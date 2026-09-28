@@ -97,7 +97,7 @@ impl ButtonParameters {
     }
 }
 
-#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Button, event = events)]
+#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Button)]
 /// Concrete retained button and dynamically constructible COM object.
 ///
 /// The allocation owns its semantic fields directly. `runtime` contains only common host,
@@ -112,7 +112,7 @@ pub struct Button {
     /// Base widget options.
     /// Initialization-only fill behavior.
     fill: WidgetFillOption,
-    /// Single event slot; attaches once after creation and closes with the widget.
+    /// Single event slot; receives its destination during construction and closes with the widget.
     events: neocogi_ui_nodes_contracts::ButtonEventPort,
 }
 
@@ -334,9 +334,11 @@ impl Button {
         resources: crate::widget_object::SharedAssets,
         label: NcCopyFromBufferOffset<'_, u8>,
         options: WidgetOptions,
+        sink: Option<ComPtr<neocogi_ui_nodes_contracts::ButtonSinkAbi>>,
     ) -> Result<ComPtr<ButtonAbi>, NcStatus> {
-        let value = Self::build(host, label, options, Some(&resources))?;
-        // Retain the sole destination before publishing the completed widget.
+        let mut value = Self::build(host, label, options, Some(&resources))?;
+        // Fix the sole destination before publishing the completed widget.
+        value.events = neocogi_com::events::EventPort::with_sink(sink);
         Ok(Self::from_value(value).query().expect("Button declares its callable class contract"))
     }
 
@@ -439,8 +441,13 @@ impl neocogi_ui_nodes_contracts::Button for Button {
 fn com_object_control_is_independent_of_interface_count() {
     // Refcount, padding and the shared call guard occupy 16 bytes on this target.
     // No per-interface fields remain; handles carry their selected tables.
-    assert_eq!(Button::COM_INTERFACE_COUNT, 5);
-    println!("Button: state={}, allocation={}", core::mem::size_of::<Button>(), core::mem::size_of::<ButtonComObject>());
+    // The constructor receiver is not an interface implemented by the widget.
+    assert_eq!(Button::COM_INTERFACE_COUNT, 4);
+    println!(
+        "Button: state={}, allocation={}",
+        core::mem::size_of::<Button>(),
+        core::mem::size_of::<ButtonComObject>()
+    );
     assert_eq!(core::mem::offset_of!(ButtonComObject, value), 16);
     assert_eq!(core::mem::size_of::<ButtonComObject>(), core::mem::size_of::<Button>() + 16);
 }

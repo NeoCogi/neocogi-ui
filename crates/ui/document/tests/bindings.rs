@@ -51,7 +51,7 @@ fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
             )
         }
         /// Binding generation never constructs a live widget.
-        fn create(&self, _: &Ui, _: &[CustomProperty]) -> Result<Widget<IWidgetAbi>, NcStatus> {
+        fn create(&self, _: &Ui, _: &[CustomProperty], _: Option<neocogi_com::ComPtr<neocogi_com::IUnknown>>) -> Result<Widget<IWidgetAbi>, NcStatus> {
             Err(NC_E_INVALID_ARG)
         }
     }
@@ -86,22 +86,21 @@ fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
     assert!(registry.validate_document(&document).unwrap_err().contains("schema mismatch"));
 }
 
-/// Registry registration rejects a stream descriptor outside the advertised COM chain.
+/// Registry registration rejects a constructor event missing from its type graph.
 #[test]
-fn custom_factory_cannot_advertise_a_stream_outside_its_com_chain() {
+fn custom_factory_cannot_omit_its_constructor_event_graph() {
     use neocogi_com::{NcStatus, NC_E_INVALID_ARG, design::IdlInterface};
     use neocogi_ui::{IWidgetAbi, Ui, Widget};
     use neocogi_ui_document::{CustomProperty, CustomWidgetFactory, CustomWidgetRegistry};
     use std::rc::Rc;
 
-    /// Fabricated source metadata advertises an unrelated projection as the stream.
+    /// Fabricated metadata omits the reachable definitions for its real typed receiver.
     static HIDDEN: IdlInterface = IdlInterface {
-        construction: None,
         abi: &neocogi_demo_contracts::CounterAbi::INTERFACE_DESCRIPTOR,
         chain: &neocogi_demo_contracts::CounterAbi::INTERFACE_CHAIN,
         rust_abi: "neocogi_demo_contracts::CounterAbi",
-        stream: Some(neocogi_com::design::IdlEventStream {
-            abi: &neocogi_ui::TextboxAbi::INTERFACE_DESCRIPTOR,
+        event_sink: Some(neocogi_com::design::IdlEventSink {
+            abi: &neocogi_demo_contracts::CounterSinkAbi::INTERFACE_DESCRIPTOR,
             message: &neocogi_demo_contracts::CounterEvent::IDL_TYPE,
         }),
         values: &[],
@@ -114,7 +113,7 @@ fn custom_factory_cannot_advertise_a_stream_outside_its_com_chain() {
             neocogi_ui_document::design::DesignWidgetManifest::from_idl("hidden.counter", vec![], &HIDDEN)
         }
         /// Registration rejects this provider before construction is possible.
-        fn create(&self, _: &Ui, _: &[CustomProperty]) -> Result<Widget<IWidgetAbi>, NcStatus> {
+        fn create(&self, _: &Ui, _: &[CustomProperty], _: Option<neocogi_com::ComPtr<neocogi_com::IUnknown>>) -> Result<Widget<IWidgetAbi>, NcStatus> {
             Err(NC_E_INVALID_ARG)
         }
     }

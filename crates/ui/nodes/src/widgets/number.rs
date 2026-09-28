@@ -87,7 +87,7 @@ impl NumberParameters {
     }
 }
 
-#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Number, event = events)]
+#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Number)]
 /// Concrete retained number input and dynamically constructible COM object.
 pub struct Number {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -103,7 +103,7 @@ pub struct Number {
     value: Real,
     /// Text editing state for shift-click numeric entry.
     edit: NumberEditState,
-    /// Single lifetime event slot; the parent attaches once before publishing the widget.
+    /// Single lifetime event slot; the constructor fixes the parent receiver before publishing the widget.
     events: neocogi_ui_nodes_contracts::NumberEventPort,
 }
 
@@ -144,12 +144,15 @@ impl Number {
 
     /// Returns the native event endpoint emitted after every user-originated value change.
     #[cfg(test)]
-    pub fn changed(&mut self) -> impl FnOnce(neocogi_ui::events::EventConsumer<crate::NumericChanged>) -> Result<(), neocogi_com::NcStatus> + '_ {
+    pub fn changed(
+        &mut self,
+    ) -> impl FnOnce(Box<dyn FnMut(crate::NumericChanged) -> Result<(), neocogi_com::NcStatus>>) -> Result<(), neocogi_com::NcStatus> + '_ {
         |mut consume| {
             let receiver = <neocogi_ui_nodes_contracts::NumberSinkAbi as neocogi_com::events::MessageSinkInterface>::receiver(
                 move |neocogi_ui_nodes_contracts::NumberEvent::Changed(event)| consume(event),
             )?;
-            self.events.attach(receiver.as_com_ref())
+            self.events = neocogi_com::events::EventPort::with_sink(Some(receiver));
+            Ok(())
         }
     }
 
@@ -301,9 +304,11 @@ impl Number {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         options: NumberOptions,
+        sink: Option<ComPtr<neocogi_ui_nodes_contracts::NumberSinkAbi>>,
     ) -> Result<ComPtr<NumberAbi>, NcStatus> {
-        let value = Self::build(host, options, Some(&resources))?;
-        // Retain the sole destination before publishing the completed widget.
+        let mut value = Self::build(host, options, Some(&resources))?;
+        // Fix the sole destination before publishing the completed widget.
+        value.events = neocogi_com::events::EventPort::with_sink(sink);
         Ok(Self::from_value(value).query().expect("Number declares its callable class contract"))
     }
 

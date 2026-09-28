@@ -54,7 +54,7 @@ fn popup_text_region_separates_labels_from_shortcuts_and_submenu_arrows() {
     // one popup so production layout must choose shared label and trailing maxima.
     let atlas = test_atlas();
     let style = test_skin(&atlas);
-    let (_, item) = MenuItem::create(MenuItemParameters::new("aaaa").shortcut_hint("bbbb"));
+    let (_, item) = MenuItem::create(MenuItemParameters::new("aaaa").shortcut_hint("bbbb"), None);
     let rows = vec![MenuSlot::Item(item.record), MenuSlot::Branch { label: "aaaaaa".into() }];
     let layout = layout_popup(&rows, &style, &atlas, Vec::new());
     let padding = style.metrics().padding.max(1);
@@ -90,8 +90,8 @@ fn popup_text_region_separates_labels_from_shortcuts_and_submenu_arrows() {
 /// Proves that compact menu traversal skips inert rows and wraps without a parallel index list.
 #[test]
 fn keyboard_selection_skips_disabled_items_and_separators_with_wrapping() {
-    let (_, disabled) = MenuItem::create(MenuItemParameters::new("disabled").disabled());
-    let (_, enabled) = MenuItem::create(MenuItemParameters::new("enabled"));
+    let (_, disabled) = MenuItem::create(MenuItemParameters::new("disabled").disabled(), None);
+    let (_, enabled) = MenuItem::create(MenuItemParameters::new("enabled"), None);
     let rows = vec![
         MenuSlot::Item(disabled.record),
         MenuSlot::Separator,

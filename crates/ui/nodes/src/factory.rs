@@ -60,15 +60,28 @@ impl IConstructionHost for UiFactory {
 
 impl IFileDialogs for UiFactory {
     /// Creates the standard picker as an eventful mounted composite owned by the nodes plugin.
-    fn create(&self, parent: ComRef<'_, IWindowAbi>) -> Result<ComPtr<IFileDialogAbi>, NcStatus> {
-        crate::dialogs::create(self.services.clone(), parent)
+    fn create(&self, parent: ComRef<'_, IWindowAbi>, events: neocogi_com::NcValueRef<'_, IFileDialogEventBinding>) -> Result<ComPtr<IFileDialogAbi>, NcStatus> {
+        crate::dialogs::create(self.services.clone(), parent, events.to_owned()?.into_sink())
     }
 }
 
 impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     /// Validates complete text and wrapping before constructing the fixed scroll/editor composition.
-    fn create_text_area(&self, input: NcCopyFromBufferOffset<'_, u8>, wrapping: TextWrapping, scrolling: bool) -> Result<ComPtr<TextAreaAbi>, NcStatus> {
-        crate::TextArea::create_com(self.services.host.clone(), self.services.resources.clone(), input, wrapping, scrolling)
+    fn create_text_area(
+        &self,
+        input: NcCopyFromBufferOffset<'_, u8>,
+        wrapping: TextWrapping,
+        scrolling: bool,
+        events: neocogi_com::NcValueRef<'_, TextAreaEventBinding>,
+    ) -> Result<ComPtr<TextAreaAbi>, NcStatus> {
+        crate::TextArea::create_com(
+            self.services.host.clone(),
+            self.services.resources.clone(),
+            input,
+            wrapping,
+            scrolling,
+            events.to_owned()?.into_sink(),
+        )
     }
 
     /// Validates text and presentation before constructing either fixed structural child.
@@ -92,9 +105,14 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     }
 
     /// Validates sizing before allocating the split container and its sole child editor.
-    fn create_split_view(&self, settings: SplitOptions) -> Result<ComPtr<SplitViewAbi>, NcStatus> {
+    fn create_split_view(&self, settings: SplitOptions, events: neocogi_com::NcValueRef<'_, SplitViewEventBinding>) -> Result<ComPtr<SplitViewAbi>, NcStatus> {
         self.services.host.check_mutation()?;
-        crate::SplitView::create_com(self.services.host.clone(), self.services.resources.clone(), settings)
+        crate::SplitView::create_com(
+            self.services.host.clone(),
+            self.services.resources.clone(),
+            settings,
+            events.to_owned()?.into_sink(),
+        )
     }
 
     /// Creates the fixed-coordinate container through the same host as other nodes.
@@ -114,15 +132,35 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     }
 
     /// Validates complete checkbox initialization before allocating its COM identity.
-    fn create_checkbox(&self, checked: bool, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<CheckboxAbi>, NcStatus> {
+    fn create_checkbox(
+        &self,
+        checked: bool,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        events: neocogi_com::NcValueRef<'_, CheckboxEventBinding>,
+    ) -> Result<ComPtr<CheckboxAbi>, NcStatus> {
         self.services.host.check_mutation()?;
-        crate::Checkbox::create_com(self.services.host.clone(), self.services.resources.clone(), checked, label)
+        crate::Checkbox::create_com(
+            self.services.host.clone(),
+            self.services.resources.clone(),
+            checked,
+            label,
+            events.to_owned()?.into_sink(),
+        )
     }
 
     /// Validates complete textbox initialization before allocating its COM identity.
-    fn create_textbox(&self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<TextboxAbi>, NcStatus> {
+    fn create_textbox(
+        &self,
+        input: NcCopyFromBufferOffset<'_, u8>,
+        events: neocogi_com::NcValueRef<'_, TextboxEventBinding>,
+    ) -> Result<ComPtr<TextboxAbi>, NcStatus> {
         self.services.host.check_mutation()?;
-        crate::Textbox::create_com(self.services.host.clone(), self.services.resources.clone(), input)
+        crate::Textbox::create_com(
+            self.services.host.clone(),
+            self.services.resources.clone(),
+            input,
+            events.to_owned()?.into_sink(),
+        )
     }
 
     /// Validates text and wrapping before allocating the display object's identity.
@@ -132,15 +170,25 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     }
 
     /// Validates every arithmetic field before allocating a slider identity.
-    fn create_slider(&self, options: SliderOptions) -> Result<ComPtr<SliderAbi>, NcStatus> {
+    fn create_slider(&self, options: SliderOptions, events: neocogi_com::NcValueRef<'_, SliderEventBinding>) -> Result<ComPtr<SliderAbi>, NcStatus> {
         self.services.host.check_mutation()?;
-        crate::Slider::create_com(self.services.host.clone(), self.services.resources.clone(), options)
+        crate::Slider::create_com(
+            self.services.host.clone(),
+            self.services.resources.clone(),
+            options,
+            events.to_owned()?.into_sink(),
+        )
     }
 
     /// Validates every arithmetic field before allocating a number identity.
-    fn create_number(&self, options: NumberOptions) -> Result<ComPtr<NumberAbi>, NcStatus> {
+    fn create_number(&self, options: NumberOptions, events: neocogi_com::NcValueRef<'_, NumberEventBinding>) -> Result<ComPtr<NumberAbi>, NcStatus> {
         self.services.host.check_mutation()?;
-        crate::Number::create_com(self.services.host.clone(), self.services.resources.clone(), options)
+        crate::Number::create_com(
+            self.services.host.clone(),
+            self.services.resources.clone(),
+            options,
+            events.to_owned()?.into_sink(),
+        )
     }
 
     /// Validates the label before allocating a color swatch with copied RGBA state.
@@ -150,27 +198,61 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     }
 
     /// Validates the label before allocating a standalone list-row identity.
-    fn create_list_item(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ListItemAbi>, NcStatus> {
+    fn create_list_item(
+        &self,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        events: neocogi_com::NcValueRef<'_, ListItemEventBinding>,
+    ) -> Result<ComPtr<ListItemAbi>, NcStatus> {
         self.services.host.check_mutation()?;
-        crate::ListItem::create_com(self.services.host.clone(), self.services.resources.clone(), label)
+        crate::ListItem::create_com(
+            self.services.host.clone(),
+            self.services.resources.clone(),
+            label,
+            events.to_owned()?.into_sink(),
+        )
     }
 
     /// Validates the label before allocating a button-like list entry.
-    fn create_list_box(&self, label: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ListBoxAbi>, NcStatus> {
+    fn create_list_box(
+        &self,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        events: neocogi_com::NcValueRef<'_, ListBoxEventBinding>,
+    ) -> Result<ComPtr<ListBoxAbi>, NcStatus> {
         self.services.host.check_mutation()?;
-        crate::ListBox::create_com(self.services.host.clone(), self.services.resources.clone(), label)
+        crate::ListBox::create_com(
+            self.services.host.clone(),
+            self.services.resources.clone(),
+            label,
+            events.to_owned()?.into_sink(),
+        )
     }
 
     /// Validates axis and range arithmetic before allocating the scrollbar.
-    fn create_scrollbar(&self, range: ScrollRange) -> Result<ComPtr<ScrollbarAbi>, NcStatus> {
+    fn create_scrollbar(&self, range: ScrollRange, events: neocogi_com::NcValueRef<'_, ScrollbarEventBinding>) -> Result<ComPtr<ScrollbarAbi>, NcStatus> {
         self.services.host.check_mutation()?;
-        crate::Scrollbar::create_com(self.services.host.clone(), self.services.resources.clone(), range)
+        crate::Scrollbar::create_com(
+            self.services.host.clone(),
+            self.services.resources.clone(),
+            range,
+            events.to_owned()?.into_sink(),
+        )
     }
 
     /// Constructs a complete Button in one call through its concrete class implementation.
-    fn create_button(&self, label: NcCopyFromBufferOffset<'_, u8>, options: WidgetOptions) -> Result<ComPtr<ButtonAbi>, NcStatus> {
+    fn create_button(
+        &self,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        options: WidgetOptions,
+        events: neocogi_com::NcValueRef<'_, ButtonEventBinding>,
+    ) -> Result<ComPtr<ButtonAbi>, NcStatus> {
         self.services.host.check_mutation()?;
-        crate::Button::create_com(self.services.host.clone(), self.services.resources.clone(), label, options)
+        crate::Button::create_com(
+            self.services.host.clone(),
+            self.services.resources.clone(),
+            label,
+            options,
+            events.to_owned()?.into_sink(),
+        )
     }
 
     /// Binds the concrete combo model to this factory's live window-owning runtime.
@@ -180,9 +262,15 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
         menu_text: NcCopyFromBufferOffset<'_, u8>,
         entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
         selection: ChoiceSelectionAbi,
+        events: neocogi_com::NcValueRef<'_, ComboEventBinding>,
     ) -> Result<ComPtr<ComboAbi>, NcStatus> {
         self.services.host.check_mutation()?;
-        let menu = self.services.choices.create_choice_menu(parent, menu_text, entries, selection)?;
+        let sink = events.to_owned()?.into_sink().map(|sink| sink.query::<IChoiceMenuSinkAbi>()).transpose()?;
+        let binding = IChoiceMenuEventBinding::from_sink(sink.as_ref().map(ComPtr::as_com_ref));
+        let menu = self
+            .services
+            .choices
+            .create_choice_menu(parent, menu_text, entries, selection, neocogi_com::NcValueRef::new(&binding)?)?;
         crate::Combo::create_com(
             self.services.host.clone(),
             self.services.resources.clone(),

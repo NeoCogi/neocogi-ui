@@ -4,7 +4,7 @@ mod tests {
     use neocogi_com::{ComRef, NcCopyFromBufferOffset, NcStatus};
     use neocogi_com::{ComPtr, IUnknown, NcString, NC_E_INVALID_ARG};
 
-    #[neocogi_com::com_class(neocogi_ui::nodes::Button, event = events)]
+    #[neocogi_com::com_class(neocogi_ui::nodes::Button)]
     /// Concrete stand-in for a plugin button, using the same COM macro and ownership path.
     struct TestButton {
         /// Plugin-local UTF-8 storage; its Rust layout never crosses the boundary.
@@ -93,8 +93,9 @@ mod tests {
         fn mount(&mut self) -> Result<(), NcStatus> {
             Err(neocogi_com::NC_E_NOINTERFACE)
         }
-        /// Its test-owned state needs no external teardown.
+        /// Drops the construction receiver even when a test retains an editing handle.
         fn close(&mut self) -> Result<(), NcStatus> {
+            self.events.close();
             Ok(())
         }
 

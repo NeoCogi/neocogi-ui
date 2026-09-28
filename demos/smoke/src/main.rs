@@ -79,18 +79,38 @@ fn register_plugins(runtime: &neocogi_com::Runtime, directory: &std::path::Path)
 fn register_plugins(runtime: &neocogi_com::Runtime, _directory: &std::path::Path) -> Result<(), Box<dyn Error>> {
     use neocogi_demo_host::static_plugins::{self, StaticPlugin};
     let available = [
-        StaticPlugin { package: "neocogi-ui-runtime", description: nc_ui::factory_plugin_description() },
-        StaticPlugin { package: "neocogi-ui-nodes", description: nc_ui_nodes::factory_plugin_description() },
-        StaticPlugin { package: "neocogi-render-plugin", description: nc_render::factory_plugin_description() },
-        StaticPlugin { package: "neocogi-gfx", description: nc_gfx::factory_plugin_description() },
-        StaticPlugin { package: "neocogi-skin", description: nc_skin::factory_plugin_description() },
+        StaticPlugin {
+            package: "neocogi-ui-runtime",
+            description: nc_ui::factory_plugin_description(),
+        },
+        StaticPlugin {
+            package: "neocogi-ui-nodes",
+            description: nc_ui_nodes::factory_plugin_description(),
+        },
+        StaticPlugin {
+            package: "neocogi-render-plugin",
+            description: nc_render::factory_plugin_description(),
+        },
+        StaticPlugin {
+            package: "neocogi-gfx",
+            description: nc_gfx::factory_plugin_description(),
+        },
+        StaticPlugin {
+            package: "neocogi-skin",
+            description: nc_skin::factory_plugin_description(),
+        },
         #[cfg(feature = "extension")]
-        StaticPlugin { package: "neocogi-example-ui-extension", description: nc_ui_extension::factory_plugin_description() },
+        StaticPlugin {
+            package: "neocogi-example-ui-extension",
+            description: nc_ui_extension::factory_plugin_description(),
+        },
     ];
     let selected = static_plugins::select(&available, option_env!("NEOCOGI_ASSEMBLY_PLUGINS"))?;
     for plugin in selected {
         // SAFETY: Every generated descriptor and implementation remains linked for process lifetime.
-        unsafe { runtime.register_factory_plugin_description(plugin.description)?; }
+        unsafe {
+            runtime.register_factory_plugin_description(plugin.description)?;
+        }
     }
     Ok(())
 }
@@ -355,10 +375,9 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content))?.finish()?;
     let menus = ui.menus()?;
     let bar = menus.create("")?;
-    let item = bar.submenu("File")?.item("Menu command")?;
-    menus.attach_bar(window.as_com_ref(), &bar)?;
     let (events_tx, events) = std::sync::mpsc::channel();
-    neocogi_ui::events::bind(item.activated()?, events_tx.clone(), ComponentMessage::Menu)?;
+    let item = bar.submenu("File")?.item_observed("Menu command", events_tx.clone(), ComponentMessage::Menu)?;
+    menus.attach_bar(window.as_com_ref(), &bar)?;
     let app = events::Controller::into_local(events::Controller::root(
         ComponentModel {
             count: 0,

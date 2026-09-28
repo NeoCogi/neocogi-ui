@@ -8,6 +8,8 @@ pub use model::*;
 /// Generated opaque component and concrete application command contracts.
 pub use neocogi_ui_document_contracts as contracts;
 mod bindings;
+mod event_bindings;
+pub use event_bindings::EventBindings;
 /// Owned COM-transportable authoring metadata for custom widgets.
 pub use neocogi_ui_design as design;
 mod custom;

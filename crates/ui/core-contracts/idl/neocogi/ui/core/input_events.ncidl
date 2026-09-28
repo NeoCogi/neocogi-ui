@@ -100,12 +100,6 @@ struct Activation {
 }
 
 #[version(1)]
-/// Labelled activation output from the actual control.
-interface IActivationEvents: IEventStream<Activation> {
-
-}
-
-#[version(1)]
 /// Complete text and cursor captured when a user edit commits.
 struct TextChanged {
     /// Complete normalized text at the edit.
@@ -152,25 +146,11 @@ enum WindowEvent: u8 {
     },
 }
 
-
-
-#[version(1)]
-/// Connection access on the actual window; the manager owns its emission storage.
-interface IWindowEvents: IEventStream<WindowEvent> {
-
-}
-
 #[version(1)]
 /// Captured popup dismissal fact.
 enum PopupDismissed: u8 {
     /// The popup left the active branch without fabricating destruction history.
     Dismissed,
-}
-
-#[version(1)]
-/// Connection access on the actual popup and its manager-owned emission storage.
-interface IPopupEvents: IEventStream<PopupDismissed> {
-
 }
 
 #[version(1)]
@@ -196,7 +176,7 @@ enum FileDialogMode: u8 {
 
 #[version(4)]
 /// Nodes-provider file picker controller and real COM controls; retaining it does not keep its runtime open.
-class IFileDialog: IEventStream<IFileDialogEvent> {
+class IFileDialog {
     /// Returns the actual stable modal window capability for ordinary lifecycle and geometry operations.
     fn window(&self) -> Result<ComPtr<IWindow>>;
     /// Reads and validates a complete native directory before changing request state or showing the modal.
@@ -216,7 +196,7 @@ class IFileDialog: IEventStream<IFileDialogEvent> {
 /// Standard picker construction capability exposed by a nodes factory bound to window management.
 interface IFileDialogs {
     /// Creates one hidden reusable modal owned by the authenticated ordinary window.
-    fn create(&self, parent: &IWindow) -> Result<ComPtr<IFileDialog>>;
+    fn create(&self, parent: &IWindow, events: &EventBinding<IFileDialogEvent>) -> Result<ComPtr<IFileDialog>>;
 }
 
 #[version(1)]

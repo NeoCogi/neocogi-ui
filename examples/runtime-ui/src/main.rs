@@ -1,6 +1,6 @@
 //! Loads a UI document without linking its concrete widgets into application code.
 use neocogi_com::NcStatus;
-use neocogi_com::events::bind_source;
+use neocogi_ui_document::EventBindings;
 use neocogi_demo_host::{AppState, Host, HostError};
 use neocogi_ui::*;
 use neocogi_ui_document::{Document, Generation, ReloadSlot, Resources};
@@ -39,13 +39,19 @@ impl State {
             None => Document::new("Runtime-loaded UI"),
         };
         let sender = self.sender.clone();
-        let outcome = self.slot.reload(&document, Resources::new(), move |component, generation| {
-            // Check the exact title widget interface before publishing a replacement.
-            component.widget::<TextBlockAbi>("title")?;
-            bind_source(component.widget::<ButtonAbi>("save")?.as_interface(), sender, move |_: button::Event| {
-                Message::Save(generation)
-            })
-        })?;
+        let outcome = self.slot.reload(
+            &document,
+            Resources::new(),
+            move |generation| {
+                let mut events = EventBindings::new();
+                events.insert::<ButtonAbi, _>("save", sender, move |_| Message::Save(generation))?;
+                Ok(events)
+            },
+            |component, _| {
+                // Check the exact title interface before publishing the complete replacement.
+                component.widget::<TextBlockAbi>("title").map(|_| ())
+            },
+        )?;
         if outcome.teardown.is_err() {
             return Err(format!("UI reloaded; old content cleanup: {}", outcome.teardown));
         }
@@ -88,7 +94,7 @@ fn run() -> Result<(), HostError> {
     let (sender, receiver) = mpsc::channel();
     let menus = host.ui.menus()?;
     let bar = menus.create("Runtime UI")?;
-    neocogi_ui::events::bind(bar.submenu("File")?.item("Reload")?.activated()?, sender.clone(), |_| Message::Reload)?;
+    bar.submenu("File")?.item_observed("Reload", sender.clone(), |_| Message::Reload)?;
     menus.attach_bar(window.as_com_ref(), &bar)?;
     #[cfg(not(target_arch = "wasm32"))]
     let path = std::env::args_os().nth(1).map(std::path::PathBuf::from);

@@ -6,7 +6,6 @@ use neocogi_com::{
     binary, com_object, guid_from_qualified_name, ComDeserialize, ComSerialize, ComRef, INcBytesAbi, IUnknown, NcBytes, NcCopyFromBufferOffset, NcGuid,
     NC_E_ABI_VERSION, NC_E_INVALID_ARG, NC_E_OUT_OF_RANGE,
 };
-use neocogi_com::events::bind_source;
 use neocogi_com::persistence::{snapshot, FactoryRegistry, ObjectRecord};
 use neocogi_idl_example_contracts::{ICompositionRoot, ICompositionRootAbi};
 
@@ -92,6 +91,8 @@ impl neocogi_com::persistence::IPersistable for SettingsView {
 struct SettingsFactory {
     /// Runtime authority and resources are supplied by the host, never the file.
     widgets: WidgetFactory,
+    /// Host-owned queue is live construction context, never persisted data.
+    sender: std::sync::mpsc::Sender<AppEvent>,
 }
 /// Parses and validates before any widget allocation or topology change.
 fn settings(version: u32, bytes: NcCopyFromBufferOffset<'_, u8>, children: u32) -> Result<Settings, NcStatus> {
@@ -120,8 +121,13 @@ impl neocogi_com::persistence::IPersistenceFactory for SettingsFactory {
         children: ComRef<'_, neocogi_com::persistence::IObjectChildrenAbi>,
     ) -> Result<ComPtr<IUnknown>, NcStatus> {
         let state = settings(version, state, children.count()?)?;
-        let button = self.widgets.button_unobserved(&state.save_label)?;
-        let checkbox = self.widgets.checkbox_unobserved(&state.checkbox_label, state.checked)?;
+        let button = self.widgets.button(&state.save_label, self.sender.clone(), |_| AppEvent::Save)?;
+        let checkbox = self.widgets.checkbox(
+            &state.checkbox_label,
+            state.checked,
+            self.sender.clone(),
+            |neocogi_ui::checkbox::Event::Changed(value)| AppEvent::Enabled(value.checked),
+        )?;
         let mut root = self.widgets.linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
         let result = (|| {
             root.insert(
@@ -183,41 +189,22 @@ fn persisted_component_builds_real_ui_and_binds_without_child_handles() {
         state: binary::to_vec(&state).unwrap(),
         children: vec![],
     };
+    let (sender, messages) = std::sync::mpsc::channel();
     let mut registry = FactoryRegistry::new().unwrap();
     registry
         .register(
             VIEW_KIND,
-            SettingsFactory::from_value(SettingsFactory { widgets: fixture.ui.widgets().clone() })
-                .query()
-                .unwrap(),
+            SettingsFactory::from_value(SettingsFactory {
+                widgets: fixture.ui.widgets().clone(),
+                sender,
+            })
+            .query()
+            .unwrap(),
         )
         .unwrap();
     let component = registry.restore(&binary::to_vec(&record).unwrap()).unwrap();
     assert_eq!(snapshot(component.as_com_ref()).unwrap(), binary::to_vec(&record).unwrap());
     let outputs = component.query::<ICompositionRootAbi>().unwrap();
-    let (sender, messages) = std::sync::mpsc::channel();
-    bind_source(
-        outputs
-            .widget(NcCopyFromBufferOffset::new(0, b"save_requested"))
-            .unwrap()
-            .query::<ButtonAbi>()
-            .unwrap()
-            .as_com_ref(),
-        sender.clone(),
-        |_| AppEvent::Save,
-    )
-    .unwrap();
-    bind_source(
-        outputs
-            .widget(NcCopyFromBufferOffset::new(0, b"enabled_changed"))
-            .unwrap()
-            .query::<CheckboxAbi>()
-            .unwrap()
-            .as_com_ref(),
-        sender.clone(),
-        |neocogi_ui::checkbox::Event::Changed(value)| AppEvent::Enabled(value.checked),
-    )
-    .unwrap();
     assert!(
         outputs
             .widget(NcCopyFromBufferOffset::new(0, b"save_requested"))
@@ -249,18 +236,6 @@ fn persisted_component_builds_real_ui_and_binds_without_child_handles() {
     drop(component);
     let restored = registry.restore(&saved).unwrap();
     assert_eq!(snapshot(restored.as_com_ref()).unwrap(), saved);
-    let outputs = restored.query::<ICompositionRootAbi>().unwrap();
-    bind_source(
-        outputs
-            .widget(NcCopyFromBufferOffset::new(0, b"save_requested"))
-            .unwrap()
-            .query::<ButtonAbi>()
-            .unwrap()
-            .as_com_ref(),
-        sender,
-        |_| AppEvent::Save,
-    )
-    .unwrap();
     let mountable = restored.query::<ICompositionRootAbi>().unwrap().root().unwrap().query::<IWidgetAbi>().unwrap();
     let _owner = window(
         &fixture.ui,

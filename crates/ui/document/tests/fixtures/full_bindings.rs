@@ -98,12 +98,9 @@ pub struct Form {
     /// Authored widget "disclosure"; the concrete COM interface is checked when binding.
     pub widget_disclosure_8: neocogi_ui::Widget<neocogi_ui::DisclosureAbi>,
 }
-/// Checks widget fields and binds each complete event stream to the application queue.
-/// Use inside ReloadSlot::reload; failed preparation preserves the published component.
+/// Resolves concrete fields after construction has installed every receiver.
 pub fn bind(
     component: &neocogi_ui_document::Component,
-    generation: neocogi_ui_document::Generation,
-    send: std::sync::mpsc::Sender<Message>,
 ) -> Result<Form, neocogi_com::NcStatus> {
     let inputs = Inputs {
         input_text_0: component.input::<neocogi_ui_document::contracts::SetText>("Text")?,
@@ -128,12 +125,20 @@ pub fn bind(
         widget_combo_7: component.widget::<neocogi_ui::ComboAbi>("combo")?,
         widget_disclosure_8: component.widget::<neocogi_ui::DisclosureAbi>("disclosure")?,
     };
-    neocogi_com::events::bind_source(form.widget_button_1.as_interface(), send.clone(), move |event: neocogi_ui::button::Event| Message { generation, event: Event::Widget1(event) })?;
-    neocogi_com::events::bind_source(form.widget_check_2.as_interface(), send.clone(), move |event: neocogi_ui::checkbox::Event| Message { generation, event: Event::Widget2(event) })?;
-    neocogi_com::events::bind_source(form.widget_text_3.as_interface(), send.clone(), move |event: neocogi_ui::textbox::Event| Message { generation, event: Event::Widget3(event) })?;
-    neocogi_com::events::bind_source(form.widget_slider_4.as_interface(), send.clone(), move |event: neocogi_ui::slider::Event| Message { generation, event: Event::Widget4(event) })?;
-    neocogi_com::events::bind_source(form.widget_scroll_5.as_interface(), send.clone(), move |event: neocogi_ui::scrollbar::Event| Message { generation, event: Event::Widget5(event) })?;
-    neocogi_com::events::bind_source(form.widget_split_6.as_interface(), send.clone(), move |event: neocogi_ui::split_view::Event| Message { generation, event: Event::Widget6(event) })?;
-    neocogi_com::events::bind_source(form.widget_combo_7.as_interface(), send.clone(), move |event: neocogi_ui::combo::Event| Message { generation, event: Event::Widget7(event) })?;
     Ok(form)
+}
+/// Prepares application receivers before Loader or ReloadSlot creates widgets.
+pub fn events(
+    generation: neocogi_ui_document::Generation,
+    send: std::sync::mpsc::Sender<Message>,
+) -> Result<neocogi_ui_document::EventBindings, neocogi_com::NcStatus> {
+    let mut bindings = neocogi_ui_document::EventBindings::new();
+    bindings.insert::<neocogi_ui::ButtonAbi, _>("button", send.clone(), move |event: neocogi_ui::button::Event| Message { generation, event: Event::Widget1(event) })?;
+    bindings.insert::<neocogi_ui::CheckboxAbi, _>("check", send.clone(), move |event: neocogi_ui::checkbox::Event| Message { generation, event: Event::Widget2(event) })?;
+    bindings.insert::<neocogi_ui::TextboxAbi, _>("text", send.clone(), move |event: neocogi_ui::textbox::Event| Message { generation, event: Event::Widget3(event) })?;
+    bindings.insert::<neocogi_ui::SliderAbi, _>("slider", send.clone(), move |event: neocogi_ui::slider::Event| Message { generation, event: Event::Widget4(event) })?;
+    bindings.insert::<neocogi_ui::ScrollbarAbi, _>("scroll", send.clone(), move |event: neocogi_ui::scrollbar::Event| Message { generation, event: Event::Widget5(event) })?;
+    bindings.insert::<neocogi_ui::SplitViewAbi, _>("split", send.clone(), move |event: neocogi_ui::split_view::Event| Message { generation, event: Event::Widget6(event) })?;
+    bindings.insert::<neocogi_ui::ComboAbi, _>("combo", send.clone(), move |event: neocogi_ui::combo::Event| Message { generation, event: Event::Widget7(event) })?;
+    Ok(bindings)
 }

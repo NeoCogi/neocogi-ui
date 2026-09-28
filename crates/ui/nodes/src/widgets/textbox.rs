@@ -92,7 +92,7 @@ impl TextboxParameters {
     }
 }
 
-#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Textbox, event = events)]
+#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Textbox)]
 /// Concrete retained textbox and dynamically constructible COM object.
 pub struct Textbox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -105,7 +105,7 @@ pub struct Textbox {
     editing: super::editing::Editing,
     /// Initialization-only font.
     font: FontRef,
-    /// Single event slot; attaches once after creation and closes with the widget.
+    /// Single event slot; receives its destination during construction and closes with the widget.
     events: neocogi_ui_nodes_contracts::TextboxEventPort,
 }
 
@@ -445,7 +445,7 @@ mod tests {
             neocogi_ui::textbox::Event::Submitted(value) => RecordedEvent::Submitted(value.text),
         })
         .unwrap();
-        textbox.events.attach(sink.as_com_ref()).unwrap();
+        textbox.events = neocogi_com::events::EventPort::with_sink(Some(sink));
         move |values| {
             let before = values.len();
             values.extend(events.try_iter());
@@ -636,9 +636,11 @@ impl Textbox {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         text: NcCopyFromBufferOffset<'_, u8>,
+        sink: Option<ComPtr<neocogi_ui_nodes_contracts::TextboxSinkAbi>>,
     ) -> Result<ComPtr<TextboxAbi>, NcStatus> {
-        let value = Self::build(host, text, Some(&resources))?;
-        // Retain the sole destination before publishing the completed widget.
+        let mut value = Self::build(host, text, Some(&resources))?;
+        // Fix the sole destination before publishing the completed widget.
+        value.events = neocogi_com::events::EventPort::with_sink(sink);
         Ok(Self::from_value(value).query().expect("Textbox declares its callable class contract"))
     }
 
@@ -698,8 +700,13 @@ impl neocogi_ui_nodes_contracts::Textbox for Textbox {
 fn com_object_control_is_independent_of_interface_count() {
     // Refcount, padding and the shared call guard occupy 16 bytes on this target.
     // No per-interface fields remain; handles carry their selected tables.
-    assert_eq!(Textbox::COM_INTERFACE_COUNT, 5);
-    println!("Textbox: state={}, allocation={}", core::mem::size_of::<Textbox>(), core::mem::size_of::<TextboxComObject>());
+    // The constructor receiver is not an interface implemented by the widget.
+    assert_eq!(Textbox::COM_INTERFACE_COUNT, 4);
+    println!(
+        "Textbox: state={}, allocation={}",
+        core::mem::size_of::<Textbox>(),
+        core::mem::size_of::<TextboxComObject>()
+    );
     assert_eq!(core::mem::offset_of!(TextboxComObject, value), 16);
     assert_eq!(core::mem::size_of::<TextboxComObject>(), core::mem::size_of::<Textbox>() + 16);
 }

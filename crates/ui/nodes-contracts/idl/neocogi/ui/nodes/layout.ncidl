@@ -153,7 +153,7 @@ struct SplitOptions {
 #[version(3)]
 /// Two-pane layout with a draggable divider owned by this same concrete container.
 /// Zero children is empty; one fills the allocation; two enable the divider.
-class SplitView: IWidget + IContainerLayout + IEventStream<SplitViewEvent> {
+class SplitView: IWidget + IContainerLayout {
     /// Returns immutable topology; indices zero and one identify first and second panes.
     fn children(&self) -> Result<ComPtr<IChildren>>;
     /// Inserts one unmounted pane at index, rejecting a third child before attachment.

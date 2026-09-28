@@ -34,24 +34,28 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let provider = neocogi_com::Runtime::global()
         .activate_plugin_factory::<ExtensionProviderAbi>(neocogi_com::guid_from_qualified_name("neocogi.example.ui-extension"))?;
     let host = ui.widgets().host()?;
-    let mut counter = provider.counter(host.as_com_ref())?;
+    let (events_tx, events) = std::sync::mpsc::channel();
+    let sink = neocogi_com::events::mapped_sink::<neocogi_demo_contracts::CounterSinkAbi, _>(events_tx, Message::Counter)?;
+    let binding = neocogi_demo_contracts::CounterEventBinding::from_sink(Some(sink.as_com_ref()));
+    let mut counter = provider.counter(host.as_com_ref(), neocogi_com::NcValueRef::new(&binding)?)?;
     let probe: ComPtr<IWidgetProbeAbi> = counter.query()?;
     let widget: ComPtr<IWidgetAbi> = counter.query()?;
     // Both derived and inherited projections identify the same COM allocation.
     let derived_identity: ComPtr<neocogi_com::IUnknown> = counter.query()?;
     let base_identity: ComPtr<neocogi_com::IUnknown> = widget.query()?;
-    assert_eq!(derived_identity.as_ptr(), base_identity.as_ptr());
+    assert_eq!(derived_identity.as_raw(), base_identity.as_raw());
     let mut inset = provider.inset(host.as_com_ref())?;
     let parent_probe: ComPtr<IWidgetProbeAbi> = inset.query()?;
-    inset.set_child(Mount::widget(widget.as_com_ref()).as_message())?.finish()?;
+    inset.set_child(neocogi_com::NcValueRef::new(&Mount::widget(widget.as_com_ref()))?)?.finish()?;
     let mut another = provider.inset(host.as_com_ref())?;
-    assert_eq!(another.set_child(Mount::widget(widget.as_com_ref()).as_message()).err(), Some(UI_E_OWNER));
+    assert_eq!(
+        another.set_child(neocogi_com::NcValueRef::new(&Mount::widget(widget.as_com_ref()))?).err(),
+        Some(UI_E_OWNER)
+    );
     assert_eq!(another.children()?.child_count()?, 0);
     let root = Widget::from_interface(inset.clone());
     // Capability discovery happens once while wiring the application, never during UI phases.
     let window = ui.window("Independent extension", Rect { x: 10, y: 10, width: 400, height: 200 }, &root)?;
-    let (events_tx, events) = std::sync::mpsc::channel();
-    neocogi_com::events::bind_source(counter.as_com_ref(), events_tx.clone(), Message::Counter)?;
     let app = events::Controller::into_local(events::Controller::root(
         Model {
             labels: Vec::new(),
@@ -107,10 +111,12 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     assert_eq!(inset.children()?.child_count()?, 0);
     ui.update_with_events(size, owner.as_com_ref())?;
     ui.render(size, renderer)?;
-    let replacement = provider.counter(host.as_com_ref())?;
+    let replacement = provider.counter(host.as_com_ref(), neocogi_com::NcValueRef::new(&CounterEventBinding::Unobserved)?)?;
     let replacement_widget: ComPtr<IWidgetAbi> = replacement.query()?;
     let replacement_probe: ComPtr<IWidgetProbeAbi> = replacement.query()?;
-    inset.set_child(Mount::widget(replacement_widget.as_com_ref()).as_message())?.finish()?;
+    inset
+        .set_child(neocogi_com::NcValueRef::new(&Mount::widget(replacement_widget.as_com_ref()))?)?
+        .finish()?;
     ui.update_with_events(size, owner.as_com_ref())?;
     window.close()?;
     assert_eq!(replacement.count(), Err(UI_E_CLOSED));

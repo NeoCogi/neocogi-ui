@@ -1,4 +1,4 @@
-use neocogi.com.events::IEventStream;
+use neocogi.com.events::EventBinding;
 extern neocogi.com.events;
 extern neocogi.ui.core;
 extern neocogi.renderer;

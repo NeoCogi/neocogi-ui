@@ -53,9 +53,9 @@ impl CustomValue {
 /// Maximum encoded bytes accepted for one plugin-provided widget description.
 pub const MAX_DESIGN_DESCRIPTOR_BYTES: usize = 64 * 1024;
 /// Current authoring descriptor schema revision.
-/// Revision 5 represents optional values as ordinary named enum definitions;
-/// it removes the parallel Optional field constructor from the transported graph.
-pub const DESIGN_DESCRIPTOR_VERSION: u32 = 5;
+/// Revision 6 describes the constructor receiver separately from the product
+/// interface chain: widgets no longer expose a mutable event-stream projection.
+pub const DESIGN_DESCRIPTOR_VERSION: u32 = 6;
 
 /// Owned structural field expression copied through the COM design catalog.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -201,13 +201,13 @@ impl From<&neocogi_com::design::IdlType> for DesignType {
     }
 }
 
-/// The one complete event stream resolved through the class ancestry.
+/// The exact receiver accepted by the product constructor, separate from class ancestry.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct DesignStream {
-    /// Closed generic COM stream identity.
+pub struct DesignEventSink {
+    /// Closed generic IMessageSink<E> identity.
     pub iid: [u8; 16],
-    /// Full stream ABI signature, including its event layout.
+    /// Receiver ABI signature, including the complete event layout.
     pub signature: [u8; 32],
     /// Exact generated message payload.
     pub message: String,
@@ -223,15 +223,15 @@ pub struct DesignInterface {
     pub signature: [u8; 32],
     /// Public Rust `*Abi` projection used by generated forms; checked by [`neocogi_com::validate_rust_path`].
     pub rust_abi: String,
-    /// Optional single stream, including inherited generic projections.
-    pub stream: Option<DesignStream>,
-    /// Complete finite value graph reachable from this interface and its stream.
+    /// Optional constructor receiver; this is not an interface implemented by the widget.
+    pub event_sink: Option<DesignEventSink>,
+    /// Complete finite value graph reachable from the product and its event value.
     pub values: Vec<DesignType>,
 }
 impl DesignInterface {
-    /// Resolves the stream's canonical value edge through the authoritative graph.
+    /// Resolves the receiver's canonical event value edge through the authoritative graph.
     pub fn event_value(&self) -> Option<&DesignType> {
-        let stream = self.stream.as_ref()?;
+        let stream = self.event_sink.as_ref()?;
         self.values.iter().find(|value| value.qualified_name == stream.message)
     }
 }
@@ -257,31 +257,22 @@ impl DesignWidgetManifest {
         if primary.interface_id != source.abi.interface_id || primary.abi_signature != source.abi.abi_signature {
             return Err("IDL interface has an inconsistent COM chain".into());
         }
-        if let Some(stream) = &source.stream {
-            if !source
-                .chain
-                .iter()
-                .any(|interface| interface.interface_id == stream.abi.interface_id && interface.abi_signature == stream.abi.abi_signature)
-            {
-                return Err("Resolved event stream is absent from the COM projection chain".into());
-            }
-        }
         // SAFETY: the generated ABI signature points to immutable static bytes.
         let digest: [u8; 32] = unsafe { source.abi.abi_signature.as_bytes() }
             .map_err(|error| error.to_string())?
             .try_into()
             .map_err(|_| "IDL interface has a non-SHA-256 signature")?;
         let stream = source
-            .stream
+            .event_sink
             .as_ref()
-            .map(|output| -> Result<DesignStream, String> {
-                Ok(DesignStream {
+            .map(|output| -> Result<DesignEventSink, String> {
+                Ok(DesignEventSink {
                     iid: output.abi.interface_id.to_uuid_bytes(),
                     // SAFETY: IDL owns this immutable static descriptor.
                     signature: unsafe { output.abi.abi_signature.as_bytes() }
                         .map_err(|error| error.to_string())?
                         .try_into()
-                        .map_err(|_| "Stream signature is not SHA-256")?,
+                        .map_err(|_| "Receiver signature is not SHA-256")?,
                     message: output.message.qualified_name.to_owned(),
                 })
             })
@@ -294,7 +285,7 @@ impl DesignWidgetManifest {
                 iid: source.abi.interface_id.to_uuid_bytes(),
                 signature: digest,
                 rust_abi: source.rust_abi.to_owned(),
-                stream,
+                event_sink: stream,
                 values: source.values.iter().map(DesignType::from).collect(),
             },
         };
@@ -309,8 +300,7 @@ impl DesignWidgetManifest {
         if self.version != DESIGN_DESCRIPTOR_VERSION || self.kind.is_empty() || self.interface.iid == [0; 16] {
             return Err("Invalid design widget descriptor identity or version".into());
         }
-        neocogi_com::validate_rust_path(&self.interface.rust_abi)
-            .map_err(|error| format!("Widget {:?}, interface.rust_abi: {error}", self.kind))?;
+        neocogi_com::validate_rust_path(&self.interface.rust_abi).map_err(|error| format!("Widget {:?}, interface.rust_abi: {error}", self.kind))?;
         let mut names = std::collections::BTreeSet::new();
         if !self
             .defaults
@@ -319,7 +309,7 @@ impl DesignWidgetManifest {
         {
             return Err("Invalid design widget property defaults".into());
         }
-        if let Some(output) = &self.interface.stream {
+        if let Some(output) = &self.interface.event_sink {
             if output.iid == [0; 16] || !qualified_name(&output.message) {
                 return Err("Invalid design widget output metadata".into());
             }
@@ -329,8 +319,7 @@ impl DesignWidgetManifest {
                 .find(|value| value.qualified_name == output.message)
                 .ok_or("Event value is absent from its definition graph")?;
         }
-        validate_value_graph(&self.interface.values)
-            .map_err(|error| format!("Widget {:?}: {error}", self.kind))?;
+        validate_value_graph(&self.interface.values).map_err(|error| format!("Widget {:?}: {error}", self.kind))?;
         Ok(())
     }
 
@@ -476,8 +465,7 @@ fn validate_value_graph(values: &[DesignType]) -> Result<(), String> {
 /// These names are not interpolated source; keyword rules apply only to binding paths.
 fn identifier(value: &str) -> bool {
     let mut chars = value.chars();
-    matches!(chars.next(), Some('a'..='z' | 'A'..='Z' | '_'))
-        && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    matches!(chars.next(), Some('a'..='z' | 'A'..='Z' | '_')) && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
 }
 
 #[cfg(test)]
@@ -498,7 +486,7 @@ mod tests {
                 signature: [2; 32],
                 rust_abi: "example_contracts::CounterAbi".into(),
                 values: vec![],
-                stream: Some(DesignStream {
+                event_sink: Some(DesignEventSink {
                     iid: [2; 16],
                     signature: [3; 32],
                     message: "example.CounterEvent".into(),
@@ -542,8 +530,18 @@ mod tests {
             assert_eq!(DesignWidgetManifest::decode(&manifest.encode().unwrap()).unwrap(), manifest);
         }
         for path in [
-            "api::type::Event", "api::match", "api::async", "api::gen", "api::", "api::::Event",
-            "crate::Event", "api::r#self", "api::Event<u32>", "api::Event; panic!()", "api::Évent", "api ::Event",
+            "api::type::Event",
+            "api::match",
+            "api::async",
+            "api::gen",
+            "api::",
+            "api::::Event",
+            "crate::Event",
+            "api::r#self",
+            "api::Event<u32>",
+            "api::Event; panic!()",
+            "api::Évent",
+            "api ::Event",
             &"a".repeat(neocogi_com::NC_DESCRIPTOR_RUST_PATH_MAX_LEN + 1),
         ] {
             let reason = neocogi_com::validate_rust_path(path).unwrap_err().to_string();
@@ -567,7 +565,7 @@ mod tests {
     #[test]
     fn logical_names_do_not_use_rust_keyword_rules() {
         let mut manifest = counter_manifest();
-        manifest.interface.stream.as_mut().unwrap().message = "example.type".into();
+        manifest.interface.event_sink.as_mut().unwrap().message = "example.type".into();
         manifest.interface.values[0].qualified_name = "example.type".into();
         manifest.interface.values[0].rust_type = "example_contracts::r#type".into();
         manifest.validate().unwrap();
@@ -596,10 +594,19 @@ mod tests {
             qualified_name: "example.OptionalTree".into(),
             rust_type: "example_contracts::OptionalTree".into(),
             shape: DesignShape::Enum(vec![
-                DesignVariant { name: "None".into(), tag: 0, fields: vec![] },
-                DesignVariant { name: "Some".into(), tag: 1, fields: vec![DesignField {
-                    name: "0".into(), ty: DesignValueType::Named("example.Tree".into()),
-                }] },
+                DesignVariant {
+                    name: "None".into(),
+                    tag: 0,
+                    fields: vec![],
+                },
+                DesignVariant {
+                    name: "Some".into(),
+                    tag: 1,
+                    fields: vec![DesignField {
+                        name: "0".into(),
+                        ty: DesignValueType::Named("example.Tree".into()),
+                    }],
+                },
             ]),
         };
         assert_eq!(validate_value_graph(&[invalid, optional]).unwrap_err(), "Recursive inline value layout");

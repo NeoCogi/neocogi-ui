@@ -1,7 +1,17 @@
 //! Real loaded controls exercise publication, binding, authored defaults, and stale handles.
 use super::*;
 use neocogi_ui_document::{*, contracts::SetText};
-use neocogi_com::events::bind_source;
+
+/// Prepares the single constructor binding used by these behavioral fixtures.
+fn receiver<C: neocogi_com::events::EventSource, M: 'static>(
+    key: &str,
+    sender: std::sync::mpsc::Sender<M>,
+    map: impl FnMut(neocogi_com::events::EventOf<C>) -> M + 'static,
+) -> Result<EventBindings, NcStatus> {
+    let mut events = EventBindings::new();
+    events.insert::<C, M>(key, sender, map)?;
+    Ok(events)
+}
 
 /// Mounts a document slot in an ordinary window using the production runtime.
 fn slot(ui: &Ui) -> ReloadSlot {
@@ -21,24 +31,32 @@ fn failed_reload_preserves_live_inputs_and_authored_save() {
     let mut fixture = Headless::standard();
     let mut slot = slot(&fixture.ui);
     let document = Document::new("test");
-    let loaded = slot.reload(&document, Resources::new(), |_, _| Ok(())).unwrap();
+    let loaded = slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     let mut title = slot.component().unwrap().input::<SetText>("title").unwrap();
     title.send(SetText { text: "Application value".into() }).unwrap();
     assert_eq!(Document::from_binary(&slot.component().unwrap().save().unwrap()).unwrap(), document);
     assert!(slot.component().unwrap().input::<contracts::SetChecked>("title").is_err());
     let mut invalid = document.clone();
     invalid.root.children[0].node.style.font = Some("not-a-real-font".into());
-    assert!(slot.reload(&invalid, Resources::new(), |_, _| Ok(())).is_err());
+    assert!(slot.reload(&invalid, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).is_err());
     assert!(slot.accepts(loaded.generation));
     title.send(SetText { text: "Still alive".into() }).unwrap();
-    assert!(slot.reload(&document, Resources::new(), |_, _| Err(neocogi_com::NC_E_INVALID_ARG)).is_err());
+    assert!(
+        slot.reload(
+            &document,
+            Resources::new(),
+            |_| Ok(EventBindings::new()),
+            |_, _| Err(neocogi_com::NC_E_INVALID_ARG)
+        )
+        .is_err()
+    );
     title
         .send(SetText {
             text: "Still alive after binding failure".into(),
         })
         .unwrap();
     fixture.frame(VIEW).unwrap();
-    let replacement = slot.reload(&document, Resources::new(), |_, _| Ok(())).unwrap();
+    let replacement = slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     assert!(!slot.accepts(loaded.generation));
     assert!(slot.accepts(replacement.generation));
     assert!(title.send(SetText { text: "Stale input".into() }).is_err());
@@ -54,21 +72,15 @@ fn outputs_rebind_and_queued_old_events_have_distinct_generations() {
     document.root = Node::new("save", WidgetSpec::Button { text: "Save".into() });
     document.inputs.clear();
     let (sender, events) = std::sync::mpsc::channel();
-    let bind = |component: &neocogi_ui_document::Component, generation| {
-        bind_source(
-            component.widget::<ButtonAbi>("save")?.as_interface(),
-            sender.clone(),
-            move |_: neocogi_ui::button::Event| generation,
-        )
-    };
-    slot.reload(&document, Resources::new(), bind).unwrap();
+    let bind = |generation| receiver::<ButtonAbi, _>("save", sender.clone(), move |_: neocogi_ui::button::Event| generation);
+    slot.reload(&document, Resources::new(), bind, |_, _| Ok(())).unwrap();
     fixture.frame(VIEW).unwrap();
     pointer(&fixture.ui, Point { x: 30, y: 30 }, true);
     pointer(&fixture.ui, Point { x: 30, y: 30 }, false);
     fixture.frame(VIEW).unwrap();
     let old = events.try_recv().unwrap();
     assert!(slot.accepts(old));
-    slot.reload(&document, Resources::new(), bind).unwrap();
+    slot.reload(&document, Resources::new(), bind, |_, _| Ok(())).unwrap();
     assert!(!slot.accepts(old));
     fixture.frame(VIEW).unwrap();
     pointer(&fixture.ui, Point { x: 30, y: 30 }, true);
@@ -180,45 +192,51 @@ fn all_builtin_document_controls_construct_and_reload() {
             outputs,
             inputs,
         };
-        slot.reload(&document, Resources::new(), |component, _| {
-            use neocogi_ui_document::contracts::*;
-            // The declared capability list must resolve to actual typed COM receivers, not merely
-            // pass schema validation. Each concrete contract has its own generated signature.
-            for input in &document.inputs {
-                match input.kind {
-                    InputKind::Text => component.input::<SetText>(&input.name).map(drop),
-                    InputKind::Checked => component.input::<SetChecked>(&input.name).map(drop),
-                    InputKind::Value => component.input::<SetValue>(&input.name).map(drop),
-                    InputKind::Enabled => component.input::<SetEnabled>(&input.name).map(drop),
-                    InputKind::Expanded => component.input::<SetExpanded>(&input.name).map(drop),
-                    InputKind::Choices => component.input::<SetChoices>(&input.name).map(drop),
-                    InputKind::Selection => component.input::<SetSelection>(&input.name).map(drop),
-                    InputKind::Offset => component.input::<SetOffset>(&input.name).map(drop),
-                    InputKind::Position => component.input::<SetPosition>(&input.name).map(drop),
-                }?;
-            }
-            let (sender, _events) = std::sync::mpsc::channel::<()>();
-            macro_rules! bind {
-                ($abi:ty) => {
-                    bind_source(component.widget::<$abi>(&document.root.key)?.as_interface(), sender.clone(), |_| ())?
-                };
-            }
-            match &document.root.widget {
-                WidgetSpec::Button { .. } => bind!(ButtonAbi),
-                WidgetSpec::Checkbox { .. } => bind!(CheckboxAbi),
-                WidgetSpec::Textbox { .. } => bind!(TextboxAbi),
-                WidgetSpec::TextArea { .. } => bind!(TextAreaAbi),
-                WidgetSpec::Slider { .. } => bind!(SliderAbi),
-                WidgetSpec::Number { .. } => bind!(NumberAbi),
-                WidgetSpec::ListItem { .. } => bind!(ListItemAbi),
-                WidgetSpec::ListBox { .. } => bind!(ListBoxAbi),
-                WidgetSpec::Scrollbar { .. } => bind!(ScrollbarAbi),
-                WidgetSpec::Combo { .. } => bind!(ComboAbi),
-                WidgetSpec::Split { .. } => bind!(SplitViewAbi),
-                _ => {}
-            }
-            Ok(())
-        })
+        slot.reload(
+            &document,
+            Resources::new(),
+            |_| {
+                let (sender, _events) = std::sync::mpsc::channel::<()>();
+                macro_rules! bind {
+                    ($abi:ty) => {
+                        receiver::<$abi, _>(&document.root.key, sender.clone(), |_| ())
+                    };
+                }
+                match &document.root.widget {
+                    WidgetSpec::Button { .. } => bind!(ButtonAbi),
+                    WidgetSpec::Checkbox { .. } => bind!(CheckboxAbi),
+                    WidgetSpec::Textbox { .. } => bind!(TextboxAbi),
+                    WidgetSpec::TextArea { .. } => bind!(TextAreaAbi),
+                    WidgetSpec::Slider { .. } => bind!(SliderAbi),
+                    WidgetSpec::Number { .. } => bind!(NumberAbi),
+                    WidgetSpec::ListItem { .. } => bind!(ListItemAbi),
+                    WidgetSpec::ListBox { .. } => bind!(ListBoxAbi),
+                    WidgetSpec::Scrollbar { .. } => bind!(ScrollbarAbi),
+                    WidgetSpec::Combo { .. } => bind!(ComboAbi),
+                    WidgetSpec::Split { .. } => bind!(SplitViewAbi),
+                    _ => Ok(EventBindings::new()),
+                }
+            },
+            |component, _| {
+                use neocogi_ui_document::contracts::*;
+                // The declared capability list must resolve to actual typed COM receivers, not merely
+                // pass schema validation. Each concrete contract has its own generated signature.
+                for input in &document.inputs {
+                    match input.kind {
+                        InputKind::Text => component.input::<SetText>(&input.name).map(drop),
+                        InputKind::Checked => component.input::<SetChecked>(&input.name).map(drop),
+                        InputKind::Value => component.input::<SetValue>(&input.name).map(drop),
+                        InputKind::Enabled => component.input::<SetEnabled>(&input.name).map(drop),
+                        InputKind::Expanded => component.input::<SetExpanded>(&input.name).map(drop),
+                        InputKind::Choices => component.input::<SetChoices>(&input.name).map(drop),
+                        InputKind::Selection => component.input::<SetSelection>(&input.name).map(drop),
+                        InputKind::Offset => component.input::<SetOffset>(&input.name).map(drop),
+                        InputKind::Position => component.input::<SetPosition>(&input.name).map(drop),
+                    }?;
+                }
+                Ok(())
+            },
+        )
         .unwrap_or_else(|error| panic!("{name}: {error}"));
         fixture.frame(VIEW).unwrap();
         assert_eq!(Document::from_binary(&slot.component().unwrap().save().unwrap()).unwrap(), document);
@@ -279,7 +297,7 @@ fn typed_inputs_validate_payloads_and_do_not_emit_user_events() {
                 },
             ],
         };
-        slot.reload(&document, Resources::new(), |_, _| Ok(())).unwrap();
+        slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
         let component = slot.component().unwrap();
         component.input::<SetEnabled>("enabled").unwrap().send(SetEnabled { enabled: false }).unwrap();
         match kind {
@@ -331,7 +349,7 @@ fn typed_enablement_preserves_live_application_flags() {
             kind: InputKind::Enabled,
         }],
     };
-    slot.reload(&document, Resources::new(), |_, _| Ok(())).unwrap();
+    slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     let component = slot.component().unwrap();
     let mut button = component.widget::<ButtonAbi>("button").unwrap();
     let mut enabled = component.input::<contracts::SetEnabled>("enabled").unwrap();
@@ -381,7 +399,7 @@ fn typed_enablement_preserves_requested_flags_without_capturing_effective_flags(
             kind: InputKind::Enabled,
         }],
     };
-    slot.reload(&document, Resources::new(), |_, _| Ok(())).unwrap();
+    slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     let component = slot.component().unwrap();
     let root = component.root().unwrap();
     let mut common = root.as_interface().add_ref();
@@ -427,13 +445,12 @@ fn authored_form_rectangles_survive_binary_reload_and_route_real_clicks() {
     let bytes = document.to_binary().unwrap();
     assert_eq!(Document::from_binary(&bytes).unwrap(), document);
     let (sender, events) = std::sync::mpsc::channel();
-    slot.reload(&document, Resources::new(), |component, generation| {
-        bind_source(
-            component.widget::<ButtonAbi>("save")?.as_interface(),
-            sender,
-            move |_: neocogi_ui::button::Event| generation,
-        )
-    })
+    slot.reload(
+        &document,
+        Resources::new(),
+        |generation| receiver::<ButtonAbi, _>("save", sender, move |_: neocogi_ui::button::Event| generation),
+        |_, _| Ok(()),
+    )
     .unwrap();
     fixture.frame(VIEW).unwrap();
     // The first point is inside the form but outside its authored button.
@@ -447,7 +464,7 @@ fn authored_form_rectangles_survive_binary_reload_and_route_real_clicks() {
     assert!(slot.accepts(events.try_recv().unwrap()));
     // Bad arithmetic must be rejected before it can replace the live component.
     document.root.children[0].edge = Edge::Position { x: i32::MAX, y: 0, width: 2, height: 20 };
-    assert!(slot.reload(&document, Resources::new(), |_, _| Ok(())).is_err());
+    assert!(slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).is_err());
     assert_eq!(slot.component().unwrap().save().unwrap(), bytes);
 }
 
@@ -459,7 +476,10 @@ fn typed_and_binary_preparation_have_equivalent_authored_state() {
     let loader = Loader::new(fixture.ui.clone(), None, Resources::new()).unwrap();
     let typed = loader.prepare(&document).unwrap();
     let binary = loader.load(&document.to_binary().unwrap()).unwrap();
-    assert_ne!(typed.root().unwrap().as_interface().as_raw().object, binary.root().unwrap().as_interface().as_raw().object);
+    assert_ne!(
+        typed.root().unwrap().as_interface().as_raw().object,
+        binary.root().unwrap().as_interface().as_raw().object
+    );
     for component in [&typed, &binary] {
         component
             .input::<SetText>("title")
@@ -498,9 +518,12 @@ fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
         }],
     };
     let (sender, events) = std::sync::mpsc::channel();
-    slot.reload(&document, Resources::new(), |component, _| {
-        bind_source(component.widget::<ComboAbi>("root")?.as_interface(), sender.clone(), |_| ())
-    })
+    slot.reload(
+        &document,
+        Resources::new(),
+        |_| receiver::<ComboAbi, _>("root", sender.clone(), |_| ()),
+        |_, _| Ok(()),
+    )
     .unwrap();
     let component = slot.component().unwrap();
     let combo = Widget::from_interface(component.root().unwrap().as_interface().add_ref().query::<ComboAbi>().unwrap());
@@ -522,9 +545,12 @@ fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
         offset: 5,
     };
     document.inputs[0].kind = InputKind::Offset;
-    slot.reload(&document, Resources::new(), |component, _| {
-        bind_source(component.widget::<ScrollbarAbi>("root")?.as_interface(), sender.clone(), |_| ())
-    })
+    slot.reload(
+        &document,
+        Resources::new(),
+        |_| receiver::<ScrollbarAbi, _>("root", sender.clone(), |_| ()),
+        |_, _| Ok(()),
+    )
     .unwrap();
     assert!(selection.send(SetSelection { selected: 0 }).is_err());
     let component = slot.component().unwrap();
@@ -545,9 +571,12 @@ fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
         handle: 6,
     };
     document.inputs[0].kind = InputKind::Position;
-    slot.reload(&document, Resources::new(), |component, _| {
-        bind_source(component.widget::<SplitViewAbi>("root")?.as_interface(), sender.clone(), |_| ())
-    })
+    slot.reload(
+        &document,
+        Resources::new(),
+        |_| receiver::<SplitViewAbi, _>("root", sender.clone(), |_| ()),
+        |_, _| Ok(()),
+    )
     .unwrap();
     assert!(offset.send(SetOffset { offset: 0 }).is_err());
     let component = slot.component().unwrap();
@@ -567,7 +596,7 @@ fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
     assert_eq!(split.settings().unwrap().position, 150);
     assert!(events.try_recv().is_err());
     assert_eq!(Document::from_binary(&component.save().unwrap()).unwrap(), document);
-    slot.reload(&document, Resources::new(), |_, _| Ok(())).unwrap();
+    slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     assert!(position.send(SetPosition { position: 100 }).is_err());
 }
 
@@ -585,9 +614,12 @@ fn application_handles_real_click_and_closed_form_retires() {
     let (sender, messages) = std::sync::mpsc::channel();
     let bytes = document.to_binary().unwrap();
     assert_eq!(Document::from_binary(&bytes).unwrap(), document);
-    slot.reload(&document, Resources::new(), |component, _| {
-        bind_source(component.widget::<ButtonAbi>("button")?.as_interface(), sender.clone(), |_| ())
-    })
+    slot.reload(
+        &document,
+        Resources::new(),
+        |_| receiver::<ButtonAbi, _>("button", sender.clone(), |_| ()),
+        |_, _| Ok(()),
+    )
     .unwrap();
     let component = slot.component().unwrap();
     let mut button = component.widget::<ButtonAbi>("button").unwrap();
@@ -605,7 +637,7 @@ fn application_handles_real_click_and_closed_form_retires() {
     assert_eq!(button.label().unwrap(), "After");
     assert_eq!(slot.component().unwrap().save().unwrap(), bytes);
     assert_eq!(owner.dispatch_next(), Ok(false));
-    slot.reload(&document, Resources::new(), |_, _| Ok(())).unwrap();
+    slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     // Container closure queues retirement until the next safe runtime boundary.
     fixture.frame(VIEW).unwrap();
     assert_eq!(owner.dispatch_next(), Err(UI_E_CLOSED));
@@ -632,13 +664,12 @@ fn application_owns_checkbox_actions_and_complete_event_consumption() {
     document.inputs.clear();
     // One application handler may issue commands to multiple typed widget fields.
     let (sender, events) = std::sync::mpsc::channel();
-    slot.reload(&document, Resources::new(), |component, _| {
-        bind_source(
-            component.widget::<CheckboxAbi>("source")?.as_interface(),
-            sender,
-            |neocogi_ui::checkbox::Event::Changed(event)| event.checked,
-        )
-    })
+    slot.reload(
+        &document,
+        Resources::new(),
+        |_| receiver::<CheckboxAbi, _>("source", sender, |neocogi_ui::checkbox::Event::Changed(event)| event.checked),
+        |_, _| Ok(()),
+    )
     .unwrap();
     fixture.frame(VIEW).unwrap();
     let form = slot.component().unwrap().root().unwrap().as_interface().add_ref().query::<FormAbi>().unwrap();
@@ -687,13 +718,12 @@ fn textbox_enum_stream_drives_form_action_and_public_sink() {
     document.inputs.clear();
     // The application matches the enum and edits its preview field after traversal.
     let (sender, events) = std::sync::mpsc::channel();
-    slot.reload(&document, Resources::new(), |component, _| {
-        bind_source(
-            component.widget::<TextboxAbi>("name")?.as_interface(),
-            sender,
-            |event: neocogi_ui::textbox::Event| event,
-        )
-    })
+    slot.reload(
+        &document,
+        Resources::new(),
+        |_| receiver::<TextboxAbi, _>("name", sender, |event: neocogi_ui::textbox::Event| event),
+        |_, _| Ok(()),
+    )
     .unwrap();
     fixture.frame(VIEW).unwrap();
     let form = slot.component().unwrap().root().unwrap().as_interface().add_ref().query::<FormAbi>().unwrap();
@@ -715,4 +745,86 @@ fn textbox_enum_stream_drives_form_action_and_public_sink() {
     key(&fixture.ui, KeyCode::Enter, 0, 0);
     fixture.frame(VIEW).unwrap();
     assert!(matches!(events.try_recv(), Ok(neocogi_ui::textbox::Event::Submitted(value)) if value.text == "Ada"));
+}
+
+/// Constructor tables reject ambiguous ownership and incompatible event types before publication.
+#[test]
+fn construction_bindings_reject_duplicate_unknown_nonemitting_and_wrong_typed_sources() {
+    let fixture = Headless::standard();
+    let loader = Loader::new(fixture.ui.clone(), None, Resources::new()).unwrap();
+    let document = Document::new("constructor bindings");
+    for (key, wrong_type) in [("missing", false), ("title", false), ("save", true)] {
+        let (sender, messages) = std::sync::mpsc::channel::<()>();
+        let mut events = EventBindings::new();
+        match wrong_type {
+            true => events.insert::<TextboxAbi, _>(key, sender, |_| ()).unwrap(),
+            false => events.insert::<ButtonAbi, _>(key, sender, |_| ()).unwrap(),
+        }
+        assert!(loader.prepare_with_events(&document, events).is_err());
+        assert!(
+            matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)),
+            "rejected {key} mapping leaked"
+        );
+    }
+    let (sender, messages) = std::sync::mpsc::channel::<()>();
+    let mut events = EventBindings::new();
+    events.insert::<ButtonAbi, _>("save", sender, |_| ()).unwrap();
+    let (replacement, rejected) = std::sync::mpsc::channel::<()>();
+    assert_eq!(events.insert::<ButtonAbi, _>("save", replacement, |_| ()), Err(neocogi_com::NC_E_INVALID_ARG));
+    assert!(matches!(rejected.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
+    let component = loader.prepare_with_events(&document, events).unwrap();
+    let retained = component.widget::<ButtonAbi>("save").unwrap();
+    assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
+    drop(component);
+    assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
+    assert_eq!(retained.label(), Err(UI_E_CLOSED));
+}
+
+/// Both loading paths install the same receiver before returning a candidate; live bindings never enter saved bytes.
+#[test]
+fn typed_and_binary_candidates_own_constructor_mappings_and_preserve_recipe_bytes() {
+    let fixture = Headless::standard();
+    let document = Document::new("observed recipe");
+    let bytes = document.to_binary().unwrap();
+    let loader = Loader::new(fixture.ui.clone(), None, Resources::new()).unwrap();
+    for binary in [false, true] {
+        let (sender, messages) = std::sync::mpsc::channel::<()>();
+        let events = receiver::<ButtonAbi, _>("save", sender, |_| ()).unwrap();
+        let candidate = match binary {
+            true => loader.load_with_events(&bytes, events).unwrap(),
+            false => loader.prepare_with_events(&document, events).unwrap(),
+        };
+        let retained = candidate.widget::<ButtonAbi>("save").unwrap();
+        assert_eq!(candidate.save().unwrap(), bytes);
+        assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
+        drop(candidate);
+        assert_eq!(retained.label(), Err(UI_E_CLOSED));
+        assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
+    }
+}
+
+/// A postconstruction field-check failure closes all installed mappings without replacing the old form.
+#[test]
+fn rejected_form_field_validation_releases_new_receivers_and_keeps_previous_generation() {
+    let fixture = Headless::standard();
+    let mut slot = slot(&fixture.ui);
+    let document = Document::new("reject candidate");
+    let active = slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
+    let previous = slot.component().unwrap().widget::<ButtonAbi>("save").unwrap();
+    let (sender, messages) = std::sync::mpsc::channel::<()>();
+    assert!(
+        slot.reload(
+            &document,
+            Resources::new(),
+            |_| receiver::<ButtonAbi, _>("save", sender, |_| ()),
+            |candidate, _| {
+                // Construction succeeded and owns the mapping, but the application's concrete field is wrong.
+                candidate.widget::<TextboxAbi>("save").map(drop)
+            }
+        )
+        .is_err()
+    );
+    assert!(slot.accepts(active.generation));
+    assert!(previous.label().is_ok());
+    assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
 }

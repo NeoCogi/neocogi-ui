@@ -101,12 +101,13 @@ Separate dialogs can bind their same protocol to different application destinati
 When reusing one dialog across requests, request identity remains application/domain
 policy; binding does not manufacture an invocation ID absent from the protocol.
 
-Declare cross-COM facts as concrete structs/enums and require one
-`IEventStream<Event>` on the concrete class. Multiple event kinds are cases of
-that one enum. The factory returns an unbound widget; its behavioral parent
-attaches one typed sink before publishing it. `#[com_class(Contract, event = events)]`
-delegates attachment to an explicit `ContractEventPort` field. See
-[IDL syntax](IDL_MODULES.md#concrete-messages-and-streams).
+Declare cross-COM facts as concrete structs/enums and pass one
+`EventBinding<Event>` into the factory. Multiple event kinds are cases of that
+enum. The behavioral parent creates its typed sink before construction; the
+factory retains it in a private `ContractEventPort` before publishing the widget.
+`#[com_class(Contract)]` does not generate event installation methods. There is
+no later binding operation. See [the complete contract](CLASS_EVENT_STREAMS.md)
+and [IDL syntax](IDL_MODULES.md#concrete-messages-and-streams).
 
 | Complete event enum variant | Producers | Nested message |
 | --- | --- | --- |
@@ -125,22 +126,21 @@ Generated methods validate/copy/retain the concrete wire message, and the UI shi
 validates domain values before calling the mapper. Captures must be owned or
 `'static`; the later controller owns its ordinary mutable model.
 
-A custom class intended for authored forms has at most one resolved event stream
-across its complete interface chain. IDL-generated `*Abi::IDL_INTERFACE.stream`
-records the closed stream's identity and message shape, including inheritance.
-The plugin's `IDesignWidgetCatalog` transports those descriptions through COM.
-The loader verifies the advertised concrete class and stream on each constructed
-object. A document names only the registered kind and typed constructor values;
-the generated form exposes the actual concrete widget projection to application
-handlers.
+A custom class intended for authored forms has at most one constructor receiver.
+IDL-generated `*Abi::IDL_INTERFACE.event_sink` records that sink's exact identity
+and complete event graph independently of the product's interface chain.
+`IDesignWidgetCatalog` transports those descriptions through COM. The loader
+checks supplied sinks before construction and the advertised class after it.
+A plugin's common catalog constructor must also query its exact typed sink before
+allocation. Generated forms expose actual concrete widget projections.
 
-Each widget has one lifetime consumer. `textbox::sink` creates that adapter
-separately; `textbox::filter_sink` can discard selected variants.
-`*_with_sink` convenience constructors attach after the COM factory returns;
-`*_unobserved` leaves the stream unbound. All second attachments return
-`NC_E_ALREADY_BOUND`; window, popup, and menu bindings follow this rule too.
+Each widget has one lifetime consumer selected during construction.
+`textbox::sink` creates that adapter separately; `textbox::filter_sink` can
+discard selected variants. `*_with_sink` passes it through the COM factory;
+`*_unobserved` chooses permanent non-delivery. There is no later attachment API.
+Windows, popups, menus, built-ins and custom plugins use this same discipline.
 Logical teardown calls `events.close()`, releases the sink, and permanently
-rejects later attachment or emission. Explicit sink handles retain their own
+rejects later emission. Explicit sink handles retain their own
 captures. Already queued facts retain their values; channel disconnection
 successfully discards future mapped values. Delivery failures propagate after
 the state transition and do not roll it back. See the
@@ -733,7 +733,7 @@ shape or destination validation leaves the complete declaration usable.
 let menus = ui.menus()?;
 let bar = menus.create("")?;
 let file = bar.submenu("File")?;
-let open = file.item("Open")?;
+let open = file.item_observed("Open", sender.clone(), |event| AppMessage::Open(event.label))?;
 open.set_shortcut_hint("Ctrl+O")?; // Presentation text, not a shortcut binding.
 open.set_mark(MenuMark::Checked { checked: false })?;
 file.separator()?;
@@ -741,7 +741,6 @@ file.submenu("Recent")?.item("Document")?;
 menus.attach_bar(window.as_com_ref(), &bar)?;
 // The actual compact rows now belong exclusively to the manager's forest.
 open.set_label("Open file")?;
-neocogi_ui::events::bind(open.activated()?, sender.clone(), |event| AppMessage::Open(event.label))?;
 ```
 
 A bar's direct entries must be submenus. `attach_bar` installs one intrinsic bar
@@ -833,8 +832,9 @@ that handles the navigation message. Application
 callbacks may open an already prepared picker through its ordinary interface;
 the following layout establishes its modal scope before later queued input.
 The picker maps its window's lifecycle output into its private queue. Use its
-completion stream for application outcomes; attaching to its private lifecycle
-stream again is rejected because the picker already owns that consumer slot. Its returned window remains
+constructor-bound completion receiver for application outcomes. Its private
+window receives the picker's sole lifecycle receiver during construction; no
+operation can install another receiver later. The returned window remains
 available for ordinary geometry, visibility and destruction operations.
 
 Cancellation hides the reusable modal and completes one active request. Reopening

@@ -1,14 +1,12 @@
 #[version(2)]
 /// Constructible button class with only its shared widget and leaf-layout protocols separated.
-class Button: IWidget + ILeafLayout + IEventStream<ButtonEvent> {
+class Button: IWidget + ILeafLayout {
 
     /// Replaces the complete UTF-8 label; the logical input offset must be zero.
     fn set_label(&mut self, label: &[u8]) -> Result<()>;
 
     /// Returns the current label as an independently owned immutable string object.
     fn label(&self) -> Result<ComPtr<INcString>>;
-
-
 
     /// Selects a semantic font role and invalidates measurement only when it differs.
     fn set_font_role(&mut self, role: FontRole) -> Result<()>;
@@ -40,7 +38,7 @@ class Button: IWidget + ILeafLayout + IEventStream<ButtonEvent> {
 factory UiFactory: IConstructionHost + IFileDialogs {
 
     /// Creates a fixed scrolling multiline editor; CRLF and CR normalize to LF and the cursor starts at the end.
-    fn create_text_area(&self, text: &[u8], wrapping: TextWrapping, scrolling: bool) -> Result<ComPtr<TextArea>>;
+    fn create_text_area(&self, text: &[u8], wrapping: TextWrapping, scrolling: bool, events: &EventBinding<TextAreaEvent>) -> Result<ComPtr<TextArea>>;
     /// Creates an empty disclosure with a real text header and editable vertical Linear body.
     fn create_disclosure(&self, label: &[u8], style: DisclosureStyle, expanded: bool) -> Result<ComPtr<Disclosure>>;
     /// Creates a framed scroll composite around one unmounted content object; generic options can subsequently change its frame.
@@ -48,7 +46,7 @@ factory UiFactory: IConstructionHost + IFileDialogs {
     /// Creates an empty directional container after validating its complete initial policy.
     fn create_linear(&self, direction: FlowDirection, cross: CrossSize) -> Result<ComPtr<Linear>>;
     /// Creates an empty split view; panes attach through its validated two-child editor.
-    fn create_split_view(&self, settings: SplitOptions) -> Result<ComPtr<SplitView>>;
+    fn create_split_view(&self, settings: SplitOptions, events: &EventBinding<SplitViewEvent>) -> Result<ComPtr<SplitView>>;
     /// Creates a fixed-coordinate form with a positive preferred content size.
     fn create_form(&self, size: Size) -> Result<ComPtr<Form>>;
     /// Creates an empty Grid with validated complete column and row policies; input offsets must be zero.
@@ -58,32 +56,32 @@ factory UiFactory: IConstructionHost + IFileDialogs {
         rows: &[LayoutTrack],
     ) -> Result<ComPtr<Grid>>;
     /// Constructs an unmounted boolean control with body-font presentation.
-    fn create_checkbox(&self, checked: bool, label: &[u8]) -> Result<ComPtr<Checkbox>>;
+    fn create_checkbox(&self, checked: bool, label: &[u8], events: &EventBinding<CheckboxEvent>) -> Result<ComPtr<Checkbox>>;
     /// Constructs an unmounted normalized single-line editor.
-    fn create_textbox(&self, text: &[u8]) -> Result<ComPtr<Textbox>>;
+    fn create_textbox(&self, text: &[u8], events: &EventBinding<TextboxEvent>) -> Result<ComPtr<Textbox>>;
     /// Constructs multiline display text using the explicit wrapping policy.
     fn create_text_block(&self, text: &[u8], wrapping: TextWrapping) -> Result<ComPtr<TextBlock>>;
     /// Constructs a slider after validating every arithmetic input.
-    fn create_slider(&self, options: SliderOptions) -> Result<ComPtr<Slider>>;
+    fn create_slider(&self, options: SliderOptions, events: &EventBinding<SliderEvent>) -> Result<ComPtr<Slider>>;
     /// Constructs standalone numeric entry after validating arithmetic inputs.
-    fn create_number(&self, options: NumberOptions) -> Result<ComPtr<Number>>;
+    fn create_number(&self, options: NumberOptions, events: &EventBinding<NumberEvent>) -> Result<ComPtr<Number>>;
     /// Constructs an RGBA swatch with an optional label.
     fn create_color_swatch(&self, rgba: u32, label: &[u8]) -> Result<ComPtr<ColorSwatch>>;
     /// Constructs one list row; application data is attached in its static adapter.
-    fn create_list_item(&self, label: &[u8]) -> Result<ComPtr<ListItem>>;
+    fn create_list_item(&self, label: &[u8], events: &EventBinding<ListItemEvent>) -> Result<ComPtr<ListItem>>;
     /// Constructs a button-like list entry.
-    fn create_list_box(&self, label: &[u8]) -> Result<ComPtr<ListBox>>;
+    fn create_list_box(&self, label: &[u8], events: &EventBinding<ListBoxEvent>) -> Result<ComPtr<ListBox>>;
     /// Constructs a scrollbar with a validated orientation and normalized range.
-    fn create_scrollbar(&self, range: ScrollRange) -> Result<ComPtr<Scrollbar>>;
+    fn create_scrollbar(&self, range: ScrollRange, events: &EventBinding<ScrollbarEvent>) -> Result<ComPtr<Scrollbar>>;
     /// Constructs an initialized, unmounted Button through its concrete class contract.
-    fn create_button(&self, label: &[u8], options: WidgetOptions) -> Result<ComPtr<Button>>;
+    fn create_button(&self, label: &[u8], options: WidgetOptions, events: &EventBinding<ButtonEvent>) -> Result<ComPtr<Button>>;
     /// Atomically binds one combo header, choice-menu popup, and validated model to its window.
     fn create_combo_box(
         &self,
         parent: &IWindow,
         menu_text: &[u8],
         entries: &[ChoiceMenuEntry],
-        selection: ChoiceSelection) -> Result<ComPtr<Combo>>;
+        selection: ChoiceSelection, events: &EventBinding<IChoiceMenuEvent>) -> Result<ComPtr<Combo>>;
 }
 
 #[version(1)]

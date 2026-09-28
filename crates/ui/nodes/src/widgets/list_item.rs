@@ -77,7 +77,7 @@ impl ListItemParameters {
     }
 }
 
-#[neocogi_com::com_class(neocogi_ui_nodes_contracts::ListItem, event = events)]
+#[neocogi_com::com_class(neocogi_ui_nodes_contracts::ListItem)]
 /// Concrete retained list item and dynamically constructible COM object.
 pub struct ListItem {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -89,7 +89,7 @@ pub struct ListItem {
     /// Base widget options.
     /// Mutable label displayed for the item.
     label: String,
-    /// Single event slot; attaches once after creation and closes with the widget.
+    /// Single event slot; receives its destination during construction and closes with the widget.
     events: neocogi_ui_nodes_contracts::ListItemEventPort,
 }
 
@@ -295,9 +295,11 @@ impl ListItem {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         label: NcCopyFromBufferOffset<'_, u8>,
+        sink: Option<ComPtr<neocogi_ui_nodes_contracts::ListItemSinkAbi>>,
     ) -> Result<ComPtr<ListItemAbi>, NcStatus> {
-        let value = Self::build(host, label, Some(&resources))?;
-        // Retain the sole destination before publishing the completed widget.
+        let mut value = Self::build(host, label, Some(&resources))?;
+        // Fix the sole destination before publishing the completed widget.
+        value.events = neocogi_com::events::EventPort::with_sink(sink);
         Ok(Self::from_value(value).query().expect("ListItem declares its callable class contract"))
     }
 

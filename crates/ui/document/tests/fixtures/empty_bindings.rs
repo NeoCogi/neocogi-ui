@@ -34,12 +34,9 @@ pub struct Form {
     /// Authored widget "root"; the concrete COM interface is checked when binding.
     pub widget_root_0: neocogi_ui::Widget<neocogi_ui::ButtonAbi>,
 }
-/// Checks widget fields and binds each complete event stream to the application queue.
-/// Use inside ReloadSlot::reload; failed preparation preserves the published component.
+/// Resolves concrete fields after construction has installed every receiver.
 pub fn bind(
     component: &neocogi_ui_document::Component,
-    generation: neocogi_ui_document::Generation,
-    send: std::sync::mpsc::Sender<Message>,
 ) -> Result<Form, neocogi_com::NcStatus> {
     let inputs = Inputs {
     };
@@ -47,6 +44,14 @@ pub fn bind(
         inputs,
         widget_root_0: component.widget::<neocogi_ui::ButtonAbi>("root")?,
     };
-    neocogi_com::events::bind_source(form.widget_root_0.as_interface(), send.clone(), move |event: neocogi_ui::button::Event| Message { generation, event: Event::Widget0(event) })?;
     Ok(form)
+}
+/// Prepares application receivers before Loader or ReloadSlot creates widgets.
+pub fn events(
+    generation: neocogi_ui_document::Generation,
+    send: std::sync::mpsc::Sender<Message>,
+) -> Result<neocogi_ui_document::EventBindings, neocogi_com::NcStatus> {
+    let mut bindings = neocogi_ui_document::EventBindings::new();
+    bindings.insert::<neocogi_ui::ButtonAbi, _>("root", send.clone(), move |event: neocogi_ui::button::Event| Message { generation, event: Event::Widget0(event) })?;
+    Ok(bindings)
 }

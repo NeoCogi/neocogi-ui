@@ -70,12 +70,11 @@ allocate. An allocation regression compares 64 warmed ordinary updates with
 
 ## Construction and posting
 
-Declare cross-COM facts as concrete NCIDL structs/enums. An emitting
-class requires `IEventStream<Event>`, an ordinary generic COM interface. Several
-event kinds travel as variants of that one message; `TextboxEvent` carries
-`Changed(TextChanged)` and `Submitted(TextSubmitted)`. The factory returns an
-unbound widget. Its behavioral parent attaches one typed sink before publishing
-it. A second attachment is rejected, including through an inherited projection.
+Declare cross-COM facts as concrete NCIDL structs/enums. The factory accepts
+`EventBinding<Event>`; several event kinds are variants of one message, such as
+`TextboxEvent::Changed` and `TextboxEvent::Submitted`. Its behavioral parent
+supplies the typed receiver before construction. A published widget has no
+receiver-installation method, including through inherited projections.
 
 The Rust facade supplies the standard channel adapter:
 
@@ -97,13 +96,13 @@ fn example(ui: &Ui) -> Result<(), NcStatus> {
 `textbox::sink(sender, mapper)` creates the same adapter separately, for
 `textbox_with_sink(text, Some(sink.as_com_ref()))`. `filter_sink` permits dropping
 selected variants before enqueueing. `textbox_unobserved(text)` leaves the
-stream unbound and allocates no receiver.
+widget permanently unobserved and allocates no receiver.
 
 An observed convenience constructor creates one COM receiver holding the mapper
-and sender inline, creates the widget through its COM factory, and attaches that
-receiver before returning. There is no additional event queue per widget.
-Factory or attachment failure releases temporary captures. For custom classes,
-`neocogi_com::events::bind_source` attaches the same generic protocol directly.
+and sender inline, then passes it through the COM factory's typed binding value.
+There is no extra event queue per widget. Construction failure releases temporary
+captures. Custom factories use the same `EventBinding<E>`; applications can build
+the receiver with `neocogi_com::events::mapped_sink`.
 
 ```text
 widget commits state
@@ -138,20 +137,21 @@ keep their own captures alive. Capture routing data rather than the producer or
 owning UI to avoid reference cycles.
 
 Node controls, choice menus, file dialogs, windows, popups, and menu items all
-use the same irreversible attachment rule. `events::bind` on a window or menu
-convenience capability also rejects replacement with `NC_E_ALREADY_BOUND`.
-Teardown closes the slot permanently; an unbound preview discards events.
+receive their sole optional sink during construction. No public operation can
+install or replace it later. Teardown releases it permanently; an unobserved
+preview discards events for its entire lifetime.
 
-Generated forms query concrete widget fields and attach their streams directly
-to the application's queue. The loader supplies no intermediate receiver and
-performs no visual actions. The application implements required handler methods
-and checks reload generations before dispatching queued facts. See
+Generated forms prepare constructor bindings targeting the application's queue,
+then query the completed component's concrete widget fields. The loader supplies
+no intermediate receiver and performs no visual actions. The application
+implements required handler methods and checks reload generations before
+dispatching queued facts. See
 [class event streams](../../../../docs/CLASS_EVENT_STREAMS.md).
 
-## Composites and attachment
+## Composite ownership
 
 A behavioral composite uses `Controller::new(model, receiver)` before mounting.
-Attach its children to sinks targeting that receiver. Its model emits declared public outputs
+Construct its children with sinks targeting that receiver. Its model emits declared public outputs
 into its enclosing owner's channel. Exposing a particular child output directly
 to the application is an explicit binding choice; private messages do not bubble
 automatically through unrelated containers. A structural `ScrollArea`, layout,

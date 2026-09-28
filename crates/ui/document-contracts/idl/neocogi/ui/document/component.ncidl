@@ -85,8 +85,10 @@ interface IDesignWidgetCatalog {
     /// The return value is the required byte count; a short buffer is unchanged.
     fn describe(&self, index: u32, output: &mut [u8]) -> Result<u32>;
     /// Constructs one widget through COM using its stable catalog index and
-    /// encoded, previously validated constructor properties.
-    fn create_widget(&self, index: u32, host: &IWidgetHost, properties: &[u8]) -> Result<ComPtr<IWidget>>;
+    /// encoded, previously validated constructor properties. Before allocating any
+    /// widget, query an observed receiver for the selected product's exact sink.
+    /// Retain that one receiver until close; unobserved is permanent.
+    fn create_widget(&self, index: u32, host: &IWidgetHost, properties: &[u8], events: &WidgetEventBinding) -> Result<ComPtr<IWidget>>;
 }
 
 #[version(1)]
@@ -150,4 +152,15 @@ interface ISetOffsetReceiver {
 interface ISetPositionReceiver {
     /// Acquires the command before applying it to the exported control.
     fn post(&mut self, value: &SetPosition) -> Result<()>;
+}
+
+#[version(1)]
+/// Constructor-only receiver transport for a heterogeneous custom-widget catalog.
+/// Observed carries a COM capability, never an untyped event payload. The selected
+/// factory queries its exact IMessageSink<E> before publishing the widget.
+enum WidgetEventBinding {
+    /// Permanently suppress delivery for this instance, including designer previews.
+    Unobserved,
+    /// Application receiver whose required typed interface is checked by the factory.
+    Observed(ComPtr<IUnknown>),
 }

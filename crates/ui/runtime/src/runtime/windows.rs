@@ -61,13 +61,13 @@ fn checked_title(title: NcCopyFromBufferOffset<'_, u8>) -> Result<String, NcStat
 /// Concrete creation policy; the parent capability is authenticated before this value is built.
 enum Placement {
     /// Independent window in an application-selectable fixed layer.
-    Root,
+    Root(Option<ComPtr<IWindowSinkAbi>>),
     /// Visible structural child of an ordinary window.
-    Child(WindowHandle),
+    Child(WindowHandle, Option<ComPtr<IWindowSinkAbi>>),
     /// Hidden modal dialog owned by an ordinary window.
-    Dialog(WindowHandle),
+    Dialog(WindowHandle, Option<ComPtr<IWindowSinkAbi>>),
     /// Hidden auto-sized popup owned by a live ordinary window or dialog.
-    Popup(WindowHandle),
+    Popup(WindowHandle, Option<ComPtr<IPopupSinkAbi>>),
 }
 
 impl RuntimeStorage {
@@ -105,13 +105,13 @@ impl RuntimeStorage {
         let mut context = self.context()?;
         self.prune_mounts(&context.window_manager);
         match &placement {
-            Placement::Root => {}
-            Placement::Child(parent) | Placement::Dialog(parent) => {
+            Placement::Root(_) => {}
+            Placement::Child(parent, _) | Placement::Dialog(parent, _) => {
                 if context.window_manager.window_layer(parent).map_err(status)? == LayerBinding::Modal {
                     return Err(UI_E_POLICY);
                 }
             }
-            Placement::Popup(parent) => {
+            Placement::Popup(parent, _) => {
                 context.window_manager.window_visible(parent).map_err(status)?;
             }
         }
@@ -119,20 +119,20 @@ impl RuntimeStorage {
         let node = self.factory.mount_node(root, None)?;
         let manager = &mut context.window_manager;
         let surface = match placement {
-            Placement::Root => NativeSurface::Window(manager.create_window(Window::new(title, local_rect(rect), node))),
-            Placement::Child(parent) => NativeSurface::Window(
+            Placement::Root(sink) => NativeSurface::Window(manager.create_window(Window::new(title, local_rect(rect), node), sink)),
+            Placement::Child(parent, sink) => NativeSurface::Window(
                 manager
-                    .create_child_window(&parent, Window::new(title, local_rect(rect), node))
+                    .create_child_window(&parent, Window::new(title, local_rect(rect), node), sink)
                     .expect("authenticated ordinary parent cannot change during an exclusive transaction"),
             ),
-            Placement::Dialog(parent) => NativeSurface::Window(
+            Placement::Dialog(parent, sink) => NativeSurface::Window(
                 manager
-                    .create_dialog(&parent, Window::new(title, local_rect(rect), node))
+                    .create_dialog(&parent, Window::new(title, local_rect(rect), node), sink)
                     .expect("authenticated ordinary owner cannot change during an exclusive transaction"),
             ),
-            Placement::Popup(parent) => NativeSurface::Popup(
+            Placement::Popup(parent, sink) => NativeSurface::Popup(
                 manager
-                    .create_popup(&parent, &title, node)
+                    .create_popup(&parent, &title, node, sink)
                     .expect("authenticated popup owner cannot disappear during an exclusive transaction"),
             ),
         };
@@ -161,8 +161,9 @@ impl IWindowManager for Runtime {
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
         root: neocogi_com::NcValueRef<'_, Mount>,
+        events: neocogi_com::NcValueRef<'_, IWindowEventBinding>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-        self.storage.create(Placement::Root, title, rect, root)?.query()
+        self.storage.create(Placement::Root(events.to_owned()?.into_sink()), title, rect, root)?.query()
     }
     /// Authenticates the parent's COM identity before validating ordinary-child policy.
     fn create_child(
@@ -171,8 +172,16 @@ impl IWindowManager for Runtime {
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
         root: neocogi_com::NcValueRef<'_, Mount>,
+        events: neocogi_com::NcValueRef<'_, IWindowEventBinding>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-        self.storage.create(Placement::Child(self.storage.parent(parent)?), title, rect, root)?.query()
+        self.storage
+            .create(
+                Placement::Child(self.storage.parent(parent)?, events.to_owned()?.into_sink()),
+                title,
+                rect,
+                root,
+            )?
+            .query()
     }
     /// Creates a hidden dialog while preserving the manager's existing modal-owner rules.
     fn create_dialog(
@@ -181,8 +190,16 @@ impl IWindowManager for Runtime {
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
         root: neocogi_com::NcValueRef<'_, Mount>,
+        events: neocogi_com::NcValueRef<'_, IWindowEventBinding>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-        self.storage.create(Placement::Dialog(self.storage.parent(parent)?), title, rect, root)?.query()
+        self.storage
+            .create(
+                Placement::Dialog(self.storage.parent(parent)?, events.to_owned()?.into_sink()),
+                title,
+                rect,
+                root,
+            )?
+            .query()
     }
     /// Creates an independently typed popup with one authoritative parent edge in the forest.
     fn create_popup(
@@ -190,9 +207,15 @@ impl IWindowManager for Runtime {
         parent: ComRef<'_, IWindowAbi>,
         title: NcCopyFromBufferOffset<'_, u8>,
         root: neocogi_com::NcValueRef<'_, Mount>,
+        events: neocogi_com::NcValueRef<'_, IPopupEventBinding>,
     ) -> Result<ComPtr<IPopupAbi>, NcStatus> {
         self.storage
-            .create(Placement::Popup(self.storage.parent(parent)?), title, Rect::default(), root)?
+            .create(
+                Placement::Popup(self.storage.parent(parent)?, events.to_owned()?.into_sink()),
+                title,
+                Rect::default(),
+                root,
+            )?
             .query()
     }
 }
@@ -215,7 +238,7 @@ enum WindowEdit {
     ChildClip(ChildWindowClip),
 }
 
-#[com_object(interfaces(IWindow, IWindowEvents))]
+#[com_object(interfaces(IWindow))]
 /// One retained COM window capability; all semantic state remains in the manager's forest.
 struct LogicalWindow {
     /// Weak owner access avoids a manager/window reference cycle.
@@ -337,7 +360,7 @@ impl IWindow for LogicalWindow {
     }
 }
 
-#[com_object(interfaces(IPopup, IPopupEvents))]
+#[com_object(interfaces(IPopup))]
 /// Popup projection has its own placement/lifetime methods and cannot impersonate a window.
 pub(super) struct LogicalPopup {
     /// Retaining the popup never retains the runtime through a strong cycle.
@@ -453,23 +476,6 @@ impl IPopup for LogicalPopup {
     }
 }
 
-impl IWindowEventsStream for LogicalWindow {
-    /// Resolves the existing owner and installs delivery directly in its record.
-    fn attach(&mut self, destination: ComRef<'_, IWindowEventsSinkAbi>) -> Result<(), NcStatus> {
-        let runtime = self.owner()?;
-        runtime.factory.host.check_mutation()?;
-        runtime.context()?.window_manager.map_window_events(&self.window, destination.add_ref())
-    }
-}
-impl IPopupEventsStream for LogicalPopup {
-    /// Resolves the existing owner and installs delivery directly in its record.
-    fn attach(&mut self, destination: ComRef<'_, IPopupEventsSinkAbi>) -> Result<(), NcStatus> {
-        let runtime = self.owner()?;
-        runtime.factory.host.check_mutation()?;
-        runtime.context()?.window_manager.map_popup_events(&self.popup, destination.add_ref())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use neocogi_ui_support::test_support::events::TestApp;
@@ -486,11 +492,10 @@ mod tests {
         let owner = ui.window("pointer popup owner", Rect { x: 20, y: 20, width: 400, height: 200 }, &body).unwrap();
         let menus = ui.menus().unwrap();
         let builder = menus.create("Pointer actions").unwrap();
-        let item = builder.item("Run at pointer").unwrap();
-        let mut popup = menus.popup(owner.as_com_ref(), &builder).unwrap();
         let (events_tx, events) = std::sync::mpsc::channel();
+        builder.item_observed("Run at pointer", events_tx.clone(), |event| event.label).unwrap();
+        let mut popup = menus.popup(owner.as_com_ref(), &builder).unwrap();
         let labels = Vec::new();
-        neocogi_ui::events::bind(item.activated().unwrap(), events_tx.clone(), |event| event.label).unwrap();
         let size = Size { width: 640, height: 400 };
 
         // Consume a pointer transition before opening. The popup request must use this committed
@@ -519,9 +524,3 @@ mod tests {
         owner.close().unwrap();
     }
 }
-
-/// Marker projection shares the same generic stream and object identity.
-impl IWindowEvents for LogicalWindow {}
-
-/// Marker projection shares the same generic stream and object identity.
-impl IPopupEvents for LogicalPopup {}

@@ -62,17 +62,19 @@ impl ReloadSlot {
         self.active.as_ref().is_some_and(|(active, _)| *active == generation)
     }
     /// Builds and binds a candidate, then publishes it only if every preparation step succeeds.
-    /// The binding callback receives only the opaque component and its attempt identity.
+    /// Receivers are prepared first; the second callback resolves fields on the complete candidate.
     pub fn reload(
         &mut self,
         document: &Document,
         resources: Resources,
+        events: impl FnOnce(Generation) -> Result<crate::EventBindings, NcStatus>,
         bind: impl FnOnce(&Component, Generation) -> Result<(), NcStatus>,
     ) -> Result<Reloaded, String> {
         self.next = self.next.checked_add(1).ok_or("Reload generation limit reached")?;
         let generation = Generation(self.next);
         let loader = Loader::new_with_custom(self.ui.clone(), Some(self.parent.clone()), resources, self.custom.clone()).map_err(|error| error.to_string())?;
-        let candidate = loader.prepare(document)?;
+        let receivers = events(generation).map_err(|error| error.to_string())?;
+        let candidate = loader.prepare_with_events(document, receivers)?;
         bind(&candidate, generation).map_err(|error| error.to_string())?;
         let edge = LinearEdge::new(LayoutTrack::Flex { weight: 1.0 });
         let committed = match self.active {

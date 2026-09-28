@@ -28,10 +28,10 @@ Use `vulkan` or `wgpu` for the other native renderers. The same crate also compi
 for `wasm32-unknown-unknown`; static applications register its descriptor explicitly.
 
 The contracts live in [the demo IDL module](../../demos/contracts/idl/neocogi/demo.ncidl).
-`class Counter: IWidget + ILeafLayout + IWidgetProbe + IEventStream<CounterEvent>`
+`class Counter: IWidget + ILeafLayout + IWidgetProbe`
 is the concrete counter contract; `IInset: IContainer` is a reusable capability.
 The registered `ExtensionProvider` factory constructs both with a typed
-`IWidgetHost` argument. Factories are the only parameterless activation roots.
+`IWidgetHost` argument; Counter also receives `EventBinding<CounterEvent>`. Factories are the only parameterless activation roots.
 
 During attachment the runtime queries and caches each control's layout capability
 beside `IWidget`; later update, layout, and paint calls use those cached pointers.
@@ -39,22 +39,23 @@ External controls share the built-in ownership and routing rules.
 
 The [implementation](src/lib.rs) uses `WidgetState` for common options, mount-once
 ownership, logical closure and sticky invalidation. The counter stores its value
-once and owns a `CounterEventPort`, exposed through `IEventStream<CounterEvent>`. `CounterEvent` is an
-IDL message enum with `Activated(Activation)` and `Changed(CounterChanged)`
-cases; `CounterChanged` is a nested message struct carrying the committed count.
-This is the complete event stream, so installing one receiver consumes the
-port exactly once. The `com_class` macro delegates attachment to that field; a second attachment
-is rejected. It posts each enum case after the corresponding state transition.
+once and owns a `CounterEventPort` initialized before the factory publishes it.
+`CounterEvent` is an ordinary IDL enum containing `Activated(Activation)` and
+`Changed(CounterChanged)`; the latter nests the committed count. The factory
+receives one typed sink for that whole enum. There is no later attachment API.
+The counter posts both variants after committing state. Composite close retires
+children first, then local resources and common state; final Drop calls close.
 
-The [acceptance host](../../demos/smoke/src/extension.rs) binds the one typed
-stream through `neocogi_com::events::bind_source(counter.as_com_ref(), ...)`. Its application handler
-matches the complete `CounterEvent` enum after UI traversal releases widget
-borrows. The same implementation and generated contracts serve both build
-commands above. `CounterAbi::IDL_INTERFACE` and `CounterEvent::IDL_MESSAGE`
-supply the generated source metadata. The root `ExtensionProvider` also
+The [acceptance host](../../demos/smoke/src/extension.rs) creates its sink through
+`neocogi_com::events::mapped_sink` and passes it into `ExtensionProvider::counter`.
+Its application handler matches `CounterEvent` after traversal releases widget
+borrows. `CounterAbi::IDL_INTERFACE` and `CounterEvent::IDL_TYPE` supply generated
+metadata. The root `ExtensionProvider` also
 implements the shared `IDesignWidgetCatalog` COM interface. Its `describe`
 method copies the counter's typed authoring descriptor through COM, and
-`create_widget` constructs the actual counter with the supplied `IWidgetHost`.
+`create_widget` accepts the host and optional COM receiver, queries that receiver
+for `CounterSinkAbi`, and only then constructs the counter. A wrong sink is
+rejected by the plugin even when a caller bypasses registry preflight.
 The unlinked native designer can load this library with `--plugin` and discover
 the counter without a Rust registration hook. A UI document stores only its kind
 and typed property values; it does not restate the event enum.

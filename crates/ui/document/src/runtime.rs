@@ -1,10 +1,9 @@
 //! COM reconstruction and explicit authored snapshots, independent from file transport.
 use crate::{*, build::Construction};
 use neocogi_com::{
-    binary, ComPtr, ComRef, IUnknown, NcStatus, NcGuid, NcBytes, INcBytesAbi, NcCopyFromBufferOffset, NC_E_INVALID_ARG, NC_E_NOT_FOUND, NC_E_ABI_VERSION,
-    NC_E_OUT_OF_RANGE,
+    binary, ComPtr, ComRef, IUnknown, NcStatus, NcGuid, NcBytes, INcBytesAbi, NcCopyFromBufferOffset, NC_E_INVALID_ARG, NC_E_NOT_FOUND, NC_E_OUT_OF_RANGE,
 };
-use neocogi_com::persistence::{FactoryRegistry, ObjectRecord, IPersistable, IPersistenceFactory, IObjectChildrenAbi};
+use neocogi_com::persistence::{ObjectRecord, IPersistable};
 use neocogi_ui::{Ui, Widget, IWidgetAbi, IWindowAbi, ITextureAbi};
 use std::collections::BTreeMap;
 use neocogi_ui::{IEventOwner, IEventOwnerAbi, IEventOwnerVtblFor, Mount, Mountable};
@@ -76,34 +75,43 @@ impl Document {
 
 /// Context-bound loader uses existing COM reconstruction and trusted widget factories.
 pub struct Loader {
-    /// No globals or dynamic code selection can be driven by document bytes.
-    registry: FactoryRegistry,
-    /// Immutable construction capabilities shared with the binary persistence factory.
-    services: std::rc::Rc<Services>,
+    /// Immutable construction capabilities; receivers belong to individual load attempts.
+    services: Services,
 }
 impl Loader {
-    /// Binds construction services; application receivers attach directly to completed widgets.
+    /// Binds construction services; application receivers are supplied separately to each construction attempt.
     /// The parent window is needed only for controls that own popups.
     pub fn new(ui: Ui, parent: Option<ComPtr<IWindowAbi>>, resources: Resources) -> Result<Self, NcStatus> {
         Self::new_with_custom(ui, parent, resources, crate::CustomWidgetRegistry::new())
     }
     /// Binds trusted custom COM factories alongside the ordinary built-in constructors.
     pub fn new_with_custom(ui: Ui, parent: Option<ComPtr<IWindowAbi>>, resources: Resources, custom: crate::CustomWidgetRegistry) -> Result<Self, NcStatus> {
-        let mut registry = FactoryRegistry::new()?;
-        let services = std::rc::Rc::new(Services { ui, parent, resources, custom });
-        registry.register(DOCUMENT_TYPE, Factory::from_value(Factory { services: services.clone() }).query()?)?;
-        Ok(Self { registry, services })
+        Ok(Self {
+            services: Services { ui, parent, resources, custom },
+        })
     }
     /// Validates typed source and constructs directly, without a binary persistence round trip.
     pub fn prepare(&self, document: &Document) -> Result<Component, String> {
+        self.prepare_with_events(document, EventBindings::new())
+    }
+    /// Validates all constructor receivers before creating the complete candidate tree.
+    pub fn prepare_with_events(&self, document: &Document, events: EventBindings) -> Result<Component, String> {
         self.services.custom.validate_document(document)?;
-        let object = self.services.construct(document.clone()).map_err(|error| error.to_string())?;
-        let interface = object.query().map_err(|error| error.to_string())?;
-        Ok(Component { object, interface })
+        let object = self.services.construct(document.clone(), events).map_err(|error| error.to_string())?;
+        Ok(Component {
+            interface: object.query().map_err(|error| error.to_string())?,
+            object,
+        })
     }
     /// Decodes external or embedded binary data before using the same typed construction routine.
     pub fn load(&self, bytes: &[u8]) -> Result<Component, NcStatus> {
-        let object = self.registry.restore_with_limits(bytes, limits())?;
+        self.load_with_events(bytes, EventBindings::new())
+    }
+    /// Decodes persistence data separately from this attempt's live application receivers.
+    pub fn load_with_events(&self, bytes: &[u8], events: EventBindings) -> Result<Component, NcStatus> {
+        let document = Document::from_binary(bytes).map_err(|_| NC_E_INVALID_ARG)?;
+        self.services.custom.validate_document(&document).map_err(|_| NC_E_INVALID_ARG)?;
+        let object = self.services.construct(document, events)?;
         Ok(Component { interface: object.query()?, object })
     }
 }
@@ -255,12 +263,6 @@ impl IPersistable for Loaded {
     }
 }
 
-/// Factory services are supplied by the application and never decoded from a file.
-#[neocogi_com::com_object(interfaces(neocogi_com::persistence::IPersistenceFactory))]
-struct Factory {
-    /// Services are immutable; sharing them with typed preparation needs no interior mutation.
-    services: std::rc::Rc<Services>,
-}
 /// One concrete construction context serves in-memory editing and persisted binary loading.
 struct Services {
     /// Runtime-bound widget construction authority.
@@ -272,40 +274,17 @@ struct Services {
     /// Trusted custom widget construction authority, separate from serialized document data.
     custom: crate::CustomWidgetRegistry,
 }
-/// Parses the exact initialization revision and validates the entire document.
-fn decode(version: u32, state: NcCopyFromBufferOffset<'_, u8>, count: u32) -> Result<Document, NcStatus> {
-    if version != VERSION {
-        return Err(NC_E_ABI_VERSION);
-    }
-    if state.offset() != 0 || count != 0 {
-        return Err(NC_E_INVALID_ARG);
-    }
-    let document: Document = binary::from_slice_with_limits(state.as_slice(), limits().binary).map_err(|_| NC_E_INVALID_ARG)?;
-    document.validate().map_err(|_| NC_E_INVALID_ARG)?;
-    Ok(document)
-}
-impl IPersistenceFactory for Factory {
-    /// Pure preflight performs no widget construction or topology changes.
-    fn validate(&self, version: u32, state: NcCopyFromBufferOffset<'_, u8>, children: u32) -> Result<(), NcStatus> {
-        let document = decode(version, state, children)?;
-        self.services.custom.validate_document(&document).map_err(|_| NC_E_INVALID_ARG)
-    }
-    /// Constructs one candidate and transfers ownership only after all bindings exist.
-    fn restore(&self, version: u32, state: NcCopyFromBufferOffset<'_, u8>, children: ComRef<'_, IObjectChildrenAbi>) -> Result<ComPtr<IUnknown>, NcStatus> {
-        let document = decode(version, state, children.count()?)?;
-        self.services.custom.validate_document(&document).map_err(|_| NC_E_INVALID_ARG)?;
-        self.services.construct(document)
-    }
-}
 impl Services {
     /// Builds the checked tree and concrete endpoints with one cleanup guard until ownership transfers.
-    fn construct(&self, document: Document) -> Result<ComPtr<IUnknown>, NcStatus> {
+    fn construct(&self, document: Document, events: EventBindings) -> Result<ComPtr<IUnknown>, NcStatus> {
+        events.validate(&document, &self.custom)?;
         let mut construction = Construction {
             ui: &self.ui,
             custom: &self.custom,
             parent: self.parent.as_ref(),
             resources: &self.resources,
             nodes: BTreeMap::new(),
+            events,
         };
         let root = construction.build(&document.root)?;
         let inputs = crate::bindings::inputs(&document, &construction.nodes)?;

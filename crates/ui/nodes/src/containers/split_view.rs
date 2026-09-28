@@ -116,7 +116,7 @@ fn partition(settings: SplitOptions, rect: Recti) -> Partition {
     result
 }
 
-#[neocogi_com::com_class(neocogi_ui_nodes_contracts::SplitView, event = events)]
+#[neocogi_com::com_class(neocogi_ui_nodes_contracts::SplitView)]
 /// Concrete container owns pane sizing and its divider; no sibling handles share mutable state.
 pub struct SplitView {
     /// Standard lifetime, resource access, options, and sticky geometry invalidation.
@@ -143,6 +143,7 @@ impl SplitView {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         settings: SplitOptions,
+        sink: Option<ComPtr<neocogi_ui_nodes_contracts::SplitViewSinkAbi>>,
     ) -> Result<ComPtr<SplitViewAbi>, NcStatus> {
         validate(settings)?;
         let editor = host.create_children()?;
@@ -155,7 +156,7 @@ impl SplitView {
             partition: Partition::default(),
             drag: Drag::Idle,
             pointer: None,
-            events: Default::default(),
+            events: neocogi_com::events::EventPort::with_sink(sink),
         };
         Ok(Self::from_value(value).query().expect("SplitView declares its concrete contract"))
     }

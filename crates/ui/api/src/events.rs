@@ -28,7 +28,7 @@
 //! }
 //! ```
 /// Installs a typed COM mapping into a standard application or component channel.
-pub use neocogi_com::events::{bind, bind_source, bind_stream, attach_source};
+pub use neocogi_com::events::mapped_sink;
 
 /// Owned application fixtures for integration tests, without borrowed callback adapters.
 #[cfg(feature = "test-support")]
@@ -38,50 +38,12 @@ mod controller;
 pub use controller::{Controller, EventModel};
 
 use crate::com::*;
-use neocogi_com::{ComRef, NC_E_INVALID_ARG, NcStatus};
+use neocogi_com::{NC_E_INVALID_ARG, NcStatus};
 
 /// Core output values are the contract data itself; no facade message wrappers are introduced.
 pub use neocogi_ui_core_contracts::{Activation, TextChanged, TextSubmitted, WindowEvent, PopupDismissed, ChoiceSelection, EVENT_DISPATCH_LIMIT};
 /// Node-specific outputs preserve their concrete contract types and field documentation.
 pub use neocogi_ui_nodes_contracts::{CheckboxChanged, NumericChanged, ScrollbarChanged, SplitChanged};
-
-/// Owned, concrete event consumer installed once at an output boundary.
-/// An observed widget has one event port and one construction-time consumer;
-/// controls with several event kinds carry a typed enum on that port. A composite
-/// consumes child events with `EventModel::handle(&mut self, message)` and owns
-/// the application behavior derived from them.
-/// The event type remains statically known; this alias hides only repeated closure syntax.
-pub type EventConsumer<E> = Box<dyn FnMut(E) -> Result<(), NcStatus>>;
-
-/// Adds one domain check to a setup closure; no output identity or lifecycle is introduced.
-fn checked<E: 'static>(
-    install: impl FnOnce(EventConsumer<E>) -> Result<(), NcStatus>,
-    validate: fn(&E) -> Result<(), NcStatus>,
-) -> impl FnOnce(EventConsumer<E>) -> Result<(), NcStatus> {
-    move |mut consume| {
-        install(Box::new(move |event| {
-            validate(&event)?;
-            consume(event)
-        }))
-    }
-}
-
-/// Obtains lifecycle output installation; setup temporarily retains the actual window.
-pub fn window_events(window: ComRef<'_, IWindowAbi>) -> Result<impl FnOnce(EventConsumer<WindowEvent>) -> Result<(), NcStatus> + use<>, NcStatus> {
-    Ok(checked(install_stream(window.add_ref().query::<IWindowEventsAbi>()?), valid_window_event))
-}
-
-/// Obtains dismissal output installation; delivery describes a captured fact.
-pub fn popup_events(popup: ComRef<'_, IPopupAbi>) -> Result<impl FnOnce(EventConsumer<PopupDismissed>) -> Result<(), NcStatus> + use<>, NcStatus> {
-    Ok(install_stream(popup.add_ref().query::<IPopupEventsAbi>()?))
-}
-
-impl crate::MenuItem {
-    /// Obtains this row's activation installation operation through its actual COM interface.
-    pub fn activated(&self) -> Result<impl FnOnce(EventConsumer<Activation>) -> Result<(), NcStatus> + use<>, NcStatus> {
-        Ok(install_stream(self.as_interface().add_ref().query::<IActivationEventsAbi>()?))
-    }
-}
 
 /// Rejects a non-finite delivered value before message translation.
 fn valid_numeric(event: &NumericChanged) -> Result<(), NcStatus> {
@@ -227,10 +189,12 @@ widget_sink!(
         Event::Changed(value) => valid_split(value),
     }
 );
-widget_sink!(combo, neocogi_ui_core_contracts::IChoiceMenuEvent, IChoiceMenuSinkAbi, |_: &Event| Ok::<
-    (),
-    NcStatus,
->(()));
+widget_sink!(
+    combo,
+    neocogi_ui_core_contracts::IChoiceMenuEvent,
+    ComboSinkAbi,
+    |_: &Event| Ok::<(), NcStatus>(())
+);
 widget_sink!(
     file_dialog,
     neocogi_ui_core_contracts::IFileDialogEvent,
@@ -240,13 +204,11 @@ widget_sink!(
     }
 );
 
-/// Retains only a checked source capability until its one attachment is installed.
-fn install_stream<C: neocogi_com::events::EventSource>(
-    source: neocogi_com::ComPtr<C>,
-) -> impl FnOnce(EventConsumer<neocogi_com::events::EventOf<C>>) -> Result<(), NcStatus> {
-    move |consume| {
-        use neocogi_com::events::MessageSinkInterface;
-        let sink = neocogi_com::events::SinkOf::<C>::receiver(consume)?;
-        attach_source(source.as_com_ref(), sink.as_com_ref())
-    }
-}
+widget_sink!(window, neocogi_ui_core_contracts::WindowEvent, IWindowSinkAbi, valid_window_event);
+widget_sink!(popup, neocogi_ui_core_contracts::PopupDismissed, IPopupSinkAbi, |_: &Event| Ok::<(), NcStatus>(
+    ()
+));
+widget_sink!(activation, neocogi_ui_core_contracts::Activation, IMenuItemSinkAbi, |_: &Event| Ok::<
+    (),
+    NcStatus,
+>(()));

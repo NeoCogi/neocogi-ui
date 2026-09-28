@@ -120,7 +120,12 @@ pub(crate) struct ChoiceMenuState {
 
 impl ChoiceMenuState {
     /// Validates selection before allocating the private COM state identity.
-    pub(crate) fn create(menu_text: String, entries: Vec<ChoiceMenuEntryAbi>, selection: Option<u64>) -> Result<ComPtr<IChoiceMenuStateAbi>, NcStatus> {
+    pub(crate) fn create(
+        menu_text: String,
+        entries: Vec<ChoiceMenuEntryAbi>,
+        selection: Option<u64>,
+        sink: Option<ComPtr<IChoiceMenuSinkAbi>>,
+    ) -> Result<ComPtr<IChoiceMenuStateAbi>, NcStatus> {
         validate_menu(&menu_text, &entries, selection)?;
         let state = Self {
             menu_text,
@@ -129,7 +134,7 @@ impl ChoiceMenuState {
             revision: 0,
             popup_anchor: Rect::default(),
             popup: ChoicePopupLifecycle::Closed,
-            changed_event: Default::default(),
+            changed_event: neocogi_com::events::EventPort::with_sink(sink),
         };
         Self::from_value(state).query()
     }
@@ -798,12 +803,5 @@ mod tests {
             .into(),
         ];
         assert_eq!(validate_menu(text, &duplicate_ids, Some(9)), Err(NC_E_INVALID_ARG));
-    }
-}
-
-impl neocogi_ui_core_contracts::IChoiceMenuStream for ChoiceMenuState {
-    /// Reserves the menu's sole stream for its behavioral parent.
-    fn attach(&mut self, consumer: neocogi_com::ComRef<'_, IChoiceMenuSinkAbi>) -> Result<(), NcStatus> {
-        self.changed_event.attach(consumer)
     }
 }

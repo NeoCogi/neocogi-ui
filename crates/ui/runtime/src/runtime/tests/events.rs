@@ -123,12 +123,9 @@ fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
             Mutation::Replace
         })
         .unwrap();
-    let previous = ui.window("first", RECT, &button).unwrap();
 
-    neocogi_ui::events::bind(neocogi_ui::events::window_events(previous.as_com_ref()).unwrap(), events_tx.clone(), |event| {
-        Mutation::Window(event)
-    })
-    .unwrap();
+    let sink = neocogi_ui::events::window::sink(events_tx.clone(), Mutation::Window).unwrap();
+    let previous = ui.window_with_sink("first", RECT, &button, Some(sink.as_com_ref())).unwrap();
     // Move every callback dependency into the persistent model; retain separate
     // assertion capabilities only where the test also needs direct observations.
     let app = TestApp::new(
@@ -360,11 +357,10 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     ui.update_with_events(SIZE, app.as_interface()).unwrap();
     assert!(app.state().ends_with(&["changed:☃:3".to_owned(), "submitted:☃".to_owned()]));
     let popup_content = ui.widgets().text_block("popup", TextWrapping::None).unwrap();
-    let mut popup = ui.popup(window.as_com_ref(), "popup", &popup_content).unwrap();
-    neocogi_ui::events::bind(neocogi_ui::events::popup_events(popup.as_com_ref()).unwrap(), session_tx.clone(), |_| {
-        "dismissed".to_owned()
-    })
-    .unwrap();
+    let sink = neocogi_ui::events::popup::sink(session_tx.clone(), |_| "dismissed".to_owned()).unwrap();
+    let mut popup = ui
+        .popup_with_sink(window.as_com_ref(), "popup", &popup_content, Some(sink.as_com_ref()))
+        .unwrap();
     popup.show_at(Rect { x: 100, y: 100, width: 20, height: 20 }).unwrap();
     ui.update_with_events(SIZE, app.as_interface()).unwrap();
     popup.hide().unwrap();
@@ -421,12 +417,9 @@ fn failed_consumer_recovers_on_next_update_and_preserves_remaining_native_input(
 fn real_lifecycle_cascade_is_deferred_until_each_consumer_returns() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let button = ui.widgets().button_unobserved("cascade").unwrap();
-    let window = ui.window("cascade", RECT, &button).unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
-    neocogi_ui::events::bind(neocogi_ui::events::window_events(window.as_com_ref()).unwrap(), events_tx.clone(), |event| {
-        event
-    })
-    .unwrap();
+    let sink = neocogi_ui::events::window::sink(events_tx.clone(), |event| event).unwrap();
+    let window = ui.window_with_sink("cascade", RECT, &button, Some(sink.as_com_ref())).unwrap();
     window.set_visibility(Visibility::Hidden).unwrap();
     let app = TestApp::new((0, window.clone()), events, |(observed, window), event| {
         if event == WindowEvent::Hidden {
@@ -564,17 +557,10 @@ fn failed_lifecycle_post_preserves_visibility_and_returns_its_receiver_error() {
     }
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let button = ui.widgets().button_unobserved("lifecycle").unwrap();
-    let window = ui.window("post failure", RECT, &button).unwrap();
-    let source = window.query::<IWindowEventsAbi>().unwrap();
-    let (events_tx, events) = std::sync::mpsc::channel();
-    let sink = <IWindowEventsSinkAbi as neocogi_com::events::MessageSinkInterface>::receiver(reject).unwrap();
-    neocogi_com::events::attach_source(source.as_com_ref(), sink.as_com_ref()).unwrap();
+    let sink = <IWindowSinkAbi as neocogi_com::events::MessageSinkInterface>::receiver(reject).unwrap();
+    let window = ui.window_with_sink("post failure", RECT, &button, Some(sink.as_com_ref())).unwrap();
     assert_eq!(window.set_visibility(Visibility::Hidden), Err(NC_E_INVALID_ARG));
     assert_eq!(window.snapshot().unwrap().visibility, Visibility::Hidden);
-    assert!(events.try_recv().is_err());
-    assert_eq!(
-        neocogi_com::events::bind_source(source.as_com_ref(), events_tx.clone(), |event| event),
-        Err(neocogi_com::NC_E_ALREADY_BOUND)
-    );
+
     assert_eq!(window.close(), Err(NC_E_INVALID_ARG));
 }

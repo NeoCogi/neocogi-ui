@@ -3,7 +3,7 @@ use crate::{
     CustomProperty, Document, Node, WidgetSpec,
     design::{DesignInterface, DesignWidgetManifest},
 };
-use neocogi_com::{NcGuid, NcStatus, NC_E_INVALID_ARG};
+use neocogi_com::{ComPtr, IUnknown, NcGuid, NcStatus, NC_E_INVALID_ARG};
 use neocogi_ui::{IWidgetAbi, Ui, Widget};
 use std::{collections::BTreeMap, rc::Rc};
 
@@ -14,8 +14,9 @@ pub trait CustomWidgetFactory {
     /// Returns complete, versioned metadata for this constructible widget kind.
     fn manifest(&self) -> Result<DesignWidgetManifest, String>;
     /// Constructs one concrete COM identity using the runtime's widget host.
-    /// The provider validates domain-specific property ranges before returning.
-    fn create(&self, ui: &Ui, properties: &[CustomProperty]) -> Result<Widget<IWidgetAbi>, NcStatus>;
+    /// The provider validates properties and the supplied typed sink before returning.
+    /// `None` constructs a permanently unobserved widget; no later attachment is allowed.
+    fn create(&self, ui: &Ui, properties: &[CustomProperty], sink: Option<ComPtr<IUnknown>>) -> Result<Widget<IWidgetAbi>, NcStatus>;
 }
 
 /// One installed provider and the immutable metadata validated at registration.
@@ -99,22 +100,12 @@ impl CustomWidgetRegistry {
     }
 
     /// Calls the installed provider and verifies its advertised concrete identity.
-    pub(crate) fn create(&self, kind: &str, ui: &Ui, properties: &[CustomProperty]) -> Result<Widget<IWidgetAbi>, NcStatus> {
+    pub(crate) fn create(&self, kind: &str, ui: &Ui, properties: &[CustomProperty], sink: Option<ComPtr<IUnknown>>) -> Result<Widget<IWidgetAbi>, NcStatus> {
         let entry = self.entries.get(kind).ok_or(NC_E_INVALID_ARG)?;
-        let widget = entry.factory.create(ui, properties)?;
+        let widget = entry.factory.create(ui, properties, sink)?;
         let interface = &entry.manifest.interface;
         let iid = NcGuid::from_uuid_bytes(interface.iid);
-        let validation = widget
-            .as_interface()
-            .add_ref()
-            .supports_interface_bytes(iid, &interface.signature)
-            .and_then(|_| match &interface.stream {
-                Some(stream) => widget
-                    .as_interface()
-                    .add_ref()
-                    .supports_interface_bytes(NcGuid::from_uuid_bytes(stream.iid), &stream.signature),
-                None => Ok(()),
-            });
+        let validation = widget.as_interface().add_ref().supports_interface_bytes(iid, &interface.signature);
         if let Err(error) = validation {
             // The candidate has not entered Construction's owned-node set yet.
             // Close its common widget state before dropping the last handle.

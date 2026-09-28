@@ -1,4 +1,4 @@
-use neocogi.com.events::IEventStream;
+use neocogi.com.events::EventBinding;
 extern neocogi.com.events;
 extern neocogi.ui.core;
 extern neocogi.ui.document;
@@ -45,7 +45,7 @@ enum CounterEvent: u8 {
 
 #[version(2)]
 /// A custom control with one enum-valued event port and a concrete editing interface.
-class Counter: IWidget + ILeafLayout + IWidgetProbe + IEventStream<CounterEvent> {
+class Counter: IWidget + ILeafLayout + IWidgetProbe {
     /// Reads the actual current activation count.
     fn count(&self) -> Result<u32>;
     /// Silently replaces the displayed count and invalidates its preferred text size when changed.
@@ -66,7 +66,7 @@ interface IInset: IContainer {
 /// Stateless plugin factory receiving runtime authority explicitly for each custom object.
 factory ExtensionProvider: IDesignWidgetCatalog {
     /// Creates a counter whose complete state belongs to the returned COM identity.
-    fn counter(&self, host: &IWidgetHost) -> Result<ComPtr<Counter>>;
+    fn counter(&self, host: &IWidgetHost, events: &EventBinding<CounterEvent>) -> Result<ComPtr<Counter>>;
     /// Creates an empty custom container; child attachment follows the same rules as built-ins.
     fn inset(&self, host: &IWidgetHost) -> Result<ComPtr<IInset>>;
 }

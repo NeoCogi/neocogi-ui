@@ -47,12 +47,9 @@ pub struct Form {
     /// Authored widget "extension"; the concrete COM interface is checked when binding.
     pub widget_extension_3: neocogi_ui::Widget<neocogi_demo_contracts::CounterAbi>,
 }
-/// Checks widget fields and binds each complete event stream to the application queue.
-/// Use inside ReloadSlot::reload; failed preparation preserves the published component.
+/// Resolves concrete fields after construction has installed every receiver.
 pub fn bind(
     component: &neocogi_ui_document::Component,
-    generation: neocogi_ui_document::Generation,
-    send: std::sync::mpsc::Sender<Message>,
 ) -> Result<Form, neocogi_com::NcStatus> {
     let inputs = Inputs {
         input_title_0: component.input::<neocogi_ui_document::contracts::SetText>("title")?,
@@ -64,7 +61,15 @@ pub fn bind(
         widget_save_2: component.widget::<neocogi_ui::ButtonAbi>("save")?,
         widget_extension_3: component.widget::<neocogi_demo_contracts::CounterAbi>("extension")?,
     };
-    neocogi_com::events::bind_source(form.widget_save_2.as_interface(), send.clone(), move |event: neocogi_ui::button::Event| Message { generation, event: Event::Widget2(event) })?;
-    neocogi_com::events::bind_source(form.widget_extension_3.as_interface(), send.clone(), move |event: neocogi_demo_contracts::CounterEvent| Message { generation, event: Event::Widget3(event) })?;
     Ok(form)
+}
+/// Prepares application receivers before Loader or ReloadSlot creates widgets.
+pub fn events(
+    generation: neocogi_ui_document::Generation,
+    send: std::sync::mpsc::Sender<Message>,
+) -> Result<neocogi_ui_document::EventBindings, neocogi_com::NcStatus> {
+    let mut bindings = neocogi_ui_document::EventBindings::new();
+    bindings.insert::<neocogi_ui::ButtonAbi, _>("save", send.clone(), move |event: neocogi_ui::button::Event| Message { generation, event: Event::Widget2(event) })?;
+    bindings.insert::<neocogi_demo_contracts::CounterAbi, _>("extension", send.clone(), move |event: neocogi_demo_contracts::CounterEvent| Message { generation, event: Event::Widget3(event) })?;
+    Ok(bindings)
 }

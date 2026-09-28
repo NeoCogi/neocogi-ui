@@ -32,6 +32,12 @@ impl Common {
 /// Common inherited methods are identical; concrete content methods below carry all policy/data.
 macro_rules! widget {
     ($name:ident, $keyboard:expr, $frame:expr) => {
+        impl Drop for $name {
+            /// Only final allocation release closes; dropping a cloned COM handle does not.
+            fn drop(&mut self) {
+                let _ = IWidget::close(self);
+            }
+        }
         impl IWidget for $name {
             /// Borrowing the host is explicit; returning it owns one ordinary COM reference.
             fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
@@ -41,13 +47,15 @@ macro_rules! widget {
             fn mount(&mut self) -> Result<(), NcStatus> {
                 self.common.state.mount()
             }
-            /// Logical closure precedes descendant/event teardown and remains distinct from final release.
+            /// Descendant preflight may refuse closure; committed cleanup diagnostics do not reopen it.
             fn close(&mut self) -> Result<(), NcStatus> {
-                if self.common.state.close()? {
-                    self.common.calls.closes += 1;
-                    self.close_content()?;
+                if !self.common.state.check_close()? {
+                    return Ok(());
                 }
-                Ok(())
+                let outcome = self.close_content()?;
+                self.common.state.complete_close();
+                self.common.calls.closes += 1;
+                outcome.finish()
             }
             /// Policy observation reads only common state and remains available during shared calls.
             fn properties(&self) -> Result<WidgetProperties, NcStatus> {
@@ -100,7 +108,7 @@ macro_rules! widget {
     };
 }
 
-#[neocogi_com::com_class(neocogi_demo_contracts::Counter, event = event)]
+#[neocogi_com::com_class(neocogi_demo_contracts::Counter)]
 /// Private implementation of the externally declared counter class.
 struct CounterObject {
     /// Common options are authoritative here, without a duplicate presentation copy.
@@ -112,12 +120,12 @@ struct CounterObject {
 }
 impl CounterObject {
     /// Validates runtime authority and publishes one fully initialized counter identity.
-    fn create(host: ComRef<'_, IWidgetHostAbi>) -> Result<ComPtr<CounterAbi>, NcStatus> {
+    fn create(host: ComRef<'_, IWidgetHostAbi>, sink: Option<ComPtr<neocogi_demo_contracts::CounterSinkAbi>>) -> Result<ComPtr<CounterAbi>, NcStatus> {
         host.check_mutation()?;
         Self::from_value(Self {
             common: Common::new(host, WidgetOptions::FRAME),
             count: 0,
-            event: Default::default(),
+            event: neocogi_com::events::EventPort::with_sink(sink),
         })
         .query()
     }
@@ -140,9 +148,9 @@ impl CounterObject {
         painter.text(state.rect, &self.count.to_string())
     }
     /// Ordinary interaction work expires even if callers retain the closed control.
-    fn close_content(&mut self) -> Result<(), NcStatus> {
+    fn close_content(&mut self) -> Result<ChildEditResult, NcStatus> {
         self.event.close();
-        Ok(())
+        Ok(ChildEditResult { teardown: neocogi_com::NC_OK })
     }
 }
 // Focus=1, Tab=2, Enter=4 and Space=8 are the canonical WidgetProperties keyboard bits.
@@ -194,8 +202,8 @@ impl Inset {
         Ok(())
     }
     /// Child teardown can fail after topology commits; preserve the ordinary committed result.
-    fn close_content(&mut self) -> Result<(), NcStatus> {
-        self.editor.close()?.finish()
+    fn close_content(&mut self) -> Result<ChildEditResult, NcStatus> {
+        self.editor.close()
     }
 }
 widget!(Inset, 0, WidgetFrame::Panel);
@@ -330,7 +338,13 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
     }
 
     /// Constructs the concrete counter through COM after checking the property payload.
-    fn create_widget(&self, index: u32, host: ComRef<'_, IWidgetHostAbi>, properties: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
+    fn create_widget(
+        &self,
+        index: u32,
+        host: ComRef<'_, IWidgetHostAbi>,
+        properties: NcCopyFromBufferOffset<'_, u8>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui_document_contracts::WidgetEventBinding>,
+    ) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
         if index != 0 {
             return Err(NC_E_INVALID_ARG);
         }
@@ -338,14 +352,27 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
         if !values.is_empty() {
             return Err(NC_E_INVALID_ARG);
         }
-        CounterObject::create(host)?.query::<IWidgetAbi>()
+        // Catalog transport carries a COM receiver, never an untyped event payload.
+        // Validate the selected product's exact sink before allocating any widget.
+        CounterObject::create(
+            host,
+            match events.to_owned()? {
+                neocogi_ui_document_contracts::WidgetEventBinding::Unobserved => None,
+                neocogi_ui_document_contracts::WidgetEventBinding::Observed(sink) => Some(sink.query()?),
+            },
+        )?
+        .query::<IWidgetAbi>()
     }
 }
 
 impl ExtensionProvider for ExtensionProviderObject {
     /// Creates a counter only after its supplied host accepts mutation.
-    fn counter(&self, host: ComRef<'_, IWidgetHostAbi>) -> Result<ComPtr<CounterAbi>, NcStatus> {
-        CounterObject::create(host)
+    fn counter(
+        &self,
+        host: ComRef<'_, IWidgetHostAbi>,
+        events: neocogi_com::NcValueRef<'_, neocogi_demo_contracts::CounterEventBinding>,
+    ) -> Result<ComPtr<CounterAbi>, NcStatus> {
+        CounterObject::create(host, events.to_owned()?.into_sink())
     }
 
     /// One empty editor is the only topology allocation; no native child list is created in this plugin.

@@ -26,21 +26,19 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
     let menus = ui.menus().unwrap();
     let bar = menus.create("").unwrap();
     let file = bar.submenu("File").unwrap();
-    let disabled = file.item("Disabled").unwrap();
+    let (session_tx, session) = std::sync::mpsc::channel();
+    let disabled = file.item_observed("Disabled", session_tx.clone(), |event| event.label).unwrap();
     disabled.set_enabled(false).unwrap();
     file.separator().unwrap();
     let recent = file.submenu("Recent").unwrap();
-    let item = recent.item("old").unwrap();
+    let item = recent.item_observed("old", session_tx.clone(), |event| event.label).unwrap();
     item.set_label("Before mount").unwrap();
     item.set_mark(MenuMark::Checked { checked: false }).unwrap();
     item.set_shortcut_hint("Ctrl+O").unwrap();
     item.set_font_role(FontRole::Body).unwrap();
     assert_eq!(item.mark().unwrap(), MenuMark::Checked { checked: false });
     assert_eq!(item.shortcut_hint().unwrap(), "Ctrl+O");
-    let (session_tx, session) = std::sync::mpsc::channel();
     let mut labels = Vec::new();
-    neocogi_ui::events::bind(item.activated().unwrap(), session_tx.clone(), |event| event.label).unwrap();
-    neocogi_ui::events::bind(disabled.activated().unwrap(), session_tx.clone(), |event| event.label).unwrap();
     menus.attach_bar(window.as_com_ref(), &bar).unwrap();
     assert_eq!(bar.separator(), Err(UI_E_CLOSED));
     drop(bar);
@@ -57,10 +55,6 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
     item.set_label("Later").unwrap();
     // Moving the menu into the runtime preserves the original consumer slot.
     // Neither a queued snapshot nor the mapping for future activations is replaced.
-    assert_eq!(
-        neocogi_ui::events::bind(item.activated().unwrap(), session_tx.clone(), |event| format!("mapped:{}", event.label)),
-        Err(neocogi_com::NC_E_ALREADY_BOUND),
-    );
     labels.extend(session.try_iter());
     assert_eq!(&labels, &["Captured"]);
     assert_eq!(editor.text().unwrap(), "focus restored");
@@ -128,11 +122,10 @@ fn standalone_menu_popup_submits_then_hides_without_destroying_its_live_rows() {
     let window = ui.window("popup menu", RECT, &body).unwrap();
     let menus = ui.menus().unwrap();
     let builder = menus.create("Actions").unwrap();
-    let item = builder.item("Run").unwrap();
-    let mut popup = menus.popup(window.as_com_ref(), &builder).unwrap();
     let (session_tx, session) = std::sync::mpsc::channel();
+    let item = builder.item_observed("Run", session_tx.clone(), |event| event.label).unwrap();
+    let mut popup = menus.popup(window.as_com_ref(), &builder).unwrap();
     let labels = Vec::new();
-    neocogi_ui::events::bind(item.activated().unwrap(), session_tx.clone(), |event| event.label).unwrap();
     popup.show_at(Rect { x: 60, y: 60, width: 20, height: 20 }).unwrap();
     // Standalone menus begin without row selection; Down selects their first actionable row.
     key(&ui, KeyCode::ArrowDown, 0);

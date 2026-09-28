@@ -237,9 +237,9 @@ fn encoded_tracks(tracks: &[LayoutTrack]) -> Vec<LayoutTrackAbi> {
 impl WidgetFactory {
     /// Creates an empty split; insert panes in first/second ownership order.
     pub fn split_view_with_sink(&self, settings: SplitOptions, sink: Option<ComRef<'_, SplitViewSinkAbi>>) -> Result<SplitViewWidget, NcStatus> {
-        Ok(SplitViewWidget::from_interface(attach_optional_sink(
-            self.interface.create_split_view(settings)?,
-            sink,
+        Ok(SplitViewWidget::from_interface(self.interface.create_split_view(
+            settings,
+            neocogi_com::NcValueRef::new(&SplitViewEventBinding::from_sink(sink))?,
         )?))
     }
     /// Creates a disclosure whose body starts empty and whose header owns the supplied label.

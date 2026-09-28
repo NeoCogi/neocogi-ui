@@ -253,8 +253,8 @@ fn button(nodes: &Rc<DialogNodes>, value: &str, action: Message) -> Result<neoco
         nodes.resources.clone(),
         NcCopyFromBufferOffset::new(0, value.as_bytes()),
         WidgetOptions::FRAME,
+        Some(sink),
     )?);
-    neocogi_com::events::attach_source(button.as_interface(), sink.as_com_ref())?;
     Ok(button)
 }
 /// Builds a complete column with exact path actions and fixed ordinary list-row measurements.
@@ -273,8 +273,8 @@ fn column(nodes: &Rc<DialogNodes>, directory: &Path, paths: Vec<PathBuf>, folder
             nodes.host.clone(),
             nodes.resources.clone(),
             NcCopyFromBufferOffset::new(0, display.as_bytes()),
+            Some(sink),
         )?);
-        neocogi_com::events::attach_source(item.as_interface(), sink.as_com_ref())?;
         item.set_icon_role(if folder { ContentIcon::ClosedFolder } else { ContentIcon::File })?;
         children.push((item.node_interface()?, LayoutTrack::Content));
     }
@@ -297,7 +297,7 @@ impl Listing {
 
 impl FileDialog {
     /// Constructs one hidden modal from actual COM controls; no native widget handle or generic application state enters its ABI.
-    fn new(services: Rc<NodeServices>, parent: ComRef<'_, IWindowAbi>) -> Result<LocalCom<Self>, NcStatus> {
+    fn new(services: Rc<NodeServices>, parent: ComRef<'_, IWindowAbi>, sink: Option<ComPtr<IFileDialogSinkAbi>>) -> Result<LocalCom<Self>, NcStatus> {
         services.host.check_mutation()?;
         let (events_tx, events) = std::sync::mpsc::channel();
         let nodes = Rc::new(DialogNodes {
@@ -317,14 +317,14 @@ impl FileDialog {
             nodes.host.clone(),
             nodes.resources.clone(),
             NcCopyFromBufferOffset::new(0, b""),
+            Some(path_sink),
         )?);
-        neocogi_com::events::attach_source(path.as_interface(), path_sink.as_com_ref())?;
         let filename = TextboxWidget::from_interface(crate::Textbox::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
             NcCopyFromBufferOffset::new(0, b""),
+            Some(filename_sink),
         )?);
-        neocogi_com::events::attach_source(filename.as_interface(), filename_sink.as_com_ref())?;
         let up = button(&nodes, "Up", Message::Up)?;
         let home = button(&nodes, "Home", Message::Home)?;
         let go = button(&nodes, "Go", Message::Go)?;
@@ -398,7 +398,7 @@ impl FileDialog {
         )?;
         let request = Request {
             phase: RequestPhase::Idle,
-            completed: Default::default(),
+            completed: neocogi_com::events::EventPort::with_sink(sink),
         };
         let model = Model {
             events_tx,
@@ -427,16 +427,20 @@ impl FileDialog {
             owner: dialog.query()?,
         };
         let windows = services.windows.clone();
-        let window = windows.create_dialog(parent, NcCopyFromBufferOffset::new(0, b"Open File"), FILE_DIALOG_RECT, mount.as_value()?)?;
+        let window_sink = neocogi_ui::events::window::sink(dialog.try_borrow()?.controller.model.events_tx.clone(), Message::Lifecycle)?;
+        let window_binding = IWindowEventBinding::from_sink(Some(window_sink.as_com_ref()));
+        let window = windows.create_dialog(
+            parent,
+            NcCopyFromBufferOffset::new(0, b"Open File"),
+            FILE_DIALOG_RECT,
+            mount.as_value()?,
+            neocogi_com::NcValueRef::new(&window_binding)?,
+        )?;
         let connected = (|| {
             window.set_options(WindowOptions::FRAME)?;
             let mut local = dialog.try_borrow_mut()?;
             local.controller.model.window = Some(window.clone());
-            neocogi_ui::events::bind(
-                neocogi_ui::events::window_events(window.as_com_ref())?,
-                local.controller.model.events_tx.clone(),
-                Message::Lifecycle,
-            )
+            Ok::<(), NcStatus>(())
         })();
         if let Err(error) = connected {
             // A failed construction must not leave an unreachable modal definition in the forest.
@@ -672,8 +676,12 @@ impl IFileDialog for FileDialog {
     }
 }
 /// Creates the one nodes-owned controller and returns its public editing capability.
-pub(crate) fn create(services: Rc<NodeServices>, parent: ComRef<'_, IWindowAbi>) -> Result<ComPtr<IFileDialogAbi>, NcStatus> {
-    FileDialog::new(services, parent)?.query()
+pub(crate) fn create(
+    services: Rc<NodeServices>,
+    parent: ComRef<'_, IWindowAbi>,
+    sink: Option<ComPtr<IFileDialogSinkAbi>>,
+) -> Result<ComPtr<IFileDialogAbi>, NcStatus> {
+    FileDialog::new(services, parent, sink)?.query()
 }
 
 /// Reads the platform home setting without converting its native encoding to Unicode.
@@ -708,10 +716,3 @@ fn read_directory(path: &Path) -> std::io::Result<(Vec<PathBuf>, Vec<PathBuf>)> 
 
 #[cfg(test)]
 mod tests;
-
-impl IFileDialogStream for FileDialog {
-    /// The public projection and controller refer to one request completion slot.
-    fn attach(&mut self, consumer: ComRef<'_, IFileDialogSinkAbi>) -> Result<(), NcStatus> {
-        self.controller.model.request.completed.attach(consumer)
-    }
-}

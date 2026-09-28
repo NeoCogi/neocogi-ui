@@ -3,7 +3,7 @@
 Menus are compact UI-owned records presented in ordinary retained menu surfaces.
 An intrinsic bar belongs to window chrome; a standalone menu uses an ordinary
 `IPopup` capability. Applications construct either form with `MenuBuilder` and retain
-only the actual `MenuItem` capabilities needed for editing or event registration.
+only the actual `MenuItem` capabilities needed for editing; receivers are fixed when each item is created.
 There is no native row widget, copied application menu model, or erased command data.
 
 ## Construction and events
@@ -23,9 +23,8 @@ fn install(ui: &Ui, sender: &std::sync::mpsc::Sender<String>) -> Result<ComPtr<I
     let menus = ui.menus()?;
     let bar = menus.create("Editor menu")?;
     let file = bar.submenu("File")?;
-    let open = file.item("Open")?;
+    let open = file.item_observed("Open", sender.clone(), |event| event.label)?;
     open.set_shortcut_hint("Ctrl+O")?;
-    neocogi_ui::events::bind(open.activated()?, sender.clone(), |event| event.label)?;
     let save = file.item("Save")?;
     save.set_enabled(false)?;
     file.separator()?;

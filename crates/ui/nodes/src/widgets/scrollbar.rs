@@ -258,7 +258,7 @@ impl ScrollbarParameters {
     }
 }
 
-#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Scrollbar, event = events)]
+#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Scrollbar)]
 /// Standalone one-axis scrollbar and dynamically constructible COM object.
 pub struct Scrollbar {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -569,9 +569,11 @@ impl Scrollbar {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         range: ScrollRange,
+        sink: Option<ComPtr<neocogi_ui_nodes_contracts::ScrollbarSinkAbi>>,
     ) -> Result<ComPtr<ScrollbarAbi>, NcStatus> {
-        let value = Self::build(host, range, Some(&resources))?;
-        // Retain the sole destination before publishing the completed widget.
+        let mut value = Self::build(host, range, Some(&resources))?;
+        // Fix the sole destination before publishing the completed widget.
+        value.events = neocogi_com::events::EventPort::with_sink(sink);
         Ok(Self::from_value(value).query().expect("Scrollbar declares its callable class contract"))
     }
 

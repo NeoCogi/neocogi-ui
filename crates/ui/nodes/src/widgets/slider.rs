@@ -119,7 +119,7 @@ impl SliderParameters {
     }
 }
 
-#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Slider, event = events)]
+#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Slider)]
 /// Concrete retained slider and dynamically constructible COM object.
 pub struct Slider {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -139,7 +139,7 @@ pub struct Slider {
     high: Real,
     /// Inline numeric editing state.
     edit: NumberEditState,
-    /// Single lifetime event slot; the parent attaches once before publishing the widget.
+    /// Single lifetime event slot; the constructor fixes the parent receiver before publishing the widget.
     events: neocogi_ui_nodes_contracts::SliderEventPort,
 }
 
@@ -505,10 +505,14 @@ mod tests {
 
     /// Collects the shared numeric message from either control through its generated concrete receiver.
     fn numeric_dispatcher(
-        install: impl FnOnce(neocogi_ui::events::EventConsumer<neocogi_ui_nodes_contracts::NumericChanged>) -> Result<(), NcStatus>,
+        install: impl FnOnce(Box<dyn FnMut(neocogi_ui_nodes_contracts::NumericChanged) -> Result<(), NcStatus>>) -> Result<(), NcStatus>,
     ) -> NumericDispatcher {
         let (events_tx, events) = std::sync::mpsc::channel();
-        neocogi_ui::events::bind(install, events_tx.clone(), |event| event.value).unwrap();
+        install(Box::new(move |event| {
+            let _ = events_tx.send(event.value);
+            Ok(())
+        }))
+        .unwrap();
         Box::new(move |values| {
             let before = values.len();
             values.extend(events.try_iter());
@@ -684,7 +688,8 @@ mod tests {
             let receiver = <neocogi_ui_nodes_contracts::SliderSinkAbi as neocogi_com::events::MessageSinkInterface>::receiver(
                 move |neocogi_ui_nodes_contracts::SliderEvent::Changed(event)| consume(event),
             )?;
-            slider.events.attach(receiver.as_com_ref())
+            slider.events = neocogi_com::events::EventPort::with_sink(Some(receiver));
+            Ok(())
         });
         run_slider_once(&mut slider, rect(0, 0, 100, 20), Vec::new(), true, false, false, Some(vec2(0, 1)));
 
@@ -918,7 +923,8 @@ mod tests {
             let receiver = <neocogi_ui_nodes_contracts::SliderSinkAbi as neocogi_com::events::MessageSinkInterface>::receiver(
                 move |neocogi_ui_nodes_contracts::SliderEvent::Changed(event)| consume(event),
             )?;
-            slider.events.attach(receiver.as_com_ref())
+            slider.events = neocogi_com::events::EventPort::with_sink(Some(receiver));
+            Ok(())
         });
         slider.set_value(4.0);
         assert_eq!(slider.value(), 4.0);
@@ -935,7 +941,8 @@ mod tests {
             let receiver = <neocogi_ui_nodes_contracts::SliderSinkAbi as neocogi_com::events::MessageSinkInterface>::receiver(
                 move |neocogi_ui_nodes_contracts::SliderEvent::Changed(event)| consume(event),
             )?;
-            slider.events.attach(receiver.as_com_ref())
+            slider.events = neocogi_com::events::EventPort::with_sink(Some(receiver));
+            Ok(())
         });
         slider.edit.editing = true;
         // Enter through the editing contract instead of reaching into the private numeric buffer.
@@ -1037,9 +1044,11 @@ impl Slider {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         options: SliderOptions,
+        sink: Option<ComPtr<neocogi_ui_nodes_contracts::SliderSinkAbi>>,
     ) -> Result<ComPtr<SliderAbi>, NcStatus> {
-        let value = Self::build(host, options, Some(&resources))?;
-        // Retain the sole destination before publishing the completed widget.
+        let mut value = Self::build(host, options, Some(&resources))?;
+        // Fix the sole destination before publishing the completed widget.
+        value.events = neocogi_com::events::EventPort::with_sink(sink);
         Ok(Self::from_value(value).query().expect("Slider declares its callable class contract"))
     }
 

@@ -11,6 +11,7 @@ pub(crate) fn create_choice_menu(
     menu_text: NcCopyFromBufferOffset<'_, u8>,
     entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
     selection: ChoiceSelectionAbi,
+    sink: Option<ComPtr<IChoiceMenuSinkAbi>>,
 ) -> Result<ComPtr<IChoiceMenuAbi>, NcStatus> {
     storage.open()?;
     storage.factory.host.check_mutation()?;
@@ -19,7 +20,7 @@ pub(crate) fn create_choice_menu(
     let parent = storage.parent(parent)?;
     let (menu_text, entries) = copied_menu(menu_text, entries)?;
     let selection = decoded_selection(selection)?;
-    let state = ChoiceMenuState::create(menu_text, entries, selection)?;
+    let state = ChoiceMenuState::create(menu_text, entries, selection, sink)?;
     let menu = choice_menu(&state)?;
     let revision = state.revision()?;
 

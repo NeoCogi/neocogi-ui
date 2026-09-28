@@ -483,11 +483,9 @@ impl LeafContent for Triangle {
     }
 }
 
-/// Collects concrete menu actions only during construction, then maps their outputs into the application channel.
-fn menu_item(menu: &MenuBuilder, pending: &mut Vec<(MenuItem, Action)>, text: &str, action: Action) -> Result<MenuItem, NcStatus> {
-    let item = menu.item(text)?;
-    pending.push((item.clone(), action));
-    Ok(item)
+/// Supplies each menu action's typed mapping before publishing its declaration.
+fn menu_item(menu: &MenuBuilder, send: &std::sync::mpsc::Sender<Message>, text: &str, action: Action) -> Result<MenuItem, NcStatus> {
+    menu.item_observed(text, send.clone(), move |event| Message::Activate(action, event))
 }
 
 /// Creates the complete demo with the same structural desktop and floating examples on every backend.
@@ -504,7 +502,14 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
     desktop.set_options(WindowOptions::NO_TITLE | WindowOptions::NO_CLOSE | WindowOptions::NO_RESIZE | WindowOptions::NO_PADDING)?;
     let mut main_body = column(ui)?;
     let main_scroll = ui.widgets().scroll_area(&main_body, true)?;
-    let demo = floating(ui, desktop.as_com_ref(), "Demo Window", rect(40, 40, 300, 450), &main_scroll)?;
+    let lifecycle = neocogi_ui::events::window::sink(events_tx.clone(), Message::Window)?;
+    let demo = ui.child_window_with_sink(
+        desktop.as_com_ref(),
+        "Demo Window",
+        rect(40, 40, 300, 450),
+        &main_scroll,
+        Some(lifecycle.as_com_ref()),
+    )?;
     demo.set_options(WindowOptions::FRAME | WindowOptions::MINIMIZE_BUTTON | WindowOptions::MAXIMIZE_BUTTON)?;
     let info = [label(ui, "40, 40")?, label(ui, "300, 450")?, label(ui, "0.0")?];
     let combo = ui.combo_box(
@@ -515,45 +520,44 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
         |neocogi_ui::combo::Event::Changed(event)| Message::Choice(ChoiceSelection::try_from(event).expect("checked COM event")),
     )?;
     let menus = ui.menus()?;
-    let mut pending = Vec::new();
     let popup_menu = menus.create("Test Popup")?;
-    menu_item(&popup_menu, &mut pending, "Hello", Action::Log)?;
-    menu_item(&popup_menu, &mut pending, "World", Action::Log)?;
+    menu_item(&popup_menu, &events_tx, "Hello", Action::Log)?;
+    menu_item(&popup_menu, &events_tx, "World", Action::Log)?;
     let test_popup = menus.popup(demo.as_com_ref(), &popup_menu)?;
     let bar = menus.create("Demo Menu")?;
     let file = bar.submenu("File")?;
-    menu_item(&file, &mut pending, "New Session", Action::New)?;
-    let open_item = menu_item(&file, &mut pending, "Open File...", Action::Open)?;
+    menu_item(&file, &events_tx, "New Session", Action::New)?;
+    let open_item = menu_item(&file, &events_tx, "Open File...", Action::Open)?;
     open_item.set_shortcut_hint("Ctrl+O")?;
     file.separator()?;
-    menu_item(&file, &mut pending, "Clear Log", Action::Clear)?;
+    menu_item(&file, &events_tx, "Clear Log", Action::Clear)?;
     let view = bar.submenu("View")?;
-    let auto_item = menu_item(&view, &mut pending, "Auto-scroll Log", Action::AutoScroll)?;
+    let auto_item = menu_item(&view, &events_tx, "Auto-scroll Log", Action::AutoScroll)?;
     auto_item.set_mark(MenuMark::Checked { checked: true })?;
-    menu_item(&view, &mut pending, "Show Textures", Action::ShowTextures)?;
+    menu_item(&view, &events_tx, "Show Textures", Action::ShowTextures)?;
     let spacing_menu = view.submenu("Spacing")?;
     let spacing = [
-        menu_item(&spacing_menu, &mut pending, "Comfortable", Action::Spacing(true))?,
-        menu_item(&spacing_menu, &mut pending, "Compact", Action::Spacing(false))?,
+        menu_item(&spacing_menu, &events_tx, "Comfortable", Action::Spacing(true))?,
+        menu_item(&spacing_menu, &events_tx, "Compact", Action::Spacing(false))?,
     ];
     let theme_menu = view.submenu("Theme")?;
     let mut themes = Vec::new();
     for theme in Theme::ALL {
-        let item = menu_item(&theme_menu, &mut pending, theme.label(), Action::Theme(theme))?;
+        let item = menu_item(&theme_menu, &events_tx, theme.label(), Action::Theme(theme))?;
         item.set_mark(MenuMark::Radio { selected: theme == Theme::Default })?;
         themes.push((theme, item));
     }
     let help = bar.submenu("Help")?;
-    menu_item(&help, &mut pending, "About", Action::About)?;
+    menu_item(&help, &events_tx, "About", Action::About)?;
     menus.attach_bar(demo.as_com_ref(), &bar)?;
     let bar = menus.create("Grid Menu")?;
     let grid_menu = bar.submenu("Grid")?;
-    menu_item(&grid_menu, &mut pending, "Reset View", Action::ResetGrid)?;
-    let minor_item = menu_item(&grid_menu, &mut pending, "Minor Lines", Action::MinorLines)?;
+    menu_item(&grid_menu, &events_tx, "Reset View", Action::ResetGrid)?;
+    let minor_item = menu_item(&grid_menu, &events_tx, "Minor Lines", Action::MinorLines)?;
     minor_item.set_mark(MenuMark::Checked { checked: true })?;
     grid_menu.separator()?;
-    menu_item(&grid_menu, &mut pending, "Show Demo Window", Action::ShowDemo)?;
-    menu_item(&grid_menu, &mut pending, "About", Action::About)?;
+    menu_item(&grid_menu, &events_tx, "Show Demo Window", Action::ShowDemo)?;
+    menu_item(&grid_menu, &events_tx, "About", Action::About)?;
     menus.attach_bar(desktop.as_com_ref(), &bar)?;
     let mut log = label(ui, "Welcome to neocogi-ui.")?;
     log.set_font_role(FontRole::Mono)?;
@@ -603,12 +607,6 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
         fps: 0.,
         next_fps: 0.,
     };
-    for (item, action) in pending {
-        neocogi_ui::events::bind(item.activated()?, events_tx.clone(), move |event| Message::Activate(action, event))?;
-    }
-    {
-        neocogi_ui::events::bind(neocogi_ui::events::window_events(state.demo.as_com_ref())?, events_tx.clone(), Message::Window)?;
-    }
     build_controls(&host, &state, &events_tx, &mut main_body)?;
     build_examples(&host, &state, &events_tx)?;
     Ok((host, state, events))

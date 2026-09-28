@@ -1,6 +1,9 @@
 //! COM catalog adapter for independently built custom widget plugins.
-use crate::{CustomProperty, CustomWidgetFactory, CustomWidgetRegistry, design::{DesignWidgetManifest, MAX_DESIGN_DESCRIPTOR_BYTES}};
-use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG};
+use crate::{
+    CustomProperty, CustomWidgetFactory, CustomWidgetRegistry,
+    design::{DesignWidgetManifest, MAX_DESIGN_DESCRIPTOR_BYTES},
+};
+use neocogi_com::{IUnknown, NcValueRef, ComPtr, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG};
 use neocogi_ui::{IWidgetAbi, Ui, Widget};
 use neocogi_ui_document_contracts::IDesignWidgetCatalogAbi;
 use std::rc::Rc;
@@ -25,12 +28,21 @@ impl CustomWidgetFactory for CatalogWidgetFactory {
     }
 
     /// Calls the plugin's common COM constructor with typed, encoded properties.
-    fn create(&self, ui: &Ui, properties: &[CustomProperty]) -> Result<Widget<IWidgetAbi>, NcStatus> {
+    fn create(&self, ui: &Ui, properties: &[CustomProperty], sink: Option<ComPtr<IUnknown>>) -> Result<Widget<IWidgetAbi>, NcStatus> {
         let encoded = serde_json::to_vec(properties).map_err(|_| NC_E_INVALID_ARG)?;
-        if encoded.len() > MAX_DESIGN_DESCRIPTOR_BYTES { return Err(NC_E_INVALID_ARG); }
+        if encoded.len() > MAX_DESIGN_DESCRIPTOR_BYTES {
+            return Err(NC_E_INVALID_ARG);
+        }
         let host = ui.widgets().host()?;
+        let binding = match sink {
+            None => neocogi_ui_document_contracts::WidgetEventBinding::Unobserved,
+            Some(receiver) => neocogi_ui_document_contracts::WidgetEventBinding::Observed(receiver),
+        };
         let widget = self.catalog.create_widget(
-            self.index, host.as_com_ref(), NcCopyFromBufferOffset::new(0, &encoded),
+            self.index,
+            host.as_com_ref(),
+            NcCopyFromBufferOffset::new(0, &encoded),
+            NcValueRef::new(&binding)?,
         )?;
         Ok(Widget::from_interface(widget))
     }
@@ -43,20 +55,30 @@ impl CustomWidgetRegistry {
     /// registry validates every record before publishing any new palette kind.
     pub fn register_catalog(&mut self, catalog: ComPtr<IDesignWidgetCatalogAbi>) -> Result<(), String> {
         let count = catalog.widget_count().map_err(|status| format!("Widget catalog count failed: {status}"))?;
-        if count > MAX_CATALOG_WIDGETS { return Err("Widget catalog exceeds kind limit".into()); }
+        if count > MAX_CATALOG_WIDGETS {
+            return Err("Widget catalog exceeds kind limit".into());
+        }
         let mut candidate = self.clone();
         for index in 0..count {
-            let required = catalog.describe(index, NcCopyToBufferOffset::new(0, &mut []))
+            let required = catalog
+                .describe(index, NcCopyToBufferOffset::new(0, &mut []))
                 .map_err(|status| format!("Widget catalog description length failed: {status}"))? as usize;
             if required == 0 || required > MAX_DESIGN_DESCRIPTOR_BYTES {
                 return Err("Widget catalog returned an invalid description length".into());
             }
             let mut bytes = vec![0; required];
-            let written = catalog.describe(index, NcCopyToBufferOffset::new(0, &mut bytes))
+            let written = catalog
+                .describe(index, NcCopyToBufferOffset::new(0, &mut bytes))
                 .map_err(|status| format!("Widget catalog description failed: {status}"))? as usize;
-            if written != required { return Err("Widget catalog changed a description during discovery".into()); }
+            if written != required {
+                return Err("Widget catalog changed a description during discovery".into());
+            }
             let manifest = DesignWidgetManifest::decode(&bytes)?;
-            candidate.register(Rc::new(CatalogWidgetFactory { catalog: catalog.clone(), index, manifest }))?;
+            candidate.register(Rc::new(CatalogWidgetFactory {
+                catalog: catalog.clone(),
+                index,
+                manifest,
+            }))?;
         }
         *self = candidate;
         Ok(())

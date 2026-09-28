@@ -168,7 +168,7 @@ impl Document {
             )
             .unwrap();
         }
-        source.push_str("}\n/// Checks widget fields and binds each complete event stream to the application queue.\n/// Use inside ReloadSlot::reload; failed preparation preserves the published component.\npub fn bind(\n    component: &neocogi_ui_document::Component,\n    generation: neocogi_ui_document::Generation,\n    send: std::sync::mpsc::Sender<Message>,\n) -> Result<Form, neocogi_com::NcStatus> {\n    let inputs = Inputs {\n");
+        source.push_str("}\n/// Resolves concrete fields after construction has installed every receiver.\npub fn bind(\n    component: &neocogi_ui_document::Component,\n) -> Result<Form, neocogi_com::NcStatus> {\n    let inputs = Inputs {\n");
         for (index, input) in self.inputs.iter().enumerate() {
             writeln!(
                 source,
@@ -192,12 +192,13 @@ impl Document {
             .unwrap();
         }
         source.push_str("    };\n");
+        source.push_str("    Ok(form)\n}\n/// Prepares application receivers before Loader or ReloadSlot creates widgets.\npub fn events(\n    generation: neocogi_ui_document::Generation,\n    send: std::sync::mpsc::Sender<Message>,\n) -> Result<neocogi_ui_document::EventBindings, neocogi_com::NcStatus> {\n    let mut bindings = neocogi_ui_document::EventBindings::new();\n");
         for (index, node, payload) in &events {
             writeln!(source,
-                "    neocogi_com::events::bind_source(form.{}.as_interface(), send.clone(), move |event: {}| Message {{ generation, event: Event::Widget{index}(event) }})?;",
-                symbol("widget", &node.key, *index), payload).unwrap();
+                "    bindings.insert::<{}, _>({:?}, send.clone(), move |event: {}| Message {{ generation, event: Event::Widget{index}(event) }})?;",
+                node.widget.rust_interface(custom)?, node.key, payload).unwrap();
         }
-        source.push_str("    Ok(form)\n}\n");
+        source.push_str("    Ok(bindings)\n}\n");
         if source.len() > MAX_BYTES {
             return Err("Generated bindings exceed the byte limit".into());
         }

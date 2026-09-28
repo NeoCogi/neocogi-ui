@@ -18,10 +18,10 @@ A `Document` contains a tree of built-in widget constructors, styles, resources,
 and parent-owned layout edges. Each node has a unique stable key. Its physical
 event port count is zero or one. A text editor's single port carries the whole
 `TextboxEvent` or `TextAreaEvent` enum, including `Changed` and `Submitted`.
-An event stream has exactly one lifetime consumer, attached by the behavioral
-parent. The loader constructs unbound widgets; generated form bindings attach
-their typed sinks directly to the application's message queue. There is no
-intermediate loader queue or form relay. A second attachment is rejected.
+An event stream has one receiver selected by the behavioral parent during
+construction. Generated forms prepare typed sinks before the loader creates
+widgets. There is no later attachment method, intermediate loader queue, or form
+relay. An omitted receiver chooses permanent non-delivery.
 
 The application owns event behavior. Every event-producing node is represented
 by one required method in the generated `Handlers` trait. The application
@@ -34,7 +34,9 @@ serialized visual output-to-input graph, route expression, or route editor.
 
 Use `Loader::new(ui, parent_window, resources)` or
 `ReloadSlot::new(ui, parent_window)`. The loader returns a `Component` whose
-concrete children can be queried and bound before mounting. Delivery errors
+concrete children can be queried before mounting. Supply `EventBindings` to
+`prepare_with_events` or `load_with_events` before construction; plain `prepare`
+and `load` select permanently unobserved widgets. Delivery errors
 propagate through the emitting operation; there is no relay diagnostic channel.
 
 `Component::widget::<ButtonAbi>("save")` resolves an authored node key and checks
@@ -87,18 +89,31 @@ impl generated::Handlers for generated::Form {
 }
 ```
 
-The actual method and field ordinals come from the generated file. Bind the
-candidate inside `ReloadSlot::reload`, retain the returned `Form` for the
-published generation, and queue generated `Message` values. Before dispatch,
-check `slot.accepts(message.generation)`; stale events from replaced candidates
-must not update the current form. Run `message.event.dispatch(&mut form)` only at
-the application's safe update boundary.
+The actual method and field ordinals come from the generated file. First use
+`generated::events(generation, sender)` in the reload receiver callback. Then use
+`generated::bind(component)` in the field-validation callback and retain that
+`Form` only after successful publication. The first function constructs sinks;
+the second resolves fields and inputs without changing event ownership.
+
+```rust,ignore
+let mut candidate_form = None;
+let outcome = slot.reload(&document, resources,
+    |generation| generated::events(generation, sender.clone()),
+    |component, _| { candidate_form = Some(generated::bind(component)?); Ok(()) },
+)?;
+let mut form = candidate_form.unwrap();
+```
+
+Before dispatch, check `slot.accepts(message.generation)`; stale events from
+replaced candidates must not update the current form. Call
+`message.event.dispatch(&mut form)` only at the application's safe update boundary.
 
 ## Reload, ownership, and authored state
 
-`ReloadSlot` owns one stable container. `reload(document, resources, bind)`
-validates and constructs an unmounted candidate, runs its binding callback, and
-only then replaces the old child. Failed construction or binding preserves the
+`ReloadSlot` owns one stable container.
+`reload(document, resources, make_events, check_fields)` prepares receivers,
+validates all keys and exact sink contracts, constructs the unmounted candidate,
+checks concrete fields, and only then replaces the old child. Failed preparation preserves the
 published component. Candidate cleanup closes partial trees and combo popups.
 The returned teardown status reports old-content cleanup after publication; it
 cannot turn a successful replacement into an unpublished one. Each attempt gets
@@ -140,8 +155,9 @@ Linear, Grid, Split, Scroll, and Disclosure remain ordinary nested containers.
 A host installs custom widgets through `CustomWidgetRegistry`. A local
 `CustomWidgetFactory` returns an owned `DesignWidgetManifest`, normally made by
 `DesignWidgetManifest::from_idl(kind, defaults, &CounterAbi::IDL_INTERFACE)`,
-and a constructor returning `Widget<IWidgetAbi>`. Static conversion checks the
-generated resolved stream against the complete required interface chain. A custom widget
+and a constructor accepting its optional COM receiver and returning `Widget<IWidgetAbi>`. Static conversion checks the
+product identity and complete reachable event graph. The constructor receiver
+is separate from the product's interface chain. A custom widget
 may expose zero or one event port; multiple logical events belong in one
 `enum`, such as `CounterEvent::Activated` and
 `CounterEvent::Changed`.
@@ -150,6 +166,9 @@ An independently built plugin can expose `IDesignWidgetCatalog` on its root COM
 factory. The registry reads bounded, versioned descriptions through the catalog's
 `describe` method, copies the IDL struct/enum/message shape and typed property
 defaults into owned data, and retains the catalog for `create_widget` calls.
+Catalog revision 6 describes the constructor sink IID/signature. `create_widget`
+receives `WidgetEventBinding`; the plugin must query its exact typed sink before
+allocating the widget. Mismatched sinks fail before publication.
 The shared `neocogi-ui-design` crate contains only this metadata and property
 codec, so plugin implementations do not link the document runtime or designer.
 `register_catalog` validates all kinds transactionally before publishing any.

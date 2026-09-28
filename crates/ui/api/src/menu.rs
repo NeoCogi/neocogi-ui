@@ -20,7 +20,18 @@ impl Menus {
     }
     /// Creates an ordinary hidden popup and consumes the builder's sole declaration tree.
     pub fn popup(&self, window: ComRef<'_, IWindowAbi>, menu: &MenuBuilder) -> Result<ComPtr<IPopupAbi>, NcStatus> {
-        self.interface.create_popup(window, menu.interface.as_com_ref())
+        self.popup_with_sink(window, menu, None)
+    }
+    /// Constructs a menu popup with its final dismissal receiver before consuming the declaration.
+    pub fn popup_with_sink(
+        &self,
+        window: ComRef<'_, IWindowAbi>,
+        menu: &MenuBuilder,
+        sink: Option<ComRef<'_, neocogi_ui_core_contracts::IPopupSinkAbi>>,
+    ) -> Result<ComPtr<IPopupAbi>, NcStatus> {
+        let events = neocogi_ui_core_contracts::IPopupEventBinding::from_sink(sink);
+        self.interface
+            .create_popup(window, menu.interface.as_com_ref(), neocogi_com::NcValueRef::new(&events)?)
     }
     /// Wraps an already checked service capability without caching manager data.
     pub fn from_interface(interface: ComPtr<IMenusAbi>) -> Self {
@@ -37,9 +48,26 @@ pub struct MenuBuilder {
 impl MenuBuilder {
     /// Appends an enabled unmarked item and returns its direct live editing/event capability.
     pub fn item(&self, label: &str) -> Result<MenuItem, NcStatus> {
+        self.item_with_sink(label, None)
+    }
+    /// Constructs an item with its sole receiver before exposing its handle.
+    pub fn item_with_sink(&self, label: &str, sink: Option<ComRef<'_, neocogi_ui_core_contracts::IMenuItemSinkAbi>>) -> Result<MenuItem, NcStatus> {
         Ok(MenuItem {
-            interface: self.interface.item(NcCopyFromBufferOffset::new(0, label.as_bytes()))?,
+            interface: self.interface.item(
+                NcCopyFromBufferOffset::new(0, label.as_bytes()),
+                neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IMenuItemEventBinding::from_sink(sink))?,
+            )?,
         })
+    }
+    /// Captures activations into the application queue without later installation.
+    pub fn item_observed<M: 'static>(
+        &self,
+        label: &str,
+        sender: std::sync::mpsc::Sender<M>,
+        map: impl FnMut(neocogi_ui_core_contracts::Activation) -> M + 'static,
+    ) -> Result<MenuItem, NcStatus> {
+        let sink = crate::events::activation::sink(sender, map)?;
+        self.item_with_sink(label, Some(sink.as_com_ref()))
     }
     /// Appends a noninteractive separator in exact declaration order.
     pub fn separator(&self) -> Result<(), NcStatus> {

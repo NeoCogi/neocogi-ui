@@ -234,25 +234,22 @@ interface IWindowManager {
         parent: &IWindow,
         title: &[u8],
         rect: Rect,
-        root: &Mount,
-    ) -> Result<ComPtr<IWindow>>;
+        root: &Mount, events: &EventBinding<WindowEvent>) -> Result<ComPtr<IWindow>>;
     /// Creates a hidden modal dialog owned by an ordinary window.
     fn create_dialog(
         &self,
         parent: &IWindow,
         title: &[u8],
         rect: Rect,
-        root: &Mount,
-    ) -> Result<ComPtr<IWindow>>;
+        root: &Mount, events: &EventBinding<WindowEvent>) -> Result<ComPtr<IWindow>>;
     /// Creates a hidden auto-sized popup owned by a live window or dialog.
     fn create_popup(
         &self,
         parent: &IWindow,
         title: &[u8],
-        root: &Mount,
-    ) -> Result<ComPtr<IPopup>>;
+        root: &Mount, events: &EventBinding<PopupDismissed>) -> Result<ComPtr<IPopup>>;
     /// Mounts one previously unmounted root and creates its logical window.
-    fn create_window(&self, title: &[u8], rect: Rect, root: &Mount) -> Result<ComPtr<IWindow>>;
+    fn create_window(&self, title: &[u8], rect: Rect, root: &Mount, events: &EventBinding<WindowEvent>) -> Result<ComPtr<IWindow>>;
 }
 
 #[version(1)]

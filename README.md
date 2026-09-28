@@ -166,9 +166,9 @@ same canonical `IWidgetHost` identity before the facade permits construction. No
 untyped argument object, private runtime pointer, or root identifier crosses that boundary.
 
 Supply a sender and typed mapper when constructing observed widgets, for example
-`ui.widgets().textbox("", sender, mapper)`. The concrete class exposes one
-`IEventStream<TextboxEvent>`; the constructor helper attaches its typed sink once.
-`textbox_unobserved` leaves it unbound. See [the event architecture](docs/CLASS_EVENT_STREAMS.md). A persistent
+`ui.widgets().textbox("", sender, mapper)`. The helper creates one typed COM sink
+and passes it in the factory's `EventBinding<TextboxEvent>` argument before the
+widget is published. `textbox_unobserved` chooses permanent non-delivery. See [the event architecture](docs/CLASS_EVENT_STREAMS.md). A persistent
 `events::Controller<Model>` owns ordinary model state and its standard channel
 receiver. Resolve `IEventOwner` once, then call
 `ui.update_with_events(size, owner.as_com_ref())` each frame. Nested components

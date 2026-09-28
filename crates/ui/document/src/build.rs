@@ -17,6 +17,8 @@ pub(crate) struct Construction<'a> {
     pub resources: &'a Resources,
     /// Name-to-capability index exists only inside the component implementation.
     pub nodes: BTreeMap<String, Widget<IWidgetAbi>>,
+    /// Receivers are consumed exactly once before each node is published.
+    pub events: crate::EventBindings,
 }
 impl Drop for Construction<'_> {
     /// Failed builds close retained partial topology, including window-owned popup controls.
@@ -52,36 +54,68 @@ impl Construction<'_> {
     pub fn build(&mut self, node: &Node) -> Result<Widget<IWidgetAbi>, NcStatus> {
         let children = node.children.iter().map(|child| self.build(&child.node)).collect::<Result<Vec<_>, _>>()?;
         let factory = self.ui.widgets();
+        let sink = self.events.take(&node.key);
         let mut widget = match &node.widget {
-            WidgetSpec::Button { text } => root(factory.button_unobserved(text)?)?,
-            WidgetSpec::Checkbox { text, checked } => root(factory.checkbox_unobserved(text, *checked)?)?,
-            WidgetSpec::Textbox { text } => root(factory.textbox_unobserved(text)?)?,
+            WidgetSpec::Button { text } => {
+                root(factory.button_with_sink(text, sink.as_ref().map(|sink| sink.query()).transpose()?.as_ref().map(ComPtr::as_com_ref))?)?
+            }
+            WidgetSpec::Checkbox { text, checked } => root(factory.checkbox_with_sink(
+                text,
+                *checked,
+                sink.as_ref().map(|sink| sink.query()).transpose()?.as_ref().map(ComPtr::as_com_ref),
+            )?)?,
+            WidgetSpec::Textbox { text } => {
+                root(factory.textbox_with_sink(text, sink.as_ref().map(|sink| sink.query()).transpose()?.as_ref().map(ComPtr::as_com_ref))?)?
+            }
             WidgetSpec::TextBlock { text, wrapping: policy } => root(factory.text_block(text, wrapping(policy))?)?,
-            WidgetSpec::TextArea { text, wrapping: policy, scrolling } => root(factory.text_area_unobserved(text, wrapping(policy), *scrolling)?)?,
-            WidgetSpec::Slider { value, low, high, step, precision } => root(factory.slider_unobserved(SliderOptions {
-                value: *value,
-                low: *low,
-                high: *high,
-                step: *step,
-                precision: *precision,
-            })?)?,
-            WidgetSpec::Number { value, step, precision } => root(factory.number_unobserved(NumberOptions {
-                value: *value,
-                step: *step,
-                precision: *precision,
-            })?)?,
+            WidgetSpec::TextArea { text, wrapping: policy, scrolling } => root(factory.text_area_with_sink(
+                text,
+                wrapping(policy),
+                *scrolling,
+                sink.as_ref().map(|sink| sink.query()).transpose()?.as_ref().map(ComPtr::as_com_ref),
+            )?)?,
+            WidgetSpec::Slider { value, low, high, step, precision } => root(factory.slider_with_sink(
+                SliderOptions {
+                    value: *value,
+                    low: *low,
+                    high: *high,
+                    step: *step,
+                    precision: *precision,
+                },
+                sink.as_ref().map(|sink| sink.query()).transpose()?.as_ref().map(ComPtr::as_com_ref),
+            )?)?,
+            WidgetSpec::Number { value, step, precision } => root(factory.number_with_sink(
+                NumberOptions {
+                    value: *value,
+                    step: *step,
+                    precision: *precision,
+                },
+                sink.as_ref().map(|sink| sink.query()).transpose()?.as_ref().map(ComPtr::as_com_ref),
+            )?)?,
             WidgetSpec::ColorSwatch { text, rgba } => root(factory.color_swatch(*rgba, text)?)?,
-            WidgetSpec::ListItem { text } => root(factory.list_item_unobserved(text)?)?,
-            WidgetSpec::ListBox { text } => root(factory.list_box_unobserved(text)?)?,
-            WidgetSpec::Scrollbar { vertical, viewport, content, offset } => root(factory.scrollbar_unobserved(ScrollRange {
-                axis: if *vertical { ScrollAxis::Vertical } else { ScrollAxis::Horizontal },
-                viewport: *viewport,
-                content: *content,
-                offset: *offset,
-            })?)?,
+            WidgetSpec::ListItem { text } => {
+                root(factory.list_item_with_sink(text, sink.as_ref().map(|sink| sink.query()).transpose()?.as_ref().map(ComPtr::as_com_ref))?)?
+            }
+            WidgetSpec::ListBox { text } => {
+                root(factory.list_box_with_sink(text, sink.as_ref().map(|sink| sink.query()).transpose()?.as_ref().map(ComPtr::as_com_ref))?)?
+            }
+            WidgetSpec::Scrollbar { vertical, viewport, content, offset } => root(factory.scrollbar_with_sink(
+                ScrollRange {
+                    axis: if *vertical { ScrollAxis::Vertical } else { ScrollAxis::Horizontal },
+                    viewport: *viewport,
+                    content: *content,
+                    offset: *offset,
+                },
+                sink.as_ref().map(|sink| sink.query()).transpose()?.as_ref().map(ComPtr::as_com_ref),
+            )?)?,
             WidgetSpec::Combo { labels, selected, placeholder } => {
                 let parent = self.parent.ok_or(NC_E_INVALID_ARG)?;
-                let mut combo = self.ui.combo_box_unobserved(parent.as_com_ref(), labels, selection(*selected))?;
+                let mut combo = self.ui.combo_box_with_sink(
+                    parent.as_com_ref(),
+                    labels,
+                    selection(*selected),
+                    sink.as_ref().map(|sink| sink.query()).transpose()?.as_ref().map(ComPtr::as_com_ref),
+                )?;
                 // Retain the root before further fallible setters so cleanup also removes its popup.
                 let widget = root(combo.clone())?;
                 self.nodes.insert(node.key.clone(), widget.clone());
@@ -113,18 +147,21 @@ impl Construction<'_> {
                 minimum_first,
                 minimum_second,
                 handle,
-            } => root(factory.split_view_unobserved(SplitOptions {
-                axis: if *vertical { SplitAxis::Vertical } else { SplitAxis::Horizontal },
-                position: *position,
-                minimum_first: *minimum_first,
-                minimum_second: *minimum_second,
-                handle_width: *handle,
-            })?)?,
+            } => root(factory.split_view_with_sink(
+                SplitOptions {
+                    axis: if *vertical { SplitAxis::Vertical } else { SplitAxis::Horizontal },
+                    position: *position,
+                    minimum_first: *minimum_first,
+                    minimum_second: *minimum_second,
+                    handle_width: *handle,
+                },
+                sink.as_ref().map(|sink| sink.query()).transpose()?.as_ref().map(ComPtr::as_com_ref),
+            )?)?,
             WidgetSpec::Scroll { enabled } => root(factory.scroll_area(children.first().ok_or(NC_E_INVALID_ARG)?, *enabled)?)?,
             WidgetSpec::Disclosure { text, tree, expanded } => {
                 root(factory.disclosure(text, if *tree { DisclosureStyle::Tree } else { DisclosureStyle::Header }, *expanded)?)?
             }
-            WidgetSpec::Custom { kind, properties, .. } => self.custom.create(kind, self.ui, properties)?,
+            WidgetSpec::Custom { kind, properties, .. } => self.custom.create(kind, self.ui, properties, sink)?,
         };
         self.nodes.insert(node.key.clone(), widget.clone());
         for (index, (child, relationship)) in children.iter().zip(&node.children).enumerate() {

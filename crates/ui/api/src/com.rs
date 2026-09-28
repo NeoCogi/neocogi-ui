@@ -20,12 +20,14 @@ pub mod nodes {
     pub use neocogi_ui_nodes_contracts::*;
 }
 pub use neocogi_ui_nodes_contracts::{
-    ButtonSinkAbi, CheckboxSinkAbi, TextboxSinkAbi, TextAreaSinkAbi, SliderSinkAbi, NumberSinkAbi, ListItemSinkAbi, ListBoxSinkAbi, ScrollbarSinkAbi,
-    SplitViewSinkAbi, Button, ButtonAbi, Checkbox, CheckboxAbi, ChildCrossSize, ColorSwatch, ColorSwatchAbi, Combo, ComboAbi, ContentIcon, CrossSize,
-    CrossSizeAbi, Disclosure, DisclosureAbi, DisclosureStyle, FillStates, FlowDirection, Grid, GridAbi, GridExtent, LayoutTrack, LayoutTrackAbi, Linear,
-    LinearAbi, LinearEdge, ListBox, ListBoxAbi, ListItem, ListItemAbi, Number, NumberAbi, NumberOptions, ScrollArea, ScrollAreaAbi, ScrollAxis, ScrollRange,
-    Scrollbar, ScrollbarAbi, Slider, FormAbi, SliderAbi, SliderOptions, SplitAxis, SplitChanged, SplitOptions, SplitView, SplitViewAbi, TextArea, TextAreaAbi,
-    TextBlock, TextBlockAbi, Textbox, TextboxAbi, UiFactory, UiFactoryAbi,
+    TextAreaEventBinding, CheckboxEventBinding, TextboxEventBinding, SliderEventBinding, NumberEventBinding, ListItemEventBinding, ListBoxEventBinding,
+    ScrollbarEventBinding, ButtonEventBinding, ComboEventBinding, SplitViewEventBinding, ComboSinkAbi, ButtonSinkAbi, CheckboxSinkAbi, TextboxSinkAbi,
+    TextAreaSinkAbi, SliderSinkAbi, NumberSinkAbi, ListItemSinkAbi, ListBoxSinkAbi, ScrollbarSinkAbi, SplitViewSinkAbi, Button, ButtonAbi, Checkbox,
+    CheckboxAbi, ChildCrossSize, ColorSwatch, ColorSwatchAbi, Combo, ComboAbi, ContentIcon, CrossSize, CrossSizeAbi, Disclosure, DisclosureAbi,
+    DisclosureStyle, FillStates, FlowDirection, Grid, GridAbi, GridExtent, LayoutTrack, LayoutTrackAbi, Linear, LinearAbi, LinearEdge, ListBox, ListBoxAbi,
+    ListItem, ListItemAbi, Number, NumberAbi, NumberOptions, ScrollArea, ScrollAreaAbi, ScrollAxis, ScrollRange, Scrollbar, ScrollbarAbi, Slider, FormAbi,
+    SliderAbi, SliderOptions, SplitAxis, SplitChanged, SplitOptions, SplitView, SplitViewAbi, TextArea, TextAreaAbi, TextBlock, TextBlockAbi, Textbox,
+    TextboxAbi, UiFactory, UiFactoryAbi,
 };
 pub use neocogi_gfx_contracts::{
     AssetLoader, AssetLoaderAbi, DrawPoint, GfxPluginFactory, GfxPluginFactoryAbi, IAssetBuilder, IAssetBuilderAbi, IGfxDiagnostics, IGfxDiagnosticsAbi,
@@ -291,24 +293,26 @@ impl WidgetFactory {
         scrolling: bool,
         sink: Option<ComRef<'_, TextAreaSinkAbi>>,
     ) -> Result<TextAreaWidget, NcStatus> {
-        Ok(TextAreaWidget::from_interface(attach_optional_sink(
-            self.interface
-                .create_text_area(NcCopyFromBufferOffset::new(0, text.as_bytes()), wrapping, scrolling)?,
-            sink,
+        Ok(TextAreaWidget::from_interface(self.interface.create_text_area(
+            NcCopyFromBufferOffset::new(0, text.as_bytes()),
+            wrapping,
+            scrolling,
+            neocogi_com::NcValueRef::new(&TextAreaEventBinding::from_sink(sink))?,
         )?))
     }
     /// Constructs an initialized, unmounted checkbox in this runtime.
     pub fn checkbox_with_sink(&self, label: &str, checked: bool, sink: Option<ComRef<'_, CheckboxSinkAbi>>) -> Result<CheckboxWidget, NcStatus> {
-        Ok(CheckboxWidget::from_interface(attach_optional_sink(
-            self.interface.create_checkbox(checked, NcCopyFromBufferOffset::new(0, label.as_bytes()))?,
-            sink,
+        Ok(CheckboxWidget::from_interface(self.interface.create_checkbox(
+            checked,
+            NcCopyFromBufferOffset::new(0, label.as_bytes()),
+            neocogi_com::NcValueRef::new(&CheckboxEventBinding::from_sink(sink))?,
         )?))
     }
     /// Constructs an initialized, unmounted textbox in this runtime.
     pub fn textbox_with_sink(&self, text: &str, sink: Option<ComRef<'_, TextboxSinkAbi>>) -> Result<TextboxWidget, NcStatus> {
-        Ok(TextboxWidget::from_interface(attach_optional_sink(
-            self.interface.create_textbox(NcCopyFromBufferOffset::new(0, text.as_bytes()))?,
-            sink,
+        Ok(TextboxWidget::from_interface(self.interface.create_textbox(
+            NcCopyFromBufferOffset::new(0, text.as_bytes()),
+            neocogi_com::NcValueRef::new(&TextboxEventBinding::from_sink(sink))?,
         )?))
     }
     /// Constructs an initialized, unmounted text block in this runtime.
@@ -319,17 +323,17 @@ impl WidgetFactory {
     }
     /// Constructs an initialized, unmounted slider in this runtime.
     pub fn slider_with_sink(&self, options: SliderOptions, sink: Option<ComRef<'_, SliderSinkAbi>>) -> Result<SliderWidget, NcStatus> {
-        Ok(SliderWidget::from_interface(attach_optional_sink(
-            self.interface.create_slider(options)?,
-            sink,
-        )?))
+        Ok(SliderWidget::from_interface(
+            self.interface
+                .create_slider(options, neocogi_com::NcValueRef::new(&SliderEventBinding::from_sink(sink))?)?,
+        ))
     }
     /// Constructs an initialized, unmounted number in this runtime.
     pub fn number_with_sink(&self, options: NumberOptions, sink: Option<ComRef<'_, NumberSinkAbi>>) -> Result<NumberWidget, NcStatus> {
-        Ok(NumberWidget::from_interface(attach_optional_sink(
-            self.interface.create_number(options)?,
-            sink,
-        )?))
+        Ok(NumberWidget::from_interface(
+            self.interface
+                .create_number(options, neocogi_com::NcValueRef::new(&NumberEventBinding::from_sink(sink))?)?,
+        ))
     }
     /// Constructs an initialized, unmounted color swatch in this runtime.
     pub fn color_swatch(&self, rgba: u32, label: &str) -> Result<ColorSwatchWidget, NcStatus> {
@@ -339,23 +343,23 @@ impl WidgetFactory {
     }
     /// Constructs an initialized, unmounted list item in this runtime.
     pub fn list_item_with_sink(&self, label: &str, sink: Option<ComRef<'_, ListItemSinkAbi>>) -> Result<ListItemWidget, NcStatus> {
-        Ok(ListItemWidget::from_interface(attach_optional_sink(
-            self.interface.create_list_item(NcCopyFromBufferOffset::new(0, label.as_bytes()))?,
-            sink,
+        Ok(ListItemWidget::from_interface(self.interface.create_list_item(
+            NcCopyFromBufferOffset::new(0, label.as_bytes()),
+            neocogi_com::NcValueRef::new(&ListItemEventBinding::from_sink(sink))?,
         )?))
     }
     /// Constructs an initialized, unmounted list box in this runtime.
     pub fn list_box_with_sink(&self, label: &str, sink: Option<ComRef<'_, ListBoxSinkAbi>>) -> Result<ListBoxWidget, NcStatus> {
-        Ok(ListBoxWidget::from_interface(attach_optional_sink(
-            self.interface.create_list_box(NcCopyFromBufferOffset::new(0, label.as_bytes()))?,
-            sink,
+        Ok(ListBoxWidget::from_interface(self.interface.create_list_box(
+            NcCopyFromBufferOffset::new(0, label.as_bytes()),
+            neocogi_com::NcValueRef::new(&ListBoxEventBinding::from_sink(sink))?,
         )?))
     }
     /// Constructs an initialized, unmounted scrollbar in this runtime.
     pub fn scrollbar_with_sink(&self, range: ScrollRange, sink: Option<ComRef<'_, ScrollbarSinkAbi>>) -> Result<ScrollbarWidget, NcStatus> {
-        Ok(ScrollbarWidget::from_interface(attach_optional_sink(
-            self.interface.create_scrollbar(range)?,
-            sink,
+        Ok(ScrollbarWidget::from_interface(self.interface.create_scrollbar(
+            range,
+            neocogi_com::NcValueRef::new(&ScrollbarEventBinding::from_sink(sink))?,
         )?))
     }
 
@@ -366,10 +370,10 @@ impl WidgetFactory {
 
     /// Creates and initializes an unmounted button in one concrete API operation.
     pub fn button_with_sink(&self, label: &str, sink: Option<ComRef<'_, ButtonSinkAbi>>) -> Result<ButtonWidget, NcStatus> {
-        Ok(ButtonWidget::from_interface(attach_optional_sink(
-            self.interface
-                .create_button(NcCopyFromBufferOffset::new(0, label.as_bytes()), WidgetOptions::FRAME)?,
-            sink,
+        Ok(ButtonWidget::from_interface(self.interface.create_button(
+            NcCopyFromBufferOffset::new(0, label.as_bytes()),
+            WidgetOptions::FRAME,
+            neocogi_com::NcValueRef::new(&ButtonEventBinding::from_sink(sink))?,
         )?))
     }
 }
@@ -478,7 +482,7 @@ impl Ui {
         parent: ComRef<'_, IWindowAbi>,
         items: &[Item],
         selection: ChoiceSelection,
-        sink: Option<ComRef<'_, IChoiceMenuSinkAbi>>,
+        sink: Option<ComRef<'_, ComboSinkAbi>>,
     ) -> Result<ComboWidget, NcStatus> {
         let (menu_text, entries) = encoded_combo_items(items)?;
         let combo = self.factory.interface.create_combo_box(
@@ -486,8 +490,9 @@ impl Ui {
             NcCopyFromBufferOffset::new(0, &menu_text),
             NcCopyFromBufferOffset::new(0, &entries),
             selection.into(),
+            neocogi_com::NcValueRef::new(&ComboEventBinding::from_sink(sink))?,
         )?;
-        Ok(ComboWidget::from_interface(attach_optional_sink(combo, sink)?))
+        Ok(ComboWidget::from_interface(combo))
     }
 
     /// Creates a combo from the generated preorder menu contract and its shared UTF-8 storage.
@@ -497,7 +502,7 @@ impl Ui {
         menu_text: &str,
         entries: &[ChoiceMenuEntry],
         selection: ChoiceSelection,
-        sink: Option<ComRef<'_, IChoiceMenuSinkAbi>>,
+        sink: Option<ComRef<'_, ComboSinkAbi>>,
     ) -> Result<ComboWidget, NcStatus> {
         let entries = combo_menu_abi(entries);
         let combo = self.factory.interface.create_combo_box(
@@ -505,16 +510,19 @@ impl Ui {
             NcCopyFromBufferOffset::new(0, menu_text.as_bytes()),
             NcCopyFromBufferOffset::new(0, &entries),
             selection.into(),
+            neocogi_com::NcValueRef::new(&ComboEventBinding::from_sink(sink))?,
         )?;
-        Ok(ComboWidget::from_interface(attach_optional_sink(combo, sink)?))
+        Ok(ComboWidget::from_interface(combo))
     }
 
     /// Creates a hidden standard file picker using the actual runtime's modal and COM controls.
     pub fn file_dialog_with_sink(&self, parent: ComRef<'_, IWindowAbi>, sink: Option<ComRef<'_, IFileDialogSinkAbi>>) -> Result<crate::FileDialog, NcStatus> {
-        Ok(crate::FileDialog::from_interface(attach_optional_sink(
-            self.factory.interface.query::<IFileDialogsAbi>()?.create(parent)?,
-            sink,
-        )?))
+        Ok(crate::FileDialog::from_interface(
+            self.factory
+                .interface
+                .query::<IFileDialogsAbi>()?
+                .create(parent, neocogi_com::NcValueRef::new(&IFileDialogEventBinding::from_sink(sink))?)?,
+        ))
     }
 
     /// Queries compact menu construction on this same runtime identity without copying its forest.
@@ -539,36 +547,82 @@ impl Ui {
     }
     /// Mounts the actual widget object in a new logical window.
     pub fn window(&self, title: &str, rect: Rect, root: &impl Mountable) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+        self.window_with_sink(title, rect, root, None)
+    }
+    /// Constructs with its final typed receiver before returning the surface.
+    pub fn window_with_sink(
+        &self,
+        title: &str,
+        rect: Rect,
+        root: &impl Mountable,
+        sink: Option<ComRef<'_, IWindowSinkAbi>>,
+    ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.windows.create_window(
             NcCopyFromBufferOffset::new(0, title.as_bytes()),
             rect,
             neocogi_com::NcValueRef::new(&root.mount_description()?)?,
+            neocogi_com::NcValueRef::new(&IWindowEventBinding::from_sink(sink))?,
         )
     }
     /// Mounts a structural child under a live window from this UI.
     pub fn child_window(&self, parent: ComRef<'_, IWindowAbi>, title: &str, rect: Rect, root: &impl Mountable) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+        self.child_window_with_sink(parent, title, rect, root, None)
+    }
+    /// Constructs with its final typed receiver before returning the surface.
+    pub fn child_window_with_sink(
+        &self,
+        parent: ComRef<'_, IWindowAbi>,
+        title: &str,
+        rect: Rect,
+        root: &impl Mountable,
+        sink: Option<ComRef<'_, IWindowSinkAbi>>,
+    ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.windows.create_child(
             parent,
             NcCopyFromBufferOffset::new(0, title.as_bytes()),
             rect,
             neocogi_com::NcValueRef::new(&root.mount_description()?)?,
+            neocogi_com::NcValueRef::new(&IWindowEventBinding::from_sink(sink))?,
         )
     }
     /// Mounts a hidden modal dialog; show it after initialization with set_visibility.
     pub fn dialog(&self, parent: ComRef<'_, IWindowAbi>, title: &str, rect: Rect, root: &impl Mountable) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+        self.dialog_with_sink(parent, title, rect, root, None)
+    }
+    /// Constructs with its final typed receiver before returning the surface.
+    pub fn dialog_with_sink(
+        &self,
+        parent: ComRef<'_, IWindowAbi>,
+        title: &str,
+        rect: Rect,
+        root: &impl Mountable,
+        sink: Option<ComRef<'_, IWindowSinkAbi>>,
+    ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.windows.create_dialog(
             parent,
             NcCopyFromBufferOffset::new(0, title.as_bytes()),
             rect,
             neocogi_com::NcValueRef::new(&root.mount_description()?)?,
+            neocogi_com::NcValueRef::new(&IWindowEventBinding::from_sink(sink))?,
         )
     }
     /// Mounts a hidden auto-sized popup with a distinct popup capability.
     pub fn popup(&self, parent: ComRef<'_, IWindowAbi>, title: &str, root: &impl Mountable) -> Result<ComPtr<IPopupAbi>, NcStatus> {
+        self.popup_with_sink(parent, title, root, None)
+    }
+    /// Constructs with its final typed receiver before returning the surface.
+    pub fn popup_with_sink(
+        &self,
+        parent: ComRef<'_, IWindowAbi>,
+        title: &str,
+        root: &impl Mountable,
+        sink: Option<ComRef<'_, IPopupSinkAbi>>,
+    ) -> Result<ComPtr<IPopupAbi>, NcStatus> {
         self.windows.create_popup(
             parent,
             NcCopyFromBufferOffset::new(0, title.as_bytes()),
             neocogi_com::NcValueRef::new(&root.mount_description()?)?,
+            neocogi_com::NcValueRef::new(&IPopupEventBinding::from_sink(sink))?,
         )
     }
     /// Queues a typed host event while keeping its text buffer local to this call.
@@ -1019,15 +1073,4 @@ impl Ui {
     pub fn file_dialog_unobserved(&self, parent: ComRef<'_, IWindowAbi>) -> Result<crate::FileDialog, NcStatus> {
         self.file_dialog_with_sink(parent, None)
     }
-}
-
-/// Completes parent binding before a newly constructed capability becomes public.
-fn attach_optional_sink<C: neocogi_com::events::EventSource, S: neocogi_com::events::MessageSinkInterface<Message = neocogi_com::events::EventOf<C>>>(
-    source: ComPtr<C>,
-    sink: Option<ComRef<'_, S>>,
-) -> Result<ComPtr<C>, NcStatus> {
-    if let Some(sink) = sink {
-        neocogi_com::events::attach_source(source.as_com_ref(), sink)?;
-    }
-    Ok(source)
 }

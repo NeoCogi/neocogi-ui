@@ -1,283 +1,225 @@
-# Concrete classes and one typed event stream
+# Constructor-bound widget events
 
-An emitting widget is a concrete COM class with two kinds of capabilities:
-commands the application can call, and one typed event stream. The widget's
-behavioral parent attaches the stream to its own message queue. A generated
-receiver acquires the event, maps it to an application message, and posts that
-message. Application behavior runs later with `&mut self`.
+An emitting widget owns one typed event port, with one receiver selected by its
+behavioral parent **during construction**. Several event kinds are variants of
+one enum, such as `TextboxEvent::Changed` and `TextboxEvent::Submitted`. They do
+not create separate ports. Event routing belongs to application code.
 
-The IDL contains ordinary interfaces, classes, factories, and data declarations.
-There is no event-port declaration, `#[observer]` annotation, widget keyword,
-visual routing graph, or per-variant subscription API.
+The IDL uses ordinary interfaces, classes, factories, enums and structs. It has
+no widget keyword, event declaration, per-variant subscription, or visual routing
+language. The former `IEventStream::attach` protocol and `com_class(event = ...)`
+option have been removed. A published object has no receiver-installation method.
 
-## The complete path
-
-```text
-Textbox commits an edit
-  -> IEventStream<TextboxEvent>'s attached IMessageSink<TextboxEvent>
-  -> validate and acquire the borrowed message
-  -> map TextboxEvent into AppMessage
-  -> application mpsc queue
-  -> safe update boundary
-  -> Form/App handler with &mut self
-```
+## Construction and delivery
 
 ```mermaid
 sequenceDiagram
     participant P as Behavioral parent
-    participant W as Textbox class
-    participant S as Typed COM sink in parent binary
-    participant Q as Parent message queue
-    P->>W: Factory creates unbound widget
-    P->>S: Create typed mapper and sender
-    P->>W: attach(sink), once
-    P->>P: Publish or mount completed form
-    W->>W: Commit text edit
-    W->>S: post(borrowed TextboxEvent)
-    S->>S: Validate and acquire owned event
+    participant S as Typed COM sink in application
+    participant F as Widget factory in plugin
+    participant W as Widget
+    participant Q as Application queue
+    P->>S: Capture sender and mapping function
+    P->>F: create(initial data, Observed(sink))
+    F->>W: Initialize the sole event port with sink
+    F-->>P: Return complete widget
+    P->>P: Publish or mount form
+    W->>W: Commit interaction state
+    W->>S: post(borrowed Event)
+    S->>S: Validate and acquire owned Event
     S->>Q: Send mapped AppMessage
-    Note over W,Q: No application handler runs during this call
-    P->>Q: Receive at safe update boundary
-    P->>P: Handle with exclusive mutable state
+    P->>Q: Drain at safe update boundary
+    P->>P: Handle with mutable application state
 ```
 
-The text path above contains the same information if a Markdown preview cannot
-render Mermaid. The sink retains a sender and mapping closure. The widget does
-not receive `Rc<RefCell<Parent>>`, a raw parent pointer, or the application's
-private message type. The parent owns its receiver and ordinary mutable state.
-Mappers run synchronously and should only capture and translate facts. They must
-not call back into an emitting widget while its COM borrow is active.
+In text: the application builds a sink, passes it into the factory, and receives
+a fully initialized widget. Later the widget calls that sink, whose mapper posts
+to the application queue. Application behavior runs after traversal releases
+its borrows. There is no intermediate loader queue or form relay.
 
-## IDL and Rust implementation
+The sink owns the sender and a typed mapping closure in the application's binary.
+Neither the application's private message type nor a Rust closure crosses COM.
+The widget does not receive `Rc<RefCell<Parent>>`, a parent pointer, or a function
+pointer with an unspecified lifetime. It retains an ordinary checked COM receiver.
+Mapping runs synchronously: it should capture facts, not reenter the emitter or
+run application behavior under the emitter's mutable COM call gate.
 
-The shared COM library supplies these ordinary generic contracts (versions and
-imports omitted here):
+## Ordinary IDL contracts
+
+Versions and imports are omitted in this illustration:
 
 ```text
-interface IMessageSink<T> {
-    fn post(&mut self, message: &T) -> Result<()>;
+interface IMessageSink<E> {
+    fn post(&mut self, message: &E) -> Result<()>;
 }
-interface IEventStream<E> {
-    fn attach(&mut self, consumer: &IMessageSink<E>) -> Result<()>;
+enum EventBinding<E> {
+    Unobserved,
+    Observed(ComPtr<IMessageSink<E>>),
 }
-
 enum TextboxEvent {
     Changed(TextChanged),
     Submitted(TextSubmitted),
 }
-class Textbox: IWidget + IEventStream<TextboxEvent> {
+class Textbox: IWidget + ILeafLayout {
     fn set_text(&mut self, text: &[u8]) -> Result<()>;
 }
 factory Widgets {
-    fn create_textbox(&self, text: &[u8]) -> Result<ComPtr<Textbox>>;
+    fn create_textbox(&self, text: &[u8], events: &EventBinding<TextboxEvent>)
+        -> Result<ComPtr<Textbox>>;
 }
 ```
 
-`Changed` and `Submitted` are cases of the same event message. Neither is a
-separate port. The factory returns a widget with an unbound stream. The Rust
-convenience constructor `ui.widgets().textbox(text, sender, mapper)` creates the
-widget and attaches its receiver before returning it to the caller.
+`EventBinding` is an ordinary library enum using the checked recursive value ABI.
+`Observed` owns a `ComPtr` to the exact `IMessageSink<E>` specialization.
+`Unobserved` chooses permanent non-delivery, useful for previews. It is not an
+empty subscription slot. Closing or dropping the widget never permits rebinding.
 
-Each closed generic has a concrete COM vtable, IID, and ABI signature. There are
-no Rust generic parameters in a foreign vtable and no type-erased event payload.
-The compiler derives identity from the template and argument identities;
-signatures also reflect their ABI definitions. Separate modules specializing
-the same contract agree on COM identity even when their generated Rust types
-have different names. A checked `QueryInterface` bridges those Rust projections.
+Each closed sink specialization has a concrete vtable, deterministic IID and ABI
+signature. Different generated Rust names for the same specialization can be
+bridged by checked `QueryInterface`. Event payloads always retain their concrete
+value types; `IUnknown` is never used as an event payload substitute.
 
-The generated `TextboxStreamAbi`, `TextboxSinkAbi`, and `TextboxEventPort`
-aliases hide the mechanical specialization names. A producer explicitly owns
-its port storage:
+The backend finds methods returning `ComPtr<Product>` in the product's declaring
+contract module. An `EventBinding<E>` argument identifies its constructor receiver.
+It generates `ProductEventBinding`, `ProductSinkAbi`, `ProductSink`,
+`ProductSinkVtblFor`, `ProductEventPort`, and an `EventSource` implementation for
+`ProductAbi`. Two binding arguments on one constructor, or different event types
+among that product's constructors, are rejected. Constructors without a binding
+can intentionally create unobserved products.
 
-```rust,ignore
-/// Concrete widget state; the remaining IWidget methods are omitted here.
-#[neocogi_com::com_class(contracts::Textbox, event = events)]
-struct TextboxImpl {
-    /// Ordinary widget state, edited under the allocation's COM borrow gate.
-    state: WidgetState,
-    /// One irreversible attachment shared by every projection of this object.
-    events: contracts::TextboxEventPort,
-}
-```
+This association is local to the declaring module: importing a downstream
+factory cannot change a published product's metadata. A custom factory returning
+a product from another module must honor that product's canonical receiver
+contract. IDL cannot prove the implementation's ownership discipline; a foreign
+implementation remains responsible for retaining exactly that receiver and
+releasing it correctly, as with every other COM contract.
 
-Initialize `events` with `Default::default()`. The macro implements the class's
-stream `attach` method by delegating to that field. After committing state, the
-producer calls `self.events.post(&TextboxEvent::Changed(snapshot))`; logical
-teardown calls `self.events.close()`. The macro does not invent widget behavior,
-state, a second queue, or a second consumer slot. Implementations still supply
-their ordinary class and interface methods.
+The product's `IDL_INTERFACE.event_sink` describes the **receiver**, not an
+interface implemented by the product. Interface inheritance therefore cannot
+introduce another consumer slot. Commands remain in the product's own interface
+chain, independently of the event receiver. `com_class(Contract)` allocates the
+ordinary concrete implementation; it does not generate event attachment methods.
 
-A composite that stores its public stream in an authoritative inner object uses
-`#[com_class(Contract)]` and implements attachment delegation explicitly.
-TextArea delegates to its text editor; Combo delegates to its choice-menu state.
-Both paths reach the same single slot. A behavioral composite such as a file
-dialog instead consumes private child events in its own controller and emits
-its own public completion event to its behavioral parent.
+## Producer ownership and closure
 
-## Attachment and ownership rules
+The implementation keeps a private `ProductEventPort` field. Its constructor
+decodes `events.to_owned()?.into_sink()` and initializes
+`EventPort::with_sink(receiver)` before publishing any widget identity. Internal
+composites pass that receiver to their actual emitter: TextArea to its editor,
+Combo to its choice model. They do not add forwarding ports.
 
-| State | `attach` | `post` | `close` |
-| --- | --- | --- | --- |
-| Unbound | Retain the receiver; become Bound | Succeed without delivery | Become Closed |
-| Bound | `NC_E_ALREADY_BOUND`; keep original receiver | Call original receiver | Drop receiver; become Closed |
-| Closed | `NC_E_CLOSED` | `NC_E_CLOSED` | Remain Closed |
+| State selected at construction | `post` | `close` |
+| --- | --- | --- |
+| Open with receiver | Call the sole typed receiver | Drop receiver and become Closed |
+| Open without receiver | Succeed without delivery | Become Closed |
+| Closed | Return `NC_E_CLOSED` | Remain Closed |
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Unbound
-    Unbound --> Bound: first attachment
-    Unbound --> Closed: teardown
-    Bound --> Bound: second attachment rejected
-    Bound --> Closed: teardown
-    Closed --> Closed: attachment and posting rejected
+    [*] --> Observed: constructor supplies receiver
+    [*] --> Unobserved: constructor selects no receiver
+    Observed --> Closed: close or final destruction
+    Unobserved --> Closed: close or final destruction
+    Closed --> Closed: repeated close
 ```
 
-This is one consumer for the widget's entire lifetime, across all event variants
-and all queried COM projections. Dropping an application handle to the sink does
-not detach it: the stream retains its own reference. There is no replacement,
-disconnect, or subscription list. An unbound widget deliberately discards events
-so previews and intentionally unobserved controls can work.
+There is no transition from Unobserved to Observed, or between receivers.
+`EventPort` mutates through `&mut self`; ordinary COM borrowing supplies reentry
+checks. Cloning a `ComPtr` shares the same producer and never creates another port.
+Dropping a cloned handle does not close a live widget. Final allocation release
+runs the concrete widget's `Drop`, which invokes its idempotent `close` path.
 
-The compiler rejects concrete classes that accumulate different event stream
-types through their interface chain. An inherited stream counts exactly as a
-locally required stream. Querying another interface cannot create another slot
-in the supplied implementation. Interfaces remain reusable COM capabilities;
-the one-stream check belongs to the concrete class contract.
+Composite closure proceeds in this order:
 
-Inherited stream projections reach the same concrete implementation and its one
-consumer slot, even when recursive interface storage duplicates a physical
-header. Header deduplication remains unresolved after the
-storage rollback. Different stream types are still
-rejected by the separate one-stream class check.
+1. Check that closure is currently allowed; an already closed widget succeeds.
+2. Close descendants. A refusal before their cleanup commits leaves the parent open.
+3. Release the parent's mapping and local editing/gesture resources.
+4. Mark the parent closed. Return any diagnostic from cleanup that already committed.
 
-The behavioral-parent rule is construction discipline, not access control. The
-parent creates and binds its children before publishing the form. Neither COM
-nor Rust can infer whether a user-written sink logically belongs to that parent.
-An independently written implementation must honor attachment semantics, just
-as it must honor its other interface contracts. `EventPort` and `com_class`
-provide the standard enforcement; merely declaring an interface does not prove
-a foreign implementation follows it.
+No cancellation protocol is introduced. A committed cleanup diagnostic does not
+undo removal or reopen the parent. Ordinary ownership drops receiver references
+on final destruction even if a best-effort close reports an error. Explicit
+closure remains necessary when external COM handles retain a removed widget.
 
-A structural layout container need not consume child events. For example, a
-textbox inside a scroll area inside a form can attach directly to the form's
-queue. The scroll area is its structural parent; the form is its behavioral
-parent. A file dialog with private validation is itself the behavioral parent
-of its buttons and textboxes.
+A structural parent need not consume events. A textbox inside a scroll area can
+send directly to its form's queue. A behavioral composite such as FileDialog
+consumes its private children's events and exposes its own completion protocol.
 
-## Application APIs and generated forms
+## Application code and generated forms
 
 ```rust,ignore
-let (send, messages) = std::sync::mpsc::channel();
-let textbox = ui.widgets().textbox("", send, |event| match event {
-    neocogi_ui::textbox::Event::Changed(value) => AppMessage::Name(value.text),
-    neocogi_ui::textbox::Event::Submitted(value) => AppMessage::Submit(value.text),
-})?;
+let (sender, messages) = std::sync::mpsc::channel();
+let save = ui.widgets().button("Save", sender.clone(), AppMessage::SaveButton)?;
+let name = ui.widgets().textbox("", sender.clone(), AppMessage::NameTextbox)?;
 ```
 
-`textbox::sink(sender, mapper)` constructs the adapter separately, and
-`textbox_with_sink(text, Some(sink.as_com_ref()))` attaches it after the COM
-factory returns. `filter_sink` permits dropping selected variants; it still
-consumes the complete stream. `textbox_unobserved` leaves the slot unbound.
-For a concrete custom class, use
-`neocogi_com::events::bind_source(widget.as_com_ref(), sender, mapper)`.
-Window, popup, and menu convenience bindings use the same single-attachment
-protocol, including after menu records move into the runtime.
+Here `SaveButton(ButtonEvent)` and `NameTextbox(TextboxEvent)` are tuple variants
+of the application's enum; their variant constructors are mapping functions.
+`textbox::sink` creates the adapter separately, and `textbox_with_sink` supplies
+it through the same COM constructor. `filter_sink` can omit selected variants
+from the queue while remaining the one consumer. `_unobserved` helpers allocate
+no receiver. Windows and popups offer `*_with_sink`; menus offer
+`item_observed`, `item_with_sink`, and `popup_with_sink`.
 
-Generated forms contain typed handles to the actual concrete COM widgets and a
-required handler method for every emitting widget. An illustrative form with
-button B and textbox T has this application contract (actual generated names
-include ordinals to avoid collisions):
+Generated forms retain typed widget fields and require a handler per emitting
+widget. They expose two separate setup functions:
 
-```rust,ignore
-pub struct Form {
-    pub widget_b_1: neocogi_ui::Widget<neocogi_ui::ButtonAbi>,
-    pub widget_t_2: neocogi_ui::Widget<neocogi_ui::TextboxAbi>,
-}
-pub trait Handlers {
-    fn on_b_1(&mut self, event: neocogi_ui::button::Event) -> Result<(), NcStatus>;
-    fn on_t_2(&mut self, event: neocogi_ui::textbox::Event) -> Result<(), NcStatus>;
-}
-```
+- `events(generation, sender)` builds an `EventBindings` table **before** loading.
+- `bind(&component)` checks and resolves concrete widget and input fields after
+  construction; it does not install receivers.
 
-The application supplies `impl Handlers`; omitting a required method fails Rust
-compilation. Its button handler can call `self.widget_t_2.set_text("Saved")`.
-The designer does not generate executable widget-to-widget routes. It generates
-checked fields, typed queue bindings, and dispatch through the handler trait.
+`Loader::prepare_with_events(document, bindings)` and
+`load_with_events(bytes, bindings)` validate every supplied key and exact receiver
+identity before construction. Duplicate entries, unknown keys, bindings for
+non-emitting widgets, and wrong event types are errors. Missing entries mean
+permanently unobserved widgets. Plain `prepare` and `load` choose that policy for
+all nodes. Live mappings never appear in persisted documents.
 
-The document loader constructs an unbound tree. Generated `bind` first resolves
-all typed fields, then attaches each stream directly to the application's queue.
-There is no loader event inbox or form-owned forwarding receiver. Document
-`outputs` aliases remain display/trace names; they do not allocate another stream
-or enable rebinding. Named input commands remain a separate integration feature.
+`ReloadSlot::reload(document, resources, make_events, check_fields)` assigns an
+attempt generation, prepares receivers, constructs the candidate, checks its
+fields, and then publishes it. Any failure preserves the old component and
+releases candidate mappings. Generated messages carry that generation; the
+application checks `slot.accepts(message.generation)` before dispatching their
+`Event` through its `Handlers` implementation. An omitted handler fails Rust
+compilation. Handlers can edit the form's actual typed widget fields.
 
-`ReloadSlot::reload` binds a candidate before publishing it. Its generated
-messages carry that attempt's generation. Before dispatch, the application checks
-`slot.accepts(message.generation)` so queued events from replaced or failed
-candidates cannot act on the new form. Candidate construction failure preserves
-the previous form; partial candidates are closed.
+## Independently built custom plugins
 
-## Custom widgets and COM discovery
+`IDesignWidgetCatalog::describe` transports catalog revision 6: the concrete
+product identity, constructor receiver IID/signature, complete reachable value
+graph, Rust binding paths, and property defaults. The designer need not link the
+plugin's contract crate to inspect that data or render an unobserved preview.
 
-A plugin root exposes `IDesignWidgetCatalog`. Its COM `describe` operation copies
-a versioned `DesignWidgetManifest` containing concrete class identity,
-the resolved stream identity and signature, message
-shape, public Rust type paths, and constructor property defaults. The standalone
-designer can read it without statically linking that plugin's Rust crate.
+The common `create_widget` call receives a `WidgetEventBinding`: Unobserved, or
+Observed holding a COM `IUnknown` reference. This transports an object capability
+through a heterogeneous catalog, not an untyped event. The selected plugin
+constructor **must query its exact `IMessageSink<E>` before allocating the widget**.
+A wrong sink fails that query. The loader checks each supplied receiver against the registered catalog
+descriptor before construction; the registry checks the returned widget against
+its product IID.
+It never queries the widget for a receiver interface.
 
-The IDL-generated `IDL_INTERFACE.stream` includes an inherited stream. Catalog
-conversion verifies that its projection exists in the complete COM chain, and
-the loader checks both advertised class and stream identities against each
-constructed object. Schema revision 2 represents one optional stream, replacing
-the old list of locally declared ports. No method-name convention is used to
-infer event semantics.
+Compiled application forms still depend on the custom contract crate to name
+actual widget fields and event values. The generic designer inspects custom
+event shapes; it does not dynamically interpret unknown event payloads for its
+preview trace. Application routing remains application code.
 
-Generated application code still depends on the plugin's contract crate so it
-can name its concrete field and message types. The generic designer preview
-renders custom controls and inspects their event shapes, but does not dynamically
-decode unknown Rust event types for its status trace. Compiled generated forms
-receive the custom class's complete typed stream.
+## Costs and error boundaries
 
-## Delivery, allocation, and teardown
+A standard sink is one COM allocation containing its mapper and sender. The
+widget factory retains that receiver; there is no second relay allocation.
+Event acquisition uses the normal recursive wire checks, shared allocation
+budget and fallible reservations. Owned strings and channel storage can allocate.
+This is not a promise of allocation-free posting.
 
-A receiver is allocated during binding and stores the typed mapper inline. Each
-post crosses the sink's COM method. Its decoder validates and acquires variable
-payload data before the producer's call-scoped storage expires. Message decoding
-uses the existing cumulative byte/record budget, scalar wire validation, and
-fallible allocation; this architecture does not bypass those checks. Owned text
-and channel blocks can allocate. There is no promise of allocation-free posting.
+A receiver error is returned after any producer state change that already
+committed. Already queued values survive producer closure. A disconnected queue
+still runs the mapper, then discards the translated value successfully. Closing
+releases the widget's receiver reference; separately retained sink handles can
+keep captures alive. Capturing the producer itself in its mapper can create a
+reference cycle, so ordinary mappings should capture senders and immutable IDs.
 
-Already queued messages retain their original values after widget closure.
-Dropping the parent receiver discards its pending messages; a disconnected sender
-is a successful no-op after mapping. Logical closure releases the widget's sink
-reference. An explicitly retained sink handle can keep its captures alive. Avoid
-capturing the producer or its owning UI in that producer's mapper, since that can
-form a reference cycle. Capture the sender and immutable application identifiers.
-
-`Controller<Model>`, `IEventOwner`, and runtime dispatch scheduling remain the
-mechanism granting ordinary mutable access at safe boundaries. Bindings compile
-in the consuming binary; producers call the same concrete COM protocol in both
-plugin and monolithic assemblies. Rebuild contracts and consumers together.
-
-See [runtime scheduling](../crates/ui/runtime/docs/EVENTS.md),
+See [COM receiver API](../crates/com/api/EVENTS.md),
+[runtime scheduling](../crates/ui/runtime/docs/EVENTS.md),
 [generated forms](../crates/ui/document/README.md), and
-[IDL syntax and ABI](IDL_MODULES.md) for the surrounding contracts.
-
-## Verification of this migration
-
-The following checks passed on Linux for this change:
-
-```sh
-cargo test --workspace --no-fail-fast
-cargo check -p neocogi-ui-designer -p neocogi-runtime-ui-example -p neocogi-theme-editor --no-default-features --features webgl --target wasm32-unknown-unknown
-SDL_VIDEODRIVER=offscreen cargo run -p neocogi-demo-smoke --features monolith,extension,embed-assets --bin neocogi-demo-smoke -- --smoke
-python3 crates/com/scripts/check-markdown-links.py
-```
-
-The workspace run includes real generated COM stream calls, inherited stream
-metadata, rejected second attachment, terminal closure, malformed-message and
-allocation-budget regressions, compiled generated forms, reload/retirement,
-and shared-library/monolith relocation tests. The optional native extension
-smoke exercises an actual rendered frame and custom-widget event handling.
-The WebAssembly command is a compile check, not a browser execution test.
-Ignored documentation sketches and the opt-in nightly size test remain ignored;
-this migration makes no new binary-size or allocation-performance claim.
+[IDL syntax](IDL_MODULES.md).

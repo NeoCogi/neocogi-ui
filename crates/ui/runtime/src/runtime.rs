@@ -207,8 +207,9 @@ impl IChoiceMenus for Runtime {
         menu_text: NcCopyFromBufferOffset<'_, u8>,
         entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
         selection: ChoiceSelectionAbi,
+        events: neocogi_com::NcValueRef<'_, IChoiceMenuEventBinding>,
     ) -> Result<ComPtr<IChoiceMenuAbi>, NcStatus> {
-        choices::create_choice_menu(&self.storage, parent, menu_text, entries, selection)
+        choices::create_choice_menu(&self.storage, parent, menu_text, entries, selection, events.to_owned()?.into_sink())
     }
 }
 

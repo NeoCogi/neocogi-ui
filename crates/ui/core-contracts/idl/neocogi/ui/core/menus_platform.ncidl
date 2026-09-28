@@ -52,15 +52,13 @@ enum ChoiceSelection: u8 {
     Selected(u64),
 }
 
-
-
 #[version(2)]
 /// Live selection-oriented menu owned by the core popup manager.
 ///
 /// The menu owns hierarchy, navigation, placement and committed selection. A header control such
 /// as Combo owns only its presentation and delegates these menu responsibilities through this
 /// interface. Mutations are silent; only user submission publishes `ChoiceSelection`.
-class IChoiceMenu: IEventStream<IChoiceMenuEvent> {
+class IChoiceMenu {
     /// Returns the exact committed stable identity, including explicit absence.
     fn selection(&self) -> Result<ChoiceSelection>;
     /// Copies the selected leaf label, or an empty string when no leaf is committed.
@@ -93,7 +91,7 @@ interface IChoiceMenus {
         parent: &IWindow,
         menu_text: &[u8],
         entries: &[ChoiceMenuEntry],
-        selection: ChoiceSelection) -> Result<ComPtr<IChoiceMenu>>;
+        selection: ChoiceSelection, events: &EventBinding<IChoiceMenuEvent>) -> Result<ComPtr<IChoiceMenu>>;
 }
 
 #[version(1)]
@@ -121,7 +119,7 @@ interface IMenuItem {
 /// Unique declaration tree consumed once by the owning manager; retained item capabilities remain live afterward.
 interface IMenuBuilder {
     /// Appends an enabled unmarked row and returns its editing/event capability.
-    fn item(&self, label: &[u8]) -> Result<ComPtr<IMenuItem>>;
+    fn item(&self, label: &[u8], events: &EventBinding<Activation>) -> Result<ComPtr<IMenuItem>>;
     /// Appends one noninteractive separator in exact declaration order.
     fn separator(&self) -> Result<()>;
     /// Appends a submenu and returns a builder scoped to that child; only the root is mountable.
@@ -136,7 +134,7 @@ interface IMenus {
     /// Installs a bar once on a live window; validates owner, declaration shape and prior attachment before transfer.
     fn attach_bar(&self, window: &IWindow, menu: &IMenuBuilder) -> Result<()>;
     /// Creates an ordinary hidden popup from one root declaration, including all its nested menus.
-    fn create_popup(&self, window: &IWindow, menu: &IMenuBuilder) -> Result<ComPtr<IPopup>>;
+    fn create_popup(&self, window: &IWindow, menu: &IMenuBuilder, events: &EventBinding<PopupDismissed>) -> Result<ComPtr<IPopup>>;
 }
 
 #[version(1)]

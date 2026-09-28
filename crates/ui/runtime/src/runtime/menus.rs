@@ -45,10 +45,14 @@ impl Builder {
 }
 impl IMenuBuilder for Builder {
     /// Appends one uniquely owned native record and publishes only its typed editing/event projection.
-    fn item(&self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IMenuItemAbi>, NcStatus> {
+    fn item(
+        &self,
+        input: NcCopyFromBufferOffset<'_, u8>,
+        events: neocogi_com::NcValueRef<'_, IMenuItemEventBinding>,
+    ) -> Result<ComPtr<IMenuItemAbi>, NcStatus> {
         let runtime = self.owner()?;
         let label = text(input)?;
-        let (handle, item) = crate::MenuItem::create(MenuItemParameters::new(label));
+        let (handle, item) = crate::MenuItem::create(MenuItemParameters::new(label), events.to_owned()?.into_sink());
         let slot = {
             let mut data = self.declaration.menu.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
             let menu = menu_at(data.as_mut().ok_or(UI_E_CLOSED)?, &self.path)?;
@@ -112,7 +116,7 @@ fn item_at<'a>(menu: &'a mut Menu, path: &[usize], slot: usize) -> Result<&'a mu
     }
 }
 
-#[com_object(interfaces(IMenuItem, IActivationEvents, IFontStyle))]
+#[com_object(interfaces(IMenuItem, IFontStyle))]
 /// Menu rows expose direct live editing without synthesizing independent widget or container subtrees.
 struct Item {
     /// Live manager resolution never retains the runtime through a row capability.
@@ -242,25 +246,6 @@ impl IFontStyle for Item {
         self.edit(Edit::Font(crate::FontRef::Named(font)))
     }
 }
-impl IActivationEventsStream for Item {
-    /// Installs into the declaration before mounting, or the same moved record afterward.
-    fn attach(&mut self, destination: ComRef<'_, IActivationEventsSinkAbi>) -> Result<(), NcStatus> {
-        let runtime = self.owner()?;
-        runtime.factory.host.check_mutation()?;
-        if let Some(declaration) = self.declaration.upgrade() {
-            let mut data = declaration.menu.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
-            if let Some(menu) = data.as_mut() {
-                match menu_at(menu, &self.path)?.entries.get_mut(self.slot) {
-                    Some(MenuEntry::Item(item)) => {
-                        return item.record.submitted_event.attach(destination);
-                    }
-                    _ => return Err(UI_E_CLOSED),
-                }
-            }
-        }
-        runtime.context()?.window_manager.map_menu_item(&self.handle, destination.add_ref())
-    }
-}
 
 impl RuntimeStorage {
     /// Authenticates a root builder by canonical COM identity and live weak registration before taking native data.
@@ -326,8 +311,14 @@ impl IMenus for Runtime {
         Ok(())
     }
     /// Consumes one root declaration into the manager's existing standalone-popup and nested-menu registration.
-    fn create_popup(&self, window: ComRef<'_, IWindowAbi>, menu: ComRef<'_, IMenuBuilderAbi>) -> Result<ComPtr<IPopupAbi>, NcStatus> {
+    fn create_popup(
+        &self,
+        window: ComRef<'_, IWindowAbi>,
+        menu: ComRef<'_, IMenuBuilderAbi>,
+        events: neocogi_com::NcValueRef<'_, IPopupEventBinding>,
+    ) -> Result<ComPtr<IPopupAbi>, NcStatus> {
         self.storage.factory.host.check_mutation()?;
+        let sink = events.to_owned()?.into_sink();
         let parent = self.storage.parent(window)?;
         let declaration = self.storage.menu_declaration(menu)?;
         let mut context = self.storage.context()?;
@@ -335,7 +326,7 @@ impl IMenus for Runtime {
         let menu = declaration.menu.try_borrow_mut().map_err(|_| UI_E_BUSY)?.take().ok_or(UI_E_CLOSED)?;
         let popup = context
             .window_manager
-            .create_menu_popup(&parent, menu)
+            .create_menu_popup(&parent, menu, sink)
             .unwrap_or_else(|_| unreachable!("authenticated parent cannot disappear before registration"));
         let identity = windows::LogicalPopup::from_value(windows::LogicalPopup {
             runtime: Rc::downgrade(&self.storage),
@@ -350,6 +341,3 @@ impl IMenus for Runtime {
         identity.query()
     }
 }
-
-/// Marker projection shares the same generic stream and object identity.
-impl IActivationEvents for Item {}

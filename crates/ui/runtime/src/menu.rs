@@ -201,7 +201,7 @@ pub(crate) struct MenuItemRecord {
     /// Mutable presentation and interaction values stored without a second mirror type.
     pub(crate) parameters: MenuItemParameters,
     /// Installed concrete activation receiver; no pending messages belong to the item.
-    pub(crate) submitted_event: neocogi_ui_core_contracts::IActivationEventsEventPort,
+    pub(crate) submitted_event: neocogi_ui_core_contracts::IMenuItemEventPort,
 }
 
 /// Uniquely owned declaration value for one actionable menu row.
@@ -215,11 +215,11 @@ pub struct MenuItem {
 
 impl MenuItem {
     /// Creates one uniquely owned item declaration and its non-owning application capability.
-    pub fn create(parameters: MenuItemParameters) -> (MenuItemHandle, Self) {
+    pub fn create(parameters: MenuItemParameters, sink: Option<neocogi_com::ComPtr<neocogi_ui_core_contracts::IMenuItemSinkAbi>>) -> (MenuItemHandle, Self) {
         // The record owns its optional destination through declaration-to-surface transfer;
         // its handle needs only the stable identity used for checked lookup.
         let id = MenuItemId::allocate();
-        let submitted_event = Default::default();
+        let submitted_event = neocogi_com::events::EventPort::with_sink(sink);
         let handle = MenuItemHandle::new(id);
         let item = Self {
             record: MenuItemRecord { id, parameters, submitted_event },

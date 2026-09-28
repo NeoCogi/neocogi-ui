@@ -50,8 +50,9 @@ pointers. Final COM release frees the allocation separately.
 | `TextBlock` | Read-only text with explicit wrapping | None |
 | `ColorSwatch` | Color preview and optional label | None |
 
-Each emitting class exposes one `IEventStream<Event>`. The constructor helper
-attaches one sink after COM factory creation; another attachment is rejected.
+Each emitting class owns one event port initialized from its factory's
+`EventBinding<Event>` argument. The receiver is fixed before publication;
+there is no later attachment operation.
 `neocogi_ui::textbox::Event`, for example, is the actual contract message enum
 covering both Changed and Submitted.
 Use `*_unobserved` constructors when no events are needed.
@@ -168,13 +169,11 @@ native atlas IDs, tree borrows, GPU contexts or backend callbacks.
 Custom drawing uses the painter's solid geometry/image methods or an owned
 `IRenderItem` implemented by the renderer assembly.
 
-External controls may also implement standard event capabilities such as
-`IActivationEvents`. The application queries that typed capability once while
-mapping to its standard message channel; producers post through the cached typed
-receiver. A custom text editor with several event kinds should declare one
-`IEventStream<EditorEvent>` with a complete enum, as Textbox and TextArea do.
-The concrete class cannot accumulate different stream types through inheritance. Dispatch consumes local messages and never
-consults the class registry.
+External controls use the same constructor contract: one
+`EventBinding<EditorEvent>`, with all event kinds in its complete enum.
+The application creates the typed sink before calling the custom factory;
+producers cache only that receiver. No inherited interface adds another port.
+Dispatch consumes local messages and never consults a class registry.
 
 ## Native text input and cancellation
 

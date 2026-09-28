@@ -70,7 +70,7 @@ impl CheckboxParameters {
     }
 }
 
-#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Checkbox, event = events)]
+#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Checkbox)]
 /// Concrete retained checkbox and dynamically constructible COM object.
 pub struct Checkbox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -82,7 +82,7 @@ pub struct Checkbox {
     /// Base widget options.
     /// Current checked value.
     checked: bool,
-    /// Single lifetime event slot; the parent attaches once before publishing the widget.
+    /// Single lifetime event slot; the constructor fixes the parent receiver before publishing the widget.
     events: neocogi_ui_nodes_contracts::CheckboxEventPort,
 }
 
@@ -228,9 +228,11 @@ impl Checkbox {
         resources: crate::widget_object::SharedAssets,
         checked: bool,
         label: NcCopyFromBufferOffset<'_, u8>,
+        sink: Option<ComPtr<neocogi_ui_nodes_contracts::CheckboxSinkAbi>>,
     ) -> Result<ComPtr<CheckboxAbi>, NcStatus> {
-        let value = Self::build(host, checked, label, Some(&resources))?;
-        // Retain the sole destination before publishing the completed widget.
+        let mut value = Self::build(host, checked, label, Some(&resources))?;
+        // Fix the sole destination before publishing the completed widget.
+        value.events = neocogi_com::events::EventPort::with_sink(sink);
         Ok(Self::from_value(value).query().expect("Checkbox declares its callable class contract"))
     }
 
@@ -290,8 +292,13 @@ impl neocogi_ui_nodes_contracts::Checkbox for Checkbox {
 fn com_object_control_is_independent_of_interface_count() {
     // Refcount, padding and the shared call guard occupy 16 bytes on this target.
     // No per-interface fields remain; handles carry their selected tables.
-    assert_eq!(Checkbox::COM_INTERFACE_COUNT, 5);
-    println!("Checkbox: state={}, allocation={}", core::mem::size_of::<Checkbox>(), core::mem::size_of::<CheckboxComObject>());
+    // The constructor receiver is not an interface implemented by the widget.
+    assert_eq!(Checkbox::COM_INTERFACE_COUNT, 4);
+    println!(
+        "Checkbox: state={}, allocation={}",
+        core::mem::size_of::<Checkbox>(),
+        core::mem::size_of::<CheckboxComObject>()
+    );
     assert_eq!(core::mem::offset_of!(CheckboxComObject, value), 16);
     assert_eq!(core::mem::size_of::<CheckboxComObject>(), core::mem::size_of::<Checkbox>() + 16);
 }
