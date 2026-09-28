@@ -828,3 +828,6 @@ fn rejected_reload_closes_retained_candidate_handles_without_touching_the_live_f
     assert_eq!(button.label(), Err(UI_E_CLOSED));
     assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
 }
+
+#[path = "form_methods.rs"]
+mod form_methods;
