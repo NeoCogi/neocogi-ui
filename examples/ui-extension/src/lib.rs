@@ -232,7 +232,7 @@ impl IContainer for Inset {
 }
 impl IInset for Inset {
     /// Read cardinality from its authoritative sequence; no second has-child flag can become stale.
-    fn set_child(&mut self, child: neocogi_com::NcValueRef<'_, neocogi_ui_core_contracts::Mount>) -> Result<ChildEditResult, NcStatus> {
+    fn set_child(&mut self, child: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>) -> Result<ChildEditResult, NcStatus> {
         self.common.state.writable()?;
         if self.editor.view()?.child_count()? == 0 {
             self.editor.insert(0, child)

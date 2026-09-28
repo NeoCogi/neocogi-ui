@@ -1,9 +1,9 @@
-# Typed class streams and owned event controllers
+# Typed events and widget-owned dispatch
 
 Widgets post typed facts into their owner's standard Rust channel. A nested
 component consumes its children's messages and emits its own public results
-upward. The application consumes the final public messages. Built-in widget constructors accept the owner's sender and a typed mapper. Behavioral owners use `Controller<Model>` and the
-same `IEventOwner` contract at every level.
+upward. The application consumes the final public messages. Built-in widget constructors accept the owner's sender and a typed mapper. Applications may use `Controller<Model>`; a behavioral composite owns its inbox
+and implements `IWidget::dispatch_next` on the same concrete widget.
 
 ## Application construction and frames
 
@@ -12,7 +12,7 @@ host resolves its COM projection once and borrows it on each update:
 
 ```rust,no_run
 use neocogi_com::NcStatus;
-use neocogi_ui::{events::{self, Controller, EventModel}, IEventOwnerAbi, Size, Ui};
+use neocogi_ui::{events::{self, Controller, EventModel}, IApplicationDispatcherAbi, Size, Ui};
 
 /// Application commands stay in the host binary.
 enum Message { Activated(String) }
@@ -36,8 +36,8 @@ fn example(ui: &Ui, size: Size) -> Result<(), NcStatus> {
     let button = ui.widgets().button("Count", send,
         |neocogi_ui::button::Event::Activated(event)| Message::Activated(event.label))?;
     // Insert button into the application's ordinary widget tree before updating.
-    let app = Controller::into_local(Controller::root(App { count: 0 }, messages));
-    let owner = app.query::<IEventOwnerAbi>()?;
+    let app = Controller::into_local(Controller::new(App { count: 0 }, messages));
+    let owner = app.query::<IApplicationDispatcherAbi>()?;
 
     // Construction happens once; both handles survive every frame.
     for _ in 0..2 {
@@ -55,9 +55,10 @@ gate as foreign calls. It does not downcast an interface. End local guards befor
 calling an update that will dispatch that controller. A conflicting call returns
 `NC_E_BUSY` before receiving anything.
 
-`Controller::root` starts claimed by the host and cannot attach to a widget.
-The runtime borrows this root only for the update and never retains it, so the
-application may own a `Ui` without creating a runtime/controller reference cycle.
+`Controller::new` transfers the model and receiver into application ownership.
+It has no attachment or retirement phase. The runtime borrows its dispatcher
+for one update without retaining it, so the application may own a `Ui` without
+a runtime/controller reference cycle.
 The demo host wraps `AppState` with this controller automatically: `Host::run`
 still accepts an owned state and receiver. Frame/input/presentation hooks take
 short local guards; those guards end before event dispatch.
@@ -150,91 +151,107 @@ dispatching queued facts. See
 
 ## Composite ownership
 
-A behavioral composite uses `Controller::new(model, receiver)` before mounting.
-Construct its children with sinks targeting that receiver. Its model emits declared public outputs
-into its enclosing owner's channel. Exposing a particular child output directly
-to the application is an explicit binding choice; private messages do not bubble
-automatically through unrelated containers. A structural `ScrollArea`, layout,
-or chrome needs no event owner solely because it contains children.
+A behavioral composite owns its model, receiver and child handles inside its
+concrete widget allocation. It implements `IWidget::dispatch_next(&mut self)`;
+ordinary controls and structural containers return `Ok(false)` and own no inbox.
+The built-in `HostedWidget` and application `LeafContent` helpers supply that
+no-op default. IDL methods remain declarations; independent plugins implement
+the common method explicitly.
 
-The static `Component::new(view, owner)` facade carries a normal widget and the
-controller's `IEventOwner` projection. Pass it to the same window, insertion, or
-replacement APIs used for ordinary widgets. Across COM, these calls borrow a
-typed `Mount` message:
+Construct child controls with typed mappings into the composite's inbox. The
+composite emits declared public results into its enclosing behavioral parent's
+channel. Private messages do not automatically bubble through structural
+containers. One output stream still has one constructor-selected consumer.
 
-- `Mount::Widget { view }` attaches an ordinary view whose outputs target an enclosing owner.
-- `Mount::Component { view, owner }` also attaches persistent local behavior.
+Window creation and container edits now borrow `&IWidget` directly. There is no
+`Mount` value, separate event-owner identity, `Component::new(view, owner)`, or
+second mount/retire state machine. The runtime validates host, layout and topology
+before calling the widget's one-way `mount` operation. Reattachment remains an
+error, including after removal.
 
-The view and controller must have different COM identities so a handler can edit
-its view without recursively entering its own allocation. The controller may
-implement public editing interfaces on its own identity. The file dialog exposes
-`IFileDialog` and `IEventOwner` on one allocation and delegates owner methods to
-its embedded `Controller<Model>`. Its ordinary Linear view needs no forwarding
-widget or event-provider capability.
+`FileDialog` implements `IFileDialog`, `IWidget` and `IContainerLayout` on one COM
+allocation. It embeds its Linear root as an ordinary Rust value, so layout
+reuse needs no second root object. Its model and receiver are ordinary fields.
+Handlers mutate local state through `&mut self` and call distinct child widgets
+through COM. Calling the composite's own COM projection from its active handler
+would reenter the borrow gate; use direct Rust helpers for self-mutation.
 
-The runtime validates host, layout, child ownership and identity before calling
-`owner.mount(view)` as the final attachment step. The controller checks its own
-phase, calls `view.mount()`, then commits its phase. A rejection preserves the
-unclaimed side. Attachments are single-use; retained handles do not permit
-reparenting. Clone a `Component` only to retain access to the same relationship.
-
-The mounted node retains its owner until retirement. Component models should
-retain widget/window/construction capabilities whose back-references are weak,
-rather than their owning `Ui`; retaining that UI would create a strong cycle.
-The file dialog follows this rule and survives releasing every client handle
-while its view remains mounted.
+A mounted composite must not strongly retain its owning `Ui`. Use child handles,
+weakly backed window capabilities and the construction host as the file dialog
+does. Releasing application handles preserves a still-mounted dialog.
 
 ## Scheduling, removal and failures
 
-The runtime uses the same dispatch contract for mounted components and the
-application. Mounted owners also run during ordinary `Ui::update`:
+Mounted widget dispatch also runs during ordinary `Ui::update`, without any
+application dispatcher:
 
-1. Synchronize geometry and finish deferred retirement outside traversal borrows.
-2. Visit mounted owners descendant-first. After one delivered message, return to
-   geometry/retirement and reconsider descendants before another owner runs.
-3. Once component work is quiet, deliver one application message. Settle any new
-   private work before delivering the application's successor.
-4. Route one queued raw input and repeat these boundaries before later input.
-5. Publish a renderable frame after successful completion. With no raw input,
-   perform an eventless update and settle its work too.
+1. Synchronize geometry and finish deferred widget close outside traversal.
+2. Visit widgets descendant-first. After one message, settle closure and geometry
+   before reconsidering descendants.
+3. When widget work is quiet, call the optional `IApplicationDispatcher` once.
+   Settle newly posted private work before its next application message.
+4. Route one queued raw input and repeat the boundary before later input.
+5. Commit a renderable frame only after successful settlement.
 
-The owner order is cached until topology changes; its vector capacity is reused.
-The runtime retains one local delivery ticket while calling out and holds no
-traversal or cache borrow across a handler. New mounts join the next boundary.
-An empty inbox still requires a poll; this is not a ready-owner notification system.
+The runtime caches actual widget handles within an update, rebuilding after any
+topology change. A callback that removes another widget invalidates the snapshot
+before its next entry, even when that callback returns `false`. The cache is
+cleared at the end of every update; only its vector capacity survives. It cannot
+keep a removed widget alive across idle frames. No separate per-widget delivery
+ticket, event-owner allocation, or active bit exists.
 
-Removal first invalidates the mounted delivery ticket, closes descendants and
-the view, and queues model retirement. Retirement runs after the active handler
-returns, including on a recoverable handler error. `Controller::retire` commits
-its terminal phase and drops its inbox before invoking `EventModel::retire` once.
-An active file request posts one cancellation; already completed parent messages
-remain in their original channel. Retained COM handles cannot resume private
-delivery. Explicit retirement and final controller destruction are idempotent.
+This simple protocol polls ordinary widgets' no-op methods too. It avoids an
+additional discovery/registration contract, but is not a ready-inbox notification
+system. No frame-time or binary-size improvement is claimed without measurement.
 
-A local guard that blocks the retirement call yields `NC_E_BUSY`; the runtime
-keeps that retirement pending and retries after the guard ends. A closed runtime
-can finish such pending work on another `close` call. A model's terminal cleanup
-error is reported without repeating its committed cleanup body.
+Removal closes descendants and then the parent. When a handler removes itself,
+its active COM borrow prevents recursive close. The runtime retains pending
+close work in descendant-first order and finishes it after the call returns,
+including on handler errors. No successor is dispatched to the removed subtree.
+Composite close drops its receiver and pending private messages, then releases
+its event mapping. An active file request settles cancellation once. Already
+posted application messages stay in the application's queue.
 
-One update-wide budget (`EVENT_DISPATCH_LIMIT`) covers component, application and
-menu reconciliation work. Reaching the ceiling returns `UI_E_EVENT_LIMIT`, even
-if that message emptied the queue: proving quiescence would require another
-foreign call. Unattempted messages remain queued and the frame is uncommitted.
-A handler error consumes its attempted message, preserves successors and later
-raw input, and does not roll back state. Update/render reentry rejects with
-`UI_E_BUSY`; conflicting calls to an active controller reject with `NC_E_BUSY`.
-Install immutable asset candidates after update returns.
+A caller-held LocalCom guard can still prevent close at that boundary. Update
+returns `NC_E_BUSY`, retains the pending work and retries after the guard ends;
+an explicitly closed runtime can finish it on another `close()` call. Final
+runtime destruction cannot forcibly enter a borrowed widget: it closes the host
+and releases retry references to avoid an ownership cycle. Such an externally
+retained widget rejects further work and finishes local cleanup on explicit
+close or final release. Release local guards before closing the runtime when
+immediate cleanup is required.
+
+One update-wide budget covers handled messages, topology-changing dispatch calls
+and menu reconciliation. Exhaustion returns `UI_E_EVENT_LIMIT` before further
+work, even if the last message emptied an inbox. Unattempted messages and later
+raw input remain queued; state mutations are not rolled back. Reentrant update
+or render returns `UI_E_BUSY`; conflicting widget COM calls return `NC_E_BUSY`.
+Standard channel capacity remains unbounded: the dispatch budget limits work
+per update, not total resident message memory.
+
+## Compiled documents
+
+`Loader::compile` and `compile_with_events` construct a document; `load` and
+`load_with_events` decode persisted source first. The result retains its authored
+recipe and typed lookups, with no scheduled bookkeeping object or event relay.
+`root()` is the actual mountable widget, not an inspection-only proxy.
+
+Dropping the recipe releases its COM references. It never explicitly closes a
+root still retained by the runtime or the application. If the root has no other
+owner, its ordinary destructor closes descendants. Failed construction closes
+partial trees; `ReloadSlot` explicitly closes a complete rejected candidate,
+including handles retained by a failing field-validation callback. Successful
+replacement leaves closure of the old subtree with the runtime.
 
 ## Static and dynamic linkage
 
-Typed mappings, channels and concrete controllers compile into their owner's
-binary. `IEventOwner` and `Mount` belong to UI core contracts. Closed generic stream and sink
-contracts live alongside each producer; domain-checking channel shims belong to
-the static UI facade. Generic stream binding belongs to the COM facade. The COM process runtime has no event
-loop or UI dispatch adapter. No additional event shared library is introduced.
-Dynamic plugins and monoliths use the same contracts. Rebuild hosts and plugins
-together after these signature changes; no legacy dispatcher bridge remains.
+Typed mappings, channels and models compile into the binary that owns them.
+`IWidget` and the single-method `IApplicationDispatcher` belong to UI core
+contracts. Closed sink specializations belong alongside their event types.
+The COM process runtime has no UI event loop. Hosts and plugins use the same
+contracts and must be rebuilt together after this ABI change.
 
-See owned-event measurements for
-before/after min-size builds and validation. The older [channel experiment](../../../../docs/EVENT_CHANNEL_EXPERIMENT.md)
-records a different historical change and is not the current controller design.
+[Widget dispatch](../../../../docs/WIDGET_EVENT_DISPATCH.md) records the design
+and ownership rules. Owned-event measurements
+and the [channel experiment](../../../../docs/EVENT_CHANNEL_EXPERIMENT.md) describe
+superseded implementations; their measurements are not results for this change.

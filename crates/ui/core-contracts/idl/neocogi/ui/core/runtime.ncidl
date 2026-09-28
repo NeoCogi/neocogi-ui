@@ -241,22 +241,22 @@ interface IWindowManager {
         parent: &IWindow,
         title: &[u8],
         rect: Rect,
-        root: &Mount, events: &EventBinding<WindowEvent>) -> Result<ComPtr<IWindow>>;
+        root: &IWidget, events: &EventBinding<WindowEvent>) -> Result<ComPtr<IWindow>>;
     /// Creates a hidden modal dialog owned by an ordinary window.
     fn create_dialog(
         &self,
         parent: &IWindow,
         title: &[u8],
         rect: Rect,
-        root: &Mount, events: &EventBinding<WindowEvent>) -> Result<ComPtr<IWindow>>;
+        root: &IWidget, events: &EventBinding<WindowEvent>) -> Result<ComPtr<IWindow>>;
     /// Creates a hidden auto-sized popup owned by a live window or dialog.
     fn create_popup(
         &self,
         parent: &IWindow,
         title: &[u8],
-        root: &Mount, events: &EventBinding<PopupDismissed>) -> Result<ComPtr<IPopup>>;
+        root: &IWidget, events: &EventBinding<PopupDismissed>) -> Result<ComPtr<IPopup>>;
     /// Mounts one previously unmounted root and creates its logical window.
-    fn create_window(&self, title: &[u8], rect: Rect, root: &Mount, events: &EventBinding<WindowEvent>) -> Result<ComPtr<IWindow>>;
+    fn create_window(&self, title: &[u8], rect: Rect, root: &IWidget, events: &EventBinding<WindowEvent>) -> Result<ComPtr<IWindow>>;
 }
 
 #[version(1)]
@@ -290,7 +290,7 @@ interface UiRuntime: IInputSink + IWindowManager + IMenus + IChoiceMenus {
     /// Borrows the persistent application owner at safe boundaries; handlers may edit topology before later input.
     /// The runtime never retains this root owner, so it may own the UI without a reference cycle.
     /// Update/render reentry returns BUSY even while the context is available to handlers.
-    fn update_with_events(&self, size: Size, owner: &IEventOwner) -> Result<()>;
+    fn update_with_events(&self, size: Size, owner: &IApplicationDispatcher) -> Result<()>;
     /// Returns the committed editable focus rectangle in drawable coordinates, or None while
     /// geometry/input is pending. Hosts synchronize native IME after each successful update.
     fn text_input_area(&self) -> Result<TextInputArea>;

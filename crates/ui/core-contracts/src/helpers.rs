@@ -82,20 +82,6 @@ pub const UI_E_EVENT_LIMIT: NcStatus = NcStatus::from_code(-1007);
 /// A native file/directory operation failed; the component's diagnostic preserves the concrete OS error.
 pub const UI_E_IO: NcStatus = NcStatus::from_code(-1008);
 
-impl Mount {
-    /// Retains an ordinary widget as an explicit attachment description.
-    /// This prepares data only; the runtime performs the one-way mount.
-    pub fn widget(view: neocogi_com::ComRef<'_, IWidgetAbi>) -> Self {
-        Self::Widget { view: view.add_ref() }
-    }
-
-    /// Borrows this concrete description for a synchronous COM attachment call.
-    /// The receiver validates and retains capabilities before this borrow ends.
-    pub fn as_value(&self) -> Result<neocogi_com::NcValueRef<'_, Self>, neocogi_com::NcStatus> {
-        neocogi_com::NcValueRef::new(self)
-    }
-}
-
 impl AxisLimit {
     /// Rejects malformed tags, negative bounds, and meaningless unbounded extents.
     pub fn validate(self) -> Result<(), NcStatus> {

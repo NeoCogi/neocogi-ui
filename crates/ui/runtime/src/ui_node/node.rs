@@ -31,8 +31,6 @@
 use crate::ui_node::ComNode;
 use crate::ui_node::mounted_node::NodeLayoutKind;
 use neocogi_com::NcStatus;
-use std::rc::Rc;
-use crate::ui_node::mounted_node::ComponentEventDriver;
 
 use crate::math::RectExt;
 use crate::{AtlasHandle, Constraints, Dimensioni, Recti, SliceInsets, Skin};
@@ -177,22 +175,20 @@ pub struct Node {
 }
 
 impl Node {
-    /// Copies mounted component drivers in child-first order without invoking
-    /// callbacks or lending any retained-tree or child-store borrow to them.
-    /// A checkout conflict is an error, never a silently skipped component.
-    pub(crate) fn collect_private_event_drivers(&self, drivers: &mut Vec<Rc<ComponentEventDriver>>) -> Result<(), NcStatus> {
+    /// Collects actual widgets in child-first order without invoking handlers or
+    /// lending retained-tree/child-store borrows to dispatch. A checkout conflict
+    /// is an error, never a silently skipped subtree.
+    pub(crate) fn collect_dispatch_widgets(&self, drivers: &mut Vec<neocogi_com::ComPtr<neocogi_ui_core_contracts::IWidgetAbi>>) -> Result<(), NcStatus> {
         match &self.data.layout {
             NodeLayoutKind::Leaf(_) => {}
             NodeLayoutKind::Branch { children, .. } => {
                 let nodes = children.take()?;
                 for child in nodes.iter() {
-                    child.collect_private_event_drivers(drivers)?;
+                    child.collect_dispatch_widgets(drivers)?;
                 }
             }
         }
-        if let Some(driver) = &self.data.event_driver {
-            drivers.push(driver.clone());
-        }
+        drivers.push(self.data.widget.clone());
         Ok(())
     }
 

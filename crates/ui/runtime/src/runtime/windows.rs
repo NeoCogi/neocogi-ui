@@ -95,7 +95,7 @@ impl RuntimeStorage {
         placement: Placement,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: neocogi_com::NcValueRef<'_, Mount>,
+        root: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>,
     ) -> Result<ComPtr<IUnknown>, NcStatus> {
         self.factory.host.check_mutation()?;
         if rect.width < 0 || rect.height < 0 {
@@ -160,7 +160,7 @@ impl IWindowManager for Runtime {
         &self,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: neocogi_com::NcValueRef<'_, Mount>,
+        root: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>,
         events: neocogi_com::NcValueRef<'_, IWindowEventBinding>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.storage.create(Placement::Root(events.to_owned()?.into_sink()), title, rect, root)?.query()
@@ -171,7 +171,7 @@ impl IWindowManager for Runtime {
         parent: ComRef<'_, IWindowAbi>,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: neocogi_com::NcValueRef<'_, Mount>,
+        root: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>,
         events: neocogi_com::NcValueRef<'_, IWindowEventBinding>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.storage
@@ -189,7 +189,7 @@ impl IWindowManager for Runtime {
         parent: ComRef<'_, IWindowAbi>,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: neocogi_com::NcValueRef<'_, Mount>,
+        root: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>,
         events: neocogi_com::NcValueRef<'_, IWindowEventBinding>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.storage
@@ -206,7 +206,7 @@ impl IWindowManager for Runtime {
         &self,
         parent: ComRef<'_, IWindowAbi>,
         title: NcCopyFromBufferOffset<'_, u8>,
-        root: neocogi_com::NcValueRef<'_, Mount>,
+        root: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>,
         events: neocogi_com::NcValueRef<'_, IPopupEventBinding>,
     ) -> Result<ComPtr<IPopupAbi>, NcStatus> {
         self.storage

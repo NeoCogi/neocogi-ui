@@ -3,7 +3,7 @@
 //! ordinary mutable consumer later, after releasing traversal borrows.
 //!
 //! ```no_run
-//! use neocogi_ui::{IEventOwnerAbi, Size, Ui, events::{self, Controller, EventModel}};
+//! use neocogi_ui::{IApplicationDispatcherAbi, Size, Ui, events::{self, Controller, EventModel}};
 //! use neocogi_com::NcStatus;
 //!
 //! /// Ordinary application state is owned by one persistent controller.
@@ -18,8 +18,8 @@
 //! fn example(ui: &Ui, size: Size) -> Result<u32, NcStatus> {
 //!     let (send, messages) = std::sync::mpsc::channel();
 //!     let button = ui.widgets().button("Count", send, |_| ())?;
-//!     let app = Controller::into_local(Controller::root(Counter { count: 0 }, messages));
-//!     let owner = app.query::<IEventOwnerAbi>()?;
+//!     let app = Controller::into_local(Controller::new(Counter { count: 0 }, messages));
+//!     let owner = app.query::<IApplicationDispatcherAbi>()?;
 //!     // Keep both handles across frames; neither update creates an adapter.
 //!     ui.update_with_events(size, owner.as_com_ref())?;
 //!     ui.update_with_events(size, owner.as_com_ref())?;

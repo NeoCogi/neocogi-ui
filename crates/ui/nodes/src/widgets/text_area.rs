@@ -854,7 +854,7 @@ impl TextArea {
             .content
             .insert(
                 0,
-                neocogi_ui_core_contracts::Mount::widget(text.query::<IWidgetAbi>()?.as_com_ref()).as_value()?,
+                text.query::<IWidgetAbi>()?.as_com_ref(),
             )?
             .finish()?;
         let runtime = crate::widget_object::WidgetRuntime::for_resources(host, crate::WidgetOption::FRAME, resources)?;

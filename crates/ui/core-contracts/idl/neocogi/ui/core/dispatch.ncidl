@@ -1,0 +1,10 @@
+#[version(1)]
+/// Application-owned message execution, borrowed for one UI update only.
+/// The application is not a widget. Its inbox may span several windows and
+/// is never mounted, retained, or closed by the widget tree.
+interface IApplicationDispatcher {
+    /// Attempts one application message outside traversal; false means idle.
+    /// A handler error consumes only that message. The caller owns the inbox
+    /// lifetime and must release any local mutable guard before entering UI update.
+    fn dispatch_next(&mut self) -> Result<bool>;
+}

@@ -36,14 +36,11 @@ pub(crate) struct NodeFactory {
 
 impl NodeFactory {
     /// Validates every fallible capability query before claiming the sole attachment.
-    pub(crate) fn mount_node(&self, mount: neocogi_com::NcValueRef<'_, Mount>, parent: Option<&Rc<ChildStore>>) -> Result<crate::Node, NcStatus> {
+    pub(crate) fn mount_node(&self, mount: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>, parent: Option<&Rc<ChildStore>>) -> Result<crate::Node, NcStatus> {
         self.check_edit()?;
         self.attaching.set(true);
         let _attachment = Attachment(&self.attaching);
-        let (mut widget, event_owner) = match mount.to_owned()? {
-            Mount::Widget { view } => (view, None),
-            Mount::Component { view, owner } => (view, Some(owner)),
-        };
+        let mut widget = mount.add_ref();
         let owner: ComPtr<IUnknown> = widget.host()?.query()?;
         if owner.as_raw().object != self.host.query::<IUnknown>()?.as_raw().object {
             return Err(UI_E_OWNER);
@@ -73,32 +70,16 @@ impl NodeFactory {
         };
         let properties = widget.properties()?;
         properties.validate()?;
-        // Explicit ownership is validated before the irreversible attachment.
-        // Ordinary widgets require no optional event-capability discovery.
-        let event_driver = match event_owner {
-            Some(mut event_owner) => {
-                if event_owner.query::<IUnknown>()?.as_raw().object == widget.query::<IUnknown>()?.as_raw().object {
-                    return Err(NC_E_INVALID_ARG);
-                }
-                // All view/layout validation succeeded. The owner claims both
-                // lifetimes in one final operation, leaving both unchanged on rejection.
-                event_owner.mount(widget.as_com_ref())?;
-                Some(Rc::new(super::mounted_node::ComponentEventDriver::owned(event_owner)))
-            }
-            None => {
-                widget.mount()?;
-                None
-            }
-        };
+        // All capability and topology checks precede the widget's sole attachment claim.
+        widget.mount()?;
         if let NodeLayoutKind::Branch { children, .. } = &layout {
             // The host-wide attachment guard prevents another edit between the
             // capability/cycle validation and this one-way collection claim.
             children.claimed.set(true);
         }
-        self.state.owners_changed.set(true);
+        self.state.dispatch_order_changed.set(true);
         Ok(crate::Node::com_widget(ComNode {
             widget,
-            event_driver,
             dirty: Cell::new(false),
             layout,
             properties,

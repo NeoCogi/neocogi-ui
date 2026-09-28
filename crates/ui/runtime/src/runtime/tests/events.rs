@@ -437,18 +437,10 @@ fn real_lifecycle_cascade_is_deferred_until_each_consumer_returns() {
     window.close().unwrap();
 }
 
-#[com_object(interfaces(IEventOwner))]
+#[com_object(interfaces(IApplicationDispatcher))]
 /// A foreign consumer fails while the runtime is settling the frame.
 struct FailingOwner;
-impl IEventOwner for FailingOwner {
-    /// This fixture is an application root and cannot attach to a widget.
-    fn mount(&mut self, _: ComRef<'_, IWidgetAbi>) -> Result<(), NcStatus> {
-        Err(UI_E_OWNER)
-    }
-    /// The stateless fixture has no terminal outcomes to settle.
-    fn retire(&mut self) -> Result<(), NcStatus> {
-        Ok(())
-    }
+impl IApplicationDispatcher for FailingOwner {
     /// Propagates the consumer failure through the actual COM dispatcher boundary.
     fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
         Err(NC_E_INVALID_ARG)
@@ -462,7 +454,7 @@ fn runtime_preserves_uncommitted_frame_on_foreign_consumer_failure() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let button = ui.widgets().button_unobserved("count").unwrap();
     let window = ui.window("count", RECT, &button).unwrap();
-    let dispatcher: ComPtr<IEventOwnerAbi> = FailingOwner::from_value(FailingOwner).query().unwrap();
+    let dispatcher: ComPtr<IApplicationDispatcherAbi> = FailingOwner::from_value(FailingOwner).query().unwrap();
     assert_eq!(runtime.update_with_events(SIZE, dispatcher.as_com_ref()), Err(NC_E_INVALID_ARG));
     let (renderer, _) = renderer();
     assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));

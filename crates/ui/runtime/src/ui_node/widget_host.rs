@@ -12,10 +12,11 @@ use std::{
 pub(crate) struct HostState {
     /// Replaceable host service shared by independent COM widgets; no borrow spans a request.
     pub(crate) clipboard: RefCell<Option<ComPtr<neocogi_ui_core_contracts::ITextClipboardAbi>>>,
-    /// Controllers awaiting cleanup after their views have become ineligible for delivery.
-    pub(crate) retired_owners: RefCell<Vec<ComPtr<IEventOwnerAbi>>>,
-    /// Topology edits invalidate the runtime's reusable descendant-first owner list.
-    pub(crate) owners_changed: Cell<bool>,
+    /// Removed widgets waiting for an active COM call to return, in descendant-first order.
+    /// Calls can enqueue more cleanup, so no queue borrow spans a foreign close method.
+    closing_widgets: RefCell<std::collections::VecDeque<ComPtr<IWidgetAbi>>>,
+    /// Topology edits invalidate the runtime's reusable descendant-first widget snapshot.
+    pub(crate) dispatch_order_changed: Cell<bool>,
     /// Final writer release can retire a checked-out subtree during observation. Ownership waits here only until that phase ends.
     pub(crate) retired: RefCell<Vec<crate::Children>>,
     /// Construction is reached weakly so widgets cannot keep the owning runtime alive.
@@ -29,33 +30,56 @@ pub(crate) struct HostState {
 }
 
 impl HostState {
-    /// Finishes removed owners without holding tree or queue borrows across COM calls.
-    pub(crate) fn finish_owner_retirement(&self) -> Result<(), neocogi_com::NcStatus> {
+    /// Closes immediately when possible; a busy descendant delays its ancestors too.
+    /// The tree has already removed these nodes, so no later dispatch may reach them.
+    pub(crate) fn close_widget(&self, mut widget: ComPtr<IWidgetAbi>) {
+        if !self.closing_widgets.borrow().is_empty() {
+            self.closing_widgets.borrow_mut().push_back(widget);
+            return;
+        }
+        match widget.close() {
+            Ok(()) => {}
+            Err(neocogi_com::NC_E_BUSY) => self.closing_widgets.borrow_mut().push_back(widget),
+            Err(error) => self.fail(error),
+        }
+    }
+
+    /// Completes deferred close after mutable handlers and traversal calls have returned.
+    /// A caller-held LocalCom guard can still block the first widget; preserve
+    /// it and every ancestor for a later boundary instead of closing out of order.
+    pub(crate) fn finish_widget_closure(&self) -> Result<(), NcStatus> {
         let mut failure = None;
-        // A caller may still hold a typed local guard. Keep those unentered
-        // retirements for the next boundary without retrying them in this loop.
-        let mut busy = Vec::new();
         loop {
-            let retired = std::mem::take(&mut *self.retired_owners.borrow_mut());
-            if retired.is_empty() {
-                break;
-            }
-            for mut owner in retired {
-                match owner.retire() {
-                    Ok(()) => {}
-                    Err(error) => {
-                        if error == neocogi_com::NC_E_BUSY {
-                            busy.push(owner);
-                        }
-                        // Continue independent cleanup after any failure. A
-                        // terminal model error is consumed; gate contention can retry.
-                        failure.get_or_insert(error);
-                    }
+            let next = self.closing_widgets.borrow_mut().pop_front();
+            let Some(mut widget) = next else { break };
+            match widget.close() {
+                Ok(()) => {}
+                Err(neocogi_com::NC_E_BUSY) => {
+                    self.closing_widgets.borrow_mut().push_front(widget);
+                    return Err(failure.unwrap_or(neocogi_com::NC_E_BUSY));
+                }
+                Err(error) => {
+                    // A committed cleanup diagnostic must not prevent independent cleanup.
+                    failure.get_or_insert(error);
                 }
             }
         }
-        self.retired_owners.borrow_mut().extend(busy);
         failure.map_or(Ok(()), Err)
+    }
+
+    /// Releases retry ownership when the runtime itself is finally destroyed.
+    /// A caller-held COM guard cannot be forcibly reentered from Drop. Its
+    /// surviving widget observes a closed host and finishes local cleanup on
+    /// explicit close or final release. Drop outside the queue's borrow because
+    /// widget destructors may close descendants and enqueue more work.
+    pub(crate) fn release_pending_closure(&self) {
+        loop {
+            let pending = std::mem::take(&mut *self.closing_widgets.borrow_mut());
+            if pending.is_empty() {
+                break;
+            }
+            drop(pending);
+        }
     }
 
     /// Defers destruction only while setters or close are observationally forbidden.

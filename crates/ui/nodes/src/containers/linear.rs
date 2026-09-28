@@ -300,7 +300,7 @@ impl Linear {
     }
 
     /// Builds one linear container with either directly imported or runtime-shared resources.
-    pub(super) fn build(
+    pub(crate) fn build(
         host: ComPtr<IWidgetHostAbi>,
         direction: FlowDirection,
         cross: CrossSizeAbi,

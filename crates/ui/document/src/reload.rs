@@ -74,14 +74,27 @@ impl ReloadSlot {
         let generation = Generation(self.next);
         let loader = Loader::new_with_custom(self.ui.clone(), Some(self.parent.clone()), resources, self.custom.clone()).map_err(|error| error.to_string())?;
         let receivers = events(generation).map_err(|error| error.to_string())?;
-        let candidate = loader.prepare_with_events(document, receivers)?;
-        bind(&candidate, generation).map_err(|error| error.to_string())?;
-        let edge = LinearEdge::new(LayoutTrack::Flex { weight: 1.0 });
-        let committed = match self.active {
-            None => self.slot.insert(0, &candidate, edge),
-            Some(_) => self.slot.replace(0, &candidate, edge),
-        }
-        .map_err(|error| error.to_string())?;
+        let candidate = loader.compile_with_events(document, receivers)?;
+        // Publication owns rollback. The compiled recipe itself has no authority
+        // to close a tree after callers retain or mount its actual widget root.
+        let committed = (|| {
+            bind(&candidate, generation)?;
+            let edge = LinearEdge::new(LayoutTrack::Flex { weight: 1.0 });
+            match self.active {
+                None => self.slot.insert(0, &candidate, edge),
+                Some(_) => self.slot.replace(0, &candidate, edge),
+            }
+        })();
+        let committed = match committed {
+            Ok(committed) => committed,
+            Err(error) => {
+                let cleanup = candidate.root().and_then(|root| root.node_interface()?.close());
+                return Err(match cleanup {
+                    Ok(()) => error.to_string(),
+                    Err(cleanup) => format!("{error}; rejected candidate cleanup: {cleanup}"),
+                });
+            }
+        };
         // The topology operation has committed. Store the matching component even
         // when closing the old subtree reported a post-commit cleanup diagnostic.
         self.active = Some((generation, candidate));

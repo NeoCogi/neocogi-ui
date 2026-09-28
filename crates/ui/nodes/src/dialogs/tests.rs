@@ -18,8 +18,8 @@ struct Fixture {
     owner: ComPtr<IWindowAbi>,
     /// Public component client; request state never lives in this wrapper.
     handle: neocogi_ui::FileDialog,
-    /// Same runtime-owned concrete controller, retained only for test observations of fixed roles.
-    controller: LocalCom<FileDialog>,
+    /// Same runtime-owned concrete widget, retained only for test observations of fixed roles.
+    widget: LocalCom<FileDialog>,
     /// Default completion inbox is owned by this fixture until a test consumes it.
     messages: Option<std::sync::mpsc::Receiver<FileDialogCompletion>>,
 }
@@ -32,7 +32,7 @@ impl Fixture {
         fixture.messages = Some(messages);
         fixture
     }
-    /// Supplies specialized test mappings before the controller and its window exist.
+    /// Supplies specialized test mappings before the widget and its window exist.
     fn with_sink(sink: ComPtr<IFileDialogSinkAbi>) -> Self {
         let bundle = crate::SkinBundle::from_atlas(crate::test_support::test_atlas());
         let source = crate::test_support::assets::export_bundle(&bundle).unwrap();
@@ -42,15 +42,15 @@ impl Fixture {
         let body = ui.widgets().button_unobserved("background").unwrap();
         let owner = ui.window("owner", OWNER_RECT, &body).unwrap();
         let services = crate::factory::NodeServices::bind(runtime.as_com_ref()).unwrap();
-        let controller = FileDialog::new(services, owner.as_com_ref(), Some(sink)).unwrap();
-        let interface = controller.query().unwrap();
+        let widget = FileDialog::new(services, owner.as_com_ref(), Some(sink)).unwrap();
+        let interface = widget.query().unwrap();
         let handle = neocogi_ui::FileDialog::from_interface(interface);
         Self {
             ui,
             runtime,
             owner,
             handle,
-            controller,
+            widget,
             messages: None,
         }
     }
@@ -81,10 +81,9 @@ impl Fixture {
     }
     /// Returns the actual current dynamic file root to verify transactional replacement and handle preservation.
     fn file_root(&self) -> ComPtr<IWidgetAbi> {
-        self.controller
+        self.widget
             .try_borrow()
             .unwrap()
-            .controller
             .model
             .files
             .content()
@@ -112,9 +111,9 @@ fn save_request_preserves_suggested_filename_and_rejects_directory_components() 
     assert!(!fixture.handle.active().unwrap());
     request.filename = "new theme.json".into();
     fixture.handle.open(&request).unwrap();
-    assert_eq!(fixture.controller.try_borrow().unwrap().controller.model.accept.label().unwrap(), "Save");
+    assert_eq!(fixture.widget.try_borrow().unwrap().model.accept.label().unwrap(), "Save");
     assert_eq!(
-        fixture.controller.try_borrow().unwrap().controller.model.filename.text().unwrap(),
+        fixture.widget.try_borrow().unwrap().model.filename.text().unwrap(),
         "new theme.json"
     );
     // Traverse the real modal and submit its suggested filename, without requiring
@@ -128,9 +127,9 @@ fn save_request_preserves_suggested_filename_and_rejects_directory_components() 
     );
     assert!(!fixture.handle.active().unwrap());
     fixture.open(directory.path());
-    assert_eq!(fixture.controller.try_borrow().unwrap().controller.model.accept.label().unwrap(), "Open");
-    assert_eq!(fixture.controller.try_borrow().unwrap().controller.model.filename.text().unwrap(), "");
-    assert!(fixture.controller.try_borrow().unwrap().controller.model.selected.is_none());
+    assert_eq!(fixture.widget.try_borrow().unwrap().model.accept.label().unwrap(), "Open");
+    assert_eq!(fixture.widget.try_borrow().unwrap().model.filename.text().unwrap(), "");
+    assert!(fixture.widget.try_borrow().unwrap().model.selected.is_none());
 }
 
 /// Failed initial reads and overlapping requests leave activity, native directory and actual dynamic roots unchanged.
@@ -152,7 +151,7 @@ fn failed_open_and_overlapping_requests_preserve_previous_state_and_expose_nativ
     assert_eq!(fixture.handle.open(&neocogi_ui::FileDialogRequest::new(&missing)), Err(UI_E_BUSY));
     assert_eq!(fixture.file_root().as_raw().object, live.as_raw().object);
     assert!(fixture.handle.diagnostic().unwrap().is_empty());
-    assert_eq!(fixture.controller.try_borrow().unwrap().controller.model.directory, directory.path());
+    assert_eq!(fixture.widget.try_borrow().unwrap().model.directory, directory.path());
     fixture.handle.close().unwrap();
     assert_eq!(fixture.handle.active(), Err(UI_E_CLOSED));
 }
@@ -234,7 +233,7 @@ fn typed_filename_acceptance_uses_real_controls_and_completes_before_update_retu
     assert_eq!(fixture.handle.active(), Ok(false));
     assert_eq!(fixture.handle.window().unwrap().snapshot().unwrap().visibility, Visibility::Hidden);
     assert_eq!(
-        fixture.controller.try_borrow().unwrap().controller.model.filename.text().unwrap(),
+        fixture.widget.try_borrow().unwrap().model.filename.text().unwrap(),
         " file name "
     );
     assert_eq!(fixture.handle.cancel(), Ok(false));
@@ -263,7 +262,7 @@ fn selected_non_utf8_file_preserves_exact_native_identity_across_display_collisi
     fixture.tabs(6);
     fixture.key(KeyCode::Space, 0);
     app.update(&fixture.ui, SIZE).unwrap();
-    assert_eq!(fixture.controller.try_borrow().unwrap().controller.model.selected.as_ref(), Some(&first));
+    assert_eq!(fixture.widget.try_borrow().unwrap().model.selected.as_ref(), Some(&first));
     // Second file, filename, Cancel, Open.
     fixture.tabs(4);
     fixture.key(KeyCode::Space, 0);
@@ -285,15 +284,15 @@ fn unreadable_navigation_preserves_selection_directory_and_dynamic_widget_identi
     fixture.tabs(7); // Four toolbar stops, parent folder, child folder, file.
     fixture.key(KeyCode::Space, 0);
     fixture.ui.update(SIZE).unwrap();
-    assert_eq!(fixture.controller.try_borrow().unwrap().controller.model.selected.as_ref(), Some(&file));
+    assert_eq!(fixture.widget.try_borrow().unwrap().model.selected.as_ref(), Some(&file));
     let root = fixture.file_root();
     std::fs::remove_dir(&folder).unwrap();
     fixture.key(KeyCode::Tab, 4); // Shift+Tab returns to the now-unreadable retained folder row.
     fixture.key(KeyCode::Space, 0);
     fixture.ui.update(SIZE).unwrap();
     assert_eq!(fixture.file_root().as_raw().object, root.as_raw().object);
-    let held = fixture.controller.try_borrow().unwrap();
-    let model = &held.controller.model;
+    let held = fixture.widget.try_borrow().unwrap();
+    let model = &held.model;
     assert_eq!(model.selected.as_ref(), Some(&file));
     assert_eq!(model.directory, directory.path());
     assert!(model.error.text().unwrap().contains("Cannot read"));
@@ -333,7 +332,7 @@ fn lifecycle_cancellation_is_once_per_request_and_stale_hide_does_not_cancel_reo
 
 /// Final runtime release queues cancellation without invoking application code or retaining the runtime through its internal handlers.
 #[test]
-fn runtime_release_preserves_active_request_terminal_cancellation_without_a_controller_cycle() {
+fn runtime_release_preserves_active_request_terminal_cancellation_without_a_widget_cycle() {
     let mut fixture = Fixture::new();
     let directory = tempfile::tempdir().unwrap();
     let events = session(&mut fixture);
@@ -365,8 +364,8 @@ fn successful_navigation_reuses_fixed_controls_and_replaces_the_complete_dynamic
     }
     fixture.open(directory.path());
     let old_root = fixture.file_root();
-    let path = fixture.controller.try_borrow().unwrap().controller.model.path.clone();
-    let mut scroll = fixture.controller.try_borrow().unwrap().controller.model.files.clone();
+    let path = fixture.widget.try_borrow().unwrap().model.path.clone();
+    let mut scroll = fixture.widget.try_borrow().unwrap().model.files.clone();
     scroll.set_offset(Point { x: 0, y: i32::MAX }).unwrap();
     fixture.ui.update(SIZE).unwrap();
     assert!(scroll.info().unwrap().requested.y > 0);
@@ -374,10 +373,10 @@ fn successful_navigation_reuses_fixed_controls_and_replaces_the_complete_dynamic
     fixture.key(KeyCode::Space, 0);
     fixture.ui.update(SIZE).unwrap();
     assert_ne!(fixture.file_root().as_raw().object, old_root.as_raw().object);
-    assert_eq!(fixture.controller.try_borrow().unwrap().controller.model.directory, child);
+    assert_eq!(fixture.widget.try_borrow().unwrap().model.directory, child);
     assert_eq!(path.text().unwrap(), child.to_string_lossy());
     assert_eq!(scroll.info().unwrap().requested.y, 0);
-    assert!(fixture.controller.try_borrow().unwrap().controller.model.selected.is_none());
+    assert!(fixture.widget.try_borrow().unwrap().model.selected.is_none());
     fixture.handle.close().unwrap();
 }
 
@@ -429,7 +428,7 @@ fn application_callback_opens_picker_and_later_input_reaches_its_new_modal_scope
     activator.close().unwrap();
 }
 
-/// Request completion is a committed fact even after the closed controller is retired during an active delivery window.
+/// Request completion is a committed fact even after the closed widget is retired during an active delivery window.
 #[test]
 fn closed_picker_preserves_all_completed_requests_during_manual_handler_runtime_reentry() {
     let mut fixture = Fixture::new();
@@ -453,15 +452,15 @@ fn closed_picker_preserves_all_completed_requests_during_manual_handler_runtime_
 
 /// A foreign mapper's reentrant observation reports a checked borrow conflict, never panics.
 #[test]
-fn completion_mapping_reentry_uses_the_controller_com_gate() {
+fn completion_mapping_reentry_uses_the_widget_com_gate() {
     let directory = tempfile::tempdir().unwrap();
     // Deliberate reentrancy probe needs the identity created after its mapper. OnceCell
     // initializes it once; this fixture-only cycle is released by explicit close below.
     let target = Rc::new(std::cell::OnceCell::<ComPtr<IFileDialogAbi>>::new());
-    let controller = target.clone();
+    let widget = target.clone();
     let (events_tx, events) = std::sync::mpsc::channel();
     let sink = neocogi_ui::file_dialog::sink(events_tx.clone(), move |IFileDialogEvent::Completed(message)| {
-        assert_eq!(controller.get().unwrap().active(), Err(neocogi_com::NC_E_BUSY));
+        assert_eq!(widget.get().unwrap().active(), Err(neocogi_com::NC_E_BUSY));
         message
     })
     .unwrap();
@@ -483,10 +482,10 @@ fn mounted_dialog_outlives_client_handles_and_retires_with_its_view() {
     fixture.open(directory.path());
     let window = fixture.handle.window().unwrap();
     let Fixture {
-        ui, runtime, owner, handle, controller, ..
+        ui, runtime, owner, handle, widget, ..
     } = fixture;
     drop(handle);
-    drop(controller);
+    drop(widget);
     assert_eq!(window.snapshot().unwrap().visibility, Visibility::Visible);
     ui.update(SIZE).unwrap();
     assert!(messages.try_recv().is_err());

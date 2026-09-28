@@ -70,7 +70,7 @@ pub(crate) fn create_storage(assets: crate::assets::ImportedAssets, compositor: 
         pending: Cell::new(true),
         updating: Cell::new(false),
         menus: RefCell::new(Vec::new()),
-        event_drivers: RefCell::new(Vec::new()),
+        dispatch_widgets: RefCell::new(Vec::new()),
     })
 }
 
@@ -114,8 +114,9 @@ pub(crate) struct RuntimeStorage {
     updating: Cell<bool>,
     /// Weak declaration authentication retains no unused menu tree or application state.
     menus: RefCell<Vec<(usize, std::rc::Weak<menus::Declaration>)>>,
-    /// Reusable descendant-first controller order; only topology edits rebuild this vector.
-    event_drivers: RefCell<Vec<Rc<crate::ui_node::mounted_node::ComponentEventDriver>>>,
+    /// Reusable descendant-first widget snapshot within one update; no handles survive a frame.
+    /// A callback may edit topology, so no RefCell borrow spans its COM call.
+    dispatch_widgets: RefCell<Vec<ComPtr<IWidgetAbi>>>,
 }
 
 /// Temporary association between an actual COM widget and an existing retained root.
@@ -127,14 +128,14 @@ struct SurfaceMount {
 }
 
 impl RuntimeStorage {
-    /// Rebuilds delivery order only after topology changes, reusing allocated capacity.
-    fn refresh_event_drivers(&self) -> Result<(), NcStatus> {
-        if self.factory.state.owners_changed.get() {
+    /// Rebuilds this update's delivery order after topology changes, reusing scratch capacity.
+    fn refresh_dispatch_widgets(&self) -> Result<(), NcStatus> {
+        if self.factory.state.dispatch_order_changed.get() {
             let context = self.context()?;
-            let mut drivers = self.event_drivers.borrow_mut();
+            let mut drivers = self.dispatch_widgets.borrow_mut();
             drivers.clear();
-            context.window_manager.collect_component_event_drivers(&mut drivers)?;
-            self.factory.state.owners_changed.set(false);
+            context.window_manager.collect_dispatch_widgets(&mut drivers)?;
+            self.factory.state.dispatch_order_changed.set(false);
         }
         Ok(())
     }
@@ -179,11 +180,15 @@ impl Drop for RuntimeStorage {
     /// Final release closes retained handles even without an explicit application close.
     fn drop(&mut self) {
         self.factory.state.closed.set(true);
-        // Close views first so controller finalization observes terminal widget
-        // lifetimes. No RefCell guard or traversal remains across retirement.
+        // Remove the forest first, then finish deferred widget close without
+        // holding any traversal or RefCell borrow across a foreign call.
         drop(self.context.get_mut().take());
-        let _ = self.factory.state.finish_owner_retirement();
-        self.event_drivers.get_mut().clear();
+        let _ = self.factory.state.finish_widget_closure();
+        self.dispatch_widgets.get_mut().clear();
+        // No future runtime boundary exists after final destruction. A caller
+        // may still own a borrowed widget, but the closed host rejects its work.
+        // Do not retain that widget in a host -> widget -> host reference cycle.
+        self.factory.state.release_pending_closure();
     }
 }
 
@@ -288,7 +293,7 @@ impl UiRuntime for Runtime {
         self.update_cycle(size, None)
     }
     /// Lends the dispatcher only after returning owned UI context storage to its idle slot.
-    fn update_with_events(&self, size: Size, dispatcher: ComRef<'_, IEventOwnerAbi>) -> Result<(), NcStatus> {
+    fn update_with_events(&self, size: Size, dispatcher: ComRef<'_, IApplicationDispatcherAbi>) -> Result<(), NcStatus> {
         self.update_cycle(size, Some(dispatcher))
     }
     /// Keeps the renderer reference and stream authority within one synchronous submission.
@@ -322,11 +327,11 @@ impl UiRuntime for Runtime {
     fn close(&self) -> Result<(), NcStatus> {
         let storage = &self.storage;
         if storage.factory.state.closed.get() {
-            // Closing again may finish a retirement previously blocked by a
-            // caller's local model guard. Never reenter an active handler.
+            // Closing again may finish a widget close previously blocked by a
+            // caller's local widget guard. Never reenter an active handler.
             return match storage.updating.get() {
                 true => Ok(()),
-                false => storage.factory.state.finish_owner_retirement(),
+                false => storage.factory.state.finish_widget_closure(),
             };
         }
         let mut context = storage.context()?;
@@ -344,7 +349,7 @@ impl UiRuntime for Runtime {
         let views = storage.factory.state.error.take().map_or(Ok(()), Err);
         let owners = match storage.updating.get() {
             true => Ok(()), // The active event handler must return before its own cleanup.
-            false => storage.factory.state.finish_owner_retirement(),
+            false => storage.factory.state.finish_widget_closure(),
         };
         views.and(owners)
     }
@@ -393,7 +398,7 @@ impl Drop for UpdateGuard<'_> {
 }
 impl Runtime {
     /// Executes owned phases so callback edits use ordinary COM window/topology APIs with no borrowed runtime wrapper.
-    fn update_cycle(&self, size: Size, dispatcher: Option<ComRef<'_, IEventOwnerAbi>>) -> Result<(), NcStatus> {
+    fn update_cycle(&self, size: Size, dispatcher: Option<ComRef<'_, IApplicationDispatcherAbi>>) -> Result<(), NcStatus> {
         let storage = &self.storage;
         storage.open()?;
         if size.width <= 0 || size.height <= 0 {
@@ -404,11 +409,11 @@ impl Runtime {
         }
         let _guard = UpdateGuard(&storage.updating);
         let result = self.run_update_cycle(size, dispatcher);
-        // Every recoverable exit finalizes already removed owners, including
+        // Every recoverable exit finalizes already removed widgets, including
         // input/layout failures before the next ordinary dispatch boundary.
         let context_available = storage.context.borrow().is_some();
         let retired = match context_available {
-            true => storage.factory.state.finish_owner_retirement(),
+            true => storage.factory.state.finish_widget_closure(),
             false => Ok(()), // A rejected reentry must not run cleanup inside its caller's traversal.
         };
         // The body marks pending only after acquiring the context. A rejected
@@ -416,11 +421,16 @@ impl Runtime {
         if retired.is_err() {
             storage.pending.set(true);
         }
+        // Preserve scratch capacity, not widget ownership, between updates.
+        // Retaining this snapshot across frames would prolong a removed leaf's
+        // allocation after its final application handle is released.
+        storage.dispatch_widgets.borrow_mut().clear();
+        storage.factory.state.dispatch_order_changed.set(true);
         result.and(retired)
     }
 
     /// Performs one guarded update; the outer operation always drains terminal cleanup.
-    fn run_update_cycle(&self, size: Size, dispatcher: Option<ComRef<'_, IEventOwnerAbi>>) -> Result<(), NcStatus> {
+    fn run_update_cycle(&self, size: Size, dispatcher: Option<ComRef<'_, IApplicationDispatcherAbi>>) -> Result<(), NcStatus> {
         let storage = &self.storage;
         let dimensions = Dimensioni::new(size.width, size.height);
         {
@@ -460,8 +470,8 @@ impl Runtime {
     }
 
     /// Settles descendants and layout before consuming one application message.
-    /// Topology changes refresh cached order; removed tickets become ineligible immediately.
-    fn dispatch_boundary(&self, dispatcher: Option<ComRef<'_, IEventOwnerAbi>>, dimensions: Dimensioni, remaining: &mut u32) -> Result<(), NcStatus> {
+    /// Every topology change invalidates the snapshot before another widget can be dispatched.
+    fn dispatch_boundary(&self, dispatcher: Option<ComRef<'_, IApplicationDispatcherAbi>>, dimensions: Dimensioni, remaining: &mut u32) -> Result<(), NcStatus> {
         loop {
             // Exhaustion stops before another dequeue. Reaching the exact ceiling also
             // returns LIMIT: proving quiescence would require inspecting foreign queues.
@@ -469,33 +479,35 @@ impl Runtime {
                 return Err(UI_E_EVENT_LIMIT);
             }
             self.storage.layout_boundary(dimensions)?;
-            self.storage.factory.state.finish_owner_retirement()?;
+            self.storage.factory.state.finish_widget_closure()?;
             let reconciled = {
                 let mut context = self.storage.context()?;
                 context.reconcile_choice_menus()?
             };
-            self.storage.refresh_event_drivers()?;
+            self.storage.refresh_dispatch_widgets()?;
             let mut progressed = reconciled;
             if reconciled {
                 spend_dispatch_budget(remaining)?;
             }
             let mut index = 0;
             loop {
-                // Retain just the selected ticket; release cache access before
-                // behavior can remove or create mounted owners.
-                let component = self.storage.event_drivers.borrow().get(index).cloned();
-                let Some(component) = component else { break };
-                // One message per visit lets retirement take effect before this
-                // same component receives a successor from its private channel.
-                let handled = component.dispatch();
-                let retired = self.storage.factory.state.finish_owner_retirement();
+                // Retain only this call's widget; release snapshot access before
+                // its handler can change the tree or remove this same object.
+                let widget = self.storage.dispatch_widgets.borrow().get(index).cloned();
+                let Some(mut widget) = widget else { break };
+                // One message per visit lets removal take effect before this
+                // widget receives any successor from its private channel.
+                let handled = widget.dispatch_next();
+                let retired = self.storage.factory.state.finish_widget_closure();
                 let handled = handled?;
                 retired?;
-                if handled {
+                if handled || self.storage.factory.state.dispatch_order_changed.get() {
                     progressed = true;
+                    // Topology-changing callbacks must also count when they report no message.
+                    // Otherwise a misbehaving widget could force unlimited rebuilds in one update.
                     spend_dispatch_budget(remaining)?;
                     // Reconsider descendants after every delivered message.
-                    // No later cached owner may run against outdated topology.
+                    // No later cached widget may run against outdated topology.
                     break;
                 }
                 self.storage.open()?;
@@ -511,7 +523,7 @@ impl Runtime {
                 Some(mut dispatcher) => dispatcher.dispatch_next(),
                 None => Ok(false),
             };
-            let retired = self.storage.factory.state.finish_owner_retirement();
+            let retired = self.storage.factory.state.finish_widget_closure();
             let delivered = delivered?;
             retired?;
             self.storage.open()?;

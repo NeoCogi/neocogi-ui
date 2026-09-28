@@ -3,6 +3,7 @@ use super::*;
 use neocogi_ui_nodes_contracts::*;
 use neocogi_com::{INcStringComPtrExt, NC_E_BUSY, NcCopyToBufferOffset};
 mod containers;
+mod composite_fixture;
 mod embedded_input;
 mod widget_flags;
 
@@ -41,7 +42,7 @@ fn oversized_window_title_rejects_creation_without_consuming_the_root() {
             .create_window(
                 NcCopyFromBufferOffset::new(0, &oversized),
                 RECT,
-                neocogi_ui_core_contracts::Mount::widget(widget.as_com_ref()).as_value().unwrap(),
+                widget.as_com_ref(),
                 neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
             )
             .unwrap_err(),
@@ -51,7 +52,7 @@ fn oversized_window_title_rejects_creation_without_consuming_the_root() {
         .create_window(
             NcCopyFromBufferOffset::new(0, b"bounded title"),
             RECT,
-            neocogi_ui_core_contracts::Mount::widget(widget.as_com_ref()).as_value().unwrap(),
+            widget.as_com_ref(),
             neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
         )
         .unwrap();
@@ -234,7 +235,7 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
     let _disclosure = factory.create_disclosure(label, DisclosureStyle::Header, false).unwrap();
     let content = button.query::<IWidgetAbi>().unwrap();
     let _scroll = factory
-        .create_scroll_area(neocogi_ui_core_contracts::Mount::widget(content.as_com_ref()).as_value().unwrap(), true)
+        .create_scroll_area(content.as_com_ref(), true)
         .unwrap();
     let area = factory
         .create_text_area(
@@ -255,7 +256,7 @@ fn mount(runtime: &ComPtr<UiRuntimeAbi>, root: &ComPtr<IWidgetAbi>) -> Result<Co
     runtime.query::<IWindowManagerAbi>()?.create_window(
         NcCopyFromBufferOffset::new(0, b"test"),
         RECT,
-        neocogi_ui_core_contracts::Mount::widget(root.as_com_ref()).as_value().unwrap(),
+        root.as_com_ref(),
         neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
     )
 }
@@ -639,9 +640,7 @@ fn window_com_capabilities_preserve_hierarchy_layers_visibility_and_subtree_clos
             root.as_com_ref(),
             NcCopyFromBufferOffset::new(0, b"child"),
             RECT,
-            neocogi_ui_core_contracts::Mount::widget(child_button.query::<IWidgetAbi>().unwrap().as_com_ref())
-                .as_value()
-                .unwrap(),
+            child_button.query::<IWidgetAbi>().unwrap().as_com_ref(),
             neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
         )
         .unwrap();
@@ -651,9 +650,7 @@ fn window_com_capabilities_preserve_hierarchy_layers_visibility_and_subtree_clos
             child.as_com_ref(),
             NcCopyFromBufferOffset::new(0, b"dialog"),
             RECT,
-            neocogi_ui_core_contracts::Mount::widget(dialog_button.query::<IWidgetAbi>().unwrap().as_com_ref())
-                .as_value()
-                .unwrap(),
+            dialog_button.query::<IWidgetAbi>().unwrap().as_com_ref(),
             neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
         )
         .unwrap();
@@ -713,7 +710,7 @@ fn child_creation_rejects_foreign_and_modal_parents_before_mounting() {
                 foreign.as_com_ref(),
                 NcCopyFromBufferOffset::new(0, b"foreign"),
                 RECT,
-                neocogi_ui_core_contracts::Mount::widget(node.as_com_ref()).as_value().unwrap(),
+                node.as_com_ref(),
                 neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
             )
             .unwrap_err(),
@@ -724,9 +721,7 @@ fn child_creation_rejects_foreign_and_modal_parents_before_mounting() {
             root.as_com_ref(),
             NcCopyFromBufferOffset::new(0, b"modal"),
             RECT,
-            neocogi_ui_core_contracts::Mount::widget(button(&first).query::<IWidgetAbi>().unwrap().as_com_ref())
-                .as_value()
-                .unwrap(),
+            button(&first).query::<IWidgetAbi>().unwrap().as_com_ref(),
             neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
         )
         .unwrap();
@@ -736,7 +731,7 @@ fn child_creation_rejects_foreign_and_modal_parents_before_mounting() {
                 dialog.as_com_ref(),
                 NcCopyFromBufferOffset::new(0, b"invalid"),
                 RECT,
-                neocogi_ui_core_contracts::Mount::widget(node.as_com_ref()).as_value().unwrap(),
+                node.as_com_ref(),
                 neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
             )
             .unwrap_err(),
@@ -747,7 +742,7 @@ fn child_creation_rejects_foreign_and_modal_parents_before_mounting() {
             root.as_com_ref(),
             NcCopyFromBufferOffset::new(0, b"valid"),
             RECT,
-            neocogi_ui_core_contracts::Mount::widget(node.as_com_ref()).as_value().unwrap(),
+            node.as_com_ref(),
             neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
         )
         .unwrap();
@@ -767,9 +762,7 @@ fn popup_com_capability_enforces_active_owner_policy_and_permanent_removal() {
         .create_popup(
             root.as_com_ref(),
             NcCopyFromBufferOffset::new(0, b"popup"),
-            neocogi_ui_core_contracts::Mount::widget(popup_button.query::<IWidgetAbi>().unwrap().as_com_ref())
-                .as_value()
-                .unwrap(),
+            popup_button.query::<IWidgetAbi>().unwrap().as_com_ref(),
             neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IPopupEventBinding::Unobserved).unwrap(),
         )
         .unwrap();
@@ -785,9 +778,7 @@ fn popup_com_capability_enforces_active_owner_policy_and_permanent_removal() {
             root.as_com_ref(),
             NcCopyFromBufferOffset::new(0, b"modal"),
             RECT,
-            neocogi_ui_core_contracts::Mount::widget(button(&runtime).query::<IWidgetAbi>().unwrap().as_com_ref())
-                .as_value()
-                .unwrap(),
+            button(&runtime).query::<IWidgetAbi>().unwrap().as_com_ref(),
             neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
         )
         .unwrap();
@@ -947,27 +938,21 @@ fn child_editor_validates_before_claiming_and_closes_retained_views() {
     assert_eq!(
         editor.insert(
             1,
-            neocogi_ui_core_contracts::Mount::widget(first.query::<IWidgetAbi>().unwrap().as_com_ref())
-                .as_value()
-                .unwrap()
+            first.query::<IWidgetAbi>().unwrap().as_com_ref()
         ),
         Err(neocogi_com::NC_E_OUT_OF_RANGE)
     );
     assert_eq!(
         editor.insert(
             0,
-            neocogi_ui_core_contracts::Mount::widget(foreign.query::<IWidgetAbi>().unwrap().as_com_ref())
-                .as_value()
-                .unwrap()
+            foreign.query::<IWidgetAbi>().unwrap().as_com_ref()
         ),
         Err(UI_E_OWNER)
     );
     editor
         .insert(
             0,
-            neocogi_ui_core_contracts::Mount::widget(first.query::<IWidgetAbi>().unwrap().as_com_ref())
-                .as_value()
-                .unwrap(),
+            first.query::<IWidgetAbi>().unwrap().as_com_ref(),
         )
         .unwrap()
         .finish()
@@ -975,18 +960,14 @@ fn child_editor_validates_before_claiming_and_closes_retained_views() {
     assert_eq!(
         editor.insert(
             1,
-            neocogi_ui_core_contracts::Mount::widget(first.query::<IWidgetAbi>().unwrap().as_com_ref())
-                .as_value()
-                .unwrap()
+            first.query::<IWidgetAbi>().unwrap().as_com_ref()
         ),
         Err(UI_E_OWNER)
     );
     assert_eq!(
         editor.replace(
             1,
-            neocogi_ui_core_contracts::Mount::widget(second.query::<IWidgetAbi>().unwrap().as_com_ref())
-                .as_value()
-                .unwrap()
+            second.query::<IWidgetAbi>().unwrap().as_com_ref()
         ),
         Err(neocogi_com::NC_E_OUT_OF_RANGE)
     );
@@ -995,9 +976,7 @@ fn child_editor_validates_before_claiming_and_closes_retained_views() {
     editor
         .replace(
             0,
-            neocogi_ui_core_contracts::Mount::widget(second.query::<IWidgetAbi>().unwrap().as_com_ref())
-                .as_value()
-                .unwrap(),
+            second.query::<IWidgetAbi>().unwrap().as_com_ref(),
         )
         .unwrap()
         .finish()
@@ -1030,9 +1009,7 @@ fn child_edit_reports_committed_topology_separately_from_teardown_failure() {
     editor
         .insert(
             0,
-            neocogi_ui_core_contracts::Mount::widget(object.query::<IWidgetAbi>().unwrap().as_com_ref())
-                .as_value()
-                .unwrap(),
+            object.query::<IWidgetAbi>().unwrap().as_com_ref(),
         )
         .unwrap()
         .finish()
@@ -1041,9 +1018,7 @@ fn child_edit_reports_committed_topology_separately_from_teardown_failure() {
     let outcome = editor
         .replace(
             0,
-            neocogi_ui_core_contracts::Mount::widget(replacement.query::<IWidgetAbi>().unwrap().as_com_ref())
-                .as_value()
-                .unwrap(),
+            replacement.query::<IWidgetAbi>().unwrap().as_com_ref(),
         )
         .unwrap();
     assert_eq!(outcome.finish(), Err(NC_E_INVALID_ARG));
@@ -1428,7 +1403,7 @@ fn builtin_scoped_paint_preserves_alignment_with_inline_semantic_state() {
 
 mod component_events;
 mod events;
-mod owned_events;
+mod widget_dispatch;
 
 mod combo;
 mod menus;

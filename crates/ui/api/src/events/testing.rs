@@ -2,7 +2,7 @@
 
 use neocogi_com::{ComPtr, ComRef, LocalCom, LocalMut, NcStatus};
 use crate::{
-    IEventOwnerAbi, Size, Ui,
+    IApplicationDispatcherAbi, Size, Ui,
     events::{Controller, EventModel},
 };
 use std::{
@@ -15,7 +15,7 @@ pub struct TestApp<State: 'static, Message: 'static> {
     /// Exact typed allocation used for direct assertions and ordinary model edits.
     local: LocalCom<Controller<Model<State, Message>>>,
     /// Runtime projection resolved once and reused for every tested frame.
-    owner: ComPtr<IEventOwnerAbi>,
+    owner: ComPtr<IApplicationDispatcherAbi>,
 }
 
 /// Concrete fixture behavior; its state and protocol remain private to the test binary.
@@ -35,12 +35,12 @@ impl<State: 'static, Message: 'static> EventModel for Model<State, Message> {
 impl<State: 'static, Message: 'static> TestApp<State, Message> {
     /// Moves the receiver and complete test model into one persistent COM allocation.
     pub fn new(state: State, messages: Receiver<Message>, handle: fn(&mut State, Message) -> Result<(), NcStatus>) -> Self {
-        let local = Controller::into_local(Controller::root(Model { state, handle }, messages));
-        let owner = local.query().expect("Controller declares IEventOwner");
+        let local = Controller::into_local(Controller::new(Model { state, handle }, messages));
+        let owner = local.query().expect("Controller declares IApplicationDispatcher");
         Self { local, owner }
     }
     /// Borrows the cached projection without querying or incrementing its reference count.
-    pub fn as_interface(&self) -> ComRef<'_, IEventOwnerAbi> {
+    pub fn as_interface(&self) -> ComRef<'_, IApplicationDispatcherAbi> {
         self.owner.as_com_ref()
     }
     /// Uses the production eventful update with the same owner throughout the fixture.

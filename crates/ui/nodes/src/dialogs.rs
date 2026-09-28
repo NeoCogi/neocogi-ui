@@ -9,7 +9,7 @@ use std::{
     rc::Rc,
 };
 use crate::boundary::text;
-use neocogi_ui::events::{Controller, EventModel};
+use std::sync::mpsc::{Receiver, TryRecvError};
 
 /// Request state is an ordinary field of the exclusively borrowed picker model.
 struct Request {
@@ -22,11 +22,11 @@ struct Request {
 /// Mutually exclusive picker-request lifecycle; no two booleans can disagree.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum RequestPhase {
-    /// Reusable controller has no request awaiting a user outcome.
+    /// Reusable dialog has no request awaiting a user outcome.
     Idle,
     /// One request is awaiting acceptance or cancellation.
     Active,
-    /// Logical controller/window closure permanently rejects new requests.
+    /// Logical widget/window closure permanently rejects new requests.
     Closed,
 }
 impl Request {
@@ -63,11 +63,6 @@ impl Request {
         }
         Ok(())
     }
-    /// Retirement settles an active request and releases its destination.
-    fn retire(&mut self) -> Result<(), NcStatus> {
-        self.close()
-    }
-
     /// Closes future completion delivery; already posted outcomes remain in the consumer inbox.
     fn close(&mut self) -> Result<(), NcStatus> {
         let result = match std::mem::replace(&mut self.phase, RequestPhase::Closed) {
@@ -97,10 +92,8 @@ struct Model {
     nodes: Rc<DialogNodes>,
     /// Stable hidden/reusable modal installed after the eventful root is mounted.
     window: Option<ComPtr<IWindowAbi>>,
-    /// Plain request state protected by the controller's existing COM borrow gate.
+    /// Plain request state protected by the widget's existing COM borrow gate.
     request: Request,
-    /// The actual shell detects logical closure before deferred model retirement.
-    view: ComPtr<IWidgetAbi>,
     /// Exact committed native directory; lossy path-field display never replaces its identity.
     directory: PathBuf,
     /// User-edited path display becomes authoritative only after a real changed event.
@@ -134,7 +127,6 @@ impl Model {
             return Err(UI_E_CLOSED);
         }
         self.nodes.host.check_mutation()?;
-        self.view.properties()?;
         Ok(())
     }
     /// Resolves untrimmed user text, preserving the exact native directory when its display was not edited.
@@ -226,13 +218,7 @@ fn line(
 ) -> Result<LinearWidget, NcStatus> {
     let line = LinearWidget::from_interface(crate::Linear::create_com(nodes.host.clone(), nodes.resources.clone(), direction, cross.into())?);
     for (index, (child, track)) in children.into_iter().enumerate() {
-        line.as_interface()
-            .insert(
-                index as u32,
-                neocogi_ui_core_contracts::Mount::widget(child.as_com_ref()).as_value()?,
-                LinearEdge::new(track),
-            )?
-            .finish()?;
+        line.as_interface().insert(index as u32, child.as_com_ref(), LinearEdge::new(track))?.finish()?;
     }
     Ok(line)
 }
@@ -335,13 +321,13 @@ impl FileDialog {
         let folders = ScrollAreaWidget::from_interface(crate::ScrollArea::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
-            neocogi_ui_core_contracts::Mount::widget(folder_content.root.node_interface()?.as_com_ref()).as_value()?,
+            folder_content.root.node_interface()?.as_com_ref(),
             true,
         )?);
         let files = ScrollAreaWidget::from_interface(crate::ScrollArea::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
-            neocogi_ui_core_contracts::Mount::widget(file_content.root.node_interface()?.as_com_ref()).as_value()?,
+            file_content.root.node_interface()?.as_com_ref(),
             true,
         )?);
         let error = label(&nodes, "")?;
@@ -384,18 +370,26 @@ impl FileDialog {
                 (accept.node_interface()?, LayoutTrack::Fixed { extent: 96 }),
             ],
         )?;
-        let shell = line(
-            &nodes,
+        // Embed the actual root layout value in FileDialog. It has no separate COM
+        // allocation or controller/view lifetime; children remain ordinary COM widgets.
+        let mut shell = crate::Linear::build(
+            nodes.host.clone(),
             FlowDirection::TopToBottom,
-            CrossSize::Stretch,
-            vec![
-                (toolbar.node_interface()?, LayoutTrack::Content),
-                (browser.node_interface()?, LayoutTrack::Flex { weight: 1.0 }),
-                (filename_line.node_interface()?, LayoutTrack::Content),
-                (error.node_interface()?, LayoutTrack::Content),
-                (actions.node_interface()?, LayoutTrack::Content),
-            ],
+            CrossSize::Stretch.into(),
+            Some(&nodes.resources),
         )?;
+        for (index, (child, track)) in [
+            (toolbar.node_interface()?, LayoutTrack::Content),
+            (browser.node_interface()?, LayoutTrack::Flex { weight: 1.0 }),
+            (filename_line.node_interface()?, LayoutTrack::Content),
+            (error.node_interface()?, LayoutTrack::Content),
+            (actions.node_interface()?, LayoutTrack::Content),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            neocogi_ui_nodes_contracts::Linear::insert(&mut shell, index as u32, child.as_com_ref(), LinearEdge::new(track))?.finish()?;
+        }
         let request = Request {
             phase: RequestPhase::Idle,
             completed: neocogi_com::events::EventPort::with_sink(sink),
@@ -405,7 +399,6 @@ impl FileDialog {
             nodes,
             window: None,
             request,
-            view: shell.node_interface()?,
             directory: PathBuf::new(),
             path_dirty: false,
             selected: None,
@@ -417,35 +410,28 @@ impl FileDialog {
             files,
             diagnostic: String::new(),
         };
-        let dialog = Self::into_local(Self {
-            controller: Controller::new(model, events),
-        });
-        // The root owns this controller once attachment commits. The controller
-        // owns ordinary view capabilities, whose host link does not retain the runtime.
-        let mount = Mount::Component {
-            view: shell.node_interface()?,
-            owner: dialog.query()?,
-        };
+        let dialog = Self::into_local(Self { shell, model, messages: Some(events) });
+        let root = dialog.query::<IWidgetAbi>()?;
         let windows = services.windows.clone();
-        let window_sink = neocogi_ui::events::window::sink(dialog.try_borrow()?.controller.model.events_tx.clone(), Message::Lifecycle)?;
+        let window_sink = neocogi_ui::events::window::sink(dialog.try_borrow()?.model.events_tx.clone(), Message::Lifecycle)?;
         let window_binding = IWindowEventBinding::from_sink(Some(window_sink.as_com_ref()));
         let window = windows.create_dialog(
             parent,
             NcCopyFromBufferOffset::new(0, b"Open File"),
             FILE_DIALOG_RECT,
-            mount.as_value()?,
+            root.as_com_ref(),
             neocogi_com::NcValueRef::new(&window_binding)?,
         )?;
         let connected = (|| {
             window.set_options(WindowOptions::FRAME)?;
             let mut local = dialog.try_borrow_mut()?;
-            local.controller.model.window = Some(window.clone());
+            local.model.window = Some(window.clone());
             Ok::<(), NcStatus>(())
         })();
         if let Err(error) = connected {
             // A failed construction must not leave an unreachable modal definition in the forest.
             let _ = window.close();
-            let _ = dialog.try_borrow_mut()?.controller.retire();
+            let _ = IWidget::close(&mut *dialog.try_borrow_mut()?);
             return Err(error);
         }
         Ok(dialog)
@@ -468,7 +454,7 @@ impl Model {
 
     /// Registers complete candidates while the private inbox is idle, then replaces only dynamic content roles.
     fn install(&mut self, directory: PathBuf, listing: Listing, reset_scroll: bool) -> Result<(), NcStatus> {
-        // These are private built-in roles: their controller validates the live
+        // These are private built-in roles: their composite validates the live
         // modal before replacement and no caller can substitute a foreign child.
         self.folders.replace_content(&listing.folders.root)?.finish()?;
         self.files.replace_content(&listing.files.root)?.finish()?;
@@ -587,44 +573,112 @@ impl Model {
         Ok(())
     }
 }
-impl EventModel for Model {
-    type Message = Message;
-
-    /// Child events enter the same mutable model used by the public picker capability.
-    fn handle(&mut self, message: Message) -> Result<(), NcStatus> {
-        self.update(message)
-    }
-
-    /// View removal cancels one outstanding request after any active handler returns.
-    fn retire(&mut self) -> Result<(), NcStatus> {
-        self.request.retire()
-    }
-}
-
-#[com_object(interfaces(IFileDialog, IEventOwner))]
-/// One allocation owns the picker model, its inbox and its public capabilities.
+#[com_object(interfaces(IFileDialog, IWidget, IContainerLayout))]
+/// One concrete composite owns its layout, model and inbox under one COM borrow gate.
 struct FileDialog {
-    /// Ordinary owned state, exclusively accessed through this allocation's COM gate.
-    controller: Controller<Model>,
+    /// Inline root layout: direct Rust delegation does not reenter a COM projection.
+    shell: crate::Linear,
+    /// Authoritative picker state, including typed child handles and completion mapping.
+    model: Model,
+    /// Sole receiving endpoint, dropped on logical close even if public handles survive.
+    messages: Option<Receiver<Message>>,
 }
-impl IEventOwner for FileDialog {
-    /// Commits the controller and its distinct concrete shell to one owning mount.
-    fn mount(&mut self, view: ComRef<'_, IWidgetAbi>) -> Result<(), NcStatus> {
-        self.controller.mount(view)
+
+impl IWidget for FileDialog {
+    /// Returns the allocating runtime without retaining its tree.
+    fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
+        IWidget::host(&self.shell)
     }
-    /// Handles one private child message without another COM allocation or shared model.
+    /// The inline layout carries the composite's one attachment state.
+    fn mount(&mut self) -> Result<(), NcStatus> {
+        IWidget::mount(&mut self.shell)
+    }
+    /// Closes descendants before disconnecting private delivery and settling one outcome.
+    fn close(&mut self) -> Result<(), NcStatus> {
+        use crate::widget_object::HostedWidget;
+        if !self.shell.runtime().state.check_close()? {
+            return Ok(());
+        }
+        // Acquire and remove descendants before any local terminal transition.
+        // The outcome distinguishes a refused preflight from committed diagnostics.
+        let outcome = self.shell.close_children()?;
+        self.messages.take();
+        let completed = self.model.request.close();
+        self.shell.close_contents();
+        self.shell.runtime_mut().state.complete_close();
+        outcome.finish().and(completed)
+    }
+    /// Receives one child fact with ordinary exclusive access to the model.
     fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
-        self.controller.dispatch_next()
+        IWidget::properties(&self.shell)?;
+        self.model.nodes.host.check_mutation()?;
+        let inbox = self.messages.as_ref().ok_or(UI_E_CLOSED)?;
+        match inbox.try_recv() {
+            Ok(message) => {
+                self.model.update(message)?;
+                Ok(true)
+            }
+            Err(TryRecvError::Empty | TryRecvError::Disconnected) => Ok(false),
+        }
     }
-    /// Ends private delivery and settles the request exactly once after view removal.
-    fn retire(&mut self) -> Result<(), NcStatus> {
-        self.controller.retire()
+    /// Uses the root layout's authoritative options and interaction policy.
+    fn properties(&self) -> Result<WidgetProperties, NcStatus> {
+        IWidget::properties(&self.shell)
+    }
+    /// Replaces only requested flags on the actual inline root state.
+    fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        IWidget::replace_flags(&mut self.shell, flags)
+    }
+    /// Sets selected flags without restoring a captured option snapshot.
+    fn set_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        IWidget::set_flags(&mut self.shell, flags)
+    }
+    /// Clears selected flags on that same state.
+    fn clear_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        IWidget::clear_flags(&mut self.shell, flags)
+    }
+    /// Directly runs the root layout's validated input phase, without a second COM call.
+    fn update(&mut self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
+        IWidget::update(&mut self.shell, state, event, text)
+    }
+    /// Drains the one authoritative geometry marker.
+    fn take_change(&mut self) -> Result<GeometryChange, NcStatus> {
+        IWidget::take_change(&mut self.shell)
+    }
+    /// Records the root appearance using the caller's scoped painting authority.
+    fn paint(&mut self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
+        IWidget::paint(&mut self.shell, scope, state, painter)
     }
 }
+impl IContainerLayout for FileDialog {
+    /// Publishes the exact child collection whose writer is embedded in the root layout.
+    fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
+        IContainerLayout::children(&self.shell)
+    }
+    /// Reuses Linear's algorithm directly in the composite's allocation.
+    fn measure(&mut self, scope: LayoutScope, bounds: LayoutLimits, service: ComRef<'_, ILayoutServiceAbi>) -> Result<Size, NcStatus> {
+        IContainerLayout::measure(&mut self.shell, scope, bounds, service)
+    }
+    /// Places the same children under the caller's scoped layout transaction.
+    fn place(&mut self, scope: LayoutScope, rect: Rect, service: ComRef<'_, ILayoutServiceAbi>) -> Result<ContainerGeometry, NcStatus> {
+        IContainerLayout::place(&mut self.shell, scope, rect, service)
+    }
+    /// Preserves ordinary root event filtering without borrowing another object.
+    fn accepts_event(&self, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<bool, NcStatus> {
+        IContainerLayout::accepts_event(&self.shell, event, text)
+    }
+}
+impl Drop for FileDialog {
+    /// Unpublished or otherwise finally released dialogs use the same idempotent cleanup.
+    fn drop(&mut self) {
+        let _ = IWidget::close(self);
+    }
+}
+
 impl IFileDialog for FileDialog {
     /// Returns the actual modal capability without exposing private structural roles.
     fn window(&self) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-        Ok(self.controller.model.window()?.clone())
+        Ok(self.model.window()?.clone())
     }
     /// Decodes native values before mutating the request or replacing directory rows.
     fn open(
@@ -635,7 +689,7 @@ impl IFileDialog for FileDialog {
         mode: FileDialogMode,
         filename: ComRef<'_, INativePathAbi>,
     ) -> Result<(), NcStatus> {
-        self.controller.model.open(
+        self.model.open(
             text(title)?,
             rect,
             neocogi_ui::path::decode(directory)?,
@@ -643,10 +697,10 @@ impl IFileDialog for FileDialog {
             neocogi_ui::path::decode(filename)?,
         )
     }
-    /// Rejects a closed view immediately, even before its deferred retirement runs.
+    /// Rejects a closed view immediately, even before its deferred closure runs.
     fn active(&self) -> Result<bool, NcStatus> {
-        self.controller.model.view.properties()?;
-        match self.controller.model.request.phase {
+        IWidget::properties(&self.shell)?;
+        match self.model.request.phase {
             RequestPhase::Closed => Err(UI_E_CLOSED),
             RequestPhase::Active => Ok(true),
             RequestPhase::Idle => Ok(false),
@@ -654,7 +708,7 @@ impl IFileDialog for FileDialog {
     }
     /// Explicit cancellation is idempotent and leaves the modal available for reuse.
     fn cancel(&mut self) -> Result<bool, NcStatus> {
-        let model = &mut self.controller.model;
+        let model = &mut self.model;
         model.owner()?;
         let active = model.request.active();
         model.finish(FileDialogCompletion::Cancelled)?;
@@ -662,20 +716,20 @@ impl IFileDialog for FileDialog {
     }
     /// Removes the view and settles the request with the current exclusive model access.
     fn close(&mut self) -> Result<(), NcStatus> {
-        if self.controller.model.request.closed() {
+        if self.model.request.closed() {
             return Ok(());
         }
-        self.controller.model.window()?.close()?;
-        // Runtime retirement may also be queued; Controller makes that later
-        // call idempotent without recursively entering this public call.
-        self.controller.retire()
+        self.model.window()?.close()?;
+        // Removal may have deferred this same widget's COM close. Direct local
+        // cleanup uses our existing mutable borrow; the later call is idempotent.
+        IWidget::close(self)
     }
     /// Diagnostics remain readable after the component's terminal closure.
     fn diagnostic(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
-        Ok(NcString::from_utf8_str(&self.controller.model.diagnostic))
+        Ok(NcString::from_utf8_str(&self.model.diagnostic))
     }
 }
-/// Creates the one nodes-owned controller and returns its public editing capability.
+/// Creates the one concrete composite widget and returns its public editing capability.
 pub(crate) fn create(
     services: Rc<NodeServices>,
     parent: ComRef<'_, IWindowAbi>,

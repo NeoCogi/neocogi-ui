@@ -1,12 +1,12 @@
 //! COM reconstruction and explicit authored snapshots, independent from file transport.
 use crate::{*, build::Construction};
 use neocogi_com::{
-    binary, ComPtr, ComRef, IUnknown, NcStatus, NcGuid, NcBytes, INcBytesAbi, NcCopyFromBufferOffset, NC_E_INVALID_ARG, NC_E_NOT_FOUND, NC_E_OUT_OF_RANGE,
+    binary, ComPtr, IUnknown, NcStatus, NcGuid, NcBytes, INcBytesAbi, NcCopyFromBufferOffset, NC_E_INVALID_ARG, NC_E_NOT_FOUND, NC_E_OUT_OF_RANGE,
 };
 use neocogi_com::persistence::{ObjectRecord, IPersistable};
 use neocogi_ui::{Ui, Widget, IWidgetAbi, IWindowAbi, ITextureAbi};
 use std::collections::BTreeMap;
-use neocogi_ui::{IEventOwner, IEventOwnerAbi, IEventOwnerVtblFor, Mount, Mountable};
+use neocogi_ui::Mountable;
 
 /// Recipe identity describes the authored component schema, never a runtime instance.
 pub const DOCUMENT_TYPE: NcGuid = neocogi_com::guid_from_qualified_name("neocogi.ui.authored-component");
@@ -91,11 +91,11 @@ impl Loader {
         })
     }
     /// Validates typed source and constructs directly, without a binary persistence round trip.
-    pub fn prepare(&self, document: &Document) -> Result<Component, String> {
-        self.prepare_with_events(document, EventBindings::new())
+    pub fn compile(&self, document: &Document) -> Result<Component, String> {
+        self.compile_with_events(document, EventBindings::new())
     }
     /// Validates all constructor receivers before creating the complete candidate tree.
-    pub fn prepare_with_events(&self, document: &Document, events: EventBindings) -> Result<Component, String> {
+    pub fn compile_with_events(&self, document: &Document, events: EventBindings) -> Result<Component, String> {
         self.services.custom.validate_document(document)?;
         let object = self.services.construct(document.clone(), events).map_err(|error| error.to_string())?;
         Ok(Component {
@@ -116,7 +116,9 @@ impl Loader {
     }
 }
 
-/// Application-facing component that resolves authored widget keys to checked typed handles.
+/// Compiled document recipe and typed lookups, independent of mounted widget lifetime.
+/// Dropping this result releases its references. A retained root remains usable;
+/// successful attachment transfers logical closure responsibility to the tree.
 pub struct Component {
     /// Canonical owner retained for authored snapshots and optional capabilities.
     object: ComPtr<IUnknown>,
@@ -124,7 +126,7 @@ pub struct Component {
     interface: ComPtr<contracts::IUiComponentAbi>,
 }
 impl Component {
-    /// Returns the root for inspection. Mount the Component itself to retain its event owner.
+    /// Retains the actual root. The runtime owns closure after successful attachment.
     pub fn root(&self) -> Result<Widget<IWidgetAbi>, NcStatus> {
         Ok(Widget::from_interface(self.interface.root()?))
     }
@@ -145,76 +147,26 @@ impl Component {
 }
 
 impl Mountable for Component {
-    /// Attaches the view and retains its publication/retirement guard for the subtree lifetime.
-    fn mount_description(&self) -> Result<Mount, NcStatus> {
-        Ok(Mount::Component {
-            view: self.interface.root()?,
-            owner: self.object.query()?,
-        })
+    /// Returns the actual root; the tree retains widgets without retaining this recipe.
+    fn mount_widget(&self) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
+        self.interface.root()
     }
 }
 
-/// One persistent composition owns its initialization and the concrete binding capabilities.
-#[neocogi_com::com_object(interfaces(contracts::IUiComponent, neocogi_com::persistence::IPersistable, IEventOwner))]
+/// Authored recipe and typed lookup capabilities, with ordinary COM reference ownership.
+/// This metadata is not a tree lifetime guard: releasing it must not close a root
+/// retained by the runtime or by an application. Failed construction is closed
+/// by Construction; rejected publication is closed explicitly by ReloadSlot.
+#[neocogi_com::com_object(interfaces(contracts::IUiComponent, neocogi_com::persistence::IPersistable))]
 struct Loaded {
     /// Exact authored values; intentionally independent of live interactive state.
     document: Document,
-    /// Retains construction cleanup authority until the runtime claims the subtree.
-    phase: LoadedPhase,
     /// Real tree root, attached only when the host commits the candidate.
     root: Widget<IWidgetAbi>,
     /// Authored widget keys retain each concrete object for checked application queries.
     nodes: BTreeMap<String, Widget<IWidgetAbi>>,
     /// Typed receivers retain only the nodes needed by public commands.
     inputs: BTreeMap<String, ComPtr<IUnknown>>,
-}
-/// Publication lifecycle only; the application owns all event queues and handlers.
-enum LoadedPhase {
-    /// Failed candidates must close every resource they created.
-    Prepared,
-    /// The runtime owns subtree retirement and retains this metadata allocation.
-    Mounted,
-    /// Logical subtree removal is permanent even when clients retain handles.
-    Retired,
-}
-impl IEventOwner for Loaded {
-    /// Keeps the recipe and cleanup guard alive for the mounted subtree, without an event relay.
-    fn mount(&mut self, mut view: ComRef<'_, IWidgetAbi>) -> Result<(), NcStatus> {
-        match self.phase {
-            LoadedPhase::Prepared => {
-                // Reject a different view before transferring this candidate's lifetime.
-                if view.add_ref().query::<IUnknown>()?.as_raw().object != self.root.node_interface()?.query::<IUnknown>()?.as_raw().object {
-                    return Err(neocogi_ui::UI_E_OWNER);
-                }
-                view.mount()?;
-                self.phase = LoadedPhase::Mounted;
-                Ok(())
-            }
-            LoadedPhase::Mounted => Err(neocogi_ui::UI_E_OWNER),
-            LoadedPhase::Retired => Err(neocogi_ui::UI_E_CLOSED),
-        }
-    }
-    /// There is no intermediate inbox: widgets deliver directly into the application's queue.
-    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
-        match self.phase {
-            LoadedPhase::Mounted => Ok(false),
-            LoadedPhase::Prepared => Err(neocogi_ui::UI_E_OWNER),
-            LoadedPhase::Retired => Err(neocogi_ui::UI_E_CLOSED),
-        }
-    }
-    /// Records the runtime's irreversible retirement without consuming application messages.
-    fn retire(&mut self) -> Result<(), NcStatus> {
-        self.phase = LoadedPhase::Retired;
-        Ok(())
-    }
-}
-impl Drop for Loaded {
-    /// Retires a rejected unmounted candidate; normal mounted retirement is idempotent.
-    fn drop(&mut self) {
-        if let Ok(mut root) = self.root.node_interface() {
-            let _ = root.close();
-        }
-    }
 }
 impl contracts::IUiComponent for Loaded {
     /// Shares the mountable widget identity without copying its state.
@@ -296,7 +248,6 @@ impl Services {
             root,
             inputs,
             nodes,
-            phase: LoadedPhase::Prepared,
         }))
     }
 }

@@ -1274,17 +1274,17 @@ impl SurfaceForest {
 }
 
 impl WindowManager {
-    /// Captures every mounted component's private dispatcher after retained
+    /// Captures each actual widget for dispatch after retained
     /// traversal and before callback delivery. The forest's parent edges always
     /// point to earlier nodes, so reverse order visits child surfaces first;
-    /// each widget tree contributes its own drivers in descendant-first order.
-    pub(crate) fn collect_component_event_drivers(
+    /// each widget tree contributes its own handles in descendant-first order.
+    pub(crate) fn collect_dispatch_widgets(
         &self,
-        drivers: &mut Vec<std::rc::Rc<crate::ui_node::mounted_node::ComponentEventDriver>>,
+        drivers: &mut Vec<neocogi_com::ComPtr<neocogi_ui_core_contracts::IWidgetAbi>>,
     ) -> Result<(), neocogi_com::NcStatus> {
         for surface in self.surfaces.nodes.iter().rev() {
             match &surface.surface.body {
-                SurfaceBody::Widgets { root, .. } => root.collect_private_event_drivers(drivers)?,
+                SurfaceBody::Widgets { root, .. } => root.collect_dispatch_widgets(drivers)?,
                 SurfaceBody::Menu(_) => {}
             }
         }

@@ -42,7 +42,7 @@ use neocogi_com::{ComInterface, ComPtr, ComRef, INcStringComPtrExt, IUnknown, Nc
 mod containers;
 pub use containers::{DisclosureWidget, FormWidget, GridWidget, LinearWidget, ScrollAreaWidget, SplitViewWidget};
 mod mount;
-pub use mount::{Component, Mountable};
+pub use mount::Mountable;
 
 /// Reusable state composed into concrete Rust widget implementations.
 pub mod widget;
@@ -560,7 +560,7 @@ impl Ui {
         self.windows.create_window(
             NcCopyFromBufferOffset::new(0, title.as_bytes()),
             rect,
-            neocogi_com::NcValueRef::new(&root.mount_description()?)?,
+            root.mount_widget()?.as_com_ref(),
             neocogi_com::NcValueRef::new(&IWindowEventBinding::from_sink(sink))?,
         )
     }
@@ -581,7 +581,7 @@ impl Ui {
             parent,
             NcCopyFromBufferOffset::new(0, title.as_bytes()),
             rect,
-            neocogi_com::NcValueRef::new(&root.mount_description()?)?,
+            root.mount_widget()?.as_com_ref(),
             neocogi_com::NcValueRef::new(&IWindowEventBinding::from_sink(sink))?,
         )
     }
@@ -602,7 +602,7 @@ impl Ui {
             parent,
             NcCopyFromBufferOffset::new(0, title.as_bytes()),
             rect,
-            neocogi_com::NcValueRef::new(&root.mount_description()?)?,
+            root.mount_widget()?.as_com_ref(),
             neocogi_com::NcValueRef::new(&IWindowEventBinding::from_sink(sink))?,
         )
     }
@@ -621,7 +621,7 @@ impl Ui {
         self.windows.create_popup(
             parent,
             NcCopyFromBufferOffset::new(0, title.as_bytes()),
-            neocogi_com::NcValueRef::new(&root.mount_description()?)?,
+            root.mount_widget()?.as_com_ref(),
             neocogi_com::NcValueRef::new(&IPopupEventBinding::from_sink(sink))?,
         )
     }
@@ -642,9 +642,9 @@ impl Ui {
         self.runtime.update(size)
     }
     /// Settles owned application messages between input phases and commits handler edits.
-    /// Construct the owner once and retain its checked IEventOwner projection across frames.
+    /// Construct the owner once and retain its checked IApplicationDispatcher projection across frames.
     /// This call only borrows that projection; it allocates no callback or revocation state.
-    pub fn update_with_events(&self, size: Size, owner: ComRef<'_, IEventOwnerAbi>) -> Result<(), NcStatus> {
+    pub fn update_with_events(&self, size: Size, owner: ComRef<'_, IApplicationDispatcherAbi>) -> Result<(), NcStatus> {
         self.runtime.update_with_events(size, owner)
     }
     /// Submits a synchronized UI frame to a native window's renderer capability.

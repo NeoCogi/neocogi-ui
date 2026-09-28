@@ -63,7 +63,7 @@ enum Edit {
         /// Existing parent accepts the new child through its ordinary COM editing interface.
         parent: neocogi_ui::LinearWidget,
         /// Child carries its own private inbox; the application never registers that inbox.
-        child: neocogi_ui::Component<IWidgetAbi>,
+        child: neocogi_ui::Widget<IWidgetAbi>,
     },
 }
 
@@ -82,6 +82,8 @@ impl neocogi_ui::events::EventModel for Consumer {
     }
 }
 
+impl super::composite_fixture::Behavior for Consumer {}
+
 /// Builds one real eventful container, supplying defaults for ordinary forwarding.
 fn component(
     ui: &neocogi_ui::Ui,
@@ -90,19 +92,12 @@ fn component(
     source: &mut Emitter,
     forward: Option<ComPtr<IMenuItemSinkAbi>>,
     edit: Edit,
-) -> (neocogi_ui::Component<IWidgetAbi>, neocogi_ui::LinearWidget) {
-    let shell = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
+) -> (neocogi_ui::Widget<IWidgetAbi>, neocogi_ui::LinearWidget) {
     let messages = source.messages.take().expect("one consumer per fixture source");
-    let controller = neocogi_ui::events::Controller::new(
-        Consumer {
-            trace: trace.clone(),
-            record: PrivateRecord { name, forward, edit },
-        },
-        messages,
+    let (widget, shell) = super::composite_fixture::Composite::build(
+        ui, Consumer { trace: trace.clone(), record: PrivateRecord { name, forward, edit } }, messages,
     );
-    let owner = neocogi_ui::events::Controller::from_value(controller).query::<IEventOwnerAbi>().unwrap();
-    let view = neocogi_ui::Widget::from_interface(shell.node_interface().unwrap());
-    (neocogi_ui::Component::new(view, owner), shell)
+    (neocogi_ui::Widget::from_interface(widget.query().unwrap()), shell)
 }
 
 /// Emits a captured fixture fact without entering any application callback.

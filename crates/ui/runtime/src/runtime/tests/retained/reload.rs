@@ -474,7 +474,7 @@ fn typed_and_binary_preparation_have_equivalent_authored_state() {
     let fixture = Headless::standard();
     let document = Document::new("preparation paths");
     let loader = Loader::new(fixture.ui.clone(), None, Resources::new()).unwrap();
-    let typed = loader.prepare(&document).unwrap();
+    let typed = loader.compile(&document).unwrap();
     let binary = loader.load(&document.to_binary().unwrap()).unwrap();
     assert_ne!(
         typed.root().unwrap().as_interface().as_raw().object,
@@ -603,7 +603,6 @@ fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
 /// A self-targeting activation applies only after input traversal, without a reentrant borrow.
 #[test]
 fn application_handles_real_click_and_closed_form_retires() {
-    use neocogi_ui::{Mount, Mountable, IEventOwnerAbi};
     let mut fixture = Headless::standard();
     let mut slot = slot(&fixture.ui);
     let mut document = Document::new("private action");
@@ -623,10 +622,7 @@ fn application_handles_real_click_and_closed_form_retires() {
     .unwrap();
     let component = slot.component().unwrap();
     let mut button = component.widget::<ButtonAbi>("button").unwrap();
-    let mut owner: neocogi_com::ComPtr<IEventOwnerAbi> = match component.mount_description().unwrap() {
-        Mount::Component { owner, .. } => owner,
-        _ => panic!("document must retain its event owner"),
-    };
+    let mut root = component.root().unwrap().node_interface().unwrap();
     fixture.frame(VIEW).unwrap();
     pointer(&fixture.ui, Point { x: 30, y: 30 }, true);
     pointer(&fixture.ui, Point { x: 30, y: 30 }, false);
@@ -636,11 +632,11 @@ fn application_handles_real_click_and_closed_form_retires() {
     button.set_label("After").unwrap();
     assert_eq!(button.label().unwrap(), "After");
     assert_eq!(slot.component().unwrap().save().unwrap(), bytes);
-    assert_eq!(owner.dispatch_next(), Ok(false));
+    assert_eq!(root.dispatch_next(), Ok(false));
     slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     // Container closure queues retirement until the next safe runtime boundary.
     fixture.frame(VIEW).unwrap();
-    assert_eq!(owner.dispatch_next(), Err(UI_E_CLOSED));
+    assert_eq!(root.dispatch_next(), Err(UI_E_CLOSED));
     assert!(button.label().is_err());
 }
 
@@ -760,7 +756,7 @@ fn construction_bindings_reject_duplicate_unknown_nonemitting_and_wrong_typed_so
             true => events.insert::<TextboxAbi, _>(key, sender, |_| ()).unwrap(),
             false => events.insert::<ButtonAbi, _>(key, sender, |_| ()).unwrap(),
         }
-        assert!(loader.prepare_with_events(&document, events).is_err());
+        assert!(loader.compile_with_events(&document, events).is_err());
         assert!(
             matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)),
             "rejected {key} mapping leaked"
@@ -772,7 +768,7 @@ fn construction_bindings_reject_duplicate_unknown_nonemitting_and_wrong_typed_so
     let (replacement, rejected) = std::sync::mpsc::channel::<()>();
     assert_eq!(events.insert::<ButtonAbi, _>("save", replacement, |_| ()), Err(neocogi_com::NC_E_INVALID_ARG));
     assert!(matches!(rejected.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
-    let component = loader.prepare_with_events(&document, events).unwrap();
+    let component = loader.compile_with_events(&document, events).unwrap();
     let retained = component.widget::<ButtonAbi>("save").unwrap();
     assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
     drop(component);
@@ -792,7 +788,7 @@ fn typed_and_binary_candidates_own_constructor_mappings_and_preserve_recipe_byte
         let events = receiver::<ButtonAbi, _>("save", sender, |_| ()).unwrap();
         let candidate = match binary {
             true => loader.load_with_events(&bytes, events).unwrap(),
-            false => loader.prepare_with_events(&document, events).unwrap(),
+            false => loader.compile_with_events(&document, events).unwrap(),
         };
         let retained = candidate.widget::<ButtonAbi>("save").unwrap();
         assert_eq!(candidate.save().unwrap(), bytes);

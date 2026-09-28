@@ -46,24 +46,24 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     assert_eq!(derived_identity.as_raw(), base_identity.as_raw());
     let mut inset = provider.inset(host.as_com_ref())?;
     let parent_probe: ComPtr<IWidgetProbeAbi> = inset.query()?;
-    inset.set_child(neocogi_com::NcValueRef::new(&Mount::widget(widget.as_com_ref()))?)?.finish()?;
+    inset.set_child(neocogi_com::NcValueRef::new(&IWidget::widget(widget.as_com_ref()))?)?.finish()?;
     let mut another = provider.inset(host.as_com_ref())?;
     assert_eq!(
-        another.set_child(neocogi_com::NcValueRef::new(&Mount::widget(widget.as_com_ref()))?).err(),
+        another.set_child(neocogi_com::NcValueRef::new(&IWidget::widget(widget.as_com_ref()))?).err(),
         Some(UI_E_OWNER)
     );
     assert_eq!(another.children()?.child_count()?, 0);
     let root = Widget::from_interface(inset.clone());
     // Capability discovery happens once while wiring the application, never during UI phases.
     let window = ui.window("Independent extension", Rect { x: 10, y: 10, width: 400, height: 200 }, &root)?;
-    let app = events::Controller::into_local(events::Controller::root(
+    let app = events::Controller::into_local(events::Controller::new(
         Model {
             labels: Vec::new(),
             counter: counter.clone(),
         },
         events,
     ));
-    let owner = app.query::<IEventOwnerAbi>()?;
+    let owner = app.query::<IApplicationDispatcherAbi>()?;
 
     ui.update_with_events(size, owner.as_com_ref())?;
     ui.render(size, renderer)?;
@@ -115,7 +115,7 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let replacement_widget: ComPtr<IWidgetAbi> = replacement.query()?;
     let replacement_probe: ComPtr<IWidgetProbeAbi> = replacement.query()?;
     inset
-        .set_child(neocogi_com::NcValueRef::new(&Mount::widget(replacement_widget.as_com_ref()))?)?
+        .set_child(neocogi_com::NcValueRef::new(&IWidget::widget(replacement_widget.as_com_ref()))?)?
         .finish()?;
     ui.update_with_events(size, owner.as_com_ref())?;
     window.close()?;

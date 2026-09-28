@@ -223,7 +223,7 @@ impl neocogi_ui_nodes_contracts::SplitView for SplitView {
         self.editor.view()
     }
     /// Checks the two-pane capacity before the new child consumes its attachment claim.
-    fn insert(&mut self, index: u32, child: neocogi_com::NcValueRef<'_, neocogi_ui_core_contracts::Mount>) -> Result<ChildEditResult, NcStatus> {
+    fn insert(&mut self, index: u32, child: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>) -> Result<ChildEditResult, NcStatus> {
         self.runtime.state.writable()?;
         if self.count >= 2 {
             return Err(NC_E_OUT_OF_RANGE);
@@ -234,7 +234,7 @@ impl neocogi_ui_nodes_contracts::SplitView for SplitView {
         Ok(result)
     }
     /// Publishes invalidation even if closing the replaced subtree reports a teardown error.
-    fn replace(&mut self, index: u32, child: neocogi_com::NcValueRef<'_, neocogi_ui_core_contracts::Mount>) -> Result<ChildEditResult, NcStatus> {
+    fn replace(&mut self, index: u32, child: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>) -> Result<ChildEditResult, NcStatus> {
         self.runtime.state.writable()?;
         let result = self.editor.replace(index, child)?;
         self.invalidate();

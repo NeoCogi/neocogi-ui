@@ -35,7 +35,7 @@ serialized visual output-to-input graph, route expression, or route editor.
 Use `Loader::new(ui, parent_window, resources)` or
 `ReloadSlot::new(ui, parent_window)`. The loader returns a `Component` whose
 concrete children can be queried before mounting. Supply `EventBindings` to
-`prepare_with_events` or `load_with_events` before construction; plain `prepare`
+`compile_with_events` or `load_with_events` before construction; plain `compile`
 and `load` select permanently unobserved widgets. Delivery errors
 propagate through the emitting operation; there is no relay diagnostic channel.
 
@@ -49,8 +49,10 @@ command graph. Optional named `InputHandle<SetText>` endpoints remain available
 for message-based integrations; they are independent of the generated widget
 fields.
 
-A loaded component owns the widget tree and its publication/retirement guard.
-It creates no event adapters. An optional document output alias supplies a
+A compiled component retains the recipe and typed lookup handles. It creates no
+lifetime guard, scheduled event owner or event relay. Dropping it releases those
+references, without explicitly closing a root retained by the application or
+runtime. An otherwise unowned root is destroyed normally and closes descendants. An optional document output alias supplies a
 trace/display name; it does not create a separate bindable endpoint or permit
 receiver replacement. Generated application bindings resolve widgets by node key.
 
@@ -119,9 +121,10 @@ The returned teardown status reports old-content cleanup after publication; it
 cannot turn a successful replacement into an unpublished one. Each attempt gets
 a distinct generation, even when preparation fails.
 
-Mount `Component` itself or use `ReloadSlot` so the runtime retains both view and
-event owner. `root()` alone is an inspection capability. Closing or replacing a
-subtree retires its lifetime guard and closes its streams. Application messages
+Mount `Component` itself, its actual `root()`, or use `ReloadSlot`; each path
+passes the same widget to the runtime. Closing or replacing that subtree closes
+its streams. A rejected `ReloadSlot` candidate is explicitly closed even if a
+failing validation callback retained one of its widget handles. Application messages
 already queued remain owned snapshots; generation checks reject stale ones. Application edits belong at ordinary mutation boundaries, outside
 layout and paint. `Component::save()` preserves authored defaults rather than
 user interaction, focus, scrolling, or live application state.

@@ -168,7 +168,7 @@ widget. They expose two separate setup functions:
 - `bind(&component)` checks and resolves concrete widget and input fields after
   construction; it does not install receivers.
 
-`Loader::prepare_with_events(document, bindings)` and
+`Loader::compile_with_events(document, bindings)` and
 `load_with_events(bytes, bindings)` validate every supplied key and exact receiver
 identity before construction. Duplicate entries, unknown keys, bindings for
 non-emitting widgets, and wrong event types are errors. Missing entries mean

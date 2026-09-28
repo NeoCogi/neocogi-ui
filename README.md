@@ -170,9 +170,9 @@ Supply a sender and typed mapper when constructing observed widgets, for example
 and passes it in the factory's `EventBinding<TextboxEvent>` argument before the
 widget is published. `textbox_unobserved` chooses permanent non-delivery. See [the event architecture](docs/CLASS_EVENT_STREAMS.md). A persistent
 `events::Controller<Model>` owns ordinary model state and its standard channel
-receiver. Resolve `IEventOwner` once, then call
+receiver. Resolve `IApplicationDispatcher` once, then call
 `ui.update_with_events(size, owner.as_com_ref())` each frame. Nested components
-use that same controller contract and attach their view/owner explicitly; the
+own their inbox inside the widget and implement `IWidget::dispatch_next`; the
 runtime settles descendants before application messages and later raw input.
 The host then synchronizes text-input geometry and renders.
 Setters retain invalidation; custom widget updates report `GeometryChange::Changed`

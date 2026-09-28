@@ -185,7 +185,7 @@ impl Host {
     pub fn run<State: AppState>(self, state: State, events: std::sync::mpsc::Receiver<State::Message>) -> Result<(), HostError> {
         // Both local frame hooks and foreign dispatch use this allocation's
         // existing COM borrow gate. Resolve its owner projection only once.
-        let state = neocogi_ui::events::Controller::into_local(neocogi_ui::events::Controller::root(Application { state }, events));
+        let state = neocogi_ui::events::Controller::into_local(neocogi_ui::events::Controller::new(Application { state }, events));
         let owner = state.query()?;
         let driver = Driver {
             host: self,
@@ -305,7 +305,7 @@ struct Driver<State: AppState> {
     /// Persistent owned state; short local guards end before entering UI dispatch.
     state: neocogi_com::LocalCom<neocogi_ui::events::Controller<Application<State>>>,
     /// Checked once at construction and borrowed for every frame without querying.
-    owner: ComPtr<neocogi_ui::IEventOwnerAbi>,
+    owner: ComPtr<neocogi_ui::IApplicationDispatcherAbi>,
     /// Optional finite run counts successfully rendered frames, including the final frame.
     remaining: Option<u32>,
     /// Whether the last observed drawable size was zero; cancellation is sent once per transition.

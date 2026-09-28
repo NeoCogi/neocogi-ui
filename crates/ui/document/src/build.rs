@@ -181,7 +181,7 @@ impl Construction<'_> {
                         .into(),
                     };
                     parent
-                        .insert(index, neocogi_ui::Mount::widget(child.as_interface()).as_value()?, edge)?
+                        .insert(index, child.as_interface(), edge)?
                         .finish()?;
                 }
                 (WidgetSpec::Grid { .. }, Edge::Grid { columns, rows }) => widget
@@ -190,7 +190,7 @@ impl Construction<'_> {
                     .query::<GridAbi>()?
                     .insert(
                         index,
-                        neocogi_ui::Mount::widget(child.as_interface()).as_value()?,
+                        child.as_interface(),
                         GridExtent { columns: *columns, rows: *rows },
                     )?
                     .finish()?,
@@ -200,7 +200,7 @@ impl Construction<'_> {
                     .query::<FormAbi>()?
                     .insert(
                         index,
-                        neocogi_ui::Mount::widget(child.as_interface()).as_value()?,
+                        child.as_interface(),
                         Rect {
                             x: *x,
                             y: *y,
@@ -213,7 +213,7 @@ impl Construction<'_> {
                     .as_interface()
                     .add_ref()
                     .query::<SplitViewAbi>()?
-                    .insert(index, neocogi_ui::Mount::widget(child.as_interface()).as_value()?)?
+                    .insert(index, child.as_interface())?
                     .finish()?,
                 (WidgetSpec::Scroll { .. }, Edge::Pane) => {} // The constructor already adopted its sole child.
                 _ => return Err(NC_E_INVALID_ARG),

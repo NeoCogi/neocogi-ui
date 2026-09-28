@@ -185,8 +185,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             event.label
         })?;
     let window = ui.window("Dynamic UI", Rect { x: 40, y: 40, width: 500, height: 200 }, &button)?;
-    let app = events::Controller::into_local(events::Controller::root(ClickModel { count: 0, button: button.clone() }, session));
-    let owner = app.query::<IEventOwnerAbi>()?;
+    let app = events::Controller::into_local(events::Controller::new(ClickModel { count: 0, button: button.clone() }, session));
+    let owner = app.query::<IApplicationDispatcherAbi>()?;
     let size = native.size()?;
     ui.update_with_events(size, owner.as_com_ref())?;
     ui.render(size, renderer.as_com_ref())?;
@@ -378,14 +378,14 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let (events_tx, events) = std::sync::mpsc::channel();
     let item = bar.submenu("File")?.item_observed("Menu command", events_tx.clone(), ComponentMessage::Menu)?;
     menus.attach_bar(window.as_com_ref(), &bar)?;
-    let app = events::Controller::into_local(events::Controller::root(
+    let app = events::Controller::into_local(events::Controller::new(
         ComponentModel {
             count: 0,
             expected_path: directory.0.join(" native file "),
         },
         events,
     ));
-    let owner = app.query::<IEventOwnerAbi>()?;
+    let owner = app.query::<IApplicationDispatcherAbi>()?;
     ui.update_with_events(size, owner.as_com_ref())?;
     ui.render(size, renderer)?;
     for (key, value) in [(KeyCode::Function, 10), (KeyCode::ArrowDown, 0), (KeyCode::Enter, 0)] {

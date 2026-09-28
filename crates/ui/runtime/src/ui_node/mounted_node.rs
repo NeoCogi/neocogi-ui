@@ -27,49 +27,10 @@ pub(super) enum NodeLayoutKind {
     },
 }
 
-/// Private mount-lifetime ticket shared with detached callback-boundary snapshots.
-/// A component removed by an earlier callback is skipped later in the same
-/// sweep, even though a snapshot still owns its separate dispatcher pointer.
-pub(crate) struct ComponentEventDriver {
-    /// Only this shared lifecycle bit can change while a detached snapshot exists.
-    active: Cell<bool>,
-    /// Separate COM allocation, validated against the widget identity at mount.
-    owner: ComPtr<IEventOwnerAbi>,
-}
-
-impl ComponentEventDriver {
-    /// Retains the controller only after its joint view/controller mount succeeds.
-    pub(crate) fn owned(owner: ComPtr<IEventOwnerAbi>) -> Self {
-        Self { active: Cell::new(true), owner }
-    }
-
-    /// Delivers one message, or skips a component already removed from its mount.
-    pub(crate) fn dispatch(&self) -> Result<bool, NcStatus> {
-        if self.active.get() {
-            self.owner.as_com_ref().dispatch_next()
-        } else {
-            Ok(false)
-        }
-    }
-
-    /// Invalidates a detached snapshot before any child or widget teardown call.
-    fn retire(&self) {
-        self.active.set(false);
-    }
-
-    /// Retains cleanup work after removal without entering an active model recursively.
-    fn queue_retirement(&self, host: &HostState) {
-        host.retired_owners.borrow_mut().push(self.owner.clone());
-    }
-}
-
 /// Node-owned COM capabilities; geometry caches remain in the surrounding node.
 pub(crate) struct ComNode {
     /// Actual common widget capability, also retained by the application proxy.
     pub(super) widget: ComPtr<IWidgetAbi>,
-    /// Optional distinct event owner supplied explicitly at mount.
-    /// It is invoked only after traversal releases this node and its descendants.
-    pub(super) event_driver: Option<Rc<ComponentEventDriver>>,
     /// Runtime-returned changes persist until ancestor invalidation consumes them.
     pub(super) dirty: Cell<bool>,
     /// Cached leaf or branch policy with runtime-owned geometry access.
@@ -293,9 +254,6 @@ impl ComNode {
 impl Drop for ComNode {
     /// Tree removal closes the widget while application COM references may remain.
     fn drop(&mut self) {
-        if let Some(driver) = &self.event_driver {
-            driver.retire();
-        }
         if let NodeLayoutKind::Branch { children, .. } = &self.layout {
             // The retained view remains registered until descendants close, even
             // when the external widget's own close implementation later fails.
@@ -303,15 +261,10 @@ impl Drop for ComNode {
                 self.host.fail(error);
             }
         }
-        if let Err(error) = self.widget.close() {
-            self.host.fail(error);
-        }
-        // Descendants queued their cleanup while closing above. Model cleanup
-        // runs only after traversal and the currently active handler have ended.
-        if let Some(driver) = &self.event_driver {
-            driver.queue_retirement(&self.host);
-        }
-        self.host.owners_changed.set(true);
+        // An active widget call cannot be reentered through close. Preserve child-first
+        // order when a descendant is busy; the next callback boundary finishes this work.
+        self.host.close_widget(self.widget.clone());
+        self.host.dispatch_order_changed.set(true);
     }
 }
 

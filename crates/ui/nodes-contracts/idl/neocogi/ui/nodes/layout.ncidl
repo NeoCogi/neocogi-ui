@@ -94,9 +94,9 @@ interface Linear: IWidget + IContainerLayout {
     /// Replaces sizing metadata without replacing the child's identity.
     fn set_edge(&mut self, index: u32, edge: LinearEdge) -> Result<()>;
     /// Validates child and relationship before committing insertion at index, including count.
-    fn insert(&mut self, index: u32, child: &Mount, edge: LinearEdge) -> Result<ChildEditResult>;
+    fn insert(&mut self, index: u32, child: &IWidget, edge: LinearEdge) -> Result<ChildEditResult>;
     /// Validates replacement before permanently closing the previous indexed subtree.
-    fn replace(&mut self, index: u32, child: &Mount, edge: LinearEdge) -> Result<ChildEditResult>;
+    fn replace(&mut self, index: u32, child: &IWidget, edge: LinearEdge) -> Result<ChildEditResult>;
 }
 
 #[version(2)]
@@ -121,9 +121,9 @@ interface Grid: IWidget + IContainerLayout {
     /// Changes span without replacing the child's identity.
     fn set_edge(&mut self, index: u32, edge: GridExtent) -> Result<()>;
     /// Validates a positive span and unmounted child before committing insertion.
-    fn insert(&mut self, index: u32, child: &Mount, edge: GridExtent) -> Result<ChildEditResult>;
+    fn insert(&mut self, index: u32, child: &IWidget, edge: GridExtent) -> Result<ChildEditResult>;
     /// Validates replacement before permanently closing the previous indexed subtree.
-    fn replace(&mut self, index: u32, child: &Mount, edge: GridExtent) -> Result<ChildEditResult>;
+    fn replace(&mut self, index: u32, child: &IWidget, edge: GridExtent) -> Result<ChildEditResult>;
 }
 
 #[version(1)]
@@ -157,9 +157,9 @@ class SplitView: IWidget + IContainerLayout {
     /// Returns immutable topology; indices zero and one identify first and second panes.
     fn children(&self) -> Result<ComPtr<IChildren>>;
     /// Inserts one unmounted pane at index, rejecting a third child before attachment.
-    fn insert(&mut self, index: u32, child: &Mount) -> Result<ChildEditResult>;
+    fn insert(&mut self, index: u32, child: &IWidget) -> Result<ChildEditResult>;
     /// Replaces one pane after validation, permanently closing its previous subtree.
-    fn replace(&mut self, index: u32, child: &Mount) -> Result<ChildEditResult>;
+    fn replace(&mut self, index: u32, child: &IWidget) -> Result<ChildEditResult>;
     /// Closes one pane; the remaining pane fills the allocation.
     fn remove(&mut self, index: u32) -> Result<ChildEditResult>;
     /// Closes both panes while keeping this container available for new content.
@@ -177,7 +177,7 @@ interface ScrollArea: IWidget + IContainerLayout + IScrolling {
     /// Returns the actual application content widget, without its surrounding transform surface.
     fn content(&self) -> Result<ComPtr<IWidget>>;
     /// Validates replacement before closing old content; structural roles and model identity stay fixed.
-    fn replace_content(&mut self, content: &Mount) -> Result<ChildEditResult>;
+    fn replace_content(&mut self, content: &IWidget) -> Result<ChildEditResult>;
 }
 
 #[version(1)]
@@ -221,9 +221,9 @@ interface Form: IWidget + IContainerLayout {
     /// Moves or resizes a child without replacing its identity.
     fn set_edge(&mut self, index: u32, edge: Rect) -> Result<()>;
     /// Validates a rectangle before attaching an unmounted child.
-    fn insert(&mut self, index: u32, child: &Mount, edge: Rect) -> Result<ChildEditResult>;
+    fn insert(&mut self, index: u32, child: &IWidget, edge: Rect) -> Result<ChildEditResult>;
     /// Commits a new child and rectangle before reporting old-child teardown.
-    fn replace(&mut self, index: u32, child: &Mount, edge: Rect) -> Result<ChildEditResult>;
+    fn replace(&mut self, index: u32, child: &IWidget, edge: Rect) -> Result<ChildEditResult>;
 }
 
 #[version(1)]

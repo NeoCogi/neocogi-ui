@@ -1,121 +1,43 @@
-//! One owned model and typed inbox, shared by application and composite controllers.
+//! Application-owned model and typed inbox, independent of widget attachment.
 
 use std::sync::mpsc::{Receiver, TryRecvError};
-use neocogi_com::{ComRef, NcStatus, com_object};
-use neocogi_ui_core_contracts::{IEventOwner, IEventOwnerAbi, IEventOwnerVtblFor, IWidgetAbi, UI_E_CLOSED, UI_E_OWNER};
+use neocogi_com::{NcStatus, com_object};
+use neocogi_ui_core_contracts::{IApplicationDispatcher, IApplicationDispatcherAbi, IApplicationDispatcherVtblFor};
 
-/// Local behavior behind a persistent COM event owner.
-///
-/// Message enums and model layout stay in the implementing binary. Concrete
-/// widget output contracts carry snapshots across COM into this model's inbox.
+/// Application behavior with a concrete, binary-local message protocol.
+/// Composites instead own their inbox in the widget and implement IWidget dispatch.
 pub trait EventModel: 'static {
-    /// The owner's exact private message protocol; no Send or type erasure is required.
+    /// Exact private message type; no Send bound or type erasure is required.
     type Message: 'static;
-    /// Handles one owned message with exclusive model access and no active tree borrow.
+    /// Handles one message with exclusive model access and no retained traversal borrow.
     fn handle(&mut self, message: Self::Message) -> Result<(), NcStatus>;
-    /// Settles terminal outcomes after delivery ends; defaults to ordinary field destruction.
-    fn retire(&mut self) -> Result<(), NcStatus> {
-        Ok(())
-    }
 }
 
-/// Irreversible controller lifetime, independent of retained COM reference counts.
-enum Phase {
-    /// Construction has not committed the controller to its one owning scope.
-    Unmounted,
-    /// The application host or mounted view authorizes message delivery.
-    Mounted,
-    /// Delivery ended permanently, including when final cleanup reported an error.
-    Retired,
-}
-
-#[com_object(interfaces(IEventOwner))]
-/// Owns one model directly and consumes its private channel through ordinary mutable access.
-///
-/// Applications may allocate this object with `into_local`; a composite may
-/// embed it as an ordinary field and delegate IEventOwner alongside its public
-/// editing interfaces. Both forms use exactly this inbox and lifecycle logic.
+#[com_object(interfaces(IApplicationDispatcher))]
+/// One application model and receiver behind the existing COM borrow gate.
+/// The runtime only borrows its dispatcher for an update. No mount, retirement
+/// state machine, or reference back from a widget controls its lifetime.
 pub struct Controller<Model: EventModel> {
-    /// Authoritative application/component state, never shared through another allocation.
+    /// Authoritative application state, directly available through typed LocalCom access.
     pub model: Model,
-    /// Sole receiving endpoint; retirement drops queued private work and disconnects senders.
-    messages: Option<Receiver<Model::Message>>,
-    /// One-way attachment and retirement policy, changed only through mutable access.
-    phase: Phase,
+    /// Sole receiving endpoint; final destruction disconnects and discards queued work.
+    messages: Receiver<Model::Message>,
 }
-
 impl<Model: EventModel> Controller<Model> {
-    /// Prepares owned state before publishing any COM projection or mount relationship.
+    /// Transfers both model and inbox to the application-owned allocation.
     pub fn new(model: Model, messages: Receiver<Model::Message>) -> Self {
-        Self {
-            model,
-            messages: Some(messages),
-            phase: Phase::Unmounted,
-        }
-    }
-
-    /// Creates the host-owned root, whose lifetime is independent of any one window.
-    /// A root is already claimed and therefore cannot also mount as a composite.
-    pub fn root(model: Model, messages: Receiver<Model::Message>) -> Self {
-        Self {
-            model,
-            messages: Some(messages),
-            phase: Phase::Mounted,
-        }
+        Self { model, messages }
     }
 }
-
-impl<Model: EventModel> IEventOwner for Controller<Model> {
-    /// Claims the only attachment without draining messages captured during construction.
-    fn mount(&mut self, mut view: ComRef<'_, IWidgetAbi>) -> Result<(), NcStatus> {
-        match self.phase {
-            Phase::Unmounted => {
-                // This is the last fallible step. A rejected view leaves the
-                // controller unclaimed, and success commits both lifetimes.
-                view.mount()?;
-                self.phase = Phase::Mounted;
-                Ok(())
-            }
-            Phase::Mounted => Err(UI_E_OWNER),
-            Phase::Retired => Err(UI_E_CLOSED),
-        }
-    }
-
-    /// Receives only after the object's COM or local borrow gate grants exclusive access.
+impl<Model: EventModel> IApplicationDispatcher for Controller<Model> {
+    /// Busy COM entry cannot dequeue; handler errors preserve unattempted successors.
     fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
-        match self.phase {
-            Phase::Unmounted => return Err(UI_E_OWNER),
-            Phase::Retired => return Err(UI_E_CLOSED),
-            Phase::Mounted => {}
-        }
-        let message = match self.messages.as_ref().expect("mounted controller owns its inbox").try_recv() {
+        let message = match self.messages.try_recv() {
             Ok(message) => message,
             Err(TryRecvError::Empty | TryRecvError::Disconnected) => return Ok(false),
         };
-        // The receive borrow ended before model behavior may mutate children or
-        // post upward. An error consumes this message but preserves successors.
         self.model.handle(message)?;
         Ok(true)
-    }
-
-    /// Commits terminal state before user cleanup, preventing duplicate outcomes after errors.
-    fn retire(&mut self) -> Result<(), NcStatus> {
-        match std::mem::replace(&mut self.phase, Phase::Retired) {
-            Phase::Retired => Ok(()),
-            Phase::Unmounted | Phase::Mounted => {
-                self.messages.take();
-                self.model.retire()
-            }
-        }
-    }
-}
-
-impl<Model: EventModel> Drop for Controller<Model> {
-    /// Final release also disconnects an unpublished or otherwise explicitly unretired owner.
-    fn drop(&mut self) {
-        // Fallible runtime retirement reports errors before releasing its final
-        // reference. A destructor can only guarantee idempotent local cleanup.
-        let _ = self.retire();
     }
 }
 
@@ -124,64 +46,40 @@ mod tests {
     use super::*;
     use std::{rc::Rc, sync::mpsc};
 
-    /// A thread-local model makes attempted delivery and terminal cleanup observable.
-    struct Model {
-        /// Successfully dequeued messages, including a deliberately failing handler.
-        attempted: Vec<u32>,
-        /// Number of terminal cleanup attempts, even when cleanup reports failure.
-        retirements: usize,
-    }
-
+    /// Records consumption of non-Send values through actual COM dispatch calls.
+    struct Model(Vec<u32>);
     impl EventModel for Model {
         type Message = Rc<u32>;
-        /// Message one fails after a visible mutation, proving there is no implicit rollback.
+        /// Message one fails after mutation, without consuming its successor.
         fn handle(&mut self, value: Self::Message) -> Result<(), NcStatus> {
-            self.attempted.push(*value);
+            self.0.push(*value);
             match *value {
                 1 => Err(neocogi_com::NC_E_INVALID_ARG),
                 _ => Ok(()),
             }
         }
-        /// A cleanup error must never cause a repeated terminal notification attempt.
-        fn retire(&mut self) -> Result<(), NcStatus> {
-            self.retirements += 1;
-            Err(neocogi_com::NC_E_INVALID_ARG)
-        }
     }
 
-    /// Busy access never dequeues; a handler error preserves its unattempted successor.
+    /// Application lifetime needs no second state machine to preserve borrow/error semantics.
     #[test]
-    fn persistent_owner_preserves_messages_across_busy_and_handler_errors() {
+    fn application_dispatch_preserves_messages_and_disconnects_on_final_release() {
         let (send, messages) = mpsc::channel();
-        let owner = Controller::into_local(Controller::root(Model { attempted: Vec::new(), retirements: 0 }, messages));
-        let mut events = owner.query::<IEventOwnerAbi>().unwrap();
+        let local = Controller::into_local(Controller::new(Model(Vec::new()), messages));
+        let mut events = local.query::<IApplicationDispatcherAbi>().unwrap();
         send.send(Rc::new(1)).unwrap();
         send.send(Rc::new(2)).unwrap();
         {
-            let held = owner.try_borrow_mut().unwrap();
+            let held = local.try_borrow_mut().unwrap();
             assert_eq!(events.dispatch_next(), Err(neocogi_com::NC_E_BUSY));
-            assert!(held.model.attempted.is_empty());
+            assert!(held.model.0.is_empty());
         }
         assert_eq!(events.dispatch_next(), Err(neocogi_com::NC_E_INVALID_ARG));
-        assert_eq!(&owner.try_borrow().unwrap().model.attempted, &[1]);
         assert_eq!(events.dispatch_next(), Ok(true));
         assert_eq!(events.dispatch_next(), Ok(false));
-        assert_eq!(&owner.try_borrow().unwrap().model.attempted, &[1, 2]);
-    }
-
-    /// Retirement disconnects the inbox and remains terminal after a cleanup failure.
-    #[test]
-    fn retirement_is_irreversible_and_attempted_once() {
-        let (send, messages) = mpsc::channel();
-        let owner = Controller::into_local(Controller::root(Model { attempted: Vec::new(), retirements: 0 }, messages));
-        let mut events = owner.query::<IEventOwnerAbi>().unwrap();
-        send.send(Rc::new(2)).unwrap();
-        assert_eq!(events.retire(), Err(neocogi_com::NC_E_INVALID_ARG));
-        assert!(send.send(Rc::new(3)).is_err());
-        assert_eq!(events.dispatch_next(), Err(UI_E_CLOSED));
-        assert_eq!(events.retire(), Ok(()));
-        let model = owner.try_borrow().unwrap();
-        assert!(model.model.attempted.is_empty());
-        assert_eq!(model.model.retirements, 1);
+        assert_eq!(&local.try_borrow().unwrap().model.0, &[1, 2]);
+        drop(local);
+        send.send(Rc::new(3)).unwrap();
+        drop(events);
+        assert!(send.send(Rc::new(4)).is_err());
     }
 }

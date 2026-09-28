@@ -1,13 +1,14 @@
-//! Owned component lifetime and attachment regressions through the real runtime.
+//! Widget-owned behavior, lifetime and attachment regressions through the real runtime.
 
 use super::*;
-use neocogi_ui::events::{Controller, EventModel};
+use neocogi_ui::events::EventModel;
+use super::composite_fixture::{Behavior, Composite};
 
 /// Behavior can remove its own view while its one mutable model borrow remains active.
 struct Removal {
     /// Installed after atomic attachment, before any pending message is dispatched.
     window: Option<ComPtr<IWindowAbi>>,
-    /// External test observation contains no reference back to the controller.
+    /// External test observation contains no reference back to the widget.
     trace: Rc<RefCell<Vec<&'static str>>>,
     /// Exercises cleanup on the handler's recoverable error path as well as success.
     fail: bool,
@@ -25,68 +26,56 @@ impl EventModel for Removal {
             false => Ok(()),
         }
     }
+}
+impl Behavior for Removal {
     /// Terminal behavior must run once, after the active handler releases its gate.
-    fn retire(&mut self) -> Result<(), NcStatus> {
-        self.trace.borrow_mut().push("retired");
+    fn close(&mut self) -> Result<(), NcStatus> {
+        self.trace.borrow_mut().push("closed");
         Ok(())
     }
 }
 
 /// Self-removal closes the inbox and defers finalization through both handler exit paths.
 #[test]
-fn removed_controller_finalizes_after_handler_return_even_on_error() {
+fn removed_widget_finalizes_after_handler_return_even_on_error() {
     for fail in [false, true] {
         let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
         let trace = Rc::new(RefCell::new(Vec::new()));
         let (send, messages) = std::sync::mpsc::channel();
-        let owner = Controller::into_local(Controller::new(Removal { window: None, trace: trace.clone(), fail }, messages));
-        let mut events = owner.query::<IEventOwnerAbi>().unwrap();
-        let view = ui.widgets().button_unobserved("owned view").unwrap();
-        let component = neocogi_ui::Component::new(view, events.clone());
+        let (local, _) = Composite::build(&ui, Removal { window: None, trace: trace.clone(), fail }, messages);
+        let mut events = local.query::<IWidgetAbi>().unwrap();
+        let component = neocogi_ui::Widget::from_interface(events.clone());
         let window = ui.window("owned behavior", RECT, &component).unwrap();
-        owner.try_borrow_mut().unwrap().model.window = Some(window.clone());
+        local.try_borrow_mut().unwrap().model.window = Some(window.clone());
         send.send(()).unwrap();
         send.send(()).unwrap();
         assert_eq!(ui.update(SIZE), if fail { Err(NC_E_INVALID_ARG) } else { Ok(()) });
-        assert_eq!(&*trace.borrow(), &["handler entered", "handler returned", "retired"]);
+        assert_eq!(&*trace.borrow(), &["handler entered", "handler returned", "closed"]);
         assert_eq!(window.snapshot(), Err(UI_E_CLOSED));
-        assert!(send.send(()).is_err(), "retirement disconnects even retained controllers");
+        assert!(send.send(()).is_err(), "closure disconnects even retained widgets");
         assert_eq!(events.dispatch_next(), Err(UI_E_CLOSED));
-        events.retire().unwrap();
+        events.close().unwrap();
         assert_eq!(trace.borrow().len(), 3);
     }
 }
 
-/// Attachment failures preserve the unclaimed side of the view/controller pair.
+/// The actual eventful widget follows the same single-attachment rule as an ordinary leaf.
 #[test]
-fn component_attachment_claims_each_view_and_owner_only_once() {
+fn composite_widget_has_one_attachment_and_no_separate_local_claim() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let trace = Rc::new(RefCell::new(Vec::new()));
     let (_send, messages) = std::sync::mpsc::channel();
-    let owner = Controller::into_local(Controller::new(Removal { window: None, trace, fail: false }, messages));
-    let events = owner.query::<IEventOwnerAbi>().unwrap();
-    let used_view = ui.widgets().button_unobserved("already mounted").unwrap();
-    let first = ui.window("first", RECT, &used_view).unwrap();
-    let rejected = neocogi_ui::Component::new(used_view, events.clone());
-    assert!(matches!(ui.window("rejected view", RECT, &rejected), Err(UI_E_OWNER)));
-
-    // A rejected view left the controller unclaimed; another fresh view can use it.
-    let live = neocogi_ui::Component::new(ui.widgets().button_unobserved("fresh view").unwrap(), events.clone());
-    let second = ui.window("second", RECT, &live).unwrap();
-    let untouched = ui.widgets().button_unobserved("still unclaimed").unwrap();
-    let rejected = neocogi_ui::Component::new(untouched.clone(), events);
-    assert!(matches!(ui.window("rejected controller", RECT, &rejected), Err(UI_E_OWNER)));
-    // The controller rejected the second attachment before claiming its proposed view.
-    let third = ui.window("third", RECT, &untouched).unwrap();
+    let (local, _) = Composite::build(&ui, Removal { window: None, trace, fail: false }, messages);
+    let view = neocogi_ui::Widget::from_interface(local.query::<IWidgetAbi>().unwrap());
+    let first = ui.window("first", RECT, &view).unwrap();
+    assert!(matches!(ui.window("second", RECT, &view), Err(UI_E_OWNER)));
     first.close().unwrap();
-    second.close().unwrap();
-    third.close().unwrap();
-    ui.update(SIZE).unwrap();
+    assert!(matches!(ui.window("closed", RECT, &view), Err(UI_E_CLOSED)));
 }
 
 /// Idle application dispatch adds no allocation to an otherwise identical warmed update.
 #[test]
-fn persistent_empty_owner_adds_no_per_update_allocations() {
+fn persistent_empty_local_adds_no_per_update_allocations() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let view = ui.widgets().button_unobserved("idle").unwrap();
     let _window = ui.window("allocation comparison", RECT, &view).unwrap();
@@ -105,28 +94,29 @@ fn persistent_empty_owner_adds_no_per_update_allocations() {
         app.update(&ui, SIZE).unwrap();
     }
     let owned = owned.finish();
-    assert_eq!(owned, plain, "the persistent owner must not allocate a per-frame adapter");
+    assert_eq!(owned, plain, "the persistent local must not allocate a per-frame adapter");
 }
 
-/// A locally borrowed controller must retain pending retirement until its guard ends.
+/// A locally borrowed widget must retain pending closure until its guard ends.
 #[test]
-fn busy_retirement_retries_without_resuming_private_delivery() {
+fn busy_closure_retries_without_resuming_private_delivery() {
     for close_runtime in [false, true] {
         let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
         let trace = Rc::new(RefCell::new(Vec::new()));
         let (send, messages) = std::sync::mpsc::channel();
-        let owner = Controller::into_local(Controller::new(
+        let (local, _) = Composite::build(
+            &ui,
             Removal {
                 window: None,
                 trace: trace.clone(),
                 fail: false,
             },
             messages,
-        ));
-        let events = owner.query::<IEventOwnerAbi>().unwrap();
-        let component = neocogi_ui::Component::new(ui.widgets().button_unobserved("guarded").unwrap(), events);
-        let window = ui.window("guarded owner", RECT, &component).unwrap();
-        let held = owner.try_borrow_mut().unwrap();
+        );
+        let events = local.query::<IWidgetAbi>().unwrap();
+        let component = neocogi_ui::Widget::from_interface(events);
+        let window = ui.window("guarded local", RECT, &component).unwrap();
+        let held = local.try_borrow_mut().unwrap();
         match close_runtime {
             true => assert_eq!(ui.close(), Err(neocogi_com::NC_E_BUSY)),
             false => {
@@ -140,7 +130,7 @@ fn busy_retirement_retries_without_resuming_private_delivery() {
             true => ui.close().unwrap(),
             false => ui.update(SIZE).unwrap(),
         }
-        assert_eq!(&*trace.borrow(), &["retired"]);
+        assert_eq!(&*trace.borrow(), &["closed"]);
         assert!(send.send(()).is_err());
     }
 }
