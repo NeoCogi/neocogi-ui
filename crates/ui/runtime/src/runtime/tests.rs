@@ -444,6 +444,11 @@ impl ILeafLayout for RetainingWidget {
     }
 }
 impl IWidget for RetainingWidget {
+    /// This widget forwards outputs and has no private inbox.
+    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
+        self.lifetime.dispatch_next()
+    }
+
     /// Returns the shared owner without exposing runtime storage.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
         self.lifetime.host()

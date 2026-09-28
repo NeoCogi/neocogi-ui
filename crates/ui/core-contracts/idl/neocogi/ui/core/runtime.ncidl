@@ -45,6 +45,13 @@ interface IWidget {
     /// removal does not undo closure. Final object destruction also performs cleanup.
     fn close(&mut self) -> Result<()>;
 
+    /// Handles at most one private message outside input, layout and paint traversal.
+    /// Widgets without an inbox return false. A handler error consumes only the
+    /// attempted message. Closure disconnects private delivery permanently.
+    /// A handler may request its own removal; terminal cleanup must wait until
+    /// this mutable call returns, and no successor may run after removal.
+    fn dispatch_next(&mut self) -> Result<bool>;
+
     /// Returns effective frame, focus and input policy, including behavior-derived flags.
     /// This observation is not requested configuration and must not be written back as such.
     fn properties(&self) -> Result<WidgetProperties>;

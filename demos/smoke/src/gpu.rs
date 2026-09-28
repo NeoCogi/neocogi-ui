@@ -16,6 +16,12 @@ struct SceneView {
     scene: ComPtr<IRenderItemAbi>,
 }
 impl IWidget for SceneView {
+    /// This widget forwards outputs and has no private inbox.
+    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
+        self.state.writable()?;
+        Ok(false)
+    }
+
     /// Authorizes this independent class to join the selected UI's tree.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
         Ok(self.state.host().add_ref())

@@ -23,6 +23,11 @@ pub trait LeafContent: 'static {
     }
     /// Records observational drawing through this invocation's checked painter capability.
     fn paint(&self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus>;
+    /// Handles at most one private message after traversal releases the widget.
+    /// Passive content uses this no-op and allocates no event queue.
+    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
+        Ok(false)
+    }
     /// Releases logical component activity once, including closing any locally owned event producers.
     /// The COM allocation and ordinary retained editing data may survive logical closure.
     fn close(&mut self) -> Result<(), NcStatus> {
@@ -46,6 +51,11 @@ impl<Content: LeafContent> IWidget for LeafObject<Content> {
     /// Mount-once semantics come from the single common state, not the content behavior.
     fn mount(&mut self) -> Result<(), NcStatus> {
         self.state.mount()
+    }
+    /// Shares the widget's COM borrow gate and lifecycle with its private behavior.
+    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
+        self.state.writable()?;
+        self.content.dispatch_next()
     }
     /// Commits logical closure once and then lets the concrete content terminate its own activity.
     fn close(&mut self) -> Result<(), NcStatus> {

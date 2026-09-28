@@ -85,6 +85,11 @@ mod tests {
     }
 
     impl IWidget for TestButton {
+        /// This widget forwards outputs and has no private inbox.
+        fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
+            Ok(false)
+        }
+
         /// This standalone facade fixture deliberately has no mountable runtime owner.
         fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
             Err(neocogi_com::NC_E_NOINTERFACE)

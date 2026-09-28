@@ -144,3 +144,16 @@ fn busy_retirement_retries_without_resuming_private_delivery() {
         assert!(send.send(()).is_err());
     }
 }
+
+/// The new common ABI method is idle for ordinary widgets and respects closure.
+#[test]
+fn ordinary_widgets_have_no_private_queue_and_reject_dispatch_after_close() {
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let button = ui.widgets().button_unobserved("ordinary").unwrap();
+    let mut widget = button.node_interface().unwrap();
+    assert_eq!(widget.dispatch_next(), Ok(false));
+    let window = ui.window("ordinary", RECT, &button).unwrap();
+    assert_eq!(widget.dispatch_next(), Ok(false));
+    window.close().unwrap();
+    assert_eq!(widget.dispatch_next(), Err(UI_E_CLOSED));
+}
