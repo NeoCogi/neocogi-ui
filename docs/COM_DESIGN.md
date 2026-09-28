@@ -65,10 +65,11 @@ implementation fields do not need `Cell` or `RefCell` for this purpose.
 Named outputs carry concrete data through generated COM posting. A receiver
 copies and maps each emitted fact into an application message and sends it through
 `std::sync::mpsc`. A persistent `Controller<Model>` owns the receiver and ordinary
-model state. Application and composite behavior share `IEventOwner`; composite
-attachment supplies an explicit typed view/owner pair. The retained UI runtime
-caches descendant-first delivery order and retires owners after active handlers
-return. The COM process runtime owns no event loop. `LocalCom` grants typed local
+application state through a borrowed `IApplicationDispatcher`. Composite models
+and receivers belong to the concrete widget, whose `IWidget::dispatch_next`
+shares its normal borrow gate and lifecycle. The retained runtime schedules
+widgets descendant-first and defers active widgets' close until their calls
+return. Snapshot handles survive only within an update. The COM process runtime owns no event loop. `LocalCom` grants typed local
 access to an allocation created for that implementation, using the same COM gate.
 No `Any`, erased event payload, borrowed callback or Rust trait object crosses
 the event ABI. See the [event guide](../crates/ui/runtime/docs/EVENTS.md).

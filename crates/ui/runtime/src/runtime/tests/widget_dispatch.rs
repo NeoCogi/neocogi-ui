@@ -61,7 +61,7 @@ fn removed_widget_finalizes_after_handler_return_even_on_error() {
 
 /// The actual eventful widget follows the same single-attachment rule as an ordinary leaf.
 #[test]
-fn composite_widget_has_one_attachment_and_no_separate_local_claim() {
+fn composite_widget_has_one_attachment_and_no_separate_behavior_claim() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let trace = Rc::new(RefCell::new(Vec::new()));
     let (_send, messages) = std::sync::mpsc::channel();
@@ -75,7 +75,7 @@ fn composite_widget_has_one_attachment_and_no_separate_local_claim() {
 
 /// Idle application dispatch adds no allocation to an otherwise identical warmed update.
 #[test]
-fn persistent_empty_local_adds_no_per_update_allocations() {
+fn empty_application_dispatcher_adds_no_per_update_allocations() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let view = ui.widgets().button_unobserved("idle").unwrap();
     let _window = ui.window("allocation comparison", RECT, &view).unwrap();
@@ -94,7 +94,7 @@ fn persistent_empty_local_adds_no_per_update_allocations() {
         app.update(&ui, SIZE).unwrap();
     }
     let owned = owned.finish();
-    assert_eq!(owned, plain, "the persistent local must not allocate a per-frame adapter");
+    assert_eq!(owned, plain, "the application dispatcher must not allocate a per-frame adapter");
 }
 
 /// A locally borrowed widget must retain pending closure until its guard ends.
@@ -146,4 +146,229 @@ fn ordinary_widgets_have_no_private_queue_and_reject_dispatch_after_close() {
     assert_eq!(widget.dispatch_next(), Ok(false));
     window.close().unwrap();
     assert_eq!(widget.dispatch_next(), Err(UI_E_CLOSED));
+}
+
+/// Private commands distinguish subtree removal from work which must be discarded.
+enum OrderedMessage {
+    /// Removes the enclosing tree while the receiver's mutable COM call is active.
+    Remove(ComPtr<IWindowAbi>),
+    /// Records unexpected successor/ancestor delivery if a stale snapshot is used.
+    Record,
+}
+
+/// A named composite makes descendant-before-parent closure externally observable.
+struct OrderedModel {
+    /// Name recorded only when this widget's terminal cleanup runs.
+    name: &'static str,
+    /// Test-only shared observation, with no capability back to any widget.
+    trace: Rc<RefCell<Vec<&'static str>>>,
+    /// Error injection after committed removal must not bypass pending cleanup.
+    fail: bool,
+}
+impl EventModel for OrderedModel {
+    type Message = OrderedMessage;
+    /// A removal handler finishes before either descendant or ancestor close executes.
+    fn handle(&mut self, message: OrderedMessage) -> Result<(), NcStatus> {
+        self.trace.borrow_mut().push("handled");
+        match message {
+            OrderedMessage::Remove(window) => window.close()?,
+            OrderedMessage::Record => {}
+        }
+        match self.fail {
+            true => Err(NC_E_INVALID_ARG),
+            false => Ok(()),
+        }
+    }
+}
+impl Behavior for OrderedModel {
+    /// Names prove ordering, not merely that both destructors eventually ran.
+    fn close(&mut self) -> Result<(), NcStatus> {
+        self.trace.borrow_mut().push(self.name);
+        Ok(())
+    }
+}
+
+/// Busy self-removal keeps the parent open until its active descendant has closed.
+#[test]
+fn descendant_self_removal_closes_child_before_parent_on_success_and_error() {
+    for fail in [false, true] {
+        let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+        let trace = Rc::new(RefCell::new(Vec::new()));
+        let (parent_send, parent_inbox) = std::sync::mpsc::channel();
+        let (parent, mut shell) = Composite::build(
+            &ui,
+            OrderedModel {
+                name: "parent",
+                trace: trace.clone(),
+                fail: false,
+            },
+            parent_inbox,
+        );
+        let parent_view = neocogi_ui::Widget::from_interface(parent.query::<IWidgetAbi>().unwrap());
+        let (child_send, child_inbox) = std::sync::mpsc::channel();
+        let (child, _) = Composite::build(
+            &ui,
+            OrderedModel {
+                name: "child",
+                trace: trace.clone(),
+                fail,
+            },
+            child_inbox,
+        );
+        let child_view = neocogi_ui::Widget::from_interface(child.query::<IWidgetAbi>().unwrap());
+        shell.insert(0, &child_view, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
+        let window = ui.window("ordered closure", RECT, &parent_view).unwrap();
+        child_send.send(OrderedMessage::Remove(window)).unwrap();
+        child_send.send(OrderedMessage::Record).unwrap();
+        parent_send.send(OrderedMessage::Record).unwrap();
+        assert_eq!(ui.update(SIZE), if fail { Err(NC_E_INVALID_ARG) } else { Ok(()) });
+        assert_eq!(&*trace.borrow(), &["handled", "child", "parent"]);
+        assert!(child_send.send(OrderedMessage::Record).is_err());
+        assert!(parent_send.send(OrderedMessage::Record).is_err());
+        // Retained projections neither reactivate nor repeat terminal cleanup.
+        child_view.node_interface().unwrap().close().unwrap();
+        parent_view.node_interface().unwrap().close().unwrap();
+        assert_eq!(trace.borrow().len(), 3);
+    }
+}
+
+/// A guard held by application code blocks its ancestors' cleanup as well as its own.
+#[test]
+fn blocked_descendant_closure_preserves_order_until_a_later_boundary() {
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let trace = Rc::new(RefCell::new(Vec::new()));
+    let (_parent_send, parent_inbox) = std::sync::mpsc::channel();
+    let (parent, mut shell) = Composite::build(
+        &ui,
+        OrderedModel {
+            name: "parent",
+            trace: trace.clone(),
+            fail: false,
+        },
+        parent_inbox,
+    );
+    let (_child_send, child_inbox) = std::sync::mpsc::channel();
+    let (child, _) = Composite::build(
+        &ui,
+        OrderedModel {
+            name: "child",
+            trace: trace.clone(),
+            fail: false,
+        },
+        child_inbox,
+    );
+    let child_view = neocogi_ui::Widget::from_interface(child.query::<IWidgetAbi>().unwrap());
+    shell.insert(0, &child_view, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
+    let parent_view = neocogi_ui::Widget::from_interface(parent.query::<IWidgetAbi>().unwrap());
+    let _window = ui.window("blocked descendant", RECT, &parent_view).unwrap();
+    let held = child.try_borrow_mut().unwrap();
+    assert_eq!(ui.close(), Err(NC_E_BUSY));
+    assert!(trace.borrow().is_empty(), "the parent must wait for its child");
+    drop(held);
+    ui.close().unwrap();
+    assert_eq!(&*trace.borrow(), &["child", "parent"]);
+}
+
+/// Passive leaf behavior deliberately edits topology without claiming to consume a message.
+struct TopologyEdit {
+    /// Consumed once so the next visit is truly idle.
+    target: Option<ComPtr<IWindowAbi>>,
+    /// Both true and false must invalidate a stale dispatch snapshot after removal.
+    report_message: bool,
+}
+impl neocogi_ui::LeafContent for TopologyEdit {
+    /// Geometry is irrelevant to the scheduling probe but still uses the real layout ABI.
+    fn measure(&self, _: LayoutLimits, _: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
+        Ok(Size { width: 10, height: 10 })
+    }
+    /// No drawing is needed to execute a real mounted leaf.
+    fn paint(&self, _: WidgetPaint, _: &mut neocogi_ui::Painter<'_>) -> Result<(), NcStatus> {
+        Ok(())
+    }
+    /// Removal invalidates the tree independently of the reported work flag.
+    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
+        match self.target.take() {
+            Some(window) => {
+                window.close()?;
+                Ok(self.report_message)
+            }
+            None => Ok(false),
+        }
+    }
+}
+
+/// A removed later entry must never be called from the pre-removal snapshot.
+#[test]
+fn topology_changes_refresh_dispatch_even_when_the_widget_reports_no_message() {
+    for report_message in [false, true] {
+        let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+        let trace = Rc::new(RefCell::new(Vec::new()));
+        let (send, inbox) = std::sync::mpsc::channel();
+        let (older, _) = Composite::build(
+            &ui,
+            OrderedModel {
+                name: "older closed",
+                trace: trace.clone(),
+                fail: false,
+            },
+            inbox,
+        );
+        let older_view = neocogi_ui::Widget::from_interface(older.query::<IWidgetAbi>().unwrap());
+        let older_window = ui.window("removed later snapshot entry", RECT, &older_view).unwrap();
+        send.send(OrderedMessage::Record).unwrap();
+        let editor = ui
+            .widgets()
+            .leaf(
+                TopologyEdit {
+                    target: Some(older_window),
+                    report_message,
+                },
+                WidgetOptions::NO_INTERACT,
+            )
+            .unwrap();
+        let _newer_window = ui.window("runs first", RECT, &editor).unwrap();
+        ui.update(SIZE).unwrap();
+        assert_eq!(&*trace.borrow(), &["older closed"]);
+        assert!(send.send(OrderedMessage::Record).is_err());
+    }
+}
+
+/// A queued non-Send value lets the test observe receiver destruction without raw pointers.
+struct DropModel;
+impl EventModel for DropModel {
+    type Message = Rc<()>;
+    /// This fixture's pending value should be discarded rather than dispatched.
+    fn handle(&mut self, _: Rc<()>) -> Result<(), NcStatus> {
+        panic!("closed runtime must never dispatch queued work")
+    }
+}
+impl Behavior for DropModel {}
+
+/// Final runtime destruction cannot retain a blocked widget in a host/widget cycle.
+#[test]
+fn final_runtime_release_does_not_leak_a_borrowed_widget_or_its_private_inbox() {
+    for explicit_close in [false, true] {
+        let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+        let (send, inbox) = std::sync::mpsc::channel();
+        let (local, _) = Composite::build(&ui, DropModel, inbox);
+        let view = neocogi_ui::Widget::from_interface(local.query::<IWidgetAbi>().unwrap());
+        let window = ui.window("final release", RECT, &view).unwrap();
+        let value = Rc::new(());
+        let weak = Rc::downgrade(&value);
+        send.send(value).unwrap();
+        let held = local.try_borrow_mut().unwrap();
+        drop(ui);
+        drop(held);
+        let mut widget = view.node_interface().unwrap();
+        assert_eq!(widget.dispatch_next(), Err(UI_E_CLOSED));
+        if explicit_close {
+            widget.close().unwrap();
+        }
+        drop(widget);
+        drop(view);
+        drop(local);
+        drop(window);
+        assert!(weak.upgrade().is_none(), "pending cleanup must not form an ownership cycle");
+        assert!(send.send(Rc::new(())).is_err());
+    }
 }

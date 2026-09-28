@@ -2,6 +2,15 @@
 
 ## 0.0.0 (unreleased)
 
+- Put private composite dispatch on `IWidget` and remove `IEventOwner`, the
+  view/controller mount pair and separate retirement lifecycle. FileDialog owns
+  its inline layout, model and receiver in one allocation. The application uses
+  a borrowed dispatcher without attachment methods. Defer busy widget close
+  until active calls return, preserving descendant-first cleanup and stopping
+  stale snapshot delivery. Rename document `prepare` to `compile`; metadata
+  releases ordinary references while reload explicitly closes rejected candidates.
+  Finding 09 in the COM/UI review is fixed, with real COM lifecycle regressions.
+
 - Share Rust binding-path validation through COM core and its existing facade.
   IDL publication and widget catalogs now enforce one bounded grammar, including
   raw identifiers and optional absolute paths. Reject malformed interface and

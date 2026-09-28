@@ -824,3 +824,58 @@ fn rejected_form_field_validation_releases_new_receivers_and_keeps_previous_gene
     assert!(previous.label().is_ok());
     assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
 }
+
+/// Root retention is ordinary COM ownership, independent of compiled recipe metadata.
+#[test]
+fn compiled_metadata_can_drop_before_the_actual_root_is_mounted() {
+    for binary in [false, true] {
+        let fixture = Headless::standard();
+        let document = Document::new("independent recipe lifetime");
+        let loader = Loader::new(fixture.ui.clone(), None, Resources::new()).unwrap();
+        let (sender, messages) = std::sync::mpsc::channel::<()>();
+        let events = receiver::<ButtonAbi, _>("save", sender, |_| ()).unwrap();
+        let compiled = match binary {
+            true => loader.load_with_events(&document.to_binary().unwrap(), events).unwrap(),
+            false => loader.compile_with_events(&document, events).unwrap(),
+        };
+        let root = compiled.root().unwrap();
+        let button = compiled.widget::<ButtonAbi>("save").unwrap();
+        drop(compiled);
+        assert!(button.label().is_ok());
+        let window = fixture.ui.window("actual compiled root", Rect { x: 10, y: 10, width: 400, height: 300 }, &root).unwrap();
+        drop(root);
+        assert!(button.label().is_ok(), "the runtime owns the mounted tree");
+        assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
+        window.close().unwrap();
+        assert_eq!(button.label(), Err(UI_E_CLOSED));
+        assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
+    }
+}
+
+/// Rejected publication closes a complete candidate even when validation retained its root.
+#[test]
+fn rejected_reload_closes_retained_candidate_handles_without_touching_the_live_form() {
+    let fixture = Headless::standard();
+    let mut slot = slot(&fixture.ui);
+    let document = Document::new("explicit candidate rollback");
+    let active = slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
+    let previous = slot.component().unwrap().widget::<ButtonAbi>("save").unwrap();
+    let (sender, messages) = std::sync::mpsc::channel::<()>();
+    let mut retained = None;
+    let result = slot.reload(
+        &document,
+        Resources::new(),
+        |_| receiver::<ButtonAbi, _>("save", sender, |_| ()),
+        |candidate, _| {
+            retained = Some((candidate.root()?, candidate.widget::<ButtonAbi>("save")?));
+            Err(neocogi_com::NC_E_INVALID_ARG)
+        },
+    );
+    assert!(result.is_err());
+    assert!(slot.accepts(active.generation));
+    assert!(previous.label().is_ok());
+    let (root, button) = retained.unwrap();
+    assert_eq!(root.node_interface().unwrap().properties(), Err(UI_E_CLOSED));
+    assert_eq!(button.label(), Err(UI_E_CLOSED));
+    assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
+}

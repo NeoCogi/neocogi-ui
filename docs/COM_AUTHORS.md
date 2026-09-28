@@ -72,7 +72,7 @@ field comment must name that constraint.
 A persistent `events::Controller<Model>` owns ordinary application state and a
 standard `std::sync::mpsc::Receiver<Model::Message>`. Pass a sender and mapper when constructing observed widgets, targeting
 that private protocol. Implement `EventModel::handle(&mut self, message)`
-with ordinary matching and retain the controller's checked `IEventOwner`
+with ordinary matching and retain the controller's checked `IApplicationDispatcher`
 projection across frames:
 
 ```rust
@@ -82,9 +82,9 @@ let button = ui.widgets().button("Open", send.clone(),
 let picker = ui.file_dialog(window.as_com_ref(), send,
     |neocogi_ui::file_dialog::Event::Completed(result)| AppMessage::Completed { destination: 0, result })?;
 let app = neocogi_ui::events::Controller::into_local(
-    neocogi_ui::events::Controller::root(model, messages),
+    neocogi_ui::events::Controller::new(model, messages),
 );
-let owner = app.query::<IEventOwnerAbi>()?;
+let owner = app.query::<IApplicationDispatcherAbi>()?;
 // Repeat these two calls each frame, retaining app and owner.
 ui.update_with_events(drawable_size, owner.as_com_ref())?;
 ui.render(drawable_size, renderer.as_com_ref())?;
@@ -146,16 +146,17 @@ successfully discards future mapped values. Delivery failures propagate after
 the state transition and do not roll it back. See the
 [class event stream guide](CLASS_EVENT_STREAMS.md) for the complete state machine.
 
-Behavioral composites bind their children to sinks targeting a private typed channel and own
-that receiver with their ordinary model in `events::Controller<Model>`. Public
-editing methods may share the controller's COM allocation and borrow gate.
-Mount the distinct view and `IEventOwner` explicitly using `Component` or
-`Mount::Component`; no optional provider query or forwarding view is needed.
-Structural containers such as `ScrollArea` need no inbox merely because they
-have children. Removing a mounted view stops delivery immediately and retires
-its model after the current handler returns.
+Behavioral composites bind their children to sinks targeting a private typed
+channel, then own the receiver and model as fields of the concrete widget.
+Implement `IWidget::dispatch_next(&mut self)` and mount that actual widget.
+There is no separate event-owner identity or second mount/retire lifecycle.
+Mutate local fields through `&mut self`; call distinct children through COM.
+Structural containers such as `ScrollArea` use the no-op dispatch implementation
+and need no inbox merely because they have children. Removing a subtree stops
+further dispatch and closes descendants before parents. An active self-removal
+call returns before the runtime enters its deferred widget close.
 
-The runtime schedules explicit nested owners automatically, including in `Ui::update`.
+The runtime schedules widgets automatically, including in `Ui::update`.
 It settles child messages and layout before dispatching an application message,
 then settles any resulting private work before continuing. Authors need no private
 dispatch loop, child registry or update-cycle object. The [events guide](../crates/ui/runtime/docs/EVENTS.md)
@@ -780,13 +781,13 @@ replacement-character labels and must remain distinct selections.
 The native picker is a UI-owned COM component containing actual COM buttons,
 textboxes, list rows, Linear containers and scrolling composites. Its internal
 private inbox owns child messages and its ordinary mutable model consumes them
-through its persistent `IEventOwner`. Its public `IFileDialog` methods and event
-owner share one COM allocation and borrow gate. The ordinary Linear view mounts
-with that owner explicitly. Dropping client handles leaves a mounted picker alive;
-removing the view or closing the runtime retires it and settles an active request.
-Retaining a picker cannot keep its runtime alive. The static facade still depends only on contracts and COM support; the UI
-plugin uses its ordinary owned adapters internally without passing Rust model
-state across the ABI.
+through `IWidget::dispatch_next`. Its public `IFileDialog`, widget and layout
+projections share one COM allocation and borrow gate; the root Linear value is
+embedded directly. Dropping client handles leaves a mounted picker alive.
+Removing it closes its private inbox and settles an active request after any
+active handler returns. Retaining a picker does not retain its runtime. The
+static facade depends only on contracts and COM support; Rust model state never
+crosses the ABI.
 
 Construct the component with its completion sink, then open it from an ordinary
 application handler:
