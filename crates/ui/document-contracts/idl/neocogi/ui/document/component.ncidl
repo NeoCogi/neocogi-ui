@@ -1,77 +1,15 @@
 extern neocogi.ui.core;
 use neocogi.ui.core::{IWidget, IWidgetHost};
 
-#[version(1)]
-/// A loaded component exposes its mountable root, named widget identities, and inputs.
+#[version(2)]
+/// A compiled component exposes its root and typed widget lookup.
+/// Getters and setters belong to the returned widget interfaces; event receivers
+/// are supplied to factories during construction, never discovered as commands.
 interface IUiComponent {
     /// Returns the component's real root; private child handles remain private.
     fn root(&self) -> Result<ComPtr<IWidget>>;
     /// Resolves one authored widget by its stable node key for a checked concrete interface query.
     fn widget(&self, name: &[u8]) -> Result<ComPtr<IWidget>>;
-    /// Resolves an input once; the consumer queries its concrete message receiver.
-    fn input(&self, name: &[u8]) -> Result<ComPtr<IUnknown>>;
-}
-
-#[version(1)]
-/// Replaces one exported text or label value without emitting a user event.
-struct SetText {
-    /// Complete UTF-8 text owned by this command.
-    text: String,
-}
-#[version(1)]
-/// Replaces an exported boolean value.
-struct SetChecked {
-    /// New checkbox value.
-    checked: bool,
-}
-#[version(1)]
-/// Replaces a finite numeric value; the destination applies its normal range policy.
-struct SetValue {
-    /// Requested finite value.
-    value: f32,
-}
-#[version(1)]
-/// Changes only NO_INTERACT in the exported widget's current requested flags.
-/// Preserves live application presentation edits and never stores effective input policy.
-/// This affects the surface only, not its descendants or its behavior-specific enablement.
-struct SetEnabled {
-    /// True clears the requested NO_INTERACT bit; false sets it.
-    enabled: bool,
-}
-#[version(1)]
-/// Sets an exported disclosure's expansion state.
-struct SetExpanded {
-    /// Requested expansion.
-    expanded: bool,
-}
-#[version(1)]
-/// Replaces a flat combo model and its selection in one validated operation.
-struct SetChoices {
-    /// Concatenated UTF-8 labels; ends contains their exclusive byte boundaries.
-    text: String,
-    /// Nondecreasing UTF-8 boundaries, ending at text length.
-    ends: Vec<u32>,
-    /// Selected ordinal, or -1 for no selection.
-    selected: i32,
-}
-
-#[version(1)]
-/// Selects one existing combo item without replacing its labels or emitting a user event.
-struct SetSelection {
-    /// Selected ordinal, or -1 to clear selection; other negative values are invalid.
-    selected: i32,
-}
-#[version(1)]
-/// Moves a scrollbar without changing its lengths or emitting a user event.
-struct SetOffset {
-    /// Requested pixel offset, clamped to the current scroll range by the destination.
-    offset: i32,
-}
-#[version(1)]
-/// Moves a split divider while retaining its current axis, limits, and handle width.
-struct SetPosition {
-    /// Requested first-pane extent; temporary allocation clamping does not discard it.
-    position: i32,
 }
 
 #[version(1)]
@@ -89,69 +27,6 @@ interface IDesignWidgetCatalog {
     /// widget, query an observed receiver for the selected product's exact sink.
     /// Retain that one receiver until close; unobserved is permanent.
     fn create_widget(&self, index: u32, host: &IWidgetHost, properties: &[u8], events: &WidgetEventBinding) -> Result<ComPtr<IWidget>>;
-}
-
-#[version(1)]
-/// Explicit application command delivery for SetText; ordinary values do not generate receivers.
-interface ISetTextReceiver {
-    /// Acquires the command before applying it to the exported control.
-    fn post(&mut self, value: &SetText) -> Result<()>;
-}
-
-#[version(1)]
-/// Explicit application command delivery for SetChecked; ordinary values do not generate receivers.
-interface ISetCheckedReceiver {
-    /// Acquires the command before applying it to the exported control.
-    fn post(&mut self, value: &SetChecked) -> Result<()>;
-}
-
-#[version(1)]
-/// Explicit application command delivery for SetValue; ordinary values do not generate receivers.
-interface ISetValueReceiver {
-    /// Acquires the command before applying it to the exported control.
-    fn post(&mut self, value: &SetValue) -> Result<()>;
-}
-
-#[version(1)]
-/// Explicit application command delivery for SetEnabled; ordinary values do not generate receivers.
-interface ISetEnabledReceiver {
-    /// Acquires the command before applying it to the exported control.
-    fn post(&mut self, value: &SetEnabled) -> Result<()>;
-}
-
-#[version(1)]
-/// Explicit application command delivery for SetExpanded; ordinary values do not generate receivers.
-interface ISetExpandedReceiver {
-    /// Acquires the command before applying it to the exported control.
-    fn post(&mut self, value: &SetExpanded) -> Result<()>;
-}
-
-#[version(1)]
-/// Explicit application command delivery for SetChoices; ordinary values do not generate receivers.
-interface ISetChoicesReceiver {
-    /// Acquires the command before applying it to the exported control.
-    fn post(&mut self, value: &SetChoices) -> Result<()>;
-}
-
-#[version(1)]
-/// Explicit application command delivery for SetSelection; ordinary values do not generate receivers.
-interface ISetSelectionReceiver {
-    /// Acquires the command before applying it to the exported control.
-    fn post(&mut self, value: &SetSelection) -> Result<()>;
-}
-
-#[version(1)]
-/// Explicit application command delivery for SetOffset; ordinary values do not generate receivers.
-interface ISetOffsetReceiver {
-    /// Acquires the command before applying it to the exported control.
-    fn post(&mut self, value: &SetOffset) -> Result<()>;
-}
-
-#[version(1)]
-/// Explicit application command delivery for SetPosition; ordinary values do not generate receivers.
-interface ISetPositionReceiver {
-    /// Acquires the command before applying it to the exported control.
-    fn post(&mut self, value: &SetPosition) -> Result<()>;
 }
 
 #[version(1)]

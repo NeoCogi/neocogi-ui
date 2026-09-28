@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "name": "all public contracts",
   "root": {
     "key": "root",
@@ -257,53 +257,6 @@
     {
       "name": "selection",
       "node": "combo"
-    }
-  ],
-  "inputs": [
-    {
-      "name": "Text",
-      "node": "text",
-      "kind": "Text"
-    },
-    {
-      "name": "Checked",
-      "node": "check",
-      "kind": "Checked"
-    },
-    {
-      "name": "Value",
-      "node": "slider",
-      "kind": "Value"
-    },
-    {
-      "name": "Enabled",
-      "node": "button",
-      "kind": "Enabled"
-    },
-    {
-      "name": "Expanded",
-      "node": "disclosure",
-      "kind": "Expanded"
-    },
-    {
-      "name": "Choices",
-      "node": "combo",
-      "kind": "Choices"
-    },
-    {
-      "name": "Selection",
-      "node": "combo",
-      "kind": "Selection"
-    },
-    {
-      "name": "Offset",
-      "node": "scroll",
-      "kind": "Offset"
-    },
-    {
-      "name": "Position",
-      "node": "split",
-      "kind": "Position"
     }
   ]
 }

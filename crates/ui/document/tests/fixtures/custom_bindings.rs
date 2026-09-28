@@ -29,15 +29,9 @@ impl Event {
         }
     }
 }
-/// Reconnect concrete command handles after every successful component replacement.
-pub struct Inputs {
-    /// Public command "title"; its receiver is checked when binding.
-    pub input_title_0: neocogi_ui_document::InputHandle<neocogi_ui_document::contracts::SetText>,
-}
-/// Checked concrete handles for every authored widget and the exported commands.
+/// Checked widget fields expose their own getters and setters.
+/// Resolve a new Form after replacement; old handles observe widget closure.
 pub struct Form {
-    /// Public command endpoints retained for message-based integrations.
-    pub inputs: Inputs,
     /// Authored widget "root"; the concrete COM interface is checked when binding.
     pub widget_root_0: neocogi_ui::Widget<neocogi_ui::LinearAbi>,
     /// Authored widget "title"; the concrete COM interface is checked when binding.
@@ -51,11 +45,7 @@ pub struct Form {
 pub fn bind(
     component: &neocogi_ui_document::Component,
 ) -> Result<Form, neocogi_com::NcStatus> {
-    let inputs = Inputs {
-        input_title_0: component.input::<neocogi_ui_document::contracts::SetText>("title")?,
-    };
     let form = Form {
-        inputs,
         widget_root_0: component.widget::<neocogi_ui::LinearAbi>("root")?,
         widget_title_1: component.widget::<neocogi_ui::TextBlockAbi>("title")?,
         widget_save_2: component.widget::<neocogi_ui::ButtonAbi>("save")?,

@@ -122,7 +122,7 @@ impl Loader {
 pub struct Component {
     /// Canonical owner retained for authored snapshots and optional capabilities.
     object: ComPtr<IUnknown>,
-    /// Cached root/input projection avoids repeated discovery.
+    /// Cached root/widget lookup projection avoids repeated discovery.
     interface: ComPtr<contracts::IUiComponentAbi>,
 }
 impl Component {
@@ -135,12 +135,7 @@ impl Component {
         let base = self.interface.widget(NcCopyFromBufferOffset::new(0, name.as_bytes()))?;
         Ok(Widget::from_interface(base.query()?))
     }
-    /// Resolves a concrete input once and rejects an incompatible message contract immediately.
-    pub fn input<C: Command>(&self, name: &str) -> Result<InputHandle<C>, NcStatus> {
-        let receiver = self.interface.input(NcCopyFromBufferOffset::new(0, name.as_bytes()))?.query()?;
-        Ok(InputHandle { receiver })
-    }
-    /// Saves authored defaults; preview interaction and application commands never rewrite them.
+    /// Saves authored defaults; preview interaction and widget setters never rewrite them.
     pub fn save(&self) -> Result<Vec<u8>, NcStatus> {
         neocogi_com::persistence::snapshot_with_limits(self.object.as_com_ref(), limits())
     }
@@ -165,8 +160,6 @@ struct Loaded {
     root: Widget<IWidgetAbi>,
     /// Authored widget keys retain each concrete object for checked application queries.
     nodes: BTreeMap<String, Widget<IWidgetAbi>>,
-    /// Typed receivers retain only the nodes needed by public commands.
-    inputs: BTreeMap<String, ComPtr<IUnknown>>,
 }
 impl contracts::IUiComponent for Loaded {
     /// Shares the mountable widget identity without copying its state.
@@ -180,14 +173,6 @@ impl contracts::IUiComponent for Loaded {
         }
         let name = std::str::from_utf8(name.as_slice()).map_err(|_| NC_E_INVALID_ARG)?;
         self.nodes.get(name).ok_or(NC_E_NOT_FOUND)?.node_interface()
-    }
-    /// Uses checked names only during application connection.
-    fn input(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IUnknown>, NcStatus> {
-        if name.offset() != 0 {
-            return Err(NC_E_INVALID_ARG);
-        }
-        let name = std::str::from_utf8(name.as_slice()).map_err(|_| NC_E_INVALID_ARG)?;
-        self.inputs.get(name).cloned().ok_or(NC_E_NOT_FOUND)
     }
 }
 impl IPersistable for Loaded {
@@ -227,7 +212,7 @@ struct Services {
     custom: crate::CustomWidgetRegistry,
 }
 impl Services {
-    /// Builds the checked tree and concrete endpoints with one cleanup guard until ownership transfers.
+    /// Builds the checked widget tree with one cleanup guard until ownership transfers.
     fn construct(&self, document: Document, events: EventBindings) -> Result<ComPtr<IUnknown>, NcStatus> {
         events.validate(&document, &self.custom)?;
         let mut construction = Construction {
@@ -239,14 +224,12 @@ impl Services {
             events,
         };
         let root = construction.build(&document.root)?;
-        let inputs = crate::bindings::inputs(&document, &construction.nodes)?;
         // Success transfers the complete typed tree to Loaded; the failed-build guard is disarmed.
         let nodes = std::mem::take(&mut construction.nodes);
         drop(construction);
         Ok(Loaded::from_value(Loaded {
             document,
             root,
-            inputs,
             nodes,
         }))
     }

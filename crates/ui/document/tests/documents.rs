@@ -1,7 +1,7 @@
 //! Persistence and validation tests use actual authored shapes, including adversarial bytes.
 use neocogi_ui_document::*;
 
-/// Text edits preserve private keys and public application names across both representations.
+/// Text edits preserve widget keys and event aliases across both representations.
 #[test]
 fn authored_documents_round_trip_both_formats() {
     let mut document = Document::new("Editable form");
@@ -18,17 +18,14 @@ fn authored_documents_round_trip_both_formats() {
     assert!(Document::from_binary(&trailing).is_err());
 }
 
-/// Invalid public contracts fail before creating any concrete receiver or widget.
+/// Invalid names, topology and event aliases fail before creating any widget.
 #[test]
-fn invalid_names_layouts_and_bindings_are_rejected() {
+fn invalid_names_layouts_and_event_aliases_are_rejected() {
     let mut document = Document::new("test");
     document.root.children[1].node.key = "title".into();
     assert!(document.validate().is_err());
     let mut document = Document::new("test");
     document.outputs[0].node = "title".into();
-    assert!(document.validate().is_err());
-    let mut document = Document::new("test");
-    document.inputs[0].kind = InputKind::Checked;
     assert!(document.validate().is_err());
     let mut document = Document::new("test");
     document.root.children[0].edge = Edge::Pane;
@@ -76,7 +73,6 @@ fn style_capabilities_match_document_validation() {
         (WidgetSpec::Form { width: 100, height: 100 }, false, false, false),
     ] {
         let mut document = Document::new("capabilities");
-        document.inputs.clear();
         document.outputs.clear();
         document.root.children.clear();
         document.root.widget = widget;
@@ -94,7 +90,7 @@ fn style_capabilities_match_document_validation() {
     }
 }
 
-/// Revision four contains no authored event graph; applications implement event behavior.
+/// Authored source contains no event graph; applications implement event behavior.
 #[test]
 fn visual_connections_are_not_part_of_the_document_schema() {
     let document = Document::new("application handlers");
@@ -102,4 +98,36 @@ fn visual_connections_are_not_part_of_the_document_schema() {
     assert!(source.get("connections").is_none());
     source["connections"] = serde_json::json!([]);
     assert!(Document::from_json(&serde_json::to_vec(&source).unwrap()).is_err());
+}
+
+/// Removed command declarations fail explicitly; no loader may silently discard setter exports.
+#[test]
+fn removed_inputs_and_previous_document_revisions_are_rejected() {
+    let document = Document::new("widget methods");
+    let source: serde_json::Value = serde_json::from_slice(&document.to_json().unwrap()).unwrap();
+    assert!(source.get("inputs").is_none());
+    for obsolete in [serde_json::json!([]), serde_json::json!([
+        {"name": "title", "node": "title", "kind": "Text"}
+    ])] {
+        let mut legacy = source.clone();
+        legacy["inputs"] = obsolete;
+        let error = Document::from_json(&serde_json::to_vec(&legacy).unwrap()).unwrap_err();
+        assert!(error.contains("unknown field `inputs`"), "{error}");
+    }
+    let mut legacy = source;
+    legacy["version"] = serde_json::json!(VERSION - 1);
+    assert!(Document::from_json(&serde_json::to_vec(&legacy).unwrap()).unwrap_err().contains("Unsupported UI document revision"));
+
+    // The persistence envelope and inner document each carry an independent
+    // revision. Reject either mismatch before publishing any widget tree.
+    use neocogi_com::{binary, persistence::ObjectRecord};
+    let bytes = document.to_binary().unwrap();
+    let mut envelope: ObjectRecord = binary::from_slice(&bytes).unwrap();
+    envelope.schema_version = VERSION - 1;
+    assert!(Document::from_binary(&binary::to_vec(&envelope).unwrap()).unwrap_err().contains("Unsupported UI component recipe or revision"));
+    envelope.schema_version = VERSION;
+    let mut legacy = document;
+    legacy.version = VERSION - 1;
+    envelope.state = binary::to_vec(&legacy).unwrap();
+    assert!(Document::from_binary(&binary::to_vec(&envelope).unwrap()).unwrap_err().contains("Unsupported UI document revision"));
 }

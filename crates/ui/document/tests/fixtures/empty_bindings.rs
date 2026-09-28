@@ -24,13 +24,9 @@ impl Event {
         }
     }
 }
-/// Reconnect concrete command handles after every successful component replacement.
-pub struct Inputs {
-}
-/// Checked concrete handles for every authored widget and the exported commands.
+/// Checked widget fields expose their own getters and setters.
+/// Resolve a new Form after replacement; old handles observe widget closure.
 pub struct Form {
-    /// Public command endpoints retained for message-based integrations.
-    pub inputs: Inputs,
     /// Authored widget "root"; the concrete COM interface is checked when binding.
     pub widget_root_0: neocogi_ui::Widget<neocogi_ui::ButtonAbi>,
 }
@@ -38,10 +34,7 @@ pub struct Form {
 pub fn bind(
     component: &neocogi_ui_document::Component,
 ) -> Result<Form, neocogi_com::NcStatus> {
-    let inputs = Inputs {
-    };
     let form = Form {
-        inputs,
         widget_root_0: component.widget::<neocogi_ui::ButtonAbi>("root")?,
     };
     Ok(form)

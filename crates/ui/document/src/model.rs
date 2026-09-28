@@ -4,8 +4,9 @@ use serde::{Serialize, Deserialize};
 use std::collections::BTreeMap;
 pub use neocogi_ui_design::{CustomProperty, CustomValue};
 
-/// Persistent schema revision; changes to field order or enum ordinals require a new revision.
-pub const VERSION: u32 = 5;
+/// Persistent schema revision; revision six removes named command inputs.
+/// Getters and setters are widget methods. Earlier layouts are rejected, never migrated.
+pub const VERSION: u32 = 6;
 /// Maximum authored nodes in one component.
 pub const MAX_NODES: usize = 4096;
 /// Maximum authored ownership depth.
@@ -25,8 +26,6 @@ pub struct Document {
     pub root: Node,
     /// Optional trace/display aliases for complete widget streams; not binding endpoints.
     pub outputs: Vec<Output>,
-    /// Public commands mapped to typed internal setters.
-    pub inputs: Vec<Input>,
 }
 
 /// One authored node; key is a document-local name preserved when reparenting.
@@ -324,71 +323,6 @@ pub struct Output {
     pub node: String,
 }
 
-/// One stable public input mapped to a typed setter.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ComSerialize, ComDeserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Input {
-    /// Public application-facing name.
-    pub name: String,
-    /// Internal node key.
-    pub node: String,
-    /// Concrete accepted message contract.
-    pub kind: InputKind,
-}
-
-/// Supported typed application-to-view operations.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ComSerialize, ComDeserialize)]
-#[serde(deny_unknown_fields)]
-pub enum InputKind {
-    /// SetText changes text or label.
-    Text,
-    /// SetChecked changes checkbox state.
-    Checked,
-    /// SetValue changes numeric state.
-    Value,
-    /// SetEnabled changes only NO_INTERACT in current requested flags, preserving live application edits.
-    Enabled,
-    /// SetExpanded changes disclosure expansion.
-    Expanded,
-    /// SetChoices replaces a combo model.
-    Choices,
-    /// SetSelection selects an existing combo item or clears selection.
-    Selection,
-    /// SetOffset moves a scrollbar within its current range.
-    Offset,
-    /// SetPosition changes only the requested split divider position.
-    Position,
-}
-impl InputKind {
-    /// Complete command catalog shared by validation and authoring tools.
-    pub const ALL: [Self; 9] = [
-        Self::Text,
-        Self::Checked,
-        Self::Value,
-        Self::Enabled,
-        Self::Expanded,
-        Self::Choices,
-        Self::Selection,
-        Self::Offset,
-        Self::Position,
-    ];
-
-    /// Human-readable operation label; field identity always uses the enum itself.
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Text => "Set text",
-            Self::Checked => "Set checked",
-            Self::Value => "Set value",
-            Self::Enabled => "Set enabled",
-            Self::Expanded => "Set expanded",
-            Self::Choices => "Set choices",
-            Self::Selection => "Set selection",
-            Self::Offset => "Set offset",
-            Self::Position => "Set position",
-        }
-    }
-}
-
 impl Default for Style {
     /// Retains normal constructor presentation without resource overrides.
     fn default() -> Self {
@@ -491,14 +425,9 @@ impl Document {
                 name: "save_requested".into(),
                 node: "save".into(),
             }],
-            inputs: vec![Input {
-                name: "title".into(),
-                node: "title".into(),
-                kind: InputKind::Text,
-            }],
         }
     }
-    /// Rejects invalid shape, names, arithmetic, references and endpoint contracts before construction.
+    /// Rejects invalid shape, names, arithmetic and event aliases before construction.
     pub fn validate(&self) -> Result<(), String> {
         if self.version != VERSION {
             return Err(format!("Unsupported UI document revision {}", self.version));
@@ -527,24 +456,6 @@ impl Document {
         for node in nodes.values() {
             if node.widget.event_stream().is_some() && !exported_nodes.contains(&node.key) && names.contains(&node.key) {
                 return Err(format!("Widget event name {} conflicts with an exported alias", node.key));
-            }
-        }
-        names.clear();
-        let mut inputs = std::collections::BTreeSet::new();
-        for input in &self.inputs {
-            if input.name.is_empty() || !names.insert(&input.name) {
-                return Err(format!("Duplicate or empty input: {}", input.name));
-            }
-            let node = nodes
-                .get(input.node.as_str())
-                .ok_or_else(|| format!("Input {} refers to missing node {}", input.name, input.node))?;
-            // The inspector and runtime expose exactly one public name per concrete command.
-            // Reject aliases at the source boundary instead of silently collapsing them on edit.
-            if !inputs.insert((&input.node, &input.kind)) {
-                return Err(format!("Input {} exports a command on {} more than once", input.name, input.node));
-            }
-            if !node.widget.accepts(&input.kind) {
-                return Err(format!("{} cannot accept input {}", input.node, input.name));
             }
         }
         Ok(())
@@ -653,30 +564,6 @@ impl WidgetSpec {
     pub fn supports_image(&self) -> bool {
         matches!(self, Self::Button { .. } | Self::ListBox { .. })
     }
-    /// Checks the concrete setter's payload contract without allocating a receiver.
-    pub fn accepts(&self, input: &InputKind) -> bool {
-        match input {
-            InputKind::Enabled => true,
-            InputKind::Text => matches!(
-                self,
-                Self::Button { .. }
-                    | Self::Checkbox { .. }
-                    | Self::Textbox { .. }
-                    | Self::TextArea { .. }
-                    | Self::TextBlock { .. }
-                    | Self::ColorSwatch { .. }
-                    | Self::ListItem { .. }
-                    | Self::ListBox { .. }
-                    | Self::Disclosure { .. }
-            ),
-            InputKind::Checked => matches!(self, Self::Checkbox { .. }),
-            InputKind::Value => matches!(self, Self::Slider { .. } | Self::Number { .. }),
-            InputKind::Expanded => matches!(self, Self::Disclosure { .. }),
-            InputKind::Choices | InputKind::Selection => matches!(self, Self::Combo { .. }),
-            InputKind::Offset => matches!(self, Self::Scrollbar { .. }),
-            InputKind::Position => matches!(self, Self::Split { .. }),
-        }
-    }
 }
 
 /// Validates the complete tree with bounded recursion and a single name index.
@@ -779,26 +666,5 @@ impl WidgetSpec {
                 Options::NONE
             }
         }
-    }
-}
-
-/// Source acceptance must agree with the single-endpoint inspector representation.
-#[cfg(test)]
-mod binding_tests {
-    use super::*;
-
-    /// Different public names cannot conceal duplicate command endpoints during editing.
-    #[test]
-    fn duplicate_input_endpoints_are_rejected_before_editing() {
-        let mut document = Document::new("bindings");
-        document.inputs.push(Input {
-            name: "title_alias".into(),
-            node: "title".into(),
-            kind: InputKind::Text,
-        });
-        assert!(document.validate().unwrap_err().contains("more than once"));
-        // The same command on another node is an independent endpoint, not an alias.
-        document.inputs[1].node = "save".into();
-        document.validate().unwrap();
     }
 }

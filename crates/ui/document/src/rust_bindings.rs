@@ -1,5 +1,5 @@
 //! Deterministic Rust contract generation; exported names remain string literals, never source code.
-use crate::{CustomWidgetRegistry, Document, InputKind, Node, WidgetSpec, MAX_BYTES};
+use crate::{CustomWidgetRegistry, Document, Node, WidgetSpec, MAX_BYTES};
 use std::fmt::Write;
 
 /// Builds a valid, collision-free symbol with a role prefix and declaration ordinal.
@@ -80,22 +80,6 @@ impl WidgetSpec {
     }
 }
 
-impl InputKind {
-    /// Public Rust command spelling for generated, statically resolved input handles.
-    pub fn rust_type(&self) -> &'static str {
-        match self {
-            Self::Text => "neocogi_ui_document::contracts::SetText",
-            Self::Checked => "neocogi_ui_document::contracts::SetChecked",
-            Self::Value => "neocogi_ui_document::contracts::SetValue",
-            Self::Enabled => "neocogi_ui_document::contracts::SetEnabled",
-            Self::Expanded => "neocogi_ui_document::contracts::SetExpanded",
-            Self::Choices => "neocogi_ui_document::contracts::SetChoices",
-            Self::Selection => "neocogi_ui_document::contracts::SetSelection",
-            Self::Offset => "neocogi_ui_document::contracts::SetOffset",
-            Self::Position => "neocogi_ui_document::contracts::SetPosition",
-        }
-    }
-}
 impl Document {
     /// Generates one concrete form field and one required handler for every event-producing widget.
     /// The application implements `Handlers` outside generated source and dispatches at its update boundary.
@@ -146,18 +130,7 @@ impl Document {
             )
             .unwrap();
         }
-        source.push_str("        }\n    }\n}\n/// Reconnect concrete command handles after every successful component replacement.\npub struct Inputs {\n");
-        for (index, input) in self.inputs.iter().enumerate() {
-            writeln!(
-                source,
-                "    /// Public command {:?}; its receiver is checked when binding.\n    pub {}: neocogi_ui_document::InputHandle<{}>,",
-                input.name,
-                symbol("input", &input.name, index),
-                input.kind.rust_type()
-            )
-            .unwrap();
-        }
-        source.push_str("}\n/// Checked concrete handles for every authored widget and the exported commands.\npub struct Form {\n    /// Public command endpoints retained for message-based integrations.\n    pub inputs: Inputs,\n");
+        source.push_str("        }\n    }\n}\n/// Checked widget fields expose their own getters and setters.\n/// Resolve a new Form after replacement; old handles observe widget closure.\npub struct Form {\n");
         for (index, node) in nodes.iter().enumerate() {
             writeln!(
                 source,
@@ -168,19 +141,7 @@ impl Document {
             )
             .unwrap();
         }
-        source.push_str("}\n/// Resolves concrete fields after construction has installed every receiver.\npub fn bind(\n    component: &neocogi_ui_document::Component,\n) -> Result<Form, neocogi_com::NcStatus> {\n    let inputs = Inputs {\n");
-        for (index, input) in self.inputs.iter().enumerate() {
-            writeln!(
-                source,
-                "        {}: component.input::<{}>({:?})?,",
-                symbol("input", &input.name, index),
-                input.kind.rust_type(),
-                input.name
-            )
-            .unwrap();
-        }
-        source.push_str("    };\n");
-        source.push_str("    let form = Form {\n        inputs,\n");
+        source.push_str("}\n/// Resolves concrete fields after construction has installed every receiver.\npub fn bind(\n    component: &neocogi_ui_document::Component,\n) -> Result<Form, neocogi_com::NcStatus> {\n    let form = Form {\n");
         for (index, node) in nodes.iter().enumerate() {
             writeln!(
                 source,

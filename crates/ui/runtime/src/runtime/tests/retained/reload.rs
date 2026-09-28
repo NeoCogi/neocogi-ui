@@ -1,6 +1,6 @@
 //! Real loaded controls exercise publication, binding, authored defaults, and stale handles.
 use super::*;
-use neocogi_ui_document::{*, contracts::SetText};
+use neocogi_ui_document::*;
 
 /// Prepares the single constructor binding used by these behavioral fixtures.
 fn receiver<C: neocogi_com::events::EventSource, M: 'static>(
@@ -27,20 +27,21 @@ fn slot(ui: &Ui) -> ReloadSlot {
 
 /// Bad documents, unavailable resources and failed binding all preserve the published component.
 #[test]
-fn failed_reload_preserves_live_inputs_and_authored_save() {
+fn failed_reload_preserves_live_widget_handles_and_authored_save() {
     let mut fixture = Headless::standard();
     let mut slot = slot(&fixture.ui);
     let document = Document::new("test");
     let loaded = slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
-    let mut title = slot.component().unwrap().input::<SetText>("title").unwrap();
-    title.send(SetText { text: "Application value".into() }).unwrap();
+    let mut title = slot.component().unwrap().widget::<TextBlockAbi>("title").unwrap();
+    title.set_text("Application value").unwrap();
+    assert_eq!(title.text().unwrap(), "Application value");
     assert_eq!(Document::from_binary(&slot.component().unwrap().save().unwrap()).unwrap(), document);
-    assert!(slot.component().unwrap().input::<contracts::SetChecked>("title").is_err());
+    assert!(slot.component().unwrap().widget::<CheckboxAbi>("title").is_err());
     let mut invalid = document.clone();
     invalid.root.children[0].node.style.font = Some("not-a-real-font".into());
     assert!(slot.reload(&invalid, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).is_err());
     assert!(slot.accepts(loaded.generation));
-    title.send(SetText { text: "Still alive".into() }).unwrap();
+    title.set_text("Still alive").unwrap();
     assert!(
         slot.reload(
             &document,
@@ -50,16 +51,13 @@ fn failed_reload_preserves_live_inputs_and_authored_save() {
         )
         .is_err()
     );
-    title
-        .send(SetText {
-            text: "Still alive after binding failure".into(),
-        })
-        .unwrap();
+    title.set_text("Still alive after binding failure").unwrap();
     fixture.frame(VIEW).unwrap();
     let replacement = slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     assert!(!slot.accepts(loaded.generation));
     assert!(slot.accepts(replacement.generation));
-    assert!(title.send(SetText { text: "Stale input".into() }).is_err());
+    assert_eq!(title.set_text("Stale handle"), Err(UI_E_CLOSED));
+    assert_eq!(title.text(), Err(UI_E_CLOSED));
     fixture.frame(VIEW).unwrap();
 }
 
@@ -70,7 +68,6 @@ fn outputs_rebind_and_queued_old_events_have_distinct_generations() {
     let mut slot = slot(&fixture.ui);
     let mut document = Document::new("button");
     document.root = Node::new("save", WidgetSpec::Button { text: "Save".into() });
-    document.inputs.clear();
     let (sender, events) = std::sync::mpsc::channel();
     let bind = |generation| receiver::<ButtonAbi, _>("save", sender.clone(), move |_: neocogi_ui::button::Event| generation);
     slot.reload(&document, Resources::new(), bind, |_, _| Ok(())).unwrap();
@@ -89,7 +86,7 @@ fn outputs_rebind_and_queued_old_events_have_distinct_generations() {
     assert!(slot.accepts(events.try_recv().unwrap()));
 }
 
-/// Every built-in must construct, bind all declared ports/commands, render, save, and retire.
+/// Every built-in must construct, expose its concrete widget interface, render, save, and retire.
 #[test]
 fn all_builtin_document_controls_construct_and_reload() {
     let mut fixture = Headless::standard();
@@ -176,21 +173,11 @@ fn all_builtin_document_controls_construct_and_reload() {
                 node: "root".into(),
             })
             .collect();
-        let inputs = InputKind::ALL
-            .into_iter()
-            .filter(|kind| root.widget.accepts(kind))
-            .map(|kind| Input {
-                name: kind.label().into(),
-                node: "root".into(),
-                kind,
-            })
-            .collect();
         let document = Document {
             version: VERSION,
             name: name.into(),
             root,
             outputs,
-            inputs,
         };
         slot.reload(
             &document,
@@ -218,23 +205,29 @@ fn all_builtin_document_controls_construct_and_reload() {
                 }
             },
             |component, _| {
-                use neocogi_ui_document::contracts::*;
-                // The declared capability list must resolve to actual typed COM receivers, not merely
-                // pass schema validation. Each concrete contract has its own generated signature.
-                for input in &document.inputs {
-                    match input.kind {
-                        InputKind::Text => component.input::<SetText>(&input.name).map(drop),
-                        InputKind::Checked => component.input::<SetChecked>(&input.name).map(drop),
-                        InputKind::Value => component.input::<SetValue>(&input.name).map(drop),
-                        InputKind::Enabled => component.input::<SetEnabled>(&input.name).map(drop),
-                        InputKind::Expanded => component.input::<SetExpanded>(&input.name).map(drop),
-                        InputKind::Choices => component.input::<SetChoices>(&input.name).map(drop),
-                        InputKind::Selection => component.input::<SetSelection>(&input.name).map(drop),
-                        InputKind::Offset => component.input::<SetOffset>(&input.name).map(drop),
-                        InputKind::Position => component.input::<SetPosition>(&input.name).map(drop),
-                    }?;
+                // Resolve the actual object projection used by generated Form fields.
+                // No setter catalog or independent command receiver participates.
+                match &document.root.widget {
+                    WidgetSpec::Button { .. } => component.widget::<ButtonAbi>("root").map(drop),
+                    WidgetSpec::Checkbox { .. } => component.widget::<CheckboxAbi>("root").map(drop),
+                    WidgetSpec::Textbox { .. } => component.widget::<TextboxAbi>("root").map(drop),
+                    WidgetSpec::TextBlock { .. } => component.widget::<TextBlockAbi>("root").map(drop),
+                    WidgetSpec::TextArea { .. } => component.widget::<TextAreaAbi>("root").map(drop),
+                    WidgetSpec::Slider { .. } => component.widget::<SliderAbi>("root").map(drop),
+                    WidgetSpec::Number { .. } => component.widget::<NumberAbi>("root").map(drop),
+                    WidgetSpec::ColorSwatch { .. } => component.widget::<ColorSwatchAbi>("root").map(drop),
+                    WidgetSpec::ListItem { .. } => component.widget::<ListItemAbi>("root").map(drop),
+                    WidgetSpec::ListBox { .. } => component.widget::<ListBoxAbi>("root").map(drop),
+                    WidgetSpec::Scrollbar { .. } => component.widget::<ScrollbarAbi>("root").map(drop),
+                    WidgetSpec::Combo { .. } => component.widget::<ComboAbi>("root").map(drop),
+                    WidgetSpec::Linear { .. } => component.widget::<LinearAbi>("root").map(drop),
+                    WidgetSpec::Grid { .. } => component.widget::<GridAbi>("root").map(drop),
+                    WidgetSpec::Split { .. } => component.widget::<SplitViewAbi>("root").map(drop),
+                    WidgetSpec::Scroll { .. } => component.widget::<ScrollAreaAbi>("root").map(drop),
+                    WidgetSpec::Form { .. } => component.widget::<FormAbi>("root").map(drop),
+                    WidgetSpec::Disclosure { .. } => component.widget::<DisclosureAbi>("root").map(drop),
+                    WidgetSpec::Custom { .. } => unreachable!("built-in fixture"),
                 }
-                Ok(())
             },
         )
         .unwrap_or_else(|error| panic!("{name}: {error}"));
@@ -243,99 +236,81 @@ fn all_builtin_document_controls_construct_and_reload() {
     }
 }
 
-/// Typed input contracts call silent setters and reject malformed replacement models.
+/// Concrete setters validate before mutation, preserve authored saves and emit no user events.
 #[test]
-fn typed_inputs_validate_payloads_and_do_not_emit_user_events() {
-    use neocogi_ui_document::contracts::{SetChecked, SetChoices, SetEnabled, SetExpanded, SetValue};
+fn widget_setters_validate_values_and_remain_separate_from_event_delivery() {
     let fixture = Headless::standard();
     let mut slot = slot(&fixture.ui);
-    let cases = [
-        (WidgetSpec::Checkbox { text: "check".into(), checked: false }, InputKind::Checked),
-        (
-            WidgetSpec::Slider {
-                value: 1.0,
-                low: 0.0,
-                high: 10.0,
-                step: 1.0,
-                precision: 0,
-            },
-            InputKind::Value,
-        ),
-        (
-            WidgetSpec::Combo {
-                labels: vec!["one".into()],
-                selected: Some(0),
-                placeholder: "none".into(),
-            },
-            InputKind::Choices,
-        ),
-        (
-            WidgetSpec::Disclosure {
-                text: "details".into(),
-                tree: false,
-                expanded: false,
-            },
-            InputKind::Expanded,
-        ),
-    ];
-    for (widget, kind) in cases {
+    for widget in [
+        WidgetSpec::Checkbox { text: "check".into(), checked: false },
+        WidgetSpec::Slider { value: 1.0, low: 0.0, high: 10.0, step: 1.0, precision: 0 },
+        WidgetSpec::Number { value: 1.0, step: 1.0, precision: 0 },
+        WidgetSpec::Combo { labels: vec!["one".into()], selected: Some(0), placeholder: "none".into() },
+        WidgetSpec::Disclosure { text: "details".into(), tree: false, expanded: false },
+    ] {
         let document = Document {
             version: VERSION,
-            name: "input".into(),
+            name: "widget methods".into(),
             root: Node::new("root", widget),
             outputs: vec![],
-            inputs: vec![
-                Input {
-                    name: "set".into(),
-                    node: "root".into(),
-                    kind: kind.clone(),
-                },
-                Input {
-                    name: "enabled".into(),
-                    node: "root".into(),
-                    kind: InputKind::Enabled,
-                },
-            ],
         };
-        slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
+        let (sender, events) = std::sync::mpsc::channel();
+        slot.reload(&document, Resources::new(), |_| match &document.root.widget {
+            WidgetSpec::Checkbox { .. } => receiver::<CheckboxAbi, _>("root", sender.clone(), |_| ()),
+            WidgetSpec::Slider { .. } => receiver::<SliderAbi, _>("root", sender.clone(), |_| ()),
+            WidgetSpec::Number { .. } => receiver::<NumberAbi, _>("root", sender.clone(), |_| ()),
+            WidgetSpec::Combo { .. } => receiver::<ComboAbi, _>("root", sender.clone(), |_| ()),
+            WidgetSpec::Disclosure { .. } => Ok(EventBindings::new()),
+            _ => unreachable!("setter fixture"),
+        }, |_, _| Ok(())).unwrap();
         let component = slot.component().unwrap();
-        component.input::<SetEnabled>("enabled").unwrap().send(SetEnabled { enabled: false }).unwrap();
-        match kind {
-            InputKind::Checked => component.input::<SetChecked>("set").unwrap().send(SetChecked { checked: true }).unwrap(),
-            InputKind::Value => {
-                let mut input = component.input::<SetValue>("set").unwrap();
-                input.send(SetValue { value: 3.0 }).unwrap();
-                assert!(input.send(SetValue { value: f32::NAN }).is_err());
-            }
-            InputKind::Choices => {
-                let mut input = component.input::<SetChoices>("set").unwrap();
-                input
-                    .send(SetChoices {
-                        text: "onetwo".into(),
-                        ends: vec![3, 6],
-                        selected: 1,
-                    })
-                    .unwrap();
-                assert!(
-                    input
-                        .send(SetChoices {
-                            text: "é".into(),
-                            ends: vec![1],
-                            selected: 0
-                        })
-                        .is_err()
-                );
-            }
-            InputKind::Expanded => component.input::<SetExpanded>("set").unwrap().send(SetExpanded { expanded: true }).unwrap(),
-            _ => unreachable!(),
+        component.root().unwrap().set_flags(WidgetOptions::NO_INTERACT).unwrap();
+        // Keep numeric validation identical for both concrete widget projections.
+        macro_rules! numeric {
+            ($abi:ty) => {{
+                let mut control = component.widget::<$abi>("root").unwrap();
+                control.set_value(3.0).unwrap();
+                assert_eq!(control.value().unwrap(), 3.0);
+                for invalid in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+                    assert!(control.set_value(invalid).is_err());
+                    assert_eq!(control.value().unwrap(), 3.0);
+                }
+            }};
         }
+        match &document.root.widget {
+            WidgetSpec::Checkbox { .. } => {
+                let mut control = component.widget::<CheckboxAbi>("root").unwrap();
+                control.set_checked(true).unwrap();
+                assert!(control.checked().unwrap());
+            }
+            WidgetSpec::Slider { .. } => numeric!(SliderAbi),
+            WidgetSpec::Number { .. } => numeric!(NumberAbi),
+            WidgetSpec::Combo { .. } => {
+                let mut control = component.widget::<ComboAbi>("root").unwrap();
+                control.replace_items(&["one", "two"], ChoiceSelection::Selected(1)).unwrap();
+                assert_eq!(control.display_text().unwrap(), "two");
+                // Invalid replacement selection must preserve the entire old model.
+                assert!(control.replace_items(&["replacement"], ChoiceSelection::Selected(1)).is_err());
+                assert_eq!(control.choice_count().unwrap(), 2);
+                assert_eq!(control.choice_label(0).unwrap(), "one");
+                assert_eq!(control.choice_label(1).unwrap(), "two");
+                assert!(matches!(control.selection().unwrap(), ChoiceSelection::Selected(1)));
+            }
+            WidgetSpec::Disclosure { .. } => {
+                let mut control = component.widget::<DisclosureAbi>("root").unwrap();
+                control.set_expanded(true).unwrap();
+                assert!(control.expanded().unwrap());
+            }
+            _ => unreachable!("setter fixture"),
+        }
+        assert_eq!(events.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty));
         assert_eq!(Document::from_binary(&component.save().unwrap()).unwrap(), document);
     }
 }
 
 /// Enablement changes only interaction intent, preserving application edits made after construction.
 #[test]
-fn typed_enablement_preserves_live_application_flags() {
+fn widget_flag_enablement_preserves_live_application_flags() {
     let fixture = Headless::standard();
     let mut slot = slot(&fixture.ui);
     let document = Document {
@@ -343,22 +318,16 @@ fn typed_enablement_preserves_live_application_flags() {
         name: "live flags".into(),
         root: Node::new("button", WidgetSpec::Button { text: "toggle".into() }),
         outputs: vec![],
-        inputs: vec![Input {
-            name: "enabled".into(),
-            node: "button".into(),
-            kind: InputKind::Enabled,
-        }],
     };
     slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     let component = slot.component().unwrap();
     let mut button = component.widget::<ButtonAbi>("button").unwrap();
-    let mut enabled = component.input::<contracts::SetEnabled>("enabled").unwrap();
     assert_eq!(button.as_interface().properties().unwrap().options, WidgetOptions::FRAME);
 
     // A later application edit removes an initial bit and adds a different bit.
     // Disabling must preserve both decisions rather than restoring authored defaults.
     button.replace_flags(WidgetOptions::ALIGN_RIGHT).unwrap();
-    enabled.send(contracts::SetEnabled { enabled: false }).unwrap();
+    button.set_flags(WidgetOptions::NO_INTERACT).unwrap();
     assert_eq!(
         button.as_interface().properties().unwrap().options,
         WidgetOptions::ALIGN_RIGHT | WidgetOptions::NO_INTERACT
@@ -370,7 +339,7 @@ fn typed_enablement_preserves_live_application_flags() {
         .replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER | WidgetOptions::NO_INTERACT)
         .unwrap();
     for _ in 0..2 {
-        enabled.send(contracts::SetEnabled { enabled: true }).unwrap();
+        button.clear_flags(WidgetOptions::NO_INTERACT).unwrap();
         assert_eq!(
             button.as_interface().properties().unwrap().options,
             WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER
@@ -380,7 +349,7 @@ fn typed_enablement_preserves_live_application_flags() {
 
 /// Selective enablement preserves live presentation edits and never stores derived input flags.
 #[test]
-fn typed_enablement_preserves_requested_flags_without_capturing_effective_flags() {
+fn widget_flag_enablement_preserves_requested_flags_without_capturing_effective_flags() {
     let fixture = Headless::standard();
     let mut slot = slot(&fixture.ui);
     let mut root = Node::new("scroll", WidgetSpec::Scroll { enabled: true });
@@ -393,11 +362,6 @@ fn typed_enablement_preserves_requested_flags_without_capturing_effective_flags(
         name: "routing".into(),
         root,
         outputs: vec![],
-        inputs: vec![Input {
-            name: "enabled".into(),
-            node: "scroll".into(),
-            kind: InputKind::Enabled,
-        }],
     };
     slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     let component = slot.component().unwrap();
@@ -406,9 +370,11 @@ fn typed_enablement_preserves_requested_flags_without_capturing_effective_flags(
     assert_eq!(common.properties().unwrap().options, WidgetOptions::FRAME | WidgetOptions::GRAB_SCROLL);
     common.clear_flags(WidgetOptions::FRAME).unwrap();
     common.set_flags(WidgetOptions::ALIGN_RIGHT).unwrap();
-    let mut enabled = component.input::<contracts::SetEnabled>("enabled").unwrap();
     for value in [false, true] {
-        enabled.send(contracts::SetEnabled { enabled: value }).unwrap();
+        match value {
+            true => common.clear_flags(WidgetOptions::NO_INTERACT),
+            false => common.set_flags(WidgetOptions::NO_INTERACT),
+        }.unwrap();
         let expected = match value {
             true => WidgetOptions::ALIGN_RIGHT | WidgetOptions::GRAB_SCROLL,
             false => WidgetOptions::ALIGN_RIGHT | WidgetOptions::GRAB_SCROLL | WidgetOptions::NO_INTERACT,
@@ -423,8 +389,8 @@ fn typed_enablement_preserves_requested_flags_without_capturing_effective_flags(
     assert_eq!(common.properties().unwrap().options, WidgetOptions::ALIGN_RIGHT | WidgetOptions::NO_INTERACT);
 
     // The reverse transition must not retain the model's temporary NO_INTERACT.
-    // An enable command edits intent only; a disabled scroll model remains inert.
-    enabled.send(contracts::SetEnabled { enabled: true }).unwrap();
+    // Clearing the requested bit edits intent only; a disabled scroll model remains inert.
+    common.clear_flags(WidgetOptions::NO_INTERACT).unwrap();
     assert_eq!(common.properties().unwrap().options, WidgetOptions::ALIGN_RIGHT | WidgetOptions::NO_INTERACT);
     scrolling.set_enabled(true).unwrap();
     assert_eq!(common.properties().unwrap().options, WidgetOptions::ALIGN_RIGHT | WidgetOptions::GRAB_SCROLL);
@@ -441,7 +407,6 @@ fn authored_form_rectangles_survive_binary_reload_and_route_real_clicks() {
         edge: Edge::Position { x: 120, y: 80, width: 100, height: 32 },
         node: Node::new("save", WidgetSpec::Button { text: "Save".into() }),
     });
-    document.inputs.clear();
     let bytes = document.to_binary().unwrap();
     assert_eq!(Document::from_binary(&bytes).unwrap(), document);
     let (sender, events) = std::sync::mpsc::channel();
@@ -481,24 +446,21 @@ fn typed_and_binary_preparation_have_equivalent_authored_state() {
         binary.root().unwrap().as_interface().as_raw().object
     );
     for component in [&typed, &binary] {
-        component
-            .input::<SetText>("title")
-            .unwrap()
-            .send(SetText { text: "runtime override".into() })
-            .unwrap();
+        let mut title = component.widget::<TextBlockAbi>("title").unwrap();
+        title.set_text("runtime override").unwrap();
+        assert_eq!(title.text().unwrap(), "runtime override");
         assert_eq!(Document::from_binary(&component.save().unwrap()).unwrap(), document);
     }
 }
 
-/// Focused commands preserve unrelated widget configuration, validate before mutation, and retire.
+/// Direct widget setters preserve unrelated configuration, validate before mutation, and retire.
 #[test]
-fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
-    use neocogi_ui_document::contracts::{SetOffset, SetPosition, SetSelection};
+fn selection_offset_and_position_setters_preserve_configuration_and_retire() {
     let fixture = Headless::standard();
     let mut slot = slot(&fixture.ui);
     let mut document = Document {
         version: VERSION,
-        name: "focused commands".into(),
+        name: "focused setters".into(),
         root: Node::new(
             "root",
             WidgetSpec::Combo {
@@ -511,11 +473,6 @@ fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
             name: "changed".into(),
             node: "root".into(),
         }],
-        inputs: vec![Input {
-            name: "set".into(),
-            node: "root".into(),
-            kind: InputKind::Selection,
-        }],
     };
     let (sender, events) = std::sync::mpsc::channel();
     slot.reload(
@@ -526,15 +483,14 @@ fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
     )
     .unwrap();
     let component = slot.component().unwrap();
-    let combo = Widget::from_interface(component.root().unwrap().as_interface().add_ref().query::<ComboAbi>().unwrap());
-    let mut selection = component.input::<SetSelection>("set").unwrap();
-    selection.send(SetSelection { selected: 1 }).unwrap();
+    let mut combo = component.widget::<ComboAbi>("root").unwrap();
+    combo.set_selection(ChoiceSelection::Selected(1)).unwrap();
     assert!(matches!(combo.selection().unwrap(), ChoiceSelection::Selected(1)));
-    for selected in [-2, 2, i32::MAX] {
-        assert!(selection.send(SetSelection { selected }).is_err());
+    for selected in [2, u64::MAX] {
+        assert!(combo.set_selection(ChoiceSelection::Selected(selected)).is_err());
         assert!(matches!(combo.selection().unwrap(), ChoiceSelection::Selected(1)));
     }
-    selection.send(SetSelection { selected: -1 }).unwrap();
+    combo.set_selection(ChoiceSelection::None).unwrap();
     assert!(matches!(combo.selection().unwrap(), ChoiceSelection::None));
     assert!(events.try_recv().is_err());
 
@@ -544,7 +500,6 @@ fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
         content: 100,
         offset: 5,
     };
-    document.inputs[0].kind = InputKind::Offset;
     slot.reload(
         &document,
         Resources::new(),
@@ -552,12 +507,11 @@ fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
         |_, _| Ok(()),
     )
     .unwrap();
-    assert!(selection.send(SetSelection { selected: 0 }).is_err());
+    assert!(combo.set_selection(ChoiceSelection::Selected(0)).is_err());
     let component = slot.component().unwrap();
-    let scrollbar = component.root().unwrap().as_interface().add_ref().query::<ScrollbarAbi>().unwrap();
-    let mut offset = component.input::<SetOffset>("set").unwrap();
+    let mut scrollbar = component.widget::<ScrollbarAbi>("root").unwrap();
     for (requested, expected) in [(50, 50), (i32::MAX, 90), (-1, 0)] {
-        offset.send(SetOffset { offset: requested }).unwrap();
+        scrollbar.set_offset(requested).unwrap();
         let range = scrollbar.range().unwrap();
         assert_eq!((range.viewport, range.content, range.offset), (10, 100, expected));
     }
@@ -570,7 +524,6 @@ fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
         minimum_second: 30,
         handle: 6,
     };
-    document.inputs[0].kind = InputKind::Position;
     slot.reload(
         &document,
         Resources::new(),
@@ -578,26 +531,25 @@ fn selection_offset_and_position_commands_preserve_configuration_and_retire() {
         |_, _| Ok(()),
     )
     .unwrap();
-    assert!(offset.send(SetOffset { offset: 0 }).is_err());
+    assert!(scrollbar.set_offset(0).is_err());
     let component = slot.component().unwrap();
-    let mut split = component.root().unwrap().as_interface().add_ref().query::<SplitViewAbi>().unwrap();
-    // Preserve live configuration as well as authored defaults when sending subsequent positions.
+    let mut split = component.widget::<SplitViewAbi>("root").unwrap();
+    // Preserve live configuration as well as authored defaults when setting subsequent positions.
     let mut settings = split.settings().unwrap();
     settings.minimum_first = 40;
     split.set_settings(settings).unwrap();
-    let mut position = component.input::<SetPosition>("set").unwrap();
-    position.send(SetPosition { position: 150 }).unwrap();
+    split.set_position(150).unwrap();
     let settings = split.settings().unwrap();
     assert_eq!(
         (settings.position, settings.minimum_first, settings.minimum_second, settings.handle_width),
         (150, 40, 30, 6)
     );
-    assert!(position.send(SetPosition { position: -1 }).is_err());
+    assert!(split.set_position(-1).is_err());
     assert_eq!(split.settings().unwrap().position, 150);
     assert!(events.try_recv().is_err());
     assert_eq!(Document::from_binary(&component.save().unwrap()).unwrap(), document);
     slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
-    assert!(position.send(SetPosition { position: 100 }).is_err());
+    assert!(split.set_position(100).is_err());
 }
 
 /// A self-targeting activation applies only after input traversal, without a reentrant borrow.
@@ -607,7 +559,6 @@ fn application_handles_real_click_and_closed_form_retires() {
     let mut slot = slot(&fixture.ui);
     let mut document = Document::new("private action");
     document.root = Node::new("button", WidgetSpec::Button { text: "Before".into() });
-    document.inputs.clear();
     document.outputs.clear();
     // Application behavior is queued explicitly; documents do not contain executable routes.
     let (sender, messages) = std::sync::mpsc::channel();
@@ -657,7 +608,6 @@ fn application_owns_checkbox_actions_and_complete_event_consumption() {
         name: "source_changed".into(),
         node: "source".into(),
     }];
-    document.inputs.clear();
     // One application handler may issue commands to multiple typed widget fields.
     let (sender, events) = std::sync::mpsc::channel();
     slot.reload(
@@ -711,7 +661,6 @@ fn textbox_enum_stream_drives_form_action_and_public_sink() {
         name: "name_event".into(),
         node: "name".into(),
     }];
-    document.inputs.clear();
     // The application matches the enum and edits its preview field after traversal.
     let (sender, events) = std::sync::mpsc::channel();
     slot.reload(

@@ -3,7 +3,7 @@
 `neocogi-ui-document` reconstructs an authored widget tree through the existing
 COM widget factories. JSON is editable source; the NCB persistence envelope is
 suitable for embedding or deployment. The loader performs no file I/O. Both
-representations use schema revision 5, and earlier revisions are rejected.
+representations use schema revision 6, and earlier revisions are rejected.
 
 Binary save and load apply the same byte, collection, value, and nesting limits.
 `Document::to_binary` and `Component::save` reject over-budget initialization
@@ -27,7 +27,7 @@ The application owns event behavior. Every event-producing node is represented
 by one required method in the generated `Handlers` trait. The application
 implements that trait in its own source file and dispatches accepted events at
 its normal update boundary. This is where button-to-textbox behavior, validation,
-state transitions, and application-specific commands belong. Revision 5 has no
+state transitions, and application-specific commands belong. Revision 6 has no
 serialized visual output-to-input graph, route expression, or route editor.
 
 ## Loading and typed widget access
@@ -43,11 +43,17 @@ propagate through the emitting operation; there is no relay diagnostic channel.
 its concrete COM interface before returning an owned `Widget<ButtonAbi>` handle.
 Generated forms use this lookup for every field. A wrong key or incompatible
 interface fails during candidate preparation, before replacing a live form.
-Widget methods remain the actual COM class methods, so an application can write
-`form.widget_title_1.set_text("Saved")` rather than route through a serialized
-command graph. Optional named `InputHandle<SetText>` endpoints remain available
-for message-based integrations; they are independent of the generated widget
-fields.
+Getters and setters belong to those widget interfaces. An application can write
+`form.widget_title_1.set_text("Saved")` and read its text through the same field.
+There is no separate command record, setter receiver, named input lookup, or
+`Form.inputs` object. Custom fields expose their own COM methods through
+`as_interface()`; the designer does not maintain a catalog of custom setters.
+
+These calls validate and apply changes synchronously and return their result.
+Event sinks have a different role: they acquire emitted facts and enqueue the
+behavioral parent's mapped messages. Getters and ordinary state setters do not
+publish user-interaction events. Application code decides when a state change
+should also trigger application behavior.
 
 A compiled component retains the recipe and typed lookup handles. It creates no
 lifetime guard, scheduled event owner or event relay. Dropping it releases those
@@ -95,7 +101,7 @@ The actual method and field ordinals come from the generated file. First use
 `generated::events(generation, sender)` in the reload receiver callback. Then use
 `generated::bind(component)` in the field-validation callback and retain that
 `Form` only after successful publication. The first function constructs sinks;
-the second resolves fields and inputs without changing event ownership.
+the second resolves widget fields without changing event ownership.
 
 ```rust,ignore
 let mut candidate_form = None;
@@ -129,15 +135,16 @@ already queued remain owned snapshots; generation checks reject stale ones. Appl
 layout and paint. `Component::save()` preserves authored defaults rather than
 user interaction, focus, scrolling, or live application state.
 
-`SetEnabled` changes only the exported widget's current requested `NO_INTERACT`
-bit: enabling calls `clear_flags`, disabling calls `set_flags`. Application edits
-to frame or alignment flags survive both operations. The adapter keeps no copy
-of live options and never writes `properties().options` back into settings:
-those effective properties may include temporary mouse-wheel or participation
-flags. Constructor defaults initialize state once; `replace_flags` is the explicit
-operation for replacing the whole requested set later.
+For surface enablement, call `clear_flags(WidgetOptions::NO_INTERACT)` to enable
+or `set_flags(WidgetOptions::NO_INTERACT)` to disable. Both preserve other current
+requested bits. Do not write `properties().options` back into settings: effective
+properties may include temporary mouse-wheel or participation flags. Constructor
+defaults initialize state once; `replace_flags` explicitly replaces the requested
+set. `SplitView::set_position` preserves other live split settings in one COM
+call. Combo `replace_items`/`replace_menu` atomically validate and replace the
+model and selection. These guarantees belong to widgets, not document adapters.
 
-Enablement applies to the exported surface, not recursively to its descendants.
+This flag change applies to the widget surface, not recursively to its descendants.
 Behavior-specific policy remains separate: for example, enabling the surface
 does not turn on a disabled scroll model. The effective flags continue to reflect
 both the current requested value and the widget's own behavior.
@@ -146,7 +153,9 @@ Fonts and icons resolve through the supplied immutable UI asset bundle. Images
 use logical keys resolved by the caller's `Resources` map. Source documents do
 not embed GPU handles, file paths selected by the loader, receivers, or plugin
 code. Validation bounds document bytes, depth, node count, numeric settings,
-child layout, event aliases, and command endpoints. JSON rejects unknown fields.
+child layout and event aliases. JSON rejects unknown fields, including the removed
+`inputs` property. Binary envelopes and inner documents reject earlier revisions;
+there is no migration or silent removal of old command declarations.
 
 `Form { width, height }` is a fixed-coordinate container. Its children use
 `Position { x, y, width, height }` edges in parent content pixels. Smaller
@@ -193,7 +202,8 @@ impose stricter domain bounds in `create`.
 required handler methods using the owned IDL interface and message metadata
 read through the registry. The generated field uses the concrete COM projection;
 the generated handler receives the declared message enum or struct. The custom
-port is bound directly to the application queue after the form has been checked.
+receiver is supplied during construction and forwards to the application queue;
+subsequent form binding only checks and retains the concrete widget fields.
 The plain `rust_bindings()` helper and the command-line example use an empty
 registry and therefore handle built-in documents only. The designer's Rust
 export uses its active registry.

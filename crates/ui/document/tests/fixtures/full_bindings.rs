@@ -54,31 +54,9 @@ impl Event {
         }
     }
 }
-/// Reconnect concrete command handles after every successful component replacement.
-pub struct Inputs {
-    /// Public command "Text"; its receiver is checked when binding.
-    pub input_text_0: neocogi_ui_document::InputHandle<neocogi_ui_document::contracts::SetText>,
-    /// Public command "Checked"; its receiver is checked when binding.
-    pub input_checked_1: neocogi_ui_document::InputHandle<neocogi_ui_document::contracts::SetChecked>,
-    /// Public command "Value"; its receiver is checked when binding.
-    pub input_value_2: neocogi_ui_document::InputHandle<neocogi_ui_document::contracts::SetValue>,
-    /// Public command "Enabled"; its receiver is checked when binding.
-    pub input_enabled_3: neocogi_ui_document::InputHandle<neocogi_ui_document::contracts::SetEnabled>,
-    /// Public command "Expanded"; its receiver is checked when binding.
-    pub input_expanded_4: neocogi_ui_document::InputHandle<neocogi_ui_document::contracts::SetExpanded>,
-    /// Public command "Choices"; its receiver is checked when binding.
-    pub input_choices_5: neocogi_ui_document::InputHandle<neocogi_ui_document::contracts::SetChoices>,
-    /// Public command "Selection"; its receiver is checked when binding.
-    pub input_selection_6: neocogi_ui_document::InputHandle<neocogi_ui_document::contracts::SetSelection>,
-    /// Public command "Offset"; its receiver is checked when binding.
-    pub input_offset_7: neocogi_ui_document::InputHandle<neocogi_ui_document::contracts::SetOffset>,
-    /// Public command "Position"; its receiver is checked when binding.
-    pub input_position_8: neocogi_ui_document::InputHandle<neocogi_ui_document::contracts::SetPosition>,
-}
-/// Checked concrete handles for every authored widget and the exported commands.
+/// Checked widget fields expose their own getters and setters.
+/// Resolve a new Form after replacement; old handles observe widget closure.
 pub struct Form {
-    /// Public command endpoints retained for message-based integrations.
-    pub inputs: Inputs,
     /// Authored widget "root"; the concrete COM interface is checked when binding.
     pub widget_root_0: neocogi_ui::Widget<neocogi_ui::LinearAbi>,
     /// Authored widget "button"; the concrete COM interface is checked when binding.
@@ -102,19 +80,7 @@ pub struct Form {
 pub fn bind(
     component: &neocogi_ui_document::Component,
 ) -> Result<Form, neocogi_com::NcStatus> {
-    let inputs = Inputs {
-        input_text_0: component.input::<neocogi_ui_document::contracts::SetText>("Text")?,
-        input_checked_1: component.input::<neocogi_ui_document::contracts::SetChecked>("Checked")?,
-        input_value_2: component.input::<neocogi_ui_document::contracts::SetValue>("Value")?,
-        input_enabled_3: component.input::<neocogi_ui_document::contracts::SetEnabled>("Enabled")?,
-        input_expanded_4: component.input::<neocogi_ui_document::contracts::SetExpanded>("Expanded")?,
-        input_choices_5: component.input::<neocogi_ui_document::contracts::SetChoices>("Choices")?,
-        input_selection_6: component.input::<neocogi_ui_document::contracts::SetSelection>("Selection")?,
-        input_offset_7: component.input::<neocogi_ui_document::contracts::SetOffset>("Offset")?,
-        input_position_8: component.input::<neocogi_ui_document::contracts::SetPosition>("Position")?,
-    };
     let form = Form {
-        inputs,
         widget_root_0: component.widget::<neocogi_ui::LinearAbi>("root")?,
         widget_button_1: component.widget::<neocogi_ui::ButtonAbi>("button")?,
         widget_check_2: component.widget::<neocogi_ui::CheckboxAbi>("check")?,

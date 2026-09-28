@@ -53,7 +53,7 @@ impl ReloadSlot {
     pub fn widget(&self) -> &LinearWidget {
         &self.slot
     }
-    /// Borrows the current component for typed inputs, outputs, or authored saving.
+    /// Borrows the current component for typed widget lookup or authored saving.
     pub fn component(&self) -> Option<&Component> {
         self.active.as_ref().map(|(_, component)| component)
     }

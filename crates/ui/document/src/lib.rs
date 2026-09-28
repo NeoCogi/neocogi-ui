@@ -5,9 +5,8 @@
 pub mod model;
 pub use model::*;
 
-/// Generated opaque component and concrete application command contracts.
+/// Generated component lookup and custom-widget discovery contracts.
 pub use neocogi_ui_document_contracts as contracts;
-mod bindings;
 mod event_bindings;
 pub use event_bindings::EventBindings;
 /// Owned COM-transportable authoring metadata for custom widgets.
@@ -18,7 +17,6 @@ pub use discovery::MAX_CATALOG_WIDGETS;
 pub use custom::{CustomWidgetFactory, CustomWidgetRegistry};
 mod build;
 mod rust_bindings;
-pub use bindings::{Command, InputHandle};
 mod runtime;
 pub use runtime::{Component, DOCUMENT_TYPE, Loader, Resources};
 mod reload;
