@@ -96,6 +96,7 @@ fn custom_factory_cannot_advertise_a_stream_outside_its_com_chain() {
 
     /// Fabricated source metadata advertises an unrelated projection as the stream.
     static HIDDEN: IdlInterface = IdlInterface {
+        construction: None,
         abi: &neocogi_demo_contracts::CounterAbi::INTERFACE_DESCRIPTOR,
         chain: &neocogi_demo_contracts::CounterAbi::INTERFACE_CHAIN,
         rust_abi: "neocogi_demo_contracts::CounterAbi",
