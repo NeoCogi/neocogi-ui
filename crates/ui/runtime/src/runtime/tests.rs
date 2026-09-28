@@ -322,6 +322,8 @@ struct WidgetProbe {
     latest: Cell<Option<WidgetUpdate>>,
     /// One-shot attempt to close an actively editing parent during child mounting.
     close_on_mount: RefCell<Option<ComPtr<IWidgetAbi>>>,
+    /// Records the exact gate/preflight result without assuming which object is busy.
+    close_mount_result: Cell<Option<Result<(), NcStatus>>>,
     /// Active parent authority deliberately reentered from a leaf measurement.
     parent_layout: RefCell<Option<(ComPtr<ILayoutServiceAbi>, LayoutScope)>>,
     /// Every update, including eventless updates and routed text/key transactions.
@@ -398,7 +400,7 @@ impl IWidget for RetainingWidget {
     fn mount(&mut self) -> Result<(), NcStatus> {
         let parent = self.probe.close_on_mount.borrow_mut().take();
         if let Some(mut parent) = parent {
-            assert_eq!(parent.close(), Err(NC_E_BUSY));
+            self.probe.close_mount_result.set(Some(parent.close()));
         }
         self.lifetime.mount()
     }

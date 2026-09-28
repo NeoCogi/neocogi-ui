@@ -195,10 +195,13 @@ impl HostedWidget for SplitView {
         &mut self.runtime
     }
     /// Retires event delivery and every owned pane when the container closes.
-    fn close_contents(&mut self) -> Result<(), NcStatus> {
+    fn close_children(&mut self) -> Result<ChildEditResult, NcStatus> {
+        self.editor.close()
+    }
+    /// Releases the divider mapping only after its panes retire.
+    fn close_contents(&mut self) {
         self.events.close();
         self.drag = Drag::Idle;
-        self.editor.close()?.finish()
     }
 }
 

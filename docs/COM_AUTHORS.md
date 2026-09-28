@@ -459,6 +459,21 @@ child sequence. Querying the view cannot recover edit authority. Expose concrete
 editing methods that keep Linear tracks, Grid spans or application-specific edge
 metadata synchronized; do not return the private editor to callers who are not
 responsible for that metadata. Child references do not transfer tree ownership.
+Widget closure is permanent and idempotent. A composite first retires its child
+collection, then releases its own event mapping and transient activity, then marks
+its own state closed. The actual widget allocation also runs this cleanup from
+`Drop`; dropping an individual `ComPtr` only releases that reference. Retained
+handles keep memory alive, never permission to reactivate a removed widget.
+
+The shared `WidgetState` has `Unmounted`, `Mounted`, and `Closed` states. Its
+`check_close` only checks permission; `complete_close` commits after cleanup.
+Built-in `HostedWidget::close_children` preserves `ChildEditResult`: refusal to
+acquire the collection leaves the parent open, while a diagnostic after committed
+child removal is reported only after local infallible cleanup and terminal state
+finish. Do not restore an already removed child or reopen an already closed
+widget. Custom COM implementations remain responsible for honoring these same
+lifetime rules; the runtime independently retires their owned descendants.
+
 Insertion consumes the child's sole attachment opportunity after validation.
 Removal closes the entire subtree permanently. Retained application references
 remain memory-safe and report closure; they cannot detach or reparent a widget.

@@ -39,7 +39,10 @@ interface IWidget {
     fn host(&self) -> Result<ComPtr<IWidgetHost>>;
     /// Claims the only tree attachment; a second call fails without changing state.
     fn mount(&mut self) -> Result<()>;
-    /// Logically closes the widget without requiring its final reference release.
+    /// Permanently closes descendants before releasing this widget's event mapping.
+    /// Repeated closure is harmless; retained references cannot reactivate the object.
+    /// A preflight refusal leaves the parent open. A diagnostic after descendant
+    /// removal does not undo closure. Final object destruction also performs cleanup.
     fn close(&mut self) -> Result<()>;
 
     /// Returns effective frame, focus and input policy, including behavior-derived flags.

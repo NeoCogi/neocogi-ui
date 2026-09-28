@@ -260,10 +260,9 @@ impl crate::widget_object::WidgetAlgorithm for Number {
 
 impl crate::widget_object::HostedWidget for Number {
     /// Releases sinks, revokes outstanding clipboard receipts, and drops local history.
-    fn close_contents(&mut self) -> Result<(), neocogi_com::NcStatus> {
+    fn close_contents(&mut self) {
         crate::widget_object::WidgetAlgorithm::close_events(self);
         self.edit = NumberEditState::default();
-        Ok(())
     }
 
     /// Borrows common lifecycle and resource state without a second number representation.

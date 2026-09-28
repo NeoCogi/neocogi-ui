@@ -229,14 +229,6 @@ impl crate::widget_object::WidgetAlgorithm for Combo {
     }
 }
 
-impl Drop for Combo {
-    /// Retires an unmounted combo's popup when its final application reference is released.
-    fn drop(&mut self) {
-        // Mounted headers request the same idempotent transition from `close_events`; this path
-        // covers construction followed by release without insertion into the retained tree.
-        let _ = self.menu.close();
-    }
-}
 
 impl crate::widget_object::HostedWidget for Combo {
     /// Borrows common lifecycle and resource state without a second combo representation.

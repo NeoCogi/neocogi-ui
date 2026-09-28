@@ -359,8 +359,8 @@ impl crate::widget_object::HostedWidget for Disclosure {
     }
 
     /// Closes both real structural children through their authoritative writer.
-    fn close_contents(&mut self) -> Result<(), neocogi_com::NcStatus> {
-        self.editor.close()?.finish()
+    fn close_children(&mut self) -> Result<neocogi_ui_core_contracts::ChildEditResult, neocogi_com::NcStatus> {
+        self.editor.close()
     }
 }
 

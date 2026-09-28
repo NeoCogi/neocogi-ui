@@ -615,8 +615,8 @@ impl crate::widget_object::HostedWidget for ScrollArea {
     }
 
     /// Closes the surface and both actual scrollbar children through their fixed writer.
-    fn close_contents(&mut self) -> Result<(), neocogi_com::NcStatus> {
-        self.editor.close()?.finish()
+    fn close_children(&mut self) -> Result<neocogi_ui_core_contracts::ChildEditResult, neocogi_com::NcStatus> {
+        self.editor.close()
     }
 }
 impl crate::widget_object::WidgetAlgorithm for ScrollSurface {}
@@ -633,8 +633,8 @@ impl crate::widget_object::HostedWidget for ScrollSurface {
     }
 
     /// Closes the sole content child when this structural surface is retired.
-    fn close_contents(&mut self) -> Result<(), neocogi_com::NcStatus> {
-        self.editor.close()?.finish()
+    fn close_children(&mut self) -> Result<neocogi_ui_core_contracts::ChildEditResult, neocogi_com::NcStatus> {
+        self.editor.close()
     }
 }
 

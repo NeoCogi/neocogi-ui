@@ -488,6 +488,7 @@ fn builtin_container_commits_replacement_metadata_before_reporting_failed_teardo
     *replacement.close_on_mount.borrow_mut() = Some(row.node_interface().unwrap());
     let outcome = row.replace(0, &second, LinearEdge::new(LayoutTrack::Fixed { extent: 90 })).unwrap();
     assert_eq!(outcome.finish(), Err(NC_E_INVALID_ARG));
+    assert_eq!(replacement.close_mount_result.get(), Some(Err(NC_E_BUSY)));
     assert_eq!(LayoutTrack::try_from(row.edge(0).unwrap().main).unwrap(), LayoutTrack::Fixed { extent: 90 });
     runtime.update(SIZE).unwrap();
     assert_eq!(replacement.latest.get().unwrap().screen.width, 90);
@@ -798,5 +799,135 @@ fn disclosure_headers_use_the_common_frame_policy_for_both_variants() {
         header.replace_flags(WidgetOptions::FRAME).unwrap();
         assert_eq!(header.take_change().unwrap(), GeometryChange::NoChange);
         window.close().unwrap();
+    }
+}
+
+/// Reentrant construction can reject a different container's child-close
+/// preflight after its widget authority check succeeds. That refusal must not
+/// poison the parent terminal flag or skip descendants on the later legal call.
+#[test]
+fn refused_descendant_close_leaves_parent_retryable() {
+    let runtime = runtime();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
+    let mut victim = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
+    let retained = ui.widgets().button_unobserved("retained descendant").unwrap();
+    victim
+        .insert(0, &retained, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
+        .unwrap()
+        .finish()
+        .unwrap();
+    let mut unrelated = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
+    let (candidate, probe) = recorded_leaf(&runtime);
+    *probe.close_on_mount.borrow_mut() = Some(victim.node_interface().unwrap());
+    unrelated
+        .insert(0, &candidate, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
+        .unwrap()
+        .finish()
+        .unwrap();
+    assert_eq!(probe.close_mount_result.get(), Some(Err(UI_E_BUSY)));
+    assert!(victim.node_interface().unwrap().properties().is_ok());
+    assert_eq!(retained.label().unwrap(), "retained descendant");
+    victim.node_interface().unwrap().close().unwrap();
+    assert_eq!(retained.label(), Err(UI_E_CLOSED));
+    assert_eq!(victim.node_interface().unwrap().properties(), Err(UI_E_CLOSED));
+    victim.node_interface().unwrap().close().unwrap();
+}
+
+/// A diagnostic after child retirement must not skip local terminal cleanup or
+/// cause another child close on retry. It cannot undo the committed removal.
+#[test]
+fn descendant_cleanup_diagnostic_still_completes_parent_close() {
+    let runtime = runtime();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
+    let mut parent = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
+    let (child, probe) = recorded_leaf(&runtime);
+    probe.fail_close.set(true);
+    parent
+        .insert(0, &child, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
+        .unwrap()
+        .finish()
+        .unwrap();
+    let mut parent = parent.node_interface().unwrap();
+    assert_eq!(parent.close(), Err(NC_E_INVALID_ARG));
+    assert_eq!(parent.properties(), Err(UI_E_CLOSED));
+    assert_eq!(probe.closes.get(), 1);
+    parent.close().unwrap();
+    assert_eq!(probe.closes.get(), 1);
+}
+
+/// A captured lifetime makes COM receiver release observable without invoking a
+/// mapper or application handler during terminal cleanup.
+struct MappingLifetime {
+    /// Independent test log retained after every widget and sink is destroyed.
+    released: Rc<RefCell<Vec<&'static str>>>,
+    /// Which widget owned this receiver's last reference.
+    label: &'static str,
+}
+impl Drop for MappingLifetime {
+    /// Captures must be released in descendant-first order exactly once.
+    fn drop(&mut self) {
+        self.released.borrow_mut().push(self.label);
+    }
+}
+
+/// Explicit closure and final allocation release share descendant-first cleanup;
+/// dropping a mere cloned handle must never close a live widget.
+#[test]
+fn mappings_release_children_before_parent_on_close_and_final_drop() {
+    use neocogi_com::events::MessageSinkInterface;
+    for explicit in [false, true] {
+        let runtime = runtime();
+        let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
+        let released = Rc::new(RefCell::new(Vec::new()));
+        let lifetime = MappingLifetime {
+            released: released.clone(),
+            label: "parent",
+        };
+        let sink = SplitViewSinkAbi::receiver(move |_| {
+            let _ = &lifetime;
+            panic!("close must not invoke mapping")
+        })
+        .unwrap();
+        let mut parent = ui
+            .widgets()
+            .split_view_with_sink(
+                SplitOptions {
+                    axis: SplitAxis::Horizontal,
+                    position: 30,
+                    minimum_first: 0,
+                    minimum_second: 0,
+                    handle_width: 4,
+                },
+                Some(sink.as_com_ref()),
+            )
+            .unwrap();
+        drop(sink);
+        let mut children = Vec::new();
+        for label in ["first", "second"] {
+            let lifetime = MappingLifetime { released: released.clone(), label };
+            let sink = ButtonSinkAbi::receiver(move |_| {
+                let _ = &lifetime;
+                panic!("close must not invoke mapping")
+            })
+            .unwrap();
+            let child = ui.widgets().button_with_sink(label, Some(sink.as_com_ref())).unwrap();
+            drop(sink);
+            parent.insert(children.len() as u32, &child).unwrap().finish().unwrap();
+            children.push(child);
+        }
+        drop(parent.clone());
+        assert!(released.borrow().is_empty());
+        if explicit {
+            parent.node_interface().unwrap().close().unwrap();
+            parent.node_interface().unwrap().close().unwrap();
+            assert_eq!(&*released.borrow(), &["first", "second", "parent"]);
+        }
+        drop(parent);
+        assert_eq!(&*released.borrow(), &["first", "second", "parent"]);
+        for child in &children {
+            assert_eq!(child.label(), Err(UI_E_CLOSED));
+        }
+        drop(children);
+        assert_eq!(&*released.borrow(), &["first", "second", "parent"]);
     }
 }

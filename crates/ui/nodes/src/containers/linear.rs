@@ -253,8 +253,8 @@ impl crate::widget_object::HostedWidget for Linear {
     }
 
     /// Closes the authoritative COM child sequence when this Linear is retired.
-    fn close_contents(&mut self) -> Result<(), neocogi_com::NcStatus> {
-        self.editor.close()?.finish()
+    fn close_children(&mut self) -> Result<neocogi_ui_core_contracts::ChildEditResult, neocogi_com::NcStatus> {
+        self.editor.close()
     }
 }
 

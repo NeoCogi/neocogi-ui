@@ -399,10 +399,9 @@ impl crate::widget_object::WidgetAlgorithm for Textbox {
 
 impl crate::widget_object::HostedWidget for Textbox {
     /// Releases sinks, revokes outstanding clipboard receipts, and drops local history.
-    fn close_contents(&mut self) -> Result<(), neocogi_com::NcStatus> {
+    fn close_contents(&mut self) {
         crate::widget_object::WidgetAlgorithm::close_events(self);
         self.editing = super::editing::Editing::default();
-        Ok(())
     }
 
     /// Borrows common lifecycle and resource state without a second textbox representation.

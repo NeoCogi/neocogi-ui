@@ -204,8 +204,8 @@ impl crate::widget_object::HostedWidget for TextArea {
     }
 
     /// Closes the surface, editor, and both scrollbar children through their fixed writer.
-    fn close_contents(&mut self) -> Result<(), NcStatus> {
-        self.editor.close()?.finish()
+    fn close_children(&mut self) -> Result<neocogi_ui_core_contracts::ChildEditResult, neocogi_com::NcStatus> {
+        self.editor.close()
     }
 }
 
@@ -690,10 +690,9 @@ impl crate::widget_object::WidgetAlgorithm for TextEditor {
 
 impl crate::widget_object::HostedWidget for TextEditor {
     /// Releases sinks, revokes outstanding clipboard receipts, and drops local history.
-    fn close_contents(&mut self) -> Result<(), neocogi_com::NcStatus> {
+    fn close_contents(&mut self) {
         crate::widget_object::WidgetAlgorithm::close_events(self);
         self.editing = super::editing::Editing::default();
-        Ok(())
     }
 
     /// Borrows common phase state stored directly beside the editable text fields.
