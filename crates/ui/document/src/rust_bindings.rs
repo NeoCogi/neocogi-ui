@@ -104,6 +104,8 @@ impl Document {
     }
 
     /// Generates bindings with custom interface and message types read from IDL-generated COM metadata.
+    /// Registry entries are immutable after COM path validation at registration.
+    /// Rust compilation still checks crate availability, types and trait implementations.
     pub fn rust_bindings_with(&self, custom: &CustomWidgetRegistry) -> Result<String, String> {
         custom.validate_document(self)?;
         let mut nodes = Vec::new();

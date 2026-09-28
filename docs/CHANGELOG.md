@@ -2,6 +2,22 @@
 
 ## 0.0.0 (unreleased)
 
+- Share Rust binding-path validation through COM core and its existing facade.
+  IDL publication and widget catalogs now enforce one bounded grammar, including
+  raw identifiers and optional absolute paths. Reject malformed interface and
+  nested-value paths with widget/field diagnostics before form export. Retain
+  immutable validated registry metadata and compile real COM-catalog-generated
+  forms in a downstream regression. Remove the inspector's duplicate version
+  checker. Finding 07 in the COM/UI adversarial review is fixed.
+
+- Complete nested event inspection for COM-discovered custom widgets and built-in
+  controls. Show enum payload fields, records, collection element types and flags
+  from the existing type graph; mark recursive/shared references and bound display
+  rows and depth with explicit notices. Add actual inspector-control assertions
+  after independent plugin discovery and recursive catalog COM transport. Fix the
+  custom-toolbox rendering crash by using the registered palette for canvas
+  labels and drawing. Finding 06 in the COM/UI adversarial review is fixed.
+
 - Make IDL collection ownership explicit with `Vec<T>`, `Slice<T>` / `[T]`, and
   `Array<T, N>` / `[T; N]`. Support recursively copied arrays in methods and
   buffers through checked wire codecs. Move `Option<T>` into an ordinary bundled

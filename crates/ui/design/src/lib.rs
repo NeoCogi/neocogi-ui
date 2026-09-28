@@ -154,7 +154,7 @@ pub enum DesignShape {
 pub struct DesignType {
     /// Dotted IDL module and declaration name.
     pub qualified_name: String,
-    /// Public Rust type path used in generated handlers.
+    /// Public Rust type path used in generated handlers; checked by [`neocogi_com::validate_rust_path`].
     pub rust_type: String,
     /// Complete struct, enum, or bit-enum shape.
     pub shape: DesignShape,
@@ -221,7 +221,7 @@ pub struct DesignInterface {
     pub iid: [u8; 16],
     /// Full transitive ABI signature of that projection.
     pub signature: [u8; 32],
-    /// Public Rust `*Abi` projection used by generated forms.
+    /// Public Rust `*Abi` projection used by generated forms; checked by [`neocogi_com::validate_rust_path`].
     pub rust_abi: String,
     /// Optional single stream, including inherited generic projections.
     pub stream: Option<DesignStream>,
@@ -303,13 +303,14 @@ impl DesignWidgetManifest {
     }
 
     /// Rejects malformed metadata before it can affect construction or code generation.
+    /// COM owns Rust binding syntax; graph names and references are checked separately.
+    /// Failures in binding strings include the widget kind and exact metadata field.
     pub fn validate(&self) -> Result<(), String> {
         if self.version != DESIGN_DESCRIPTOR_VERSION || self.kind.is_empty() || self.interface.iid == [0; 16] {
             return Err("Invalid design widget descriptor identity or version".into());
         }
-        if !rust_path(&self.interface.rust_abi) {
-            return Err("Invalid design widget interface or output policy".into());
-        }
+        neocogi_com::validate_rust_path(&self.interface.rust_abi)
+            .map_err(|error| format!("Widget {:?}, interface.rust_abi: {error}", self.kind))?;
         let mut names = std::collections::BTreeSet::new();
         if !self
             .defaults
@@ -328,7 +329,8 @@ impl DesignWidgetManifest {
                 .find(|value| value.qualified_name == output.message)
                 .ok_or("Event value is absent from its definition graph")?;
         }
-        validate_value_graph(&self.interface.values)?;
+        validate_value_graph(&self.interface.values)
+            .map_err(|error| format!("Widget {:?}: {error}", self.kind))?;
         Ok(())
     }
 
@@ -365,8 +367,12 @@ fn validate_value_graph(values: &[DesignType]) -> Result<(), String> {
         return Err("Too many value definitions".into());
     }
     let mut definitions = BTreeMap::new();
-    for value in values {
-        if !qualified_name(&value.qualified_name) || !rust_path(&value.rust_type) || definitions.insert(value.qualified_name.as_str(), value).is_some() {
+    for (index, value) in values.iter().enumerate() {
+        // Logical graph names and Rust source spellings have different grammars.
+        // Check every reachable definition, including types nested in the event.
+        neocogi_com::validate_rust_path(&value.rust_type)
+            .map_err(|error| format!("interface.values[{index}].rust_type ({:?}): {error}", value.qualified_name))?;
+        if !qualified_name(&value.qualified_name) || definitions.insert(value.qualified_name.as_str(), value).is_some() {
             return Err("Invalid or duplicate value definition".into());
         }
     }
@@ -466,27 +472,20 @@ fn validate_value_graph(values: &[DesignType]) -> Result<(), String> {
     Ok(())
 }
 
-/// Checks one generated Rust identifier before interpolating it into output.
+/// Checks one logical IDL graph name, independently of Rust binding spelling.
+/// These names are not interpolated source; keyword rules apply only to binding paths.
 fn identifier(value: &str) -> bool {
     let mut chars = value.chars();
     matches!(chars.next(), Some('a'..='z' | 'A'..='Z' | '_'))
         && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
-        && !matches!(value, "self" | "super" | "crate" | "Self" | "fn" | "mod" | "pub" | "use")
-}
-
-/// Allows only simple generated Rust paths, never injected source expressions.
-fn rust_path(path: &str) -> bool {
-    !path.is_empty() && path.split("::").all(identifier)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// A copied catalog description must retain exact typed metadata and reject
-    /// malformed versions, Rust paths, and nonfinite constructor defaults.
-    #[test]
-    fn manifest_round_trip_and_validation_guard_generated_bindings() {
+    /// Supplies one complete stream for validation-boundary tests.
+    fn counter_manifest() -> DesignWidgetManifest {
         let mut manifest = DesignWidgetManifest {
             version: DESIGN_DESCRIPTOR_VERSION,
             kind: "example.counter".into(),
@@ -515,6 +514,13 @@ mod tests {
                 fields: vec![],
             }]),
         });
+        manifest
+    }
+
+    /// A copied catalog description retains typed metadata and checks defaults.
+    #[test]
+    fn manifest_round_trip_and_validation_guard_generated_bindings() {
+        let manifest = counter_manifest();
         assert_eq!(DesignWidgetManifest::decode(&manifest.encode().unwrap()).unwrap(), manifest);
         let mut invalid = manifest.clone();
         invalid.version += 1;
@@ -526,6 +532,47 @@ mod tests {
         invalid.defaults[0].value = CustomValue::Number(f32::NAN);
         assert!(invalid.encode().is_err());
     }
+    /// Producers and COM consumers must apply the same complete binding-path grammar.
+    #[test]
+    fn rust_binding_paths_share_com_policy_and_report_the_metadata_field() {
+        for prefix in ["example_contracts", "example_contracts::r#type", "::example_contracts::r#gen"] {
+            let mut manifest = counter_manifest();
+            manifest.interface.rust_abi = format!("{prefix}::CounterAbi");
+            manifest.interface.values[0].rust_type = format!("{prefix}::CounterEvent");
+            assert_eq!(DesignWidgetManifest::decode(&manifest.encode().unwrap()).unwrap(), manifest);
+        }
+        for path in [
+            "api::type::Event", "api::match", "api::async", "api::gen", "api::", "api::::Event",
+            "crate::Event", "api::r#self", "api::Event<u32>", "api::Event; panic!()", "api::Évent", "api ::Event",
+            &"a".repeat(neocogi_com::NC_DESCRIPTOR_RUST_PATH_MAX_LEN + 1),
+        ] {
+            let reason = neocogi_com::validate_rust_path(path).unwrap_err().to_string();
+            for (field, is_interface) in [("interface.rust_abi", true), ("interface.values[0].rust_type", false)] {
+                let mut manifest = counter_manifest();
+                match is_interface {
+                    true => manifest.interface.rust_abi = path.into(),
+                    false => manifest.interface.values[0].rust_type = path.into(),
+                }
+                let error = manifest.encode().unwrap_err();
+                assert!(error.contains("example.counter") && error.contains(field) && error.contains(&reason), "{error}");
+                // An external producer can bypass encode, so decoding must enforce
+                // the identical rule on structurally valid, owned JSON storage.
+                let forged = serde_json::to_vec(&manifest).unwrap();
+                assert_eq!(DesignWidgetManifest::decode(&forged).unwrap_err(), error);
+            }
+        }
+    }
+
+    /// Logical names are graph identities; only explicit Rust bindings become source.
+    #[test]
+    fn logical_names_do_not_use_rust_keyword_rules() {
+        let mut manifest = counter_manifest();
+        manifest.interface.stream.as_mut().unwrap().message = "example.type".into();
+        manifest.interface.values[0].qualified_name = "example.type".into();
+        manifest.interface.values[0].rust_type = "example_contracts::r#type".into();
+        manifest.validate().unwrap();
+    }
+
     /// Recursive named edges are finite metadata, while inline cycles are invalid layouts.
     #[test]
     fn recursive_graph_requires_complete_definitions_and_real_indirection() {
