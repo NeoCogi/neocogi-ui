@@ -116,9 +116,9 @@ pub fn write_rust(data: &AssetData, destination: &Path) -> io::Result<()> {
 
 /// Formats one validated visual as generated Rust source with an explicit tagged patch.
 fn visual_source(value: AssetVisual) -> io::Result<String> {
-    let patch = AssetPatch::try_from(value.patch).map_err(|status| io::Error::other(status.to_string()))?;
+    let patch = value.patch;
     Ok(format!(
-        "AssetVisual {{ insets: {:?}, center_visible: {}, content_color: {}, patch: AssetPatch::{patch:?}.into() }}",
+        "AssetVisual {{ insets: {:?}, center_visible: {}, content_color: {}, patch: AssetPatch::{patch:?} }}",
         value.insets, value.center_visible, value.content_color
     ))
 }

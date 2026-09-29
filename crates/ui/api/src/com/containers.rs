@@ -180,11 +180,11 @@ impl Widget<LinearAbi> {
     }
     /// Returns the typed cross policy, rejecting any unknown external ABI tag.
     pub fn cross_size(&self) -> Result<CrossSize, NcStatus> {
-        CrossSize::try_from(self.interface.cross_size()?)
+        self.interface.cross_size()
     }
     /// Replaces the line's complete typed cross policy.
     pub fn set_cross_size(&mut self, cross: CrossSize) -> Result<(), NcStatus> {
-        self.interface.set_cross_size(cross.into())
+        self.interface.set_cross_size(cross)
     }
 }
 
@@ -195,7 +195,7 @@ enum Axis {
 }
 impl Axis {
     /// Executes the selected concrete copied-policy read.
-    fn copy(&self, grid: &ComPtr<GridAbi>, output: NcCopyToBufferOffset<'_, LayoutTrackAbi>) -> Result<u32, NcStatus> {
+    fn copy(&self, grid: &ComPtr<GridAbi>, output: NcCopyToBufferOffset<'_, LayoutTrack>) -> Result<u32, NcStatus> {
         match self {
             Self::Columns => grid.columns(output),
             Self::Rows => grid.rows(output),
@@ -204,11 +204,11 @@ impl Axis {
     /// Allocates an ordinary application snapshot without retaining plugin state.
     fn read(&self, grid: &ComPtr<GridAbi>) -> Result<Vec<LayoutTrack>, NcStatus> {
         let count = self.copy(grid, NcCopyToBufferOffset::new(0, &mut []))?;
-        let mut values = vec![LayoutTrack::Content.into(); count as usize];
+        let mut values = vec![LayoutTrack::Content; count as usize];
         if self.copy(grid, NcCopyToBufferOffset::new(0, &mut values))? != count {
             return Err(UI_E_BUSY);
         }
-        values.into_iter().map(LayoutTrack::try_from).collect()
+        Ok(values)
     }
 }
 impl Widget<GridAbi> {
@@ -218,8 +218,7 @@ impl Widget<GridAbi> {
     }
     /// Replaces every column policy after the plugin validates the complete sequence.
     pub fn set_columns(&mut self, tracks: &[LayoutTrack]) -> Result<(), NcStatus> {
-        let tracks = encoded_tracks(tracks);
-        self.interface.set_columns(NcCopyFromBufferOffset::new(0, &tracks))
+        self.interface.set_columns(NcCopyFromBufferOffset::new(0, tracks))
     }
     /// Copies the current row policies into application-owned typed values.
     pub fn rows(&self) -> Result<Vec<LayoutTrack>, NcStatus> {
@@ -227,14 +226,8 @@ impl Widget<GridAbi> {
     }
     /// Replaces every row policy while preserving child identities and Grid spans.
     pub fn set_rows(&mut self, tracks: &[LayoutTrack]) -> Result<(), NcStatus> {
-        let tracks = encoded_tracks(tracks);
-        self.interface.set_rows(NcCopyFromBufferOffset::new(0, &tracks))
+        self.interface.set_rows(NcCopyFromBufferOffset::new(0, tracks))
     }
-}
-
-/// Converts a complete local typed sequence to plain wire values for one synchronous bulk call.
-fn encoded_tracks(tracks: &[LayoutTrack]) -> Vec<LayoutTrackAbi> {
-    tracks.iter().copied().map(Into::into).collect()
 }
 
 impl WidgetFactory {
@@ -261,15 +254,13 @@ impl WidgetFactory {
     }
     /// Creates an empty directional container with one complete axis/cross configuration.
     pub fn linear(&self, direction: FlowDirection, cross: CrossSize) -> Result<LinearWidget, NcStatus> {
-        Ok(LinearWidget::from_interface(self.interface.create_linear(direction, cross.into())?))
+        Ok(LinearWidget::from_interface(self.interface.create_linear(direction, cross)?))
     }
     /// Creates an empty Grid with complete validated track policies on both axes.
     pub fn grid(&self, columns: &[LayoutTrack], rows: &[LayoutTrack]) -> Result<GridWidget, NcStatus> {
-        let columns = encoded_tracks(columns);
-        let rows = encoded_tracks(rows);
         Ok(GridWidget::from_interface(self.interface.create_grid(
-            NcCopyFromBufferOffset::new(0, &columns),
-            NcCopyFromBufferOffset::new(0, &rows),
+            NcCopyFromBufferOffset::new(0, columns),
+            NcCopyFromBufferOffset::new(0, rows),
         )?))
     }
 }

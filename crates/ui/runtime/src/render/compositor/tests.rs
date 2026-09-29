@@ -36,13 +36,13 @@ impl IRenderer for Recorder {
     /// Copies the live stream before borrowing assertion storage, keeping foreign calls reentrant.
     fn render(&self, info: RenderInfo, _: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         let mut vertices = vec![RenderVertex::default(); info.vertex_count as usize];
-        let mut records = vec![RenderBatch::Atlas { first: 0, count: 0 }.into(); info.batch_count as usize];
+        let mut records = vec![RenderBatch::Atlas { first: 0, count: 0 }; info.batch_count as usize];
         assert_eq!(
             stream.vertices(info.invocation, NcCopyToBufferOffset::new(0, &mut vertices))?,
             info.vertex_count
         );
         assert_eq!(stream.batches(info.invocation, NcCopyToBufferOffset::new(0, &mut records))?, info.batch_count);
-        let batches = records.into_iter().map(RenderBatch::try_from).collect::<Result<Vec<_>, _>>()?;
+        let batches = records;
         // Resolve every resource during the active scope. No resource-type registry or erased
         // application payload participates in this renderer fixture.
         for (index, batch) in batches.iter().enumerate() {

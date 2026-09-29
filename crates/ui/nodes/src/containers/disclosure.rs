@@ -513,9 +513,9 @@ fn prepare_children(
     // disclosure. The shared scalar model contains no parent or child object backpointer.
     let header = DisclosureHeader::create_com(host.clone(), variant.header_options(), model, label, variant, resources)?;
     let body = if let Some(resources) = resources {
-        super::Linear::create_com(host.clone(), resources.clone(), FlowDirection::TopToBottom, CrossSize::Stretch.into())?
+        super::Linear::create_com(host.clone(), resources.clone(), FlowDirection::TopToBottom, CrossSize::Stretch)?
     } else {
-        let value = super::Linear::build(host.clone(), FlowDirection::TopToBottom, CrossSize::Stretch.into(), None)?;
+        let value = super::Linear::build(host.clone(), FlowDirection::TopToBottom, CrossSize::Stretch, None)?;
         super::Linear::from_value(value).query().expect("Linear declares its callable class contract")
     };
     let editor = host.create_children()?;

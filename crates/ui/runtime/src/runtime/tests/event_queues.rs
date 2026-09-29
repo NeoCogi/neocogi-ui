@@ -292,7 +292,7 @@ fn composite_queues_report_outer_origins_without_retaining_their_children() {
     assert!(captured.same_object(&origin));
     assert!(captured.upgrade().unwrap().is_none());
     let neocogi_ui::combo::Event::Changed(selection) = event;
-    assert_eq!(ChoiceSelection::try_from(selection).unwrap(), ChoiceSelection::Selected(1));
+    assert_eq!(selection, ChoiceSelection::Selected(1));
 }
 
 /// Sends an ordinary key to the production runtime without directly invoking a port.

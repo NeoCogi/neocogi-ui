@@ -87,7 +87,7 @@ impl<Model: Behavior> IWidget for Composite<Model> {
         self.shell.node_interface()?.clear_flags(flags)
     }
     /// Uses the real widget input boundary rather than a fake runtime shortcut.
-    fn update(&mut self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
+    fn update(&mut self, state: WidgetUpdate, event: WidgetEvent, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
         self.shell.node_interface()?.update(state, event, text)
     }
     /// Drains ordinary sticky geometry invalidation.
@@ -113,7 +113,7 @@ impl<Model: Behavior> IContainerLayout for Composite<Model> {
         self.layout.place(scope, rect, service)
     }
     /// Retains ordinary filtering behavior for the real input traversal.
-    fn accepts_event(&self, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<bool, NcStatus> {
+    fn accepts_event(&self, event: WidgetEvent, text: NcCopyFromBufferOffset<'_, u8>) -> Result<bool, NcStatus> {
         self.layout.accepts_event(event, text)
     }
 }

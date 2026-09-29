@@ -35,7 +35,7 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
                     combo,
                     ChoiceSelection,
                     session_tx.clone(),
-                    |_queue, _origin, neocogi_ui::combo::Event::Changed(event)| ChoiceSelection::try_from(event).unwrap()
+                    |_queue, _origin, neocogi_ui::combo::Event::Changed(event)| event
                 )
                 .unwrap()
                 .as_com_ref(),
@@ -138,7 +138,7 @@ fn combo_choice_menu_uses_shared_submenu_navigation() {
                     combo,
                     ChoiceSelection,
                     session_tx.clone(),
-                    |_queue, _origin, neocogi_ui::combo::Event::Changed(event)| ChoiceSelection::try_from(event).unwrap()
+                    |_queue, _origin, neocogi_ui::combo::Event::Changed(event)| event
                 )
                 .unwrap()
                 .as_com_ref(),

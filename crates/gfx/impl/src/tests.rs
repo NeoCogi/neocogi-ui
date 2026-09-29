@@ -122,7 +122,7 @@ fn com_builder_matches_direct_pixels_metrics_and_resolved_visuals() {
         assert_eq!(a.insets, b.insets);
         assert_eq!(a.center_visible, b.center_visible);
         assert_eq!(a.content_color, b.content_color);
-        assert_eq!(AssetPatch::try_from(a.patch).unwrap(), AssetPatch::try_from(b.patch).unwrap());
+        assert_eq!(a.patch, b.patch);
     }
 }
 

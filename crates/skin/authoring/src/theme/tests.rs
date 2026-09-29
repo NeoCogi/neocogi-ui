@@ -125,7 +125,7 @@ fn assert_data_equivalent(left: &AssetData, right: &AssetData) {
         assert_eq!(left.insets, right.insets);
         assert_eq!(left.center_visible, right.center_visible);
         assert_eq!(left.content_color, right.content_color);
-        assert_eq!(AssetPatch::try_from(left.patch).unwrap(), AssetPatch::try_from(right.patch).unwrap());
+        assert_eq!(left.patch, right.patch);
     }
 }
 use neocogi_gfx_contracts::{ChromeRole, ControlRole, MenuRole};
@@ -942,7 +942,7 @@ fn complete_visual_fields_round_trip_and_override_only_the_selected_state() {
     assert_eq!(control.enabled.hovered.center_visible, 1);
     assert_eq!(control.enabled.normal.content_color, rgba(Color { r: 90, g: 80, b: 70, a: 255 }));
     assert_eq!(
-        AssetPatch::try_from(control.enabled.normal.patch).unwrap(),
+        control.enabled.normal.patch,
         AssetPatch::Flat {
             top_left: rgba(cells[0]),
             top: rgba(cells[1]),

@@ -79,17 +79,16 @@ fn generated_form_fields_preserve_widget_validation_silence_and_reload_lifetime(
         (&b"label"[..], 5, 1),
         (&b"label"[..], u32::MAX, 2),
     ] {
-        let entries: [ChoiceMenuEntryAbi; 1] = [ChoiceMenuEntry::Choice {
+        let entries: [ChoiceMenuEntry; 1] = [ChoiceMenuEntry::Choice {
             id: 0,
             label: MenuTextRange { first, count },
-        }
-        .into()];
+        }];
         assert!(
             combo
                 .replace_menu(
                     neocogi_com::NcCopyFromBufferOffset::new(0, text),
                     neocogi_com::NcCopyFromBufferOffset::new(0, &entries),
-                    ChoiceSelection::Selected(0).into(),
+                    ChoiceSelection::Selected(0),
                 )
                 .is_err()
         );

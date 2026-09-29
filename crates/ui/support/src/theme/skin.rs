@@ -277,7 +277,7 @@ fn pointer_visual_mut(values: &mut neocogi_ui_core_contracts::AssetPointerVisual
 /// Projects one canonical visual into the short-lived renderer-facing drawing vocabulary.
 fn visual(value: AssetVisual, atlas: &AtlasHandle) -> Visual {
     let insets = runtime_insets(value.insets);
-    let mut patch = match AssetPatch::try_from(value.patch).expect("validated asset patch tag") {
+    let mut patch = match value.patch {
         AssetPatch::Flat {
             top_left,
             top,

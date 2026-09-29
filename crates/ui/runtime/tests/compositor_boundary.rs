@@ -38,7 +38,7 @@ impl IRenderer for CaptureRenderer {
     /// Copies both bounded arrays while the invocation token is valid.
     fn render(&self, info: RenderInfo, atlas: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         let mut vertices = vec![RenderVertex::default(); info.vertex_count as usize];
-        let mut batches = vec![RenderBatch::Atlas { first: 0, count: 3 }.into(); info.batch_count as usize];
+        let mut batches = vec![RenderBatch::Atlas { first: 0, count: 3 }; info.batch_count as usize];
         let vertex_count = stream.vertices(info.invocation, NcCopyToBufferOffset::new(0, &mut vertices))?;
         let batch_count = stream.batches(info.invocation, NcCopyToBufferOffset::new(0, &mut batches))?;
         self.observation.vertices.set(vertex_count);

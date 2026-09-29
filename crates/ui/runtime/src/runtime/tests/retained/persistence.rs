@@ -144,8 +144,8 @@ impl neocogi_com::persistence::IPersistenceFactory for SettingsFactory {
                 0,
                 &button,
                 LinearEdge {
-                    main: LayoutTrack::Fixed { extent: 32 }.into(),
-                    cross: ChildCrossSize::Stretch.into(),
+                    main: LayoutTrack::Fixed { extent: 32 },
+                    cross: ChildCrossSize::Stretch,
                 },
             )?
             .finish()?;
@@ -153,8 +153,8 @@ impl neocogi_com::persistence::IPersistenceFactory for SettingsFactory {
                 1,
                 &checkbox,
                 LinearEdge {
-                    main: LayoutTrack::Fixed { extent: 32 }.into(),
-                    cross: ChildCrossSize::Stretch.into(),
+                    main: LayoutTrack::Fixed { extent: 32 },
+                    cross: ChildCrossSize::Stretch,
                 },
             )?
             .finish()

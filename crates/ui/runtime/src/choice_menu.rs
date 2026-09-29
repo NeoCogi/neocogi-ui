@@ -11,7 +11,7 @@ use neocogi_com::{
     com_object,
 };
 use neocogi_ui_core_contracts::{
-    ChoiceMenuEntry, ChoiceMenuEntryAbi, ChoiceSelection, ChoiceSelectionAbi, IChoiceMenu, IChoiceMenuAbi, IChoiceMenuVtblFor, MenuTextRange, Rect,
+    ChoiceMenuEntry, ChoiceSelection, IChoiceMenu, IChoiceMenuAbi, IChoiceMenuVtblFor, MenuTextRange, Rect,
 };
 
 /// Maximum accepted branch nesting, keeping foreign preorder input bounded on the native stack.
@@ -69,11 +69,11 @@ pub(crate) trait IChoiceMenuState {
     /// Returns a revision changed by hierarchy labels or committed selection.
     fn revision(&self) -> Result<u64, NcStatus>;
     /// Returns the explicit optional committed leaf identity.
-    fn selection(&self) -> Result<ChoiceSelectionAbi, NcStatus>;
+    fn selection(&self) -> Result<ChoiceSelection, NcStatus>;
     /// Copies the hierarchy's shared UTF-8 storage for rebuilding its menu projection.
     fn menu_text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
     /// Copies a requested preorder entry range and returns the complete entry count.
-    fn menu_entries(&self, output: NcCopyToBufferOffset<'_, ChoiceMenuEntryAbi>) -> Result<u32, NcStatus>;
+    fn menu_entries(&self, output: NcCopyToBufferOffset<'_, ChoiceMenuEntry>) -> Result<u32, NcStatus>;
     /// Returns the number of retained display labels.
     fn choice_count(&self) -> Result<u64, NcStatus>;
     /// Copies one exact display label after strict range validation.
@@ -82,11 +82,11 @@ pub(crate) trait IChoiceMenuState {
     fn replace_menu(
         &mut self,
         menu_text: NcCopyFromBufferOffset<'_, u8>,
-        entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
-        selection: ChoiceSelectionAbi,
+        entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntry>,
+        selection: ChoiceSelection,
     ) -> Result<bool, NcStatus>;
     /// Silently replaces the optional committed selection without clamping.
-    fn set_selection(&mut self, selection: ChoiceSelectionAbi) -> Result<bool, NcStatus>;
+    fn set_selection(&mut self, selection: ChoiceSelection) -> Result<bool, NcStatus>;
     /// Applies one typed header intent and captures a valid screen-space anchor when opening.
     fn request_popup(&mut self, intent: ChoicePopupIntent, anchor: Rect) -> Result<(), NcStatus>;
     /// Reconciles semantic lifecycle with actual generic-popup visibility.
@@ -105,7 +105,7 @@ pub(crate) struct ChoiceMenuState {
     /// Shared UTF-8 storage referenced by every checked preorder entry.
     menu_text: String,
     /// Authoritative preorder hierarchy with explicit direct-child counts.
-    entries: Vec<ChoiceMenuEntryAbi>,
+    entries: Vec<ChoiceMenuEntry>,
     /// Committed stable leaf identity; `None` remains distinct from every `u64` value.
     selection: Option<u64>,
     /// Monotonic semantic revision used to invalidate transient popup candidates.
@@ -122,7 +122,7 @@ impl ChoiceMenuState {
     /// Validates selection before allocating the private COM state identity.
     pub(crate) fn create(
         menu_text: String,
-        entries: Vec<ChoiceMenuEntryAbi>,
+        entries: Vec<ChoiceMenuEntry>,
         selection: Option<u64>,
         queue: Option<ComPtr<IChoiceMenuEventQueueAbi>>,
     ) -> Result<ComPtr<IChoiceMenuStateAbi>, NcStatus> {
@@ -210,7 +210,7 @@ impl IChoiceMenuState for ChoiceMenuState {
     }
 
     /// Encodes structural absence without manufacturing an in-band index sentinel.
-    fn selection(&self) -> Result<ChoiceSelectionAbi, NcStatus> {
+    fn selection(&self) -> Result<ChoiceSelection, NcStatus> {
         Ok(encode_selection(self.selection))
     }
 
@@ -220,7 +220,7 @@ impl IChoiceMenuState for ChoiceMenuState {
     }
 
     /// Copies only the requested suffix while reporting complete preorder cardinality.
-    fn menu_entries(&self, mut output: NcCopyToBufferOffset<'_, ChoiceMenuEntryAbi>) -> Result<u32, NcStatus> {
+    fn menu_entries(&self, mut output: NcCopyToBufferOffset<'_, ChoiceMenuEntry>) -> Result<u32, NcStatus> {
         let offset = usize::try_from(output.offset()).map_err(|_| NC_E_INVALID_ARG)?;
         let source = self.entries.get(offset..).ok_or(NC_E_INVALID_ARG)?;
         for (target, entry) in output.as_mut_slice().iter_mut().zip(source) {
@@ -245,11 +245,11 @@ impl IChoiceMenuState for ChoiceMenuState {
     fn replace_menu(
         &mut self,
         menu_text: NcCopyFromBufferOffset<'_, u8>,
-        entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
-        selection: ChoiceSelectionAbi,
+        entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntry>,
+        selection: ChoiceSelection,
     ) -> Result<bool, NcStatus> {
         let (menu_text, entries) = copied_menu(menu_text, entries)?;
-        let selection = decoded_selection(selection)?;
+        let selection = decoded_selection(selection);
         validate_menu(&menu_text, &entries, selection)?;
         if self.menu_text == menu_text && self.entries == entries && self.selection == selection {
             return Ok(false);
@@ -263,8 +263,8 @@ impl IChoiceMenuState for ChoiceMenuState {
     }
 
     /// Replaces selection only after validating it against the current item sequence.
-    fn set_selection(&mut self, selection: ChoiceSelectionAbi) -> Result<bool, NcStatus> {
-        let selection = decoded_selection(selection)?;
+    fn set_selection(&mut self, selection: ChoiceSelection) -> Result<bool, NcStatus> {
+        let selection = decoded_selection(selection);
         validate_selection(selection, &self.menu_text, &self.entries)?;
         if self.selection == selection {
             return Ok(false);
@@ -306,7 +306,7 @@ impl IChoiceMenuState for ChoiceMenuState {
         // Commit the complete popup transition before entering even a pure mapper.
         if changed {
             self.changed_event
-                .post(&neocogi_ui_core_contracts::IChoiceMenuEvent::Changed(ChoiceSelection::Selected(id).into()))?;
+                .post(&neocogi_ui_core_contracts::IChoiceMenuEvent::Changed(ChoiceSelection::Selected(id)))?;
         }
         Ok(self.revision)
     }
@@ -328,7 +328,7 @@ impl IChoiceMenuState for ChoiceMenuState {
 
 impl IChoiceMenu for ChoiceMenuState {
     /// Returns the exact optional stable identity from the authoritative menu model.
-    fn selection(&self) -> Result<ChoiceSelectionAbi, NcStatus> {
+    fn selection(&self) -> Result<ChoiceSelection, NcStatus> {
         <Self as IChoiceMenuState>::selection(self)
     }
 
@@ -355,14 +355,14 @@ impl IChoiceMenu for ChoiceMenuState {
     fn replace(
         &mut self,
         menu_text: NcCopyFromBufferOffset<'_, u8>,
-        entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
-        selection: ChoiceSelectionAbi,
+        entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntry>,
+        selection: ChoiceSelection,
     ) -> Result<(), NcStatus> {
         <Self as IChoiceMenuState>::replace_menu(self, menu_text, entries, selection).map(|_| ())
     }
 
     /// Silently commits one checked optional leaf identity.
-    fn set_selection(&mut self, selection: ChoiceSelectionAbi) -> Result<(), NcStatus> {
+    fn set_selection(&mut self, selection: ChoiceSelection) -> Result<(), NcStatus> {
         <Self as IChoiceMenuState>::set_selection(self, selection).map(|_| ())
     }
 
@@ -391,11 +391,10 @@ impl IChoiceMenu for ChoiceMenuState {
 pub(crate) fn choice_menu(state: &ComPtr<IChoiceMenuStateAbi>) -> Result<Menu, NcStatus> {
     let menu_text = state.menu_text()?.to_string()?;
     let count = usize::try_from(state.menu_entries(NcCopyToBufferOffset::new(0, &mut []))?).map_err(|_| NC_E_INVALID_ARG)?;
-    let placeholder: ChoiceMenuEntryAbi = ChoiceMenuEntry::Choice {
+    let placeholder: ChoiceMenuEntry = ChoiceMenuEntry::Choice {
         id: 0,
         label: MenuTextRange { first: 0, count: 0 },
-    }
-    .into();
+    };
     let mut entries = vec![placeholder; count];
     let copied = state.menu_entries(NcCopyToBufferOffset::new(0, &mut entries))?;
     if usize::try_from(copied).ok() != Some(count) {
@@ -443,7 +442,7 @@ impl ChoiceMenuController {
         let presentation_changed = revision != self.observed_revision;
         if presentation_changed {
             let menu = choice_menu(&self.state)?;
-            let committed = decoded_selection(self.state.selection()?)?;
+            let committed = decoded_selection(self.state.selection()?);
             manager.replace_choice_popup(&self.popup, menu, committed).map_err(surface_status)?;
             self.observed_revision = revision;
         }
@@ -520,24 +519,24 @@ fn surface_status(error: SurfaceMutationError) -> NcStatus {
 }
 
 /// Encodes optional selection with a tagged absence variant rather than a sentinel identity.
-pub(crate) fn encode_selection(selection: Option<u64>) -> ChoiceSelectionAbi {
+pub(crate) fn encode_selection(selection: Option<u64>) -> ChoiceSelection {
     match selection {
         Some(id) => ChoiceSelection::Selected(id),
         None => ChoiceSelection::None,
     }
-    .into()
 }
 
-/// Decodes the public tagged selection and rejects unknown discriminants.
-pub(crate) fn decoded_selection(selection: ChoiceSelectionAbi) -> Result<Option<u64>, NcStatus> {
-    match ChoiceSelection::try_from(selection).map_err(|_| NC_E_INVALID_ARG)? {
-        ChoiceSelection::None => Ok(None),
-        ChoiceSelection::Selected(id) => Ok(Some(id)),
+/// Converts a checked native selection to the runtime optional identity.
+/// Foreign discriminants have already been validated by the COM thunk.
+pub(crate) fn decoded_selection(selection: ChoiceSelection) -> Option<u64> {
+    match selection {
+        ChoiceSelection::None => None,
+        ChoiceSelection::Selected(id) => Some(id),
     }
 }
 
 /// Validates one optional identity against every selectable leaf in the hierarchy.
-fn validate_selection(selection: Option<u64>, text: &str, entries: &[ChoiceMenuEntryAbi]) -> Result<(), NcStatus> {
+fn validate_selection(selection: Option<u64>, text: &str, entries: &[ChoiceMenuEntry]) -> Result<(), NcStatus> {
     match selection {
         Some(id) if choice_label(text, entries, id).is_none() => Err(NC_E_INVALID_ARG),
         Some(_) | None => Ok(()),
@@ -547,8 +546,8 @@ fn validate_selection(selection: Option<u64>, text: &str, entries: &[ChoiceMenuE
 /// Validates shared UTF-8 storage and copies the complete serialized hierarchy atomically.
 pub(crate) fn copied_menu(
     menu_text: NcCopyFromBufferOffset<'_, u8>,
-    entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
-) -> Result<(String, Vec<ChoiceMenuEntryAbi>), NcStatus> {
+    entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntry>,
+) -> Result<(String, Vec<ChoiceMenuEntry>), NcStatus> {
     if menu_text.offset() != 0 || entries.offset() != 0 {
         return Err(NC_E_INVALID_ARG);
     }
@@ -568,18 +567,18 @@ fn ranged_text(text: &str, range: MenuTextRange) -> Option<&str> {
 }
 
 /// Counts selectable leaves without creating a parallel flattened collection.
-fn choice_count(entries: &[ChoiceMenuEntryAbi]) -> usize {
+fn choice_count(entries: &[ChoiceMenuEntry]) -> usize {
     entries
         .iter()
-        .filter(|entry| matches!(ChoiceMenuEntry::try_from(**entry), Ok(ChoiceMenuEntry::Choice { .. })))
+        .filter(|entry| matches!(entry, ChoiceMenuEntry::Choice { .. }))
         .count()
 }
 
 /// Resolves one preorder leaf ordinal directly from the authoritative serialized entries.
-fn choice_at<'a>(text: &'a str, entries: &[ChoiceMenuEntryAbi], ordinal: usize) -> Option<&'a str> {
+fn choice_at<'a>(text: &'a str, entries: &[ChoiceMenuEntry], ordinal: usize) -> Option<&'a str> {
     entries
         .iter()
-        .filter_map(|entry| match ChoiceMenuEntry::try_from(*entry).ok()? {
+        .filter_map(|entry| match *entry {
             ChoiceMenuEntry::Choice { label, .. } => ranged_text(text, label),
             ChoiceMenuEntry::Submenu { .. } => None,
         })
@@ -587,15 +586,15 @@ fn choice_at<'a>(text: &'a str, entries: &[ChoiceMenuEntryAbi], ordinal: usize) 
 }
 
 /// Resolves a stable leaf identity independently from its label and hierarchy position.
-fn choice_label<'a>(text: &'a str, entries: &[ChoiceMenuEntryAbi], selected: u64) -> Option<&'a str> {
-    entries.iter().find_map(|entry| match ChoiceMenuEntry::try_from(*entry).ok()? {
+fn choice_label<'a>(text: &'a str, entries: &[ChoiceMenuEntry], selected: u64) -> Option<&'a str> {
+    entries.iter().find_map(|entry| match *entry {
         ChoiceMenuEntry::Choice { id, label } if id == selected => ranged_text(text, label),
         ChoiceMenuEntry::Choice { .. } | ChoiceMenuEntry::Submenu { .. } => None,
     })
 }
 
-/// Validates tags, ranges, direct-child counts, unique leaf identities, and selection together.
-fn validate_menu(text: &str, entries: &[ChoiceMenuEntryAbi], selection: Option<u64>) -> Result<(), NcStatus> {
+/// Validates ranges, direct-child counts, unique leaf identities, and selection together.
+fn validate_menu(text: &str, entries: &[ChoiceMenuEntry], selection: Option<u64>) -> Result<(), NcStatus> {
     let mut ids = std::collections::HashSet::new();
     let mut index = 0;
     while index < entries.len() {
@@ -605,8 +604,8 @@ fn validate_menu(text: &str, entries: &[ChoiceMenuEntryAbi], selection: Option<u
 }
 
 /// Validates one preorder node and returns the first entry after all of its descendants.
-fn validate_node(text: &str, entries: &[ChoiceMenuEntryAbi], index: usize, depth: usize, ids: &mut std::collections::HashSet<u64>) -> Result<usize, NcStatus> {
-    let entry = ChoiceMenuEntry::try_from(*entries.get(index).ok_or(NC_E_INVALID_ARG)?).map_err(|_| NC_E_INVALID_ARG)?;
+fn validate_node(text: &str, entries: &[ChoiceMenuEntry], index: usize, depth: usize, ids: &mut std::collections::HashSet<u64>) -> Result<usize, NcStatus> {
+    let entry = *entries.get(index).ok_or(NC_E_INVALID_ARG)?;
     match entry {
         ChoiceMenuEntry::Choice { id, label } => {
             ranged_text(text, label).ok_or(NC_E_INVALID_ARG)?;
@@ -630,7 +629,7 @@ fn validate_node(text: &str, entries: &[ChoiceMenuEntryAbi], index: usize, depth
 }
 
 /// Converts the checked preorder model into the manager's shared recursive menu declaration.
-fn native_menu(text: &str, entries: &[ChoiceMenuEntryAbi]) -> Result<Menu, NcStatus> {
+fn native_menu(text: &str, entries: &[ChoiceMenuEntry]) -> Result<Menu, NcStatus> {
     validate_menu(text, entries, None)?;
     let mut menu = Menu::new("");
     let mut index = 0;
@@ -643,8 +642,8 @@ fn native_menu(text: &str, entries: &[ChoiceMenuEntryAbi]) -> Result<Menu, NcSta
 }
 
 /// Converts one node and its exact descendants without reconstructing parent indices.
-fn native_entry(text: &str, entries: &[ChoiceMenuEntryAbi], index: usize) -> Result<(MenuEntry, usize), NcStatus> {
-    match ChoiceMenuEntry::try_from(*entries.get(index).ok_or(NC_E_INVALID_ARG)?).map_err(|_| NC_E_INVALID_ARG)? {
+fn native_entry(text: &str, entries: &[ChoiceMenuEntry], index: usize) -> Result<(MenuEntry, usize), NcStatus> {
+    match *entries.get(index).ok_or(NC_E_INVALID_ARG)? {
         ChoiceMenuEntry::Choice { id, label } => Ok((
             MenuEntry::Choice {
                 id,
@@ -679,7 +678,7 @@ mod tests {
             (1, MenuTextRange { first: 5, count: 6 }),
             (2, MenuTextRange { first: 11, count: 6 }),
         ]
-        .map(|(id, label)| ChoiceMenuEntry::Choice { id, label }.into())
+        .map(|(id, label)| ChoiceMenuEntry::Choice { id, label })
         .to_vec();
         ChoiceMenuState {
             menu_text,
@@ -723,8 +722,7 @@ mod tests {
         let entries = [ChoiceMenuEntry::Choice {
             id: 7,
             label: MenuTextRange { first: 0, count: 5 },
-        }
-        .into()];
+        }];
         let result = state.replace_menu(
             NcCopyFromBufferOffset::new(0, text),
             NcCopyFromBufferOffset::new(0, &entries),
@@ -747,13 +745,11 @@ mod tests {
             ChoiceMenuEntry::Choice {
                 id: 0,
                 label: MenuTextRange { first: 0, count: 7 },
-            }
-            .into(),
+            },
             ChoiceMenuEntry::Choice {
                 id: 1,
                 label: MenuTextRange { first: 7, count: 9 },
-            }
-            .into(),
+            },
         ];
         state
             .replace_menu(
@@ -773,34 +769,29 @@ mod tests {
             ChoiceMenuEntry::Submenu {
                 label: MenuTextRange { first: 0, count: 6 },
                 children: 2,
-            }
-            .into(),
+            },
             ChoiceMenuEntry::Choice {
                 id: 9,
                 label: MenuTextRange { first: 6, count: 4 },
-            }
-            .into(),
+            },
         ];
         assert_eq!(validate_menu(text, &missing_child, Some(9)), Err(NC_E_INVALID_ARG));
 
         let empty_branch = [ChoiceMenuEntry::Submenu {
             label: MenuTextRange { first: 0, count: 6 },
             children: 0,
-        }
-        .into()];
+        }];
         assert_eq!(validate_menu(text, &empty_branch, None), Err(NC_E_INVALID_ARG));
 
         let duplicate_ids = [
             ChoiceMenuEntry::Choice {
                 id: 9,
                 label: MenuTextRange { first: 6, count: 4 },
-            }
-            .into(),
+            },
             ChoiceMenuEntry::Choice {
                 id: 9,
                 label: MenuTextRange { first: 6, count: 4 },
-            }
-            .into(),
+            },
         ];
         assert_eq!(validate_menu(text, &duplicate_ids, Some(9)), Err(NC_E_INVALID_ARG));
     }

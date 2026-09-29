@@ -106,7 +106,7 @@ impl IWidget for TestContainer {
         self.state.clear_flags(flags)
     }
     /// This fixture's layout inputs change through setters only.
-    fn update(&mut self, _state: WidgetUpdate, _event: WidgetEventAbi, _text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
+    fn update(&mut self, _state: WidgetUpdate, _event: WidgetEvent, _text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
         self.state.writable()?;
         Ok(GeometryChange::NoChange)
     }
@@ -183,7 +183,7 @@ impl IContainerLayout for TestContainer {
         Ok(ContainerGeometry::new(rect))
     }
     /// Concrete application policy can filter an event after geometric target selection.
-    fn accepts_event(&self, _event: WidgetEventAbi, _text: NcCopyFromBufferOffset<'_, u8>) -> Result<bool, NcStatus> {
+    fn accepts_event(&self, _event: WidgetEvent, _text: NcCopyFromBufferOffset<'_, u8>) -> Result<bool, NcStatus> {
         Ok(false)
     }
 }
@@ -389,7 +389,7 @@ fn builtin_linear_reuses_track_resolution_and_validates_edges_before_mounting() 
     assert!(a.latest.get().unwrap().screen.x > b.latest.get().unwrap().screen.x);
     assert!(b.latest.get().unwrap().screen.x > c.latest.get().unwrap().screen.x);
     assert_eq!(a.latest.get().unwrap().screen.width, 40);
-    assert_eq!(LayoutTrack::try_from(row.edge(0).unwrap().main).unwrap(), LayoutTrack::Fixed { extent: 40 });
+    assert_eq!(row.edge(0).unwrap().main, LayoutTrack::Fixed { extent: 40 });
     assert_eq!(row.set_cross_size(CrossSize::Fixed { extent: -1 }), Err(NC_E_INVALID_ARG));
     assert_eq!(row.cross_size().unwrap(), CrossSize::Stretch);
     let (renderer, _) = renderer();
@@ -463,7 +463,7 @@ fn builtin_container_commits_replacement_metadata_before_reporting_failed_teardo
     let outcome = row.replace(0, &second, LinearEdge::new(LayoutTrack::Fixed { extent: 90 })).unwrap();
     assert_eq!(outcome.finish(), Err(NC_E_INVALID_ARG));
     assert_eq!(replacement.close_mount_result.get(), Some(Err(NC_E_BUSY)));
-    assert_eq!(LayoutTrack::try_from(row.edge(0).unwrap().main).unwrap(), LayoutTrack::Fixed { extent: 90 });
+    assert_eq!(row.edge(0).unwrap().main, LayoutTrack::Fixed { extent: 90 });
     runtime.update(SIZE).unwrap();
     assert_eq!(replacement.latest.get().unwrap().screen.width, 90);
     assert_eq!(previous.closes.get(), 1);
@@ -557,10 +557,10 @@ fn nested_com_scroll_areas_preserve_boundary_bubbling() {
     assert!(inner.info().unwrap().maximum.y > 0);
     assert!(outer.info().unwrap().maximum.y > 0);
     runtime
-        .input(UiInput::Pointer(Point { x: 100, y: 100 }).into(), NcCopyFromBufferOffset::new(0, &[]))
+        .input(UiInput::Pointer(Point { x: 100, y: 100 }), NcCopyFromBufferOffset::new(0, &[]))
         .unwrap();
     runtime
-        .input(UiInput::Scroll(Point { x: 0, y: 20 }).into(), NcCopyFromBufferOffset::new(0, &[]))
+        .input(UiInput::Scroll(Point { x: 0, y: 20 }), NcCopyFromBufferOffset::new(0, &[]))
         .unwrap();
     runtime.update(SIZE).unwrap();
     assert!(inner.info().unwrap().requested.y > 0);
@@ -568,7 +568,7 @@ fn nested_com_scroll_areas_preserve_boundary_bubbling() {
     inner.scroll_to_end().unwrap();
     runtime.update(SIZE).unwrap();
     runtime
-        .input(UiInput::Scroll(Point { x: 0, y: 20 }).into(), NcCopyFromBufferOffset::new(0, &[]))
+        .input(UiInput::Scroll(Point { x: 0, y: 20 }), NcCopyFromBufferOffset::new(0, &[]))
         .unwrap();
     runtime.update(SIZE).unwrap();
     let end = inner.info().unwrap();
@@ -620,8 +620,7 @@ fn disclosure_com_header_controls_the_actual_body_without_a_parent_backpointer()
                     pressed: true,
                     repeat: false,
                     modifiers: 0,
-                })
-                .into(),
+                }),
                 NcCopyFromBufferOffset::new(0, &[]),
             )
             .unwrap();
@@ -687,13 +686,12 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
                 pressed: true,
                 repeat: false,
                 modifiers: 0,
-            })
-            .into(),
+            }),
             NcCopyFromBufferOffset::new(0, &[]),
         )
         .unwrap();
     runtime.update(SIZE).unwrap();
-    runtime.input(UiInput::Text.into(), NcCopyFromBufferOffset::new(0, "é".as_bytes())).unwrap();
+    runtime.input(UiInput::Text, NcCopyFromBufferOffset::new(0, "é".as_bytes())).unwrap();
     runtime.update(SIZE).unwrap();
     assert_eq!(area.text().unwrap(), "aé☃\nb\n");
     runtime
@@ -704,8 +702,7 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
                 pressed: true,
                 repeat: false,
                 modifiers: 0,
-            })
-            .into(),
+            }),
             NcCopyFromBufferOffset::new(0, &[]),
         )
         .unwrap();

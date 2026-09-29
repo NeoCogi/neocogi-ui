@@ -391,7 +391,7 @@ impl FileDialog {
         let mut shell = crate::Linear::build(
             nodes.host.clone(),
             FlowDirection::TopToBottom,
-            CrossSize::Stretch.into(),
+            CrossSize::Stretch,
             Some(&nodes.resources),
         )?;
         for (index, (child, track)) in [
@@ -721,7 +721,7 @@ impl IWidget for FileDialog {
         IWidget::clear_flags(&mut self.shell, flags)
     }
     /// Directly runs the root layout's validated input phase, without a second COM call.
-    fn update(&mut self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
+    fn update(&mut self, state: WidgetUpdate, event: WidgetEvent, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
         IWidget::update(&mut self.shell, state, event, text)
     }
     /// Drains the one authoritative geometry marker.
@@ -747,7 +747,7 @@ impl IContainerLayout for FileDialog {
         IContainerLayout::place(&mut self.shell, scope, rect, service)
     }
     /// Preserves ordinary root event filtering without borrowing another object.
-    fn accepts_event(&self, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<bool, NcStatus> {
+    fn accepts_event(&self, event: WidgetEvent, text: NcCopyFromBufferOffset<'_, u8>) -> Result<bool, NcStatus> {
         IContainerLayout::accepts_event(&self.shell, event, text)
     }
 }

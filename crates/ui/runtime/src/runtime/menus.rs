@@ -213,17 +213,16 @@ impl IMenuItem for Item {
         self.edit(Edit::Enabled(enabled))
     }
     /// Encodes the exact native persistent role without conflating unchecked and unmarked.
-    fn mark(&self) -> Result<MenuMarkAbi, NcStatus> {
+    fn mark(&self) -> Result<MenuMark, NcStatus> {
         Ok(match self.read()?.mark {
             crate::MenuItemMark::None => MenuMark::None,
             crate::MenuItemMark::Checked(checked) => MenuMark::Checked { checked },
             crate::MenuItemMark::Radio(selected) => MenuMark::Radio { selected },
-        }
-        .into())
+        })
     }
     /// Validates a complete concrete marker before applying its presentation change.
-    fn set_mark(&self, mark: MenuMarkAbi) -> Result<(), NcStatus> {
-        self.edit(Edit::Mark(match MenuMark::try_from(mark)? {
+    fn set_mark(&self, mark: MenuMark) -> Result<(), NcStatus> {
+        self.edit(Edit::Mark(match mark {
             MenuMark::None => crate::MenuItemMark::None,
             MenuMark::Checked { checked } => crate::MenuItemMark::Checked(checked),
             MenuMark::Radio { selected } => crate::MenuItemMark::Radio(selected),

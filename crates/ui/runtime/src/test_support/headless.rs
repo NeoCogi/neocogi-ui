@@ -31,13 +31,13 @@ impl IRenderer for CaptureRenderer {
     /// Reads complete arrays while the token is live, then publishes copied observations.
     fn render(&self, info: RenderInfo, _image: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         let mut vertices = vec![RenderVertex::default(); info.vertex_count as usize];
-        let mut records = vec![RenderBatch::Atlas { first: 0, count: 0 }.into(); info.batch_count as usize];
+        let mut records = vec![RenderBatch::Atlas { first: 0, count: 0 }; info.batch_count as usize];
         assert_eq!(
             stream.vertices(info.invocation, NcCopyToBufferOffset::new(0, &mut vertices))?,
             info.vertex_count
         );
         assert_eq!(stream.batches(info.invocation, NcCopyToBufferOffset::new(0, &mut records))?, info.batch_count);
-        let batches = records.into_iter().map(RenderBatch::try_from).collect::<Result<Vec<_>, _>>()?;
+        let batches = records;
         // No observation borrow survives a foreign stream call. This also permits deliberately
         // reentrant renderer fixtures to be added without changing the production path.
         let mut frame = self.frame.borrow_mut();

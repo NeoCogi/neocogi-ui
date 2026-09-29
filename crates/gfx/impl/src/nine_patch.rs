@@ -52,7 +52,7 @@ pub(super) fn expand(destination: Rect, draw: NinePatchDraw, white: Rect, icons:
     }
 
     let destinations = partition_rectangle(destination, draw.insets);
-    let (sources, colors) = match AssetPatch::try_from(draw.patch).map_err(|_| NC_E_INVALID_ARG)? {
+    let (sources, colors) = match draw.patch {
         AssetPatch::Flat {
             top_left,
             top,

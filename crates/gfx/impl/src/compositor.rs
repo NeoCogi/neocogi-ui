@@ -13,7 +13,7 @@ use neocogi_gfx_contracts::*;
 use neocogi_gfx_support::AssetTables;
 use neocogi_renderer_contracts::{
     IRenderItemAbi, IRenderStream, IRenderStreamAbi, IRenderStreamVtblFor, IRgbaImageAbi, IRendererAbi, ITextureAbi, MAX_RENDER_BATCHES,
-    MAX_RENDER_VERTICES, RenderBatch, RenderBatchAbi, RenderInfo, RenderVertex,
+    MAX_RENDER_VERTICES, RenderBatch, RenderInfo, RenderVertex,
 };
 use std::{
     cell::{Cell, RefCell},
@@ -102,13 +102,12 @@ enum Batch {
 
 impl Batch {
     /// Copies pointer-free metadata for the renderer's bulk stream traversal.
-    fn record(&self) -> RenderBatchAbi {
+    fn record(&self) -> RenderBatch {
         match self {
             Self::Atlas { first, count } => RenderBatch::Atlas { first: *first, count: *count },
             Self::Texture { first, .. } => RenderBatch::Texture { first: *first },
             Self::Item { rect, clip, .. } => RenderBatch::Item { rect: *rect, clip: *clip },
         }
-        .into()
     }
 }
 
@@ -166,7 +165,7 @@ impl IRenderStream for Stream {
     }
 
     /// Copies pointer-free batch records without invoking retained resources under a borrow.
-    fn batches(&self, invocation: u64, mut output: NcCopyToBufferOffset<'_, RenderBatchAbi>) -> Result<u32, NcStatus> {
+    fn batches(&self, invocation: u64, mut output: NcCopyToBufferOffset<'_, RenderBatch>) -> Result<u32, NcStatus> {
         self.storage.check(invocation)?;
         let first = usize::try_from(output.offset()).map_err(|_| NC_E_INVALID_ARG)?;
         let batches = self.storage.batches.try_borrow().map_err(|_| NC_E_BUSY)?;

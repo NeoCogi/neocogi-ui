@@ -132,8 +132,7 @@ fn framed(insets: Insets, border: Color, fill: Option<Color>) -> AssetVisual {
             bottom_left: border,
             bottom: border,
             bottom_right: border,
-        }
-        .into(),
+        },
     }
 }
 

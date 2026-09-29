@@ -7,12 +7,10 @@
 
 pub use neocogi_renderer_contracts::{
     Color, IRenderDiagnostics, IRenderDiagnosticsAbi, IRenderItem, IRenderItemAbi, IRenderStream, IRenderStreamAbi, IRenderer, IRendererAbi, IRgbaImage,
-    IRgbaImageAbi, ITexture, ITextureAbi, ITextureFactory, ITextureFactoryAbi, MAX_IMAGE_BYTES, MAX_RENDER_BATCHES, MAX_RENDER_VERTICES, Rect, RenderBatch,
-    RenderBatchAbi, RenderBatchTag, RenderInfo, RenderVertex, Size, TextureRegion, color, rgba_bytes,
+    IRgbaImageAbi, ITexture, ITextureAbi, ITextureFactory, ITextureFactoryAbi, MAX_IMAGE_BYTES, MAX_RENDER_BATCHES, MAX_RENDER_VERTICES, Rect, RenderBatch, RenderInfo, RenderVertex, Size, TextureRegion, color, rgba_bytes,
 };
 pub use neocogi_platform_contracts::{
-    IInputSink, IInputSinkAbi, IPlatformWindow, IPlatformWindowAbi, KeyCode, KeyStroke, Platform, PlatformAbi, Point, PollStatus, TextInputArea,
-    TextInputAreaAbi, TextInputAreaTag, UiInput, UiInputAbi, UiInputTag,
+    IInputSink, IInputSinkAbi, IPlatformWindow, IPlatformWindowAbi, KeyCode, KeyStroke, Platform, PlatformAbi, Point, PollStatus, TextInputArea, UiInput,
 };
 pub use neocogi_ui_core_contracts::*;
 /// Complete generated built-in node contract namespace, including its distinct module metadata.
@@ -23,8 +21,7 @@ pub use neocogi_ui_nodes_contracts::{
     TextAreaEventBinding, CheckboxEventBinding, TextboxEventBinding, SliderEventBinding, NumberEventBinding, ListItemEventBinding, ListBoxEventBinding,
     ScrollbarEventBinding, ButtonEventBinding, ComboEventBinding, SplitViewEventBinding, ComboEventQueueAbi, ButtonEventQueueAbi, CheckboxEventQueueAbi,
     TextboxEventQueueAbi, TextAreaEventQueueAbi, SliderEventQueueAbi, NumberEventQueueAbi, ListItemEventQueueAbi, ListBoxEventQueueAbi, ScrollbarEventQueueAbi,
-    SplitViewEventQueueAbi, Button, ButtonAbi, Checkbox, CheckboxAbi, ChildCrossSize, ColorSwatch, ColorSwatchAbi, Combo, ComboAbi, ContentIcon, CrossSize,
-    CrossSizeAbi, Disclosure, DisclosureAbi, DisclosureStyle, FillStates, FlowDirection, Grid, GridAbi, GridExtent, LayoutTrack, LayoutTrackAbi, Linear,
+    SplitViewEventQueueAbi, Button, ButtonAbi, Checkbox, CheckboxAbi, ChildCrossSize, ColorSwatch, ColorSwatchAbi, Combo, ComboAbi, ContentIcon, CrossSize, Disclosure, DisclosureAbi, DisclosureStyle, FillStates, FlowDirection, Grid, GridAbi, GridExtent, LayoutTrack, Linear,
     LinearAbi, LinearEdge, ListBox, ListBoxAbi, ListItem, ListItemAbi, Number, NumberAbi, NumberOptions, ScrollArea, ScrollAreaAbi, ScrollAxis, ScrollRange,
     Scrollbar, ScrollbarAbi, Slider, FormAbi, SliderAbi, SliderOptions, SplitAxis, SplitChanged, SplitOptions, SplitView, SplitViewAbi, TextArea, TextAreaAbi,
     TextBlock, TextBlockAbi, Textbox, TextboxAbi, UiFactory, UiFactoryAbi,
@@ -35,7 +32,7 @@ pub use neocogi_gfx_contracts::{
 };
 #[cfg(feature = "skin")]
 pub use neocogi_skin_contracts::{
-    ISkinDiagnostics, ISkinDiagnosticsAbi, PaletteEdit, PaletteEditAbi, PaletteEditTag, SkinPluginFactory, SkinPluginFactoryAbi, StyleCompiler,
+    ISkinDiagnostics, ISkinDiagnosticsAbi, PaletteEdit, SkinPluginFactory, SkinPluginFactoryAbi, StyleCompiler,
     StyleCompilerAbi, ThemeLoader, ThemeLoaderAbi,
 };
 use neocogi_com::{ComInterface, ComPtr, ComRef, INcStringComPtrExt, IUnknown, NcCopyFromBufferOffset, NcStatus};
@@ -489,7 +486,7 @@ impl Ui {
             parent,
             NcCopyFromBufferOffset::new(0, &menu_text),
             NcCopyFromBufferOffset::new(0, &entries),
-            selection.into(),
+            selection,
             neocogi_com::NcValueRef::new(&ComboEventBinding::from_queue(queue))?,
         )?;
         Ok(ComboWidget::from_interface(combo))
@@ -504,12 +501,11 @@ impl Ui {
         selection: ChoiceSelection,
         queue: Option<ComRef<'_, ComboEventQueueAbi>>,
     ) -> Result<ComboWidget, NcStatus> {
-        let entries = combo_menu_abi(entries);
         let combo = self.factory.interface.create_combo_box(
             parent,
             NcCopyFromBufferOffset::new(0, menu_text.as_bytes()),
-            NcCopyFromBufferOffset::new(0, &entries),
-            selection.into(),
+            NcCopyFromBufferOffset::new(0, entries),
+            selection,
             neocogi_com::NcValueRef::new(&ComboEventBinding::from_queue(queue))?,
         )?;
         Ok(ComboWidget::from_interface(combo))
@@ -631,14 +627,14 @@ impl Ui {
     }
     /// Queues a typed host event while keeping its text buffer local to this call.
     pub fn input(&self, event: UiInput, text: &str) -> Result<(), NcStatus> {
-        self.runtime.input(event.into(), NcCopyFromBufferOffset::new(0, text.as_bytes()))
+        self.runtime.input(event, NcCopyFromBufferOffset::new(0, text.as_bytes()))
     }
     /// Retains the runtime's input projection once for a host loop or concrete input interceptor.
     pub fn input_sink(&self) -> Result<ComPtr<IInputSinkAbi>, NcStatus> {
         self.runtime.query()
     }
     /// Reads the committed editor area used by the platform's native text input service.
-    pub fn text_input_area(&self) -> Result<TextInputAreaAbi, NcStatus> {
+    pub fn text_input_area(&self) -> Result<TextInputArea, NcStatus> {
         self.runtime.text_input_area()
     }
     /// Processes input and synchronizes independently recorded geometry changes.
@@ -758,7 +754,7 @@ pub type ComboWidget = Widget<ComboAbi>;
 impl Widget<ComboAbi> {
     /// Returns the NCIDL-defined selection value without a parallel facade record.
     pub fn selection(&self) -> Result<ChoiceSelection, NcStatus> {
-        ChoiceSelection::try_from(self.interface.selection()?).map_err(|_| neocogi_com::NC_E_INVALID_ARG)
+        self.interface.selection()
     }
     /// Copies the exact selected label or visible placeholder currently painted by the header.
     pub fn display_text(&self) -> Result<String, NcStatus> {
@@ -779,21 +775,20 @@ impl Widget<ComboAbi> {
         self.interface.replace_menu(
             NcCopyFromBufferOffset::new(0, &menu_text),
             NcCopyFromBufferOffset::new(0, &entries),
-            selection.into(),
+            selection,
         )
     }
     /// Atomically replaces the generated preorder hierarchy, shared text, and selection.
     pub fn replace_menu(&mut self, menu_text: &str, entries: &[ChoiceMenuEntry], selection: ChoiceSelection) -> Result<(), NcStatus> {
-        let entries = combo_menu_abi(entries);
         self.interface.replace_menu(
             NcCopyFromBufferOffset::new(0, menu_text.as_bytes()),
-            NcCopyFromBufferOffset::new(0, &entries),
-            selection.into(),
+            NcCopyFromBufferOffset::new(0, entries),
+            selection,
         )
     }
     /// Silently replaces the committed optional selection without clamping invalid indices.
     pub fn set_selection(&mut self, selection: ChoiceSelection) -> Result<(), NcStatus> {
-        self.interface.set_selection(selection.into())
+        self.interface.set_selection(selection)
     }
     /// Copies the fallback retained independently from the current selection.
     pub fn placeholder(&self) -> Result<String, NcStatus> {
@@ -814,20 +809,15 @@ impl Widget<ComboAbi> {
 }
 
 /// Packs a flat convenience list into the same generated menu contract used by nested choices.
-fn encoded_combo_items<Item: AsRef<str>>(items: &[Item]) -> Result<(Vec<u8>, Vec<ChoiceMenuEntryAbi>), NcStatus> {
+fn encoded_combo_items<Item: AsRef<str>>(items: &[Item]) -> Result<(Vec<u8>, Vec<ChoiceMenuEntry>), NcStatus> {
     let mut text = Vec::new();
     let mut entries = Vec::with_capacity(items.len());
     for (id, item) in items.iter().enumerate() {
         let id = u64::try_from(id).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
         let label = combo_label_range(&mut text, item.as_ref())?;
-        entries.push(ChoiceMenuEntry::Choice { id, label }.into());
+        entries.push(ChoiceMenuEntry::Choice { id, label });
     }
     Ok((text, entries))
-}
-
-/// Converts generated values to their fixed-layout call representation without another model.
-fn combo_menu_abi(entries: &[ChoiceMenuEntry]) -> Vec<ChoiceMenuEntryAbi> {
-    entries.iter().copied().map(Into::into).collect()
 }
 
 /// Appends one label and returns its checked range in the shared operation buffer.

@@ -266,7 +266,7 @@ macro_rules! direct_widget_phase_impl {
             fn update(
                 &mut self,
                 state: neocogi_ui_core_contracts::WidgetUpdate,
-                event: neocogi_ui_core_contracts::WidgetEventAbi,
+                event: neocogi_ui_core_contracts::WidgetEvent,
                 text: neocogi_com::NcCopyFromBufferOffset<'_, u8>,
             ) -> Result<neocogi_ui_core_contracts::GeometryChange, neocogi_com::NcStatus> {
                 <$name as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
@@ -431,7 +431,7 @@ macro_rules! direct_container_layout_impl {
             /// Applies the concrete container's post-target event filtering policy.
             fn accepts_event(
                 &self,
-                event: neocogi_ui_core_contracts::WidgetEventAbi,
+                event: neocogi_ui_core_contracts::WidgetEvent,
                 text: neocogi_com::NcCopyFromBufferOffset<'_, u8>,
             ) -> Result<bool, neocogi_com::NcStatus> {
                 <$name as crate::widget_object::HostedWidget>::runtime(self).state.readable()?;

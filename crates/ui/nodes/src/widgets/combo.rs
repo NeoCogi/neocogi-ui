@@ -104,11 +104,7 @@ impl Combo {
     fn display_text(&self) -> String {
         // The public COM observation below preserves errors. Painting cannot return a status, and
         // the private state object remains alive and valid for the header's complete lifetime.
-        match self
-            .menu
-            .selection()
-            .and_then(|selection| ChoiceSelection::try_from(selection).map_err(|_| neocogi_com::NC_E_INVALID_ARG))
-        {
+        match self.menu.selection() {
             Ok(ChoiceSelection::Selected(_)) => self.menu.selected_label().and_then(|text| text.to_string()).unwrap_or_default(),
             Ok(ChoiceSelection::None) | Err(_) => self.placeholder.clone(),
         }
@@ -251,7 +247,7 @@ impl crate::widget_object::FontState for Combo {
     }
 }
 use crate::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_core_contracts::{ChoiceMenuEntryAbi, ChoiceSelection, ChoiceSelectionAbi, FontRole, GeometryChange, IChoiceMenuAbi, IWidgetHostAbi};
+use neocogi_ui_core_contracts::{ChoiceMenuEntry, ChoiceSelection, FontRole, GeometryChange, IChoiceMenuAbi, IWidgetHostAbi};
 use neocogi_ui_nodes_contracts::ComboAbi;
 use neocogi_com::{ComPtr, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus, NcString};
 
@@ -292,7 +288,7 @@ impl Combo {
 
 impl neocogi_ui_nodes_contracts::Combo for Combo {
     /// Returns an explicit tagged optional position from the authoritative model.
-    fn selection(&self) -> Result<ChoiceSelectionAbi, NcStatus> {
+    fn selection(&self) -> Result<ChoiceSelection, NcStatus> {
         self.runtime().state.readable()?;
         self.menu.selection()
     }
@@ -319,8 +315,8 @@ impl neocogi_ui_nodes_contracts::Combo for Combo {
     fn replace_menu(
         &mut self,
         menu_text: NcCopyFromBufferOffset<'_, u8>,
-        entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
-        selection: ChoiceSelectionAbi,
+        entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntry>,
+        selection: ChoiceSelection,
     ) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
         self.menu.replace(menu_text, entries, selection)?;
@@ -329,7 +325,7 @@ impl neocogi_ui_nodes_contracts::Combo for Combo {
     }
 
     /// Silently changes selection with strict range validation and truthful geometry invalidation.
-    fn set_selection(&mut self, selection: ChoiceSelectionAbi) -> Result<(), NcStatus> {
+    fn set_selection(&mut self, selection: ChoiceSelection) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
         self.menu.set_selection(selection)?;
         // Header measurement reserves the widest label, so changing only selection is paint-only.

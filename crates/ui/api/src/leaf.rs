@@ -85,7 +85,7 @@ impl<Content: LeafContent> IWidget for LeafObject<Content> {
         self.state.clear_flags(flags)
     }
     /// Validates all copied input before mutating content; changes remain sticky until collected.
-    fn update(&mut self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
+    fn update(&mut self, state: WidgetUpdate, event: WidgetEvent, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
         self.state.writable()?;
         state.validate()?;
         let (event, text) = decode_widget_event(event, text)?;

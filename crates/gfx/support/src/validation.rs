@@ -185,7 +185,7 @@ impl AssetTables {
             if visual.center_visible > 1 {
                 return Err(NC_E_INVALID_ARG);
             }
-            if let AssetPatch::Image { icon, source, .. } = AssetPatch::try_from(visual.patch).map_err(|_| NC_E_INVALID_ARG)? {
+            if let AssetPatch::Image { icon, source, .. } = visual.patch {
                 validate_insets(source)?;
                 let rect = self.icons.get(icon as usize).ok_or(NC_E_INVALID_ARG)?.rect;
                 if source.left.checked_add(source.right).ok_or(NC_E_INVALID_ARG)? > rect.width
@@ -336,8 +336,7 @@ fn transparent() -> AssetVisual {
             bottom_left: 0,
             bottom: 0,
             bottom_right: 0,
-        }
-        .into(),
+        },
     }
 }
 

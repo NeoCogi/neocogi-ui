@@ -84,7 +84,7 @@ macro_rules! widget {
                 self.common.state.clear_flags(flags)
             }
             /// Validate complete copied input before the concrete behavior can mutate or emit.
-            fn update(&mut self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
+            fn update(&mut self, state: WidgetUpdate, event: WidgetEvent, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
                 self.common.state.writable()?;
                 state.validate()?;
                 decode_widget_event(event, text)?;
@@ -305,7 +305,7 @@ impl IContainerLayout for Inset {
         Ok(ContainerGeometry::new(rect))
     }
     /// No branch-level filtering: the ordinary runtime remains responsible for child input eligibility.
-    fn accepts_event(&self, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<bool, NcStatus> {
+    fn accepts_event(&self, event: WidgetEvent, text: NcCopyFromBufferOffset<'_, u8>) -> Result<bool, NcStatus> {
         self.common.state.readable()?;
         decode_widget_event(event, text)?;
         Ok(true)

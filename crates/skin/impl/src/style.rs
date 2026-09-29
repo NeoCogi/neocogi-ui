@@ -1,9 +1,9 @@
 //! Typed Skin policy and composition over the narrow GFX publication capability.
 
 use crate::Diagnostic;
-use neocogi_com::{ComPtr, ComRef, INcStringAbi, NC_E_INVALID_ARG, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, com_factory};
+use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, com_factory};
 use neocogi_gfx_contracts::*;
-use neocogi_skin_contracts::{ISkinDiagnostics, PaletteEdit, PaletteEditAbi, StyleCompiler};
+use neocogi_skin_contracts::{ISkinDiagnostics, PaletteEdit, StyleCompiler};
 use neocogi_appearance::{AppearanceTables, rgba};
 
 /// Copies the current fixed appearance tables without importing fonts, icons, or pixels.
@@ -57,12 +57,11 @@ impl StyleCompilerObject {
 
 impl StyleCompiler for StyleCompilerObject {
     /// Compiles appearance policy locally and delegates generic bundle publication to GFX.
-    fn derive_style(&self, base: ComRef<'_, IAssetBundleAbi>, metrics: AssetMetrics, palette: PaletteEditAbi) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
-        // The closed edit tag is validated before any current appearance record is interpreted.
-        let edit = PaletteEdit::try_from(palette).map_err(|_| NC_E_INVALID_ARG)?;
+    fn derive_style(&self, base: ComRef<'_, IAssetBundleAbi>, metrics: AssetMetrics, palette: PaletteEdit) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
+        // The COM thunk already validated the edit tag and active payload.
         let mut tables = read_appearance(base)?;
         let mut chrome = base.chrome()?;
-        if let PaletteEdit::Flat(palette) = edit {
+        if let PaletteEdit::Flat(palette) = palette {
             let insets = tables.surfaces[SurfaceRole::GenericFrame.raw() as usize].normal.insets;
             tables = AppearanceTables::flat(insets, &palette);
             if chrome.has_backdrop == 1 {

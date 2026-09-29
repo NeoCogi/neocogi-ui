@@ -197,7 +197,7 @@ fn static_com_editing_and_webgl() {
     assert_eq!(native.poll(input.as_com_ref()).unwrap(), PollStatus::Idle);
     exercise(text.unchecked_ref(), "compose-end");
     while native.poll(input.as_com_ref()).unwrap() == PollStatus::Event {}
-    assert_eq!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::None);
+    assert_eq!(ui.text_input_area().unwrap(), TextInputArea::None);
     ui.update(size).unwrap();
     assert_eq!(editor.text().unwrap(), "日本");
     ui.render(size, renderer.as_com_ref()).unwrap();

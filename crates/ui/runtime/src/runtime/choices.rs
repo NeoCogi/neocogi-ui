@@ -2,15 +2,15 @@
 
 use super::*;
 use crate::choice_menu::{ChoiceMenuState, choice_menu, copied_menu, decoded_selection};
-use neocogi_ui_core_contracts::{ChoiceMenuEntryAbi, ChoiceSelectionAbi, IChoiceMenuAbi};
+use neocogi_ui_core_contracts::{ChoiceMenuEntry, ChoiceSelection, IChoiceMenuAbi};
 
 /// Creates the core-owned choice model and popup without constructing any presentation widget.
 pub(crate) fn create_choice_menu(
     storage: &Rc<RuntimeStorage>,
     parent: ComRef<'_, IWindowAbi>,
     menu_text: NcCopyFromBufferOffset<'_, u8>,
-    entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
-    selection: ChoiceSelectionAbi,
+    entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntry>,
+    selection: ChoiceSelection,
     queue: Option<ComPtr<IChoiceMenuEventQueueAbi>>,
 ) -> Result<ComPtr<IChoiceMenuAbi>, NcStatus> {
     storage.open()?;
@@ -19,7 +19,7 @@ pub(crate) fn create_choice_menu(
     // Copy every foreign input before any manager mutation, leaving validation failure atomic.
     let parent = storage.parent(parent)?;
     let (menu_text, entries) = copied_menu(menu_text, entries)?;
-    let selection = decoded_selection(selection)?;
+    let selection = decoded_selection(selection);
     let state = ChoiceMenuState::create(menu_text, entries, selection, queue)?;
     let menu = choice_menu(&state)?;
     let revision = state.revision()?;

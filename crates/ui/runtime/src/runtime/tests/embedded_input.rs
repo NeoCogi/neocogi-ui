@@ -117,14 +117,14 @@ fn window_cycle_can_resume_after_focus_moves_through_an_embedded_scope() {
         ui.update(SIZE).unwrap();
     }
     assert!(matches!(
-        TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(),
+        ui.text_input_area().unwrap(),
         TextInputArea::Area(_)
     ));
     for pressed in [true, false] {
         ui.input(key(KeyCode::Function, 6, 2, pressed), "").unwrap();
         ui.update(SIZE).unwrap();
     }
-    assert_eq!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::None);
+    assert_eq!(ui.text_input_area().unwrap(), TextInputArea::None);
     for pressed in [true, false] {
         ui.input(key(KeyCode::Tab, 0, 2, pressed), "").unwrap();
         ui.update(SIZE).unwrap();
@@ -132,7 +132,7 @@ fn window_cycle_can_resume_after_focus_moves_through_an_embedded_scope() {
     ui.input(key(KeyCode::Function, 6, 2, true), "").unwrap();
     ui.update(SIZE).unwrap();
     assert!(
-        matches!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::Area(_)),
+        matches!(ui.text_input_area().unwrap(), TextInputArea::Area(_)),
         "the first new Ctrl+F6 press after leaving the scope must cycle to the textbox window"
     );
 }

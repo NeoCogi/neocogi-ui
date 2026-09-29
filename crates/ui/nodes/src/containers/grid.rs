@@ -266,7 +266,7 @@ impl super::ContainerAlgorithm for Grid {
 
 use crate::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
 use neocogi_ui_core_contracts::{IWidgetHostAbi};
-use neocogi_ui_nodes_contracts::{GridAbi, GridExtent, LayoutTrackAbi};
+use neocogi_ui_nodes_contracts::{GridAbi, GridExtent, LayoutTrack};
 use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus};
 
 direct_widget_phase_impl!(Grid);
@@ -277,8 +277,8 @@ impl Grid {
     pub(crate) fn create_com(
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
-        columns: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
-        rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
+        columns: NcCopyFromBufferOffset<'_, LayoutTrack>,
+        rows: NcCopyFromBufferOffset<'_, LayoutTrack>,
     ) -> Result<ComPtr<GridAbi>, NcStatus> {
         let value = Self::build(host, columns, rows, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("Grid declares its callable class contract"))
@@ -287,8 +287,8 @@ impl Grid {
     /// Builds one Grid with either directly imported or runtime-shared resources.
     fn build(
         host: ComPtr<IWidgetHostAbi>,
-        columns: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
-        rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
+        columns: NcCopyFromBufferOffset<'_, LayoutTrack>,
+        rows: NcCopyFromBufferOffset<'_, LayoutTrack>,
         resources: Option<&crate::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
         let columns = local_tracks(columns)?;
@@ -303,13 +303,13 @@ impl neocogi_ui_nodes_contracts::Grid for Grid {
     container_methods!();
 
     /// Copies column policy from the one concrete Grid state.
-    fn columns(&self, output: NcCopyToBufferOffset<'_, LayoutTrackAbi>) -> Result<u32, NcStatus> {
+    fn columns(&self, output: NcCopyToBufferOffset<'_, LayoutTrack>) -> Result<u32, NcStatus> {
         self.runtime().state.readable()?;
         copy_tracks(self.column_tracks(), output)
     }
 
     /// Validates all input before rebuilding column-dependent span placement.
-    fn set_columns(&mut self, tracks: NcCopyFromBufferOffset<'_, LayoutTrackAbi>) -> Result<(), NcStatus> {
+    fn set_columns(&mut self, tracks: NcCopyFromBufferOffset<'_, LayoutTrack>) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
         let tracks = local_tracks(tracks)?;
         if self.column_tracks() != tracks {
@@ -320,13 +320,13 @@ impl neocogi_ui_nodes_contracts::Grid for Grid {
     }
 
     /// Copies row policy without exposing Grid's placement scratch.
-    fn rows(&self, output: NcCopyToBufferOffset<'_, LayoutTrackAbi>) -> Result<u32, NcStatus> {
+    fn rows(&self, output: NcCopyToBufferOffset<'_, LayoutTrack>) -> Result<u32, NcStatus> {
         self.runtime().state.readable()?;
         copy_tracks(self.row_tracks(), output)
     }
 
     /// Replaces row policy only after validating the complete typed input.
-    fn set_rows(&mut self, tracks: NcCopyFromBufferOffset<'_, LayoutTrackAbi>) -> Result<(), NcStatus> {
+    fn set_rows(&mut self, tracks: NcCopyFromBufferOffset<'_, LayoutTrack>) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
         let tracks = local_tracks(tracks)?;
         if self.row_tracks() != tracks {
@@ -340,7 +340,7 @@ impl neocogi_ui_nodes_contracts::Grid for Grid {
 }
 
 /// Validates a complete track sequence before constructing or mutating Grid state.
-fn local_tracks(tracks: NcCopyFromBufferOffset<'_, LayoutTrackAbi>) -> Result<Vec<TrackSize>, NcStatus> {
+fn local_tracks(tracks: NcCopyFromBufferOffset<'_, LayoutTrack>) -> Result<Vec<TrackSize>, NcStatus> {
     if tracks.offset() != 0 || tracks.len() > u32::MAX as usize {
         return Err(neocogi_com::NC_E_INVALID_ARG);
     }
@@ -348,7 +348,7 @@ fn local_tracks(tracks: NcCopyFromBufferOffset<'_, LayoutTrackAbi>) -> Result<Ve
 }
 
 /// Copies a requested track range and returns the complete retained cardinality.
-fn copy_tracks(tracks: &[TrackSize], mut output: NcCopyToBufferOffset<'_, LayoutTrackAbi>) -> Result<u32, NcStatus> {
+fn copy_tracks(tracks: &[TrackSize], mut output: NcCopyToBufferOffset<'_, LayoutTrack>) -> Result<u32, NcStatus> {
     let offset = usize::try_from(output.offset()).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
     let source = tracks.get(offset..).ok_or(neocogi_com::NC_E_INVALID_ARG)?;
     for (target, track) in output.as_mut_slice().iter_mut().zip(source) {

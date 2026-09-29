@@ -114,7 +114,7 @@ pub trait AppState: 'static {
 
     /// Selects the one native IME session after all UI updates. Embedded UI hosts
     /// may translate their preview's committed rectangle into window coordinates.
-    fn text_input_area(&self, host: &Host) -> Result<TextInputAreaAbi, NcStatus> {
+    fn text_input_area(&self, host: &Host) -> Result<TextInputArea, NcStatus> {
         host.ui.text_input_area()
     }
 }
@@ -264,11 +264,10 @@ struct PollInput {
 }
 impl IInputSink for PollInput {
     /// Validates UTF-8 and offset before retaining an owned copy of the native input.
-    fn input(&self, event: UiInputAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+    fn input(&self, event: UiInput, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         if text.offset() != 0 {
             return Err(neocogi_com::NC_E_INVALID_ARG);
         }
-        let event = UiInput::try_from(event).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
         let text = std::str::from_utf8(text.as_slice()).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?.to_owned();
         self.send.send(InputObservation { event, text }).map_err(|_| UI_E_CLOSED)
     }

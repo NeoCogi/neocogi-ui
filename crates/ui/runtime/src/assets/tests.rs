@@ -6,7 +6,7 @@ use neocogi_ui_nodes_contracts::ButtonAbi;
 use crate::test_support::assets::{export_bundle, export_bundle_data, export_imported_data};
 use neocogi_gfx_contracts::AssetPublisherAbi;
 use neocogi_ui::assets::AssetData;
-use neocogi_skin_contracts::{PaletteEdit, PaletteEditAbi, PaletteEditTag, StyleCompilerAbi};
+use neocogi_skin_contracts::{PaletteEdit, StyleCompilerAbi};
 use neocogi_com::{com_object, ComPtr, ComRef, NcStatus, NcCopyFromBufferOffset, NcCopyToBufferOffset, NC_E_BUSY, NC_E_INVALID_ARG};
 use std::{
     cell::{Cell, RefCell},
@@ -35,7 +35,7 @@ fn equivalent(a: &AssetData, b: &AssetData) {
         assert_eq!(a.insets, b.insets);
         assert_eq!(a.center_visible, b.center_visible);
         assert_eq!(a.content_color, b.content_color);
-        assert_eq!(AssetPatch::try_from(a.patch).unwrap(), AssetPatch::try_from(b.patch).unwrap());
+        assert_eq!(a.patch, b.patch);
     }
 }
 
@@ -128,7 +128,7 @@ fn derived_identity_is_preserved_but_unrelated_and_incomplete_catalogs_are_rejec
 /// Malformed Unicode, partitions, pixels, dimensions and tagged geometry fail before native construction.
 #[test]
 fn malformed_portable_metadata_never_reaches_a_live_skin() {
-    for case in 0..11 {
+    for case in 0..10 {
         let mut data = export_bundle_data(&bundle()).unwrap();
         match case {
             0 => data.tables.glyphs.to_mut()[0].scalar = 0xd800,       // Invalid Unicode surrogate.
@@ -139,23 +139,18 @@ fn malformed_portable_metadata_never_reaches_a_live_skin() {
             5 => data.pixels.to_mut().fill(0),                         // Required white tile is no longer opaque white.
             6 => data.tables.metrics.padding = -1,
             7 => data.tables.chrome.has_backdrop = 2,
-            8 => data.tables.controls.to_mut()[0].disabled.patch = AssetPatchAbi::from_unknown_tag(AssetPatchTag::from_raw(255)).unwrap(),
-            9 => {
+            8 => {
                 data.tables.controls.to_mut()[0].disabled.patch = AssetPatch::Image {
                     icon: u32::MAX,
                     source: Insets::default(),
                     tint: 0,
                 }
-                .into()
             }
-            10 => data.tables.controls.to_mut()[0].disabled.center_visible = 2,
+            9 => data.tables.controls.to_mut()[0].disabled.center_visible = 2,
             _ => unreachable!(),
         }
         let source = data.into_bundle().unwrap();
-        let expected = match case {
-            8 => neocogi_com::NC_E_INVALID_TAG,
-            _ => NC_E_INVALID_ARG,
-        };
+        let expected = NC_E_INVALID_ARG;
         assert!(
             matches!(ImportedAssets::read(source.as_com_ref(), None), Err(status) if status == expected),
             "case {case}"
@@ -164,6 +159,36 @@ fn malformed_portable_metadata_never_reaches_a_live_skin() {
     let mut data = export_bundle_data(&bundle()).unwrap();
     data.tables.size.width = i32::MAX;
     assert_eq!(data.into_bundle().unwrap_err(), NC_E_INVALID_ARG);
+}
+
+/// A malformed nested enum from a foreign asset table fails before constructing a skin.
+#[test]
+fn unknown_nested_asset_tag_is_rejected_at_the_output_boundary() {
+    /// Supplies initialized raw records with one deliberately invalid nested tag.
+    unsafe extern "C" fn malformed_controls(
+        _object: *mut core::ffi::c_void,
+        _offset: u64,
+        count: u64,
+        output: *mut <AssetControlVisuals as neocogi_com::ComValue>::Wire,
+    ) -> NcStatus {
+        let data = export_bundle_data(&bundle()).unwrap();
+        if count != data.tables.controls.len() as u64 { return NC_E_INVALID_ARG; }
+        for (index, value) in data.tables.controls.iter().enumerate() {
+            let mut wire = neocogi_com::encode_inline(value).unwrap();
+            wire.disabled.patch.tag = 255;
+            // SAFETY: generated caller supplied count writable raw elements.
+            unsafe { output.add(index).write(wire); }
+        }
+        neocogi_com::NC_OK
+    }
+    let source = export_bundle(&bundle()).unwrap();
+    let raw = source.as_raw();
+    // SAFETY: copy the function-pointer table, retaining the real source object.
+    // The replacement table and source outlive the single borrowed read.
+    let mut table = unsafe { core::ptr::read(raw.vtable) };
+    table.control_visuals = malformed_controls;
+    let borrowed = unsafe { ComRef::from_raw_borrowed(neocogi_com::ComRaw { object: raw.object, vtable: &table }) }.unwrap();
+    assert!(matches!(ImportedAssets::read(borrowed, None), Err(neocogi_com::NC_E_INVALID_TAG)));
 }
 
 #[com_object(interfaces(ITextMetrics))]
@@ -406,7 +431,7 @@ fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision
     let original = ImportedAssets::read(source.as_com_ref(), None).unwrap();
     let mut metrics = source.metrics().unwrap();
     metrics.padding += 4;
-    let candidate = compiler.derive_style(source.as_com_ref(), metrics, PaletteEdit::Preserve.into()).unwrap();
+    let candidate = compiler.derive_style(source.as_com_ref(), metrics, PaletteEdit::Preserve).unwrap();
     assert_eq!(
         ui.assets().unwrap().as_raw().object,
         source.as_raw().object,
@@ -421,7 +446,7 @@ fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision
         button: crate::color(51, 62, 73, 84),
         ..crate::FlatPalette::default()
     };
-    let flat = compiler.derive_style(source.as_com_ref(), metrics, PaletteEdit::Flat(palette).into()).unwrap();
+    let flat = compiler.derive_style(source.as_com_ref(), metrics, PaletteEdit::Flat(palette)).unwrap();
     let imported = ImportedAssets::read(flat.as_com_ref(), Some(&original)).unwrap();
     let mut skin = original.bundle().skin().clone();
     skin.metrics_mut().padding = metrics.padding;
@@ -433,16 +458,22 @@ fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision
     );
     let invalid = AssetMetrics { padding: -1, ..metrics };
     assert_eq!(
-        compiler.derive_style(source.as_com_ref(), invalid, PaletteEdit::Preserve.into()).unwrap_err(),
+        compiler.derive_style(source.as_com_ref(), invalid, PaletteEdit::Preserve).unwrap_err(),
         NC_E_INVALID_ARG
     );
-    let invalid = PaletteEditAbi::from_unknown_tag(PaletteEditTag::from_raw(255)).unwrap();
-    assert_eq!(
-        compiler.derive_style(source.as_com_ref(), metrics, invalid).unwrap_err(),
-        neocogi_com::NC_E_INVALID_TAG
-    );
+    // An invalid discriminant exists only in foreign wire storage. Exercise
+    // the actual provider thunk before it can dispatch a native PaletteEdit.
+    let mut invalid = neocogi_com::encode_inline(&PaletteEdit::Preserve).unwrap();
+    invalid.tag = 255;
+    let raw = compiler.as_raw();
+    let mut output = core::mem::MaybeUninit::uninit();
+    // SAFETY: the live base capability, initialized metrics and wire enum, and
+    // writable result all satisfy the raw call's storage/lifetime obligations.
+    assert_eq!(unsafe {
+        ((*raw.vtable).derive_style)(raw.object, source.as_raw(), neocogi_com::encode_inline(&metrics).unwrap(), invalid, output.as_mut_ptr())
+    }, neocogi_com::NC_E_INVALID_TAG);
     assert_eq!(ui.assets().unwrap().as_raw().object, source.as_raw().object);
     ui.close().unwrap();
     // Compilation owns no UI lifetime: retained resource data remains authorable after closure.
-    compiler.derive_style(source.as_com_ref(), metrics, PaletteEdit::Preserve.into()).unwrap();
+    compiler.derive_style(source.as_com_ref(), metrics, PaletteEdit::Preserve).unwrap();
 }

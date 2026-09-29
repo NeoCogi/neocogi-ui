@@ -99,7 +99,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     }
 
     /// Validates both policies before creating a container and its host-owned child store.
-    fn create_linear(&self, direction: FlowDirection, cross: CrossSizeAbi) -> Result<ComPtr<LinearAbi>, NcStatus> {
+    fn create_linear(&self, direction: FlowDirection, cross: CrossSize) -> Result<ComPtr<LinearAbi>, NcStatus> {
         self.services.host.check_mutation()?;
         crate::Linear::create_com(self.services.host.clone(), self.services.resources.clone(), direction, cross)
     }
@@ -124,8 +124,8 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     /// Validates complete typed track sequences before allocating Grid state.
     fn create_grid(
         &self,
-        columns: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
-        rows: NcCopyFromBufferOffset<'_, LayoutTrackAbi>,
+        columns: NcCopyFromBufferOffset<'_, LayoutTrack>,
+        rows: NcCopyFromBufferOffset<'_, LayoutTrack>,
     ) -> Result<ComPtr<GridAbi>, NcStatus> {
         self.services.host.check_mutation()?;
         crate::Grid::create_com(self.services.host.clone(), self.services.resources.clone(), columns, rows)
@@ -260,8 +260,8 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
         &self,
         parent: ComRef<'_, IWindowAbi>,
         menu_text: NcCopyFromBufferOffset<'_, u8>,
-        entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
-        selection: ChoiceSelectionAbi,
+        entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntry>,
+        selection: ChoiceSelection,
         events: neocogi_com::NcValueRef<'_, ComboEventBinding>,
     ) -> Result<ComPtr<ComboAbi>, NcStatus> {
         self.services.host.check_mutation()?;

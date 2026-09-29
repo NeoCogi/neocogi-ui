@@ -194,7 +194,7 @@ impl Drop for RuntimeStorage {
 
 impl IInputSink for Runtime {
     /// Validates before enqueueing and owns the copied text after this synchronous call.
-    fn input(&self, event: UiInputAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+    fn input(&self, event: UiInput, text: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         let storage = &self.storage;
         storage.open()?;
         let mut context = storage.context()?;
@@ -210,8 +210,8 @@ impl IChoiceMenus for Runtime {
         &self,
         parent: ComRef<'_, IWindowAbi>,
         menu_text: NcCopyFromBufferOffset<'_, u8>,
-        entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntryAbi>,
-        selection: ChoiceSelectionAbi,
+        entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntry>,
+        selection: ChoiceSelection,
         events: neocogi_com::NcValueRef<'_, IChoiceMenuEventBinding>,
     ) -> Result<ComPtr<IChoiceMenuAbi>, NcStatus> {
         choices::create_choice_menu(&self.storage, parent, menu_text, entries, selection, events.to_owned()?.into_queue())
@@ -271,7 +271,7 @@ impl UiRuntime for Runtime {
         Ok(())
     }
     /// Exposes only committed geometry; pending setters or input hide stale IME placement.
-    fn text_input_area(&self) -> Result<TextInputAreaAbi, NcStatus> {
+    fn text_input_area(&self) -> Result<TextInputArea, NcStatus> {
         self.storage.open()?;
         let mut context = self.storage.context()?;
         self.storage.collect_changes(&mut context)?;
@@ -284,8 +284,7 @@ impl UiRuntime for Runtime {
                 height: area.height,
             }),
             None => TextInputArea::None,
-        }
-        .into())
+        })
     }
 
     /// Polling and eventful updates execute the same concrete phase sequence.

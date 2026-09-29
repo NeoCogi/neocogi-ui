@@ -227,8 +227,8 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
             neocogi_com::NcValueRef::new(&neocogi_ui_nodes_contracts::ScrollbarEventBinding::Unobserved).unwrap(),
         )
         .unwrap();
-    let _linear = factory.create_linear(FlowDirection::TopToBottom, CrossSize::Stretch.into()).unwrap();
-    let tracks = [LayoutTrack::Content.into()];
+    let _linear = factory.create_linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
+    let tracks = [LayoutTrack::Content];
     let _grid = factory
         .create_grid(NcCopyFromBufferOffset::new(0, &tracks), NcCopyFromBufferOffset::new(0, &tracks))
         .unwrap();
@@ -291,11 +291,11 @@ impl IRenderer for Renderer {
             stream.vertices(info.invocation, NcCopyToBufferOffset::new(0, &mut vertices))?,
             info.vertex_count
         );
-        let mut batches = vec![RenderBatch::Atlas { first: 0, count: 0 }.into(); info.batch_count as usize];
+        let mut batches = vec![RenderBatch::Atlas { first: 0, count: 0 }; info.batch_count as usize];
         assert_eq!(stream.batches(info.invocation, NcCopyToBufferOffset::new(0, &mut batches))?, info.batch_count);
         // These built-in fixtures use one coalesced atlas range regardless of glyph/primitive count.
         assert_eq!(batches.len(), 1);
-        assert!(matches!(RenderBatch::try_from(batches[0])?, RenderBatch::Atlas { first: 0, count } if count == info.vertex_count));
+        assert!(matches!(batches[0], RenderBatch::Atlas { first: 0, count } if count == info.vertex_count));
         assert_eq!(stream.texture(info.invocation, 0).unwrap_err(), NC_E_INVALID_ARG);
         assert_eq!(stream.item(info.invocation, 0).unwrap_err(), NC_E_INVALID_ARG);
         assert!(vertices.len() >= 6);
@@ -488,7 +488,7 @@ impl IWidget for RetainingWidget {
         self.button.clear_flags(flags)
     }
     /// Eventless updates do not change this fixture's fixed content geometry.
-    fn update(&mut self, state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
+    fn update(&mut self, state: WidgetUpdate, event: WidgetEvent, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
         let (event, text) = decode_widget_event(event, text)?;
         self.probe.latest.set(Some(state));
         self.probe.updates.set(self.probe.updates.get() + 1);
@@ -826,7 +826,7 @@ fn com_nodes_update_without_activation_and_collect_hidden_widget_changes() {
     runtime.update(SIZE).unwrap();
     let measured = probe.measures.get();
     runtime
-        .input(UiInput::Text.into(), NcCopyFromBufferOffset::new(0, "hello ☃".as_bytes()))
+        .input(UiInput::Text, NcCopyFromBufferOffset::new(0, "hello ☃".as_bytes()))
         .unwrap();
     let (renderer, _) = renderer();
     assert_eq!(runtime.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
@@ -876,15 +876,15 @@ fn input_validation_and_explicit_teardown_preserve_their_error_boundaries() {
     });
     assert_eq!(runtime.input(bad_key.into(), NcCopyFromBufferOffset::new(0, &[])), Err(NC_E_INVALID_ARG));
     assert_eq!(
-        runtime.input(UiInput::Text.into(), NcCopyFromBufferOffset::new(1, b"bad")),
+        runtime.input(UiInput::Text, NcCopyFromBufferOffset::new(1, b"bad")),
         Err(NC_E_INVALID_ARG)
     );
     assert_eq!(
-        runtime.input(UiInput::Text.into(), NcCopyFromBufferOffset::new(0, &[0xff])),
+        runtime.input(UiInput::Text, NcCopyFromBufferOffset::new(0, &[0xff])),
         Err(NC_E_INVALID_ARG)
     );
     assert_eq!(
-        runtime.input(UiInput::Cancel.into(), NcCopyFromBufferOffset::new(0, b"unexpected")),
+        runtime.input(UiInput::Cancel, NcCopyFromBufferOffset::new(0, b"unexpected")),
         Err(NC_E_INVALID_ARG)
     );
     let (renderer, _) = renderer();
@@ -1374,7 +1374,7 @@ fn platform_input_projection_and_committed_text_area_share_runtime_state() {
     assert_eq!(identity.as_raw().object, runtime.query::<neocogi_com::IUnknown>().unwrap().as_raw().object);
     let editor = ui.widgets().textbox_unobserved("start").unwrap();
     let window = ui.window("IME", RECT, &editor).unwrap();
-    assert_eq!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::None);
+    assert_eq!(ui.text_input_area().unwrap(), TextInputArea::None);
     input
         .input(
             UiInput::Key(KeyStroke {
@@ -1383,35 +1383,34 @@ fn platform_input_projection_and_committed_text_area_share_runtime_state() {
                 pressed: true,
                 repeat: false,
                 modifiers: 0,
-            })
-            .into(),
+            }),
             NcCopyFromBufferOffset::new(0, &[]),
         )
         .unwrap();
     ui.update(SIZE).unwrap();
-    let TextInputArea::Area(first) = TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap() else {
+    let TextInputArea::Area(first) = ui.text_input_area().unwrap() else {
         panic!("focused editor must request IME")
     };
     assert!(first.width > 0 && first.height > 0);
-    input.input(UiInput::Text.into(), NcCopyFromBufferOffset::new(0, "é☃".as_bytes())).unwrap();
-    assert_eq!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::None);
+    input.input(UiInput::Text, NcCopyFromBufferOffset::new(0, "é☃".as_bytes())).unwrap();
+    assert_eq!(ui.text_input_area().unwrap(), TextInputArea::None);
     ui.update(SIZE).unwrap();
     assert_eq!(editor.text().unwrap(), "starté☃");
     let mut rect = RECT;
     rect.x += 30;
     window.set_rect(rect).unwrap();
-    assert_eq!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::None);
+    assert_eq!(ui.text_input_area().unwrap(), TextInputArea::None);
     ui.update(SIZE).unwrap();
-    let TextInputArea::Area(moved) = TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap() else {
+    let TextInputArea::Area(moved) = ui.text_input_area().unwrap() else {
         panic!("moved editor keeps focus")
     };
     assert_eq!(moved.x, first.x + 30);
     window.close().unwrap();
     ui.update(SIZE).unwrap();
-    assert_eq!(TextInputArea::try_from(ui.text_input_area().unwrap()).unwrap(), TextInputArea::None);
+    assert_eq!(ui.text_input_area().unwrap(), TextInputArea::None);
     ui.close().unwrap();
     assert_eq!(ui.text_input_area().err(), Some(UI_E_CLOSED));
-    assert_eq!(input.input(UiInput::Cancel.into(), NcCopyFromBufferOffset::new(0, &[])), Err(UI_E_CLOSED));
+    assert_eq!(input.input(UiInput::Cancel, NcCopyFromBufferOffset::new(0, &[])), Err(UI_E_CLOSED));
 }
 
 /// Concrete external content observes ownership, geometry and lifecycle without retaining its COM self.

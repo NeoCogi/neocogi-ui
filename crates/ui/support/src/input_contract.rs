@@ -29,7 +29,7 @@ fn key(event: KeyEvent) -> KeyStroke {
 }
 
 /// Copies the tagged event and borrows its existing text allocation for this call.
-pub fn event(input: Option<&UiInputEvent>) -> (WidgetEventAbi, &[u8]) {
+pub fn event(input: Option<&UiInputEvent>) -> (WidgetEvent, &[u8]) {
     let (event, text): (WidgetEvent, &[u8]) = match input {
         None => (WidgetEvent::None, &[]),
         Some(UiInputEvent::Cancel) => (WidgetEvent::Cancel, &[]),
@@ -72,7 +72,7 @@ pub fn event(input: Option<&UiInputEvent>) -> (WidgetEventAbi, &[u8]) {
         Some(UiInputEvent::Key { event }) => (WidgetEvent::Key(key(*event)), &[]),
         Some(UiInputEvent::Text { text }) => (WidgetEvent::Text, text.as_bytes()),
     };
-    (event.into(), text)
+    (event, text)
 }
 
 /// Reuses the authoritative shared action mapping instead of repeating key rules in plugins.
@@ -140,7 +140,7 @@ pub fn host_key(event: KeyStroke) -> Result<KeyEvent, NcStatus> {
 }
 
 /// Decodes copied COM input for the private built-in algorithms, owning only text.
-pub fn local_event(event: WidgetEventAbi, bytes: NcCopyFromBufferOffset<'_, u8>) -> Result<Option<UiInputEvent>, NcStatus> {
+pub fn local_event(event: WidgetEvent, bytes: NcCopyFromBufferOffset<'_, u8>) -> Result<Option<UiInputEvent>, NcStatus> {
     let (event, text) = decode_widget_event(event, bytes)?;
     /// Copies one ABI point into the private math value.
     fn point(value: Point) -> crate::Vec2i {

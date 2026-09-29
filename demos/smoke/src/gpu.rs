@@ -55,7 +55,7 @@ impl IWidget for SceneView {
         self.state.clear_flags(flags)
     }
     /// Scene data affects paint only; the host explicitly updates transforms outside UI observation.
-    fn update(&mut self, _state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
+    fn update(&mut self, _state: WidgetUpdate, event: WidgetEvent, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
         self.state.writable()?;
         decode_widget_event(event, text)?;
         Ok(GeometryChange::NoChange)

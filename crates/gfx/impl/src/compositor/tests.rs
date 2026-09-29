@@ -12,7 +12,7 @@ struct RenderCapture {
     /// Final bulk vertices copied while the stream token was active.
     vertices: std::cell::RefCell<Vec<RenderVertex>>,
     /// Final ordered batch records copied while the stream token was active.
-    batches: std::cell::RefCell<Vec<RenderBatchAbi>>,
+    batches: std::cell::RefCell<Vec<RenderBatch>>,
     /// Retained stream and expired invocation used to verify post-call revocation.
     retained: std::cell::RefCell<Option<(u64, ComPtr<IRenderStreamAbi>)>>,
 }
@@ -38,7 +38,7 @@ impl IRenderer for CaptureRenderer {
         stream: neocogi_com::ComRef<'_, IRenderStreamAbi>,
     ) -> Result<(), NcStatus> {
         let mut vertices = vec![RenderVertex::default(); info.vertex_count as usize];
-        let mut batches = vec![RenderBatch::Atlas { first: 0, count: 3 }.into(); info.batch_count as usize];
+        let mut batches = vec![RenderBatch::Atlas { first: 0, count: 3 }; info.batch_count as usize];
         assert_eq!(
             stream.vertices(info.invocation, NcCopyToBufferOffset::new(0, &mut vertices))?,
             info.vertex_count
@@ -84,8 +84,7 @@ fn compositor_expands_typed_image_patch_and_rejects_invalid_payloads() {
                         bottom: source.height - source.height / 2,
                     },
                     tint: 0xffffffff,
-                }
-                .into(),
+                },
             },
         )
         .unwrap();
@@ -109,8 +108,7 @@ fn compositor_expands_typed_image_patch_and_rejects_invalid_payloads() {
                     icon: close,
                     source: Insets::default(),
                     tint: 0xffffffff,
-                }
-                .into(),
+                },
             },
         ),
         Err(NC_E_INVALID_ARG)
@@ -126,8 +124,7 @@ fn compositor_expands_typed_image_patch_and_rejects_invalid_payloads() {
                     icon: u32::MAX,
                     source: Insets::default(),
                     tint: 0xffffffff,
-                }
-                .into(),
+                },
             },
         ),
         Err(NC_E_OUT_OF_RANGE)

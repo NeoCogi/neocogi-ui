@@ -128,10 +128,10 @@ impl ChildEditResult {
     }
 }
 
-/// Decodes a tagged event and validates its matching whole-text argument.
+/// Validates a native event and its matching whole-text argument.
+/// The COM codec has already checked the wire tag and active field bit patterns.
 /// The returned text borrow lasts only as long as the caller's original buffer.
-pub fn decode_widget_event<'a>(event: WidgetEventAbi, text: neocogi_com::NcCopyFromBufferOffset<'a, u8>) -> Result<(WidgetEvent, &'a str), NcStatus> {
-    let event = WidgetEvent::try_from(event)?;
+pub fn decode_widget_event<'a>(event: WidgetEvent, text: neocogi_com::NcCopyFromBufferOffset<'a, u8>) -> Result<(WidgetEvent, &'a str), NcStatus> {
     if text.offset() != 0 {
         return Err(NC_E_INVALID_ARG);
     }

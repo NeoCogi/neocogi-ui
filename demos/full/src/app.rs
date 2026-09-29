@@ -331,7 +331,7 @@ impl AppState for State {
                 _ => Ok(()),
             },
             Message::Combo(origin, neocogi_ui::events::combo::Event::Changed(event)) => match origin.upgrade()? {
-                Some(_) => self.choice_changed(&ChoiceSelection::try_from(event)?),
+                Some(_) => self.choice_changed(&event),
                 None => Ok(()),
             },
             Message::FileDialog(origin, neocogi_ui::events::file_dialog::Event::Completed(event)) => match origin.upgrade()? {

@@ -281,7 +281,7 @@ impl super::ContainerAlgorithm for Linear {
 
 use crate::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
 use neocogi_ui_core_contracts::{IWidgetHostAbi};
-use neocogi_ui_nodes_contracts::{ChildCrossSize, CrossSize, CrossSizeAbi, FlowDirection, LinearAbi, LinearEdge};
+use neocogi_ui_nodes_contracts::{ChildCrossSize, CrossSize, FlowDirection, LinearAbi, LinearEdge};
 use neocogi_com::{ComPtr, NcStatus};
 
 direct_widget_phase_impl!(Linear);
@@ -293,7 +293,7 @@ impl Linear {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         direction: FlowDirection,
-        cross: CrossSizeAbi,
+        cross: CrossSize,
     ) -> Result<ComPtr<LinearAbi>, NcStatus> {
         let value = Self::build(host, direction, cross, Some(&resources))?;
         Ok(Self::from_value(value).query().expect("Linear declares its callable class contract"))
@@ -303,7 +303,7 @@ impl Linear {
     pub(crate) fn build(
         host: ComPtr<IWidgetHostAbi>,
         direction: FlowDirection,
-        cross: CrossSizeAbi,
+        cross: CrossSize,
         resources: Option<&crate::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
         let direction = local_direction(direction)?;
@@ -335,13 +335,13 @@ impl neocogi_ui_nodes_contracts::Linear for Linear {
     }
 
     /// Returns the line's cross size independently of per-child relationships.
-    fn cross_size(&self) -> Result<CrossSizeAbi, NcStatus> {
+    fn cross_size(&self) -> Result<CrossSize, NcStatus> {
         self.runtime().state.readable()?;
         Ok(cross_size(Linear::cross_size(self)))
     }
 
     /// Changes cross size only after validating its typed payload.
-    fn set_cross_size(&mut self, cross: CrossSizeAbi) -> Result<(), NcStatus> {
+    fn set_cross_size(&mut self, cross: CrossSize) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
         let cross = local_cross(cross)?;
         if Linear::cross_size(self) != cross {
@@ -376,8 +376,8 @@ fn flow_direction(direction: LinearDirection) -> FlowDirection {
 }
 
 /// Validates a line cross-axis policy, including exact nonnegative extents.
-fn local_cross(cross: CrossSizeAbi) -> Result<LinearCrossSize, NcStatus> {
-    match CrossSize::try_from(cross).map_err(|_| neocogi_com::NC_E_INVALID_ARG)? {
+fn local_cross(cross: CrossSize) -> Result<LinearCrossSize, NcStatus> {
+    match cross {
         CrossSize::Content => Ok(LinearCrossSize::Content),
         CrossSize::Stretch => Ok(LinearCrossSize::Stretch),
         CrossSize::Fixed { extent } if extent >= 0 => Ok(LinearCrossSize::Fixed(extent)),
@@ -386,19 +386,18 @@ fn local_cross(cross: CrossSizeAbi) -> Result<LinearCrossSize, NcStatus> {
 }
 
 /// Encodes the retained line cross policy without a duplicate cached representation.
-fn cross_size(cross: LinearCrossSize) -> CrossSizeAbi {
+fn cross_size(cross: LinearCrossSize) -> CrossSize {
     match cross {
         LinearCrossSize::Content => CrossSize::Content,
         LinearCrossSize::Stretch => CrossSize::Stretch,
         LinearCrossSize::Fixed(extent) => CrossSize::Fixed { extent },
     }
-    .into()
 }
 
 /// Validates both axes of one Linear relationship before consuming a child claim.
 fn local_linear_edge(edge: LinearEdge) -> Result<LinearItemSpec, NcStatus> {
     let main = super::local_track(edge.main)?;
-    let fixed_cross = match ChildCrossSize::try_from(edge.cross).map_err(|_| neocogi_com::NC_E_INVALID_ARG)? {
+    let fixed_cross = match edge.cross {
         ChildCrossSize::Stretch => None,
         ChildCrossSize::Fixed { extent } if extent >= 0 => Some(extent),
         _ => return Err(neocogi_com::NC_E_INVALID_ARG),
@@ -413,8 +412,7 @@ fn linear_edge(edge: LinearItemSpec) -> LinearEdge {
         cross: match edge.fixed_cross {
             Some(extent) => ChildCrossSize::Fixed { extent },
             None => ChildCrossSize::Stretch,
-        }
-        .into(),
+        },
     }
 }
 

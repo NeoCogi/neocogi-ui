@@ -130,7 +130,7 @@ mod tests {
             self.replace_flags(WidgetOptions::from_raw(self.requested_flags.raw() & !flags.raw()))
         }
         /// Input validation remains typed even in a facade-only fake component.
-        fn update(&mut self, _state: WidgetUpdate, event: WidgetEventAbi, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
+        fn update(&mut self, _state: WidgetUpdate, event: WidgetEvent, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
             decode_widget_event(event, text)?;
             Ok(GeometryChange::NoChange)
         }

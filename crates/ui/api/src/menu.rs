@@ -105,11 +105,11 @@ impl MenuItem {
     }
     /// Reads the complete check/radio role rather than guessing it from a boolean.
     pub fn mark(&self) -> Result<MenuMark, NcStatus> {
-        self.interface.mark()?.try_into()
+        self.interface.mark()
     }
     /// Updates presentation only; application code owns any check/radio-group policy.
     pub fn set_mark(&self, mark: MenuMark) -> Result<(), NcStatus> {
-        self.interface.set_mark(mark.into())
+        self.interface.set_mark(mark)
     }
     /// Copies the display-only accelerator, with empty text representing absence.
     pub fn shortcut_hint(&self) -> Result<String, NcStatus> {

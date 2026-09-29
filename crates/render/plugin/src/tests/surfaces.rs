@@ -31,7 +31,7 @@ struct SurfaceStream {
     /// Final copied geometry in physical pixels.
     vertices: Vec<RenderVertex>,
     /// Complete painter ordering.
-    batches: Vec<RenderBatchAbi>,
+    batches: Vec<RenderBatch>,
     /// Sampled images indexed by overall batch number.
     images: Vec<ComPtr<ITextureAbi>>,
 }
@@ -42,7 +42,7 @@ impl IRenderStream for SurfaceStream {
         Ok(self.vertices.len() as u32)
     }
     /// Copies the complete ordered batch list.
-    fn batches(&self, _: u64, mut output: NcCopyToBufferOffset<'_, RenderBatchAbi>) -> Result<u32, NcStatus> {
+    fn batches(&self, _: u64, mut output: NcCopyToBufferOffset<'_, RenderBatch>) -> Result<u32, NcStatus> {
         output.as_mut_slice().copy_from_slice(&self.batches);
         Ok(self.batches.len() as u32)
     }
@@ -103,7 +103,7 @@ fn independent_surface_snapshots_keep_orientation_and_device_lifetime() {
     let vertices = quad(Rect { x: 0, y: 0, width: 32, height: 32 });
     let (first_info, first_stream) = SurfaceStream {
         vertices: vec![vertices[0], vertices[1], vertices[2], vertices[0], vertices[2], vertices[3]],
-        batches: vec![RenderBatch::Atlas { first: 0, count: 6 }.into()],
+        batches: vec![RenderBatch::Atlas { first: 0, count: 6 }],
         images: vec![],
     }
     .publish(extent, 0xff000000);
@@ -159,7 +159,7 @@ fn independent_surface_snapshots_keep_orientation_and_device_lifetime() {
             .into_iter()
             .chain(quad(Rect { x: 32, y: 0, width: 32, height: 32 }))
             .collect(),
-        batches: vec![RenderBatch::Texture { first: 0 }.into(), RenderBatch::Texture { first: 4 }.into()],
+        batches: vec![RenderBatch::Texture { first: 0 }, RenderBatch::Texture { first: 4 }],
         images: vec![old.clone(), new.clone()],
     }
     .publish(SIZE, 0xff333333);

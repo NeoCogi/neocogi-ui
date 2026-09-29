@@ -6,8 +6,7 @@ pub(crate) use neocogi_ui_support::input_contract::{event, snapshot};
 use neocogi_ui_support::input_contract::host_key;
 
 /// Validates one host event before changing the queue, then reuses existing normalization.
-pub(crate) fn enqueue(context: &mut crate::window_manager::WindowManager, event: UiInputAbi, bytes: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-    let event = UiInput::try_from(event)?;
+pub(crate) fn enqueue(context: &mut crate::window_manager::WindowManager, event: UiInput, bytes: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
     let text = text(bytes)?;
     if !matches!(event, UiInput::Text) && !text.is_empty() {
         return Err(NC_E_INVALID_ARG);

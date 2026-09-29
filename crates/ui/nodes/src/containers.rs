@@ -139,8 +139,8 @@ macro_rules! container_edges {
 }
 
 /// Validates one typed track before topology or semantic mutation begins.
-pub(super) fn local_track(track: neocogi_ui_nodes_contracts::LayoutTrackAbi) -> Result<crate::TrackSize, neocogi_com::NcStatus> {
-    match neocogi_ui_nodes_contracts::LayoutTrack::try_from(track).map_err(|_| neocogi_com::NC_E_INVALID_ARG)? {
+pub(super) fn local_track(track: neocogi_ui_nodes_contracts::LayoutTrack) -> Result<crate::TrackSize, neocogi_com::NcStatus> {
+    match track {
         neocogi_ui_nodes_contracts::LayoutTrack::Content => Ok(crate::TrackSize::Content),
         neocogi_ui_nodes_contracts::LayoutTrack::Fixed { extent } if extent >= 0 => Ok(crate::TrackSize::Fixed(extent)),
         neocogi_ui_nodes_contracts::LayoutTrack::Flex { weight } if weight.is_finite() && weight > 0.0 => Ok(crate::TrackSize::Flex(weight)),
@@ -148,14 +148,13 @@ pub(super) fn local_track(track: neocogi_ui_nodes_contracts::LayoutTrackAbi) -> 
     }
 }
 
-/// Copies one retained track policy into its typed ABI representation.
-pub(super) fn layout_track(track: crate::TrackSize) -> neocogi_ui_nodes_contracts::LayoutTrackAbi {
+/// Copies one retained track policy into the native public contract value.
+pub(super) fn layout_track(track: crate::TrackSize) -> neocogi_ui_nodes_contracts::LayoutTrack {
     match track {
         crate::TrackSize::Content => neocogi_ui_nodes_contracts::LayoutTrack::Content,
         crate::TrackSize::Fixed(extent) => neocogi_ui_nodes_contracts::LayoutTrack::Fixed { extent },
         crate::TrackSize::Flex(weight) => neocogi_ui_nodes_contracts::LayoutTrack::Flex { weight },
     }
-    .into()
 }
 
 mod form;
