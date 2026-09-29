@@ -304,7 +304,7 @@ fn title_drag_and_close_deliver_window_events_through_the_production_session() {
     let body = fixture.ui.widgets().button_unobserved("body").unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
     let observations = Vec::new();
-    let queue = neocogi_ui::events::window::queue(events_tx.clone(), |event| event).unwrap();
+    let queue = neocogi_ui::test_event_queue!(window, neocogi_ui::WindowEvent, events_tx.clone(), |_queue, _origin, event| event).unwrap();
     let owner = fixture
         .ui
         .window_with_queue("chrome", Rect { x: 30, y: 30, width: 180, height: 120 }, &body, Some(queue.as_com_ref()))

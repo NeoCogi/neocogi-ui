@@ -121,12 +121,22 @@ impl neocogi_com::persistence::IPersistenceFactory for SettingsFactory {
         children: ComRef<'_, neocogi_com::persistence::IObjectChildrenAbi>,
     ) -> Result<ComPtr<IUnknown>, NcStatus> {
         let state = settings(version, state, children.count()?)?;
-        let button = self.widgets.button(&state.save_label, self.sender.clone(), |_| AppEvent::Save)?;
-        let checkbox = self.widgets.checkbox(
+        let button = self.widgets.button_with_queue(
+            &state.save_label,
+            Some(neocogi_ui::test_event_queue!(button, AppEvent, self.sender.clone(), |_queue, _origin, _| AppEvent::Save)?.as_com_ref()),
+        )?;
+        let checkbox = self.widgets.checkbox_with_queue(
             &state.checkbox_label,
             state.checked,
-            self.sender.clone(),
-            |neocogi_ui::checkbox::Event::Changed(value)| AppEvent::Enabled(value.checked),
+            Some(
+                neocogi_ui::test_event_queue!(
+                    checkbox,
+                    AppEvent,
+                    self.sender.clone(),
+                    |_queue, _origin, neocogi_ui::checkbox::Event::Changed(value)| AppEvent::Enabled(value.checked)
+                )?
+                .as_com_ref(),
+            ),
         )?;
         let mut root = self.widgets.linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
         let result = (|| {

@@ -504,15 +504,9 @@ mod tests {
     type NumericDispatcher = Box<dyn FnMut(&mut Vec<Real>) -> bool>;
 
     /// Collects the shared numeric message from either control through its generated concrete receiver.
-    fn numeric_dispatcher<T>(
-        install: impl FnOnce(Box<dyn FnMut(neocogi_ui_nodes_contracts::NumericChanged) -> Result<(), NcStatus>>) -> Result<T, NcStatus>,
-    ) -> (T, NumericDispatcher) {
+    fn numeric_dispatcher<T>(install: impl FnOnce(std::sync::mpsc::Sender<f32>) -> Result<T, NcStatus>) -> (T, NumericDispatcher) {
         let (events_tx, events) = std::sync::mpsc::channel();
-        let widget = install(Box::new(move |event| {
-            let _ = events_tx.send(event.value);
-            Ok(())
-        }))
-        .unwrap();
+        let widget = install(events_tx).unwrap();
         (
             widget,
             Box::new(move |values| {
@@ -687,10 +681,10 @@ mod tests {
             SliderParameters::with_opt(1.15, 1.0, 2.0, 0.2, precision(2), WidgetOption::FRAME)
                 .expect("finite ascending fractional slider parameters must validate"),
         );
-        let (slider, mut dispatcher) = numeric_dispatcher(|mut consume| {
-            let receiver = <neocogi_ui_nodes_contracts::SliderEventQueueAbi as neocogi_com::events::EventQueueInterface>::receiver(
-                move |_origin, neocogi_ui_nodes_contracts::SliderEvent::Changed(event)| consume(event),
-            )?;
+        let (slider, mut dispatcher) = numeric_dispatcher(|send| {
+            let receiver = neocogi_ui::test_event_queue!(slider, f32, send, |_queue, _origin, neocogi_ui_nodes_contracts::SliderEvent::Changed(event)| {
+                event.value
+            })?;
             Ok(slider.map(|mut value| {
                 Slider::into_local_cyclic::<neocogi_ui_nodes_contracts::SliderAbi>(move |origin| {
                     value.events = neocogi_com::events::EventPort::with_queue(Some(receiver), origin);
@@ -849,10 +843,10 @@ mod tests {
         let number = crate::test_support::algorithm::Algorithm::<Number>::from(
             NumberParameters::new(0.0, 2.0, DecimalPrecision::ZERO).expect("finite non-negative number parameters must validate"),
         );
-        let (number, mut dispatcher) = numeric_dispatcher(|mut consume| {
-            let receiver = <neocogi_ui_nodes_contracts::NumberEventQueueAbi as neocogi_com::events::EventQueueInterface>::receiver(
-                move |_origin, neocogi_ui_nodes_contracts::NumberEvent::Changed(event)| consume(event),
-            )?;
+        let (number, mut dispatcher) = numeric_dispatcher(|send| {
+            let receiver = neocogi_ui::test_event_queue!(number, f32, send, |_queue, _origin, neocogi_ui_nodes_contracts::NumberEvent::Changed(event)| {
+                event.value
+            })?;
             Ok(number.map(|value| value.into_observed(receiver)))
         });
         let mut number = number.try_borrow_mut().unwrap();
@@ -934,10 +928,10 @@ mod tests {
         let slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
             SliderParameters::new(0.0, -5.0, 5.0).expect("finite ascending slider parameters must validate"),
         );
-        let (slider, mut dispatcher) = numeric_dispatcher(|mut consume| {
-            let receiver = <neocogi_ui_nodes_contracts::SliderEventQueueAbi as neocogi_com::events::EventQueueInterface>::receiver(
-                move |_origin, neocogi_ui_nodes_contracts::SliderEvent::Changed(event)| consume(event),
-            )?;
+        let (slider, mut dispatcher) = numeric_dispatcher(|send| {
+            let receiver = neocogi_ui::test_event_queue!(slider, f32, send, |_queue, _origin, neocogi_ui_nodes_contracts::SliderEvent::Changed(event)| {
+                event.value
+            })?;
             Ok(slider.map(|mut value| {
                 Slider::into_local_cyclic::<neocogi_ui_nodes_contracts::SliderAbi>(move |origin| {
                     value.events = neocogi_com::events::EventPort::with_queue(Some(receiver), origin);
@@ -958,10 +952,10 @@ mod tests {
         let slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
             SliderParameters::with_opt(2.0, 0.0, 10.0, 1.0, DecimalPrecision::ZERO, WidgetOption::FRAME).unwrap(),
         );
-        let (slider, mut dispatcher) = numeric_dispatcher(|mut consume| {
-            let receiver = <neocogi_ui_nodes_contracts::SliderEventQueueAbi as neocogi_com::events::EventQueueInterface>::receiver(
-                move |_origin, neocogi_ui_nodes_contracts::SliderEvent::Changed(event)| consume(event),
-            )?;
+        let (slider, mut dispatcher) = numeric_dispatcher(|send| {
+            let receiver = neocogi_ui::test_event_queue!(slider, f32, send, |_queue, _origin, neocogi_ui_nodes_contracts::SliderEvent::Changed(event)| {
+                event.value
+            })?;
             Ok(slider.map(|mut value| {
                 Slider::into_local_cyclic::<neocogi_ui_nodes_contracts::SliderAbi>(move |origin| {
                     value.events = neocogi_com::events::EventPort::with_queue(Some(receiver), origin);

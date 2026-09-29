@@ -517,7 +517,16 @@ mod tests {
         let menus = ui.menus().unwrap();
         let builder = menus.create("Pointer actions").unwrap();
         let (events_tx, events) = std::sync::mpsc::channel();
-        builder.item_observed("Run at pointer", events_tx.clone(), |event| event.label).unwrap();
+        builder
+            .item_with_queue(
+                "Run at pointer",
+                Some(
+                    neocogi_ui::test_event_queue!(activation, String, events_tx.clone(), |_queue, _origin, event| event.label)
+                        .unwrap()
+                        .as_com_ref(),
+                ),
+            )
+            .unwrap();
         let mut popup = menus.popup(owner.as_com_ref(), &builder).unwrap();
         let labels = Vec::new();
         let size = Size { width: 640, height: 400 };

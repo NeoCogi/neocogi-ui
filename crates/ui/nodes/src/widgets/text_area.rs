@@ -934,7 +934,7 @@ mod tests {
         impl FnMut(&mut Vec<RecordedEvent>) -> bool,
     ) {
         let (events_tx, events) = std::sync::mpsc::channel();
-        let queue = neocogi_ui::text_area::queue(events_tx, |event| match event {
+        let queue = neocogi_ui::test_event_queue!(text_area, RecordedEvent, events_tx, |_queue, _origin, event| match event {
             neocogi_ui::text_area::Event::Changed(value) => RecordedEvent::Changed(value.text, value.cursor),
             neocogi_ui::text_area::Event::Submitted(value) => RecordedEvent::Submitted(value.text),
         })

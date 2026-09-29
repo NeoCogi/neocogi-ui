@@ -152,8 +152,14 @@ fn malformed_portable_metadata_never_reaches_a_live_skin() {
             _ => unreachable!(),
         }
         let source = data.into_bundle().unwrap();
-        let expected = match case { 8 => neocogi_com::NC_E_INVALID_TAG, _ => NC_E_INVALID_ARG };
-        assert!(matches!(ImportedAssets::read(source.as_com_ref(), None), Err(status) if status == expected), "case {case}");
+        let expected = match case {
+            8 => neocogi_com::NC_E_INVALID_TAG,
+            _ => NC_E_INVALID_ARG,
+        };
+        assert!(
+            matches!(ImportedAssets::read(source.as_com_ref(), None), Err(status) if status == expected),
+            "case {case}"
+        );
     }
     let mut data = export_bundle_data(&bundle()).unwrap();
     data.tables.size.width = i32::MAX;
@@ -255,7 +261,19 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
     let (session_tx, session) = std::sync::mpsc::channel();
     let button = ui
         .widgets()
-        .button("switch theme", session_tx.clone(), move |neocogi_ui::button::Event::Activated(event)| event)
+        .button_with_queue(
+            "switch theme",
+            Some(
+                neocogi_ui::test_event_queue!(
+                    button,
+                    neocogi_ui::events::Activation,
+                    session_tx.clone(),
+                    |_queue, _origin, neocogi_ui::button::Event::Activated(event)| event
+                )
+                .unwrap()
+                .as_com_ref(),
+            ),
+        )
         .unwrap();
     let probe = Rc::new(Probe {
         runtime,
@@ -419,7 +437,10 @@ fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision
         NC_E_INVALID_ARG
     );
     let invalid = PaletteEditAbi::from_unknown_tag(PaletteEditTag::from_raw(255)).unwrap();
-    assert_eq!(compiler.derive_style(source.as_com_ref(), metrics, invalid).unwrap_err(), neocogi_com::NC_E_INVALID_TAG);
+    assert_eq!(
+        compiler.derive_style(source.as_com_ref(), metrics, invalid).unwrap_err(),
+        neocogi_com::NC_E_INVALID_TAG
+    );
     assert_eq!(ui.assets().unwrap().as_raw().object, source.as_raw().object);
     ui.close().unwrap();
     // Compilation owns no UI lifetime: retained resource data remains authorable after closure.

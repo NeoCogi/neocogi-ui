@@ -1,12 +1,11 @@
 //! Typed constructor receivers preserve ownership, validation and queue ordering.
 use super::*;
-use neocogi_ui::events::*;
 use neocogi_com::NC_E_INVALID_ARG;
 use neocogi_com::events::EventPort;
 use neocogi_ui_core_contracts::IMenuItemEventQueueAbi;
 use std::{cell::Cell, rc::Rc};
 
-/// Counts mapping destruction without relying on channel implementation details.
+/// Counts queue destruction without relying on channel implementation details.
 struct Lifetime(Rc<Cell<u32>>);
 impl Drop for Lifetime {
     fn drop(&mut self) {
@@ -16,17 +15,17 @@ impl Drop for Lifetime {
 
 /// Independent producer ports share an application FIFO without installing observers later.
 #[test]
-fn construction_mapping_preserves_fifo_and_owned_snapshots() {
+fn construction_queue_preserves_fifo_and_owned_snapshots() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let menu = ui.menus().unwrap().create("origins").unwrap();
     let origin = menu.item("source").unwrap();
     let (sender, messages) = std::sync::mpsc::channel();
     let mut first = EventPort::<IMenuItemEventQueueAbi>::with_queue(
-        Some(activation::queue(sender.clone(), |event| event.label).unwrap()),
+        Some(neocogi_ui::test_event_queue!(activation, String, sender.clone(), |_queue, _origin, event| event.label).unwrap()),
         origin.as_interface().downgrade().unwrap(),
     );
     let mut second = EventPort::<IMenuItemEventQueueAbi>::with_queue(
-        Some(activation::queue(sender, |event| event.label).unwrap()),
+        Some(neocogi_ui::test_event_queue!(activation, String, sender, |_queue, _origin, event| event.label).unwrap()),
         menu.item("second").unwrap().as_interface().downgrade().unwrap(),
     );
     second.post(&Activation { label: "second".into() }).unwrap();
@@ -38,17 +37,15 @@ fn construction_mapping_preserves_fifo_and_owned_snapshots() {
 
 /// Logical closure releases the captured parent even while the producer remains retained.
 #[test]
-fn close_releases_mapping_once_and_preserves_already_queued_facts() {
+fn close_releases_queue_once_and_preserves_already_queued_facts() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let menu = ui.menus().unwrap().create("origins").unwrap();
     let origin = menu.item("source").unwrap();
     let (sender, messages) = std::sync::mpsc::channel();
     let drops = Rc::new(Cell::new(0));
     let capture = Lifetime(drops.clone());
-    let sink = activation::queue(sender, move |event| {
-        let _ = &capture;
-        event.label
-    })
+    let sink = neocogi_ui::test_event_queue!(activation, String, sender,
+        |_queue, _origin, event| event.label, { _lifetime: Lifetime = capture })
     .unwrap();
     let mut port = EventPort::<IMenuItemEventQueueAbi>::with_queue(Some(sink), origin.as_interface().downgrade().unwrap());
     port.post(&Activation { label: "before close".into() }).unwrap();
@@ -71,10 +68,9 @@ fn translation_precedes_dispatch_and_disconnection_keeps_cleanup_deterministic()
     let (sender, messages) = std::sync::mpsc::channel();
     let calls = Rc::new(Cell::new(0));
     let observed = calls.clone();
-    let sink = activation::queue(sender, move |event| {
-        observed.set(observed.get() + 1);
-        event.label
-    })
+    let sink = neocogi_ui::test_event_queue!(activation, String, sender,
+        |queue, _origin, event| { queue.calls.set(queue.calls.get() + 1); event.label },
+        { calls: Rc<Cell<u32>> = observed })
     .unwrap();
     let mut port = EventPort::<IMenuItemEventQueueAbi>::with_queue(Some(sink), origin.as_interface().downgrade().unwrap());
     port.post(&Activation { label: "first".into() }).unwrap();
@@ -95,13 +91,13 @@ fn unobserved_port_has_no_delivery_and_cannot_emit_after_close() {
     assert_eq!(port.post(&Activation { label: "closed".into() }), Err(neocogi_com::NC_E_CLOSED));
 }
 
-/// The generated aggregate sink preserves facade domain checks before mapping.
+/// The generated aggregate sink preserves facade domain checks before queue.
 #[test]
-fn constructor_queues_reject_invalid_payloads_before_the_mapper_runs() {
+fn constructor_queues_reject_invalid_payloads_before_recording() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let origin = ui.widgets().textbox_unobserved("").unwrap();
     let (sender, receiver) = std::sync::mpsc::channel();
-    let mut sink = neocogi_ui::textbox::queue(sender, |event| event).unwrap();
+    let mut sink = neocogi_ui::test_event_queue!(textbox, neocogi_ui::textbox::Event, sender, |_queue, _origin, event| event).unwrap();
     let invalid = neocogi_ui::textbox::Event::Changed(TextChanged { text: "é".into(), cursor: 1 });
     assert_eq!(
         sink.post(origin.as_interface(), neocogi_com::NcValueRef::new(&invalid).unwrap()),
@@ -126,7 +122,7 @@ fn constructor_queues_reject_invalid_payloads_before_the_mapper_runs() {
         .widgets()
         .number_unobserved(neocogi_ui::NumberOptions { value: 0.0, step: 1.0, precision: 0 })
         .unwrap();
-    let mut sink = neocogi_ui::number::queue(sender, |_| ()).unwrap();
+    let mut sink = neocogi_ui::test_event_queue!(number, (), sender, |_queue, _origin, _| ()).unwrap();
     assert_eq!(
         sink.post(
             origin.as_interface(),
@@ -243,7 +239,13 @@ fn one_application_queue_handles_two_widget_types_without_retaining_origins() {
 fn composite_queues_report_outer_origins_without_retaining_their_children() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let (send, messages) = std::sync::mpsc::channel();
-    let queue = neocogi_com::events::mapped_queue::<TextAreaEventQueueAbi, _>(send, |origin, event| (origin, event)).unwrap();
+    let queue = neocogi_ui::test_event_queue!(
+        text_area,
+        (neocogi_com::WeakComPtr<TextAreaAbi>, neocogi_ui::text_area::Event),
+        send,
+        |_queue, origin, event| (origin.downgrade()?, event)
+    )
+    .unwrap();
     let area = ui
         .widgets()
         .text_area_with_queue("", TextWrapping::Word, true, Some(queue.as_com_ref()))
@@ -263,7 +265,13 @@ fn composite_queues_report_outer_origins_without_retaining_their_children() {
     let mut root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let window = ui.window("combo origin", RECT, &root).unwrap();
     let (send, messages) = std::sync::mpsc::channel();
-    let queue = neocogi_com::events::mapped_queue::<ComboEventQueueAbi, _>(send, |origin, event| (origin, event)).unwrap();
+    let queue = neocogi_ui::test_event_queue!(
+        combo,
+        (neocogi_com::WeakComPtr<ComboAbi>, neocogi_ui::combo::Event),
+        send,
+        |_queue, origin, event| (origin.downgrade()?, event)
+    )
+    .unwrap();
     let combo = ui
         .combo_box_with_queue(
             window.as_com_ref(),

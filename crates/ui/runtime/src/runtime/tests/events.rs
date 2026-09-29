@@ -2,16 +2,16 @@
 use super::*;
 use neocogi_ui_support::test_support::events::TestApp;
 
-/// Both textbox outputs share one callback allocation; construction retains it
+/// Both textbox outputs share one queue allocation; construction retains it
 /// without allocating another receiver or validating an output through a query.
 #[test]
-fn constructor_sink_allocates_once_and_drops_with_logical_widget_closure() {
+fn constructor_queue_allocates_once_and_drops_with_logical_widget_closure() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let (sender, receiver) = std::sync::mpsc::channel();
     let measurement = crate::test_support::AllocationMeasurement::begin();
-    let queue = neocogi_ui::textbox::queue(sender, |event| event).unwrap();
+    let queue = neocogi_ui::test_event_queue!(textbox, neocogi_ui::textbox::Event, sender, |_queue, _origin, event| event).unwrap();
     let allocations = measurement.finish();
-    assert_eq!(allocations.events, 1, "sender and mapper must live inside the one COM queue allocation");
+    assert_eq!(allocations.events, 1, "sender must live inside the one concrete COM queue allocation");
 
     let measurement = crate::test_support::AllocationMeasurement::begin();
     let unobserved = ui.widgets().textbox_unobserved("same").unwrap();
@@ -29,12 +29,15 @@ fn constructor_sink_allocates_once_and_drops_with_logical_widget_closure() {
     drop(unobserved);
 }
 
-/// Failed factory validation releases a callback that was never published to a widget.
+/// Failed factory validation releases a queue that was never published to a widget.
 #[test]
-fn failed_constructor_releases_sink_captures() {
+fn failed_constructor_releases_its_queue() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let (sender, receiver) = std::sync::mpsc::channel::<()>();
-    let result = ui.widgets().number(NumberOptions { value: f32::NAN, step: 1.0, precision: 0 }, sender, |_| ());
+    let result = ui.widgets().number_with_queue(
+        NumberOptions { value: f32::NAN, step: 1.0, precision: 0 },
+        Some(neocogi_ui::test_event_queue!(number, (), sender, |_queue, _origin, _| ()).unwrap().as_com_ref()),
+    );
     assert!(matches!(result, Err(NC_E_INVALID_ARG)));
     assert!(matches!(receiver.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
 }
@@ -61,11 +64,35 @@ fn consumer_preserves_emission_order_snapshot_values_and_bounded_progress() {
     let (session_tx, session) = std::sync::mpsc::channel();
     let mut a = ui
         .widgets()
-        .button("a", session_tx.clone(), move |neocogi_ui::button::Event::Activated(event)| event.label)
+        .button_with_queue(
+            "a",
+            Some(
+                neocogi_ui::test_event_queue!(
+                    button,
+                    String,
+                    session_tx.clone(),
+                    |_queue, _origin, neocogi_ui::button::Event::Activated(event)| event.label
+                )
+                .unwrap()
+                .as_com_ref(),
+            ),
+        )
         .unwrap();
     let mut b = ui
         .widgets()
-        .button("b", session_tx.clone(), move |neocogi_ui::button::Event::Activated(event)| event.label)
+        .button_with_queue(
+            "b",
+            Some(
+                neocogi_ui::test_event_queue!(
+                    button,
+                    String,
+                    session_tx.clone(),
+                    |_queue, _origin, neocogi_ui::button::Event::Activated(event)| event.label
+                )
+                .unwrap()
+                .as_com_ref(),
+            ),
+        )
         .unwrap();
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     column.insert(0, &a, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
@@ -119,12 +146,22 @@ fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
     let (events_tx, events) = std::sync::mpsc::channel();
     let button = ui
         .widgets()
-        .button("replace window", events_tx.clone(), move |neocogi_ui::button::Event::Activated(_)| {
-            Mutation::Replace
-        })
+        .button_with_queue(
+            "replace window",
+            Some(
+                neocogi_ui::test_event_queue!(
+                    button,
+                    Mutation,
+                    events_tx.clone(),
+                    |_queue, _origin, neocogi_ui::button::Event::Activated(_)| { Mutation::Replace }
+                )
+                .unwrap()
+                .as_com_ref(),
+            ),
+        )
         .unwrap();
 
-    let queue = neocogi_ui::events::window::queue(events_tx.clone(), Mutation::Window).unwrap();
+    let queue = neocogi_ui::test_event_queue!(window, Mutation, events_tx.clone(), |_queue, _origin, event| Mutation::Window(event)).unwrap();
     let previous = ui.window_with_queue("first", RECT, &button, Some(queue.as_com_ref())).unwrap();
     // Move every callback dependency into the persistent model; retain separate
     // assertion capabilities only where the test also needs direct observations.
@@ -168,9 +205,19 @@ fn dropping_inbox_and_application_releases_runtime_without_a_source_sink_cycle()
     let (events_tx, events) = std::sync::mpsc::channel();
     let button = ui
         .widgets()
-        .button("owned runtime", events_tx.clone(), move |neocogi_ui::button::Event::Activated(event)| {
-            event.label
-        })
+        .button_with_queue(
+            "owned runtime",
+            Some(
+                neocogi_ui::test_event_queue!(
+                    button,
+                    String,
+                    events_tx.clone(),
+                    |_queue, _origin, neocogi_ui::button::Event::Activated(event)| { event.label }
+                )
+                .unwrap()
+                .as_com_ref(),
+            ),
+        )
         .unwrap();
     let window = ui.window("owner", RECT, &button).unwrap();
 
@@ -190,9 +237,20 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
 
     let mut checkbox = ui
         .widgets()
-        .checkbox("check", false, session_tx.clone(), move |neocogi_ui::checkbox::Event::Changed(event)| {
-            format!("checked:{}", event.checked)
-        })
+        .checkbox_with_queue(
+            "check",
+            false,
+            Some(
+                neocogi_ui::test_event_queue!(
+                    checkbox,
+                    String,
+                    session_tx.clone(),
+                    |_queue, _origin, neocogi_ui::checkbox::Event::Changed(event)| { format!("checked:{}", event.checked) }
+                )
+                .unwrap()
+                .as_com_ref(),
+            ),
+        )
         .unwrap();
     let window = ui.window("checkbox", RECT, &checkbox).unwrap();
 
@@ -211,7 +269,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
 
     let mut slider = ui
         .widgets()
-        .slider(
+        .slider_with_queue(
             SliderOptions {
                 value: 1.0,
                 low: 0.0,
@@ -219,8 +277,16 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
                 step: 1.0,
                 precision: 0,
             },
-            session_tx.clone(),
-            move |neocogi_ui::slider::Event::Changed(event)| format!("numeric:{}", event.value),
+            Some(
+                neocogi_ui::test_event_queue!(
+                    slider,
+                    String,
+                    session_tx.clone(),
+                    |_queue, _origin, neocogi_ui::slider::Event::Changed(event)| format!("numeric:{}", event.value)
+                )
+                .unwrap()
+                .as_com_ref(),
+            ),
         )
         .unwrap();
     let window = ui.window("slider", RECT, &slider).unwrap();
@@ -236,10 +302,18 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
 
     let number = ui
         .widgets()
-        .number(
+        .number_with_queue(
             NumberOptions { value: 3.0, step: 1.0, precision: 0 },
-            session_tx.clone(),
-            move |neocogi_ui::number::Event::Changed(event)| format!("numeric:{}", event.value),
+            Some(
+                neocogi_ui::test_event_queue!(
+                    number,
+                    String,
+                    session_tx.clone(),
+                    |_queue, _origin, neocogi_ui::number::Event::Changed(event)| format!("numeric:{}", event.value)
+                )
+                .unwrap()
+                .as_com_ref(),
+            ),
         )
         .unwrap();
     let window = ui.window("number", RECT, &number).unwrap();
@@ -253,12 +327,36 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
 
     let item = ui
         .widgets()
-        .list_item("item", session_tx.clone(), move |neocogi_ui::list_item::Event::Activated(event)| event.label)
+        .list_item_with_queue(
+            "item",
+            Some(
+                neocogi_ui::test_event_queue!(
+                    list_item,
+                    String,
+                    session_tx.clone(),
+                    |_queue, _origin, neocogi_ui::list_item::Event::Activated(event)| event.label
+                )
+                .unwrap()
+                .as_com_ref(),
+            ),
+        )
         .unwrap();
 
     let list_box = ui
         .widgets()
-        .list_box("box", session_tx.clone(), move |neocogi_ui::list_box::Event::Activated(event)| event.label)
+        .list_box_with_queue(
+            "box",
+            Some(
+                neocogi_ui::test_event_queue!(
+                    list_box,
+                    String,
+                    session_tx.clone(),
+                    |_queue, _origin, neocogi_ui::list_box::Event::Activated(event)| event.label
+                )
+                .unwrap()
+                .as_com_ref(),
+            ),
+        )
         .unwrap();
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     column.insert(0, &item, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
@@ -274,15 +372,23 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
 
     let mut bar = ui
         .widgets()
-        .scrollbar(
+        .scrollbar_with_queue(
             ScrollRange {
                 axis: ScrollAxis::Horizontal,
                 viewport: 20,
                 content: 100,
                 offset: 0,
             },
-            session_tx.clone(),
-            move |neocogi_ui::scrollbar::Event::Changed(event)| format!("scroll:{}", event.offset),
+            Some(
+                neocogi_ui::test_event_queue!(
+                    scrollbar,
+                    String,
+                    session_tx.clone(),
+                    |_queue, _origin, neocogi_ui::scrollbar::Event::Changed(event)| format!("scroll:{}", event.offset)
+                )
+                .unwrap()
+                .as_com_ref(),
+            ),
         )
         .unwrap();
     let window = ui.window("bar", RECT, &bar).unwrap();
@@ -313,10 +419,17 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     let labels = Vec::new();
     let mut textbox = ui
         .widgets()
-        .textbox("", session_tx.clone(), |event| match event {
-            neocogi_ui::textbox::Event::Changed(value) => format!("changed:{}:{}", value.text, value.cursor),
-            neocogi_ui::textbox::Event::Submitted(value) => format!("submitted:{}", value.text),
-        })
+        .textbox_with_queue(
+            "",
+            Some(
+                neocogi_ui::test_event_queue!(textbox, String, session_tx.clone(), |_queue, _origin, event| match event {
+                    neocogi_ui::textbox::Event::Changed(value) => format!("changed:{}:{}", value.text, value.cursor),
+                    neocogi_ui::textbox::Event::Submitted(value) => format!("submitted:{}", value.text),
+                })
+                .unwrap()
+                .as_com_ref(),
+            ),
+        )
         .unwrap();
     let window = ui.window("textbox", RECT, &textbox).unwrap();
     textbox.set_text("a").unwrap();
@@ -335,10 +448,19 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
 
     let area = ui
         .widgets()
-        .text_area("", TextWrapping::Word, true, session_tx.clone(), |event| match event {
-            neocogi_ui::text_area::Event::Changed(value) => format!("changed:{}:{}", value.text, value.cursor),
-            neocogi_ui::text_area::Event::Submitted(value) => format!("submitted:{}", value.text),
-        })
+        .text_area_with_queue(
+            "",
+            TextWrapping::Word,
+            true,
+            Some(
+                neocogi_ui::test_event_queue!(text_area, String, session_tx.clone(), |_queue, _origin, event| match event {
+                    neocogi_ui::text_area::Event::Changed(value) => format!("changed:{}:{}", value.text, value.cursor),
+                    neocogi_ui::text_area::Event::Submitted(value) => format!("submitted:{}", value.text),
+                })
+                .unwrap()
+                .as_com_ref(),
+            ),
+        )
         .unwrap();
     let window = ui.window("textarea", RECT, &area).unwrap();
     key(&ui, KeyCode::Tab);
@@ -357,7 +479,7 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     ui.update_with_events(SIZE, app.as_interface()).unwrap();
     assert!(app.state().ends_with(&["changed:☃:3".to_owned(), "submitted:☃".to_owned()]));
     let popup_content = ui.widgets().text_block("popup", TextWrapping::None).unwrap();
-    let queue = neocogi_ui::events::popup::queue(session_tx.clone(), |_| "dismissed".to_owned()).unwrap();
+    let queue = neocogi_ui::test_event_queue!(popup, String, session_tx.clone(), |_queue, _origin, _| "dismissed".to_owned()).unwrap();
     let mut popup = ui
         .popup_with_queue(window.as_com_ref(), "popup", &popup_content, Some(queue.as_com_ref()))
         .unwrap();
@@ -377,7 +499,14 @@ fn failed_consumer_recovers_on_next_update_and_preserves_remaining_native_input(
     let (events_tx, events) = std::sync::mpsc::channel();
     let button = ui
         .widgets()
-        .button("fail once", events_tx.clone(), move |neocogi_ui::button::Event::Activated(_)| ())
+        .button_with_queue(
+            "fail once",
+            Some(
+                neocogi_ui::test_event_queue!(button, (), events_tx.clone(), |_queue, _origin, neocogi_ui::button::Event::Activated(_)| ())
+                    .unwrap()
+                    .as_com_ref(),
+            ),
+        )
         .unwrap();
     let editor = ui.widgets().textbox_unobserved("").unwrap();
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
@@ -418,7 +547,7 @@ fn real_lifecycle_cascade_is_deferred_until_each_consumer_returns() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let button = ui.widgets().button_unobserved("cascade").unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
-    let queue = neocogi_ui::events::window::queue(events_tx.clone(), |event| event).unwrap();
+    let queue = neocogi_ui::test_event_queue!(window, neocogi_ui::WindowEvent, events_tx.clone(), |_queue, _origin, event| event).unwrap();
     let window = ui.window_with_queue("cascade", RECT, &button, Some(queue.as_com_ref())).unwrap();
     window.set_visibility(Visibility::Hidden).unwrap();
     let app = TestApp::new((0, window.clone()), events, |(observed, window), event| {
@@ -506,18 +635,14 @@ fn failed_post_preserves_committed_widget_state_and_requires_a_new_frame() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
     let (renderer, _) = renderer();
-    let mut reject_next = true;
-    let queue = <NumberEventQueueAbi as neocogi_com::events::EventQueueInterface>::receiver(move |_origin, neocogi_ui::number::Event::Changed(event)| {
-        // A receiver may reject one post and recover without changing the
-        // widget's construction-time destination or undoing its committed value.
-        match std::mem::replace(&mut reject_next, false) {
-            true => Err(NC_E_INVALID_ARG),
-            false => {
-                events_tx.send(event.value).unwrap();
-                Ok(())
+    let queue = neocogi_ui::test_event_queue!(number, f32, events_tx,
+        |queue, _origin, neocogi_ui::number::Event::Changed(event)| {
+            // A queue may reject one post without rolling back the producer's edit.
+            match std::mem::replace(&mut queue.reject_next, false) {
+                true => return Err(NC_E_INVALID_ARG),
+                false => event.value,
             }
-        }
-    })
+        }, { reject_next: bool = true })
     .unwrap();
     let number = ui
         .widgets()
@@ -543,13 +668,19 @@ fn failed_post_preserves_committed_widget_state_and_requires_a_new_frame() {
 /// Window mutations report posting errors after committing their complete lifecycle transition.
 #[test]
 fn failed_lifecycle_post_preserves_visibility_and_returns_its_receiver_error() {
-    /// Foreign consumer rejects this committed lifecycle fact without enqueueing it.
-    fn reject(_: neocogi_com::WeakComPtr<IWindowAbi>, _: WindowEvent) -> Result<(), NcStatus> {
-        Err(NC_E_INVALID_ARG)
+    #[neocogi_com::com_object(neocogi_ui::IWindowEventQueue)]
+    /// Concrete foreign queue rejects each fully decoded lifecycle event.
+    struct Reject;
+    impl neocogi_ui::IWindowEventQueue for Reject {
+        /// Valid decoding does not oblige an application receiver to accept a post.
+        fn post(&mut self, _: neocogi_com::ComRef<'_, IWindowAbi>, event: neocogi_com::NcValueRef<'_, WindowEvent>) -> Result<(), NcStatus> {
+            let _ = event.to_owned()?;
+            Err(NC_E_INVALID_ARG)
+        }
     }
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let button = ui.widgets().button_unobserved("lifecycle").unwrap();
-    let queue = <IWindowEventQueueAbi as neocogi_com::events::EventQueueInterface>::receiver(reject).unwrap();
+    let queue = Reject::from_value(Reject).query::<IWindowEventQueueAbi>().unwrap();
     let window = ui.window_with_queue("post failure", RECT, &button, Some(queue.as_com_ref())).unwrap();
     assert_eq!(window.set_visibility(Visibility::Hidden), Err(NC_E_INVALID_ARG));
     assert_eq!(window.snapshot().unwrap().visibility, Visibility::Hidden);

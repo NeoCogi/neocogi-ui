@@ -27,11 +27,29 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
     let bar = menus.create("").unwrap();
     let file = bar.submenu("File").unwrap();
     let (session_tx, session) = std::sync::mpsc::channel();
-    let disabled = file.item_observed("Disabled", session_tx.clone(), |event| event.label).unwrap();
+    let disabled = file
+        .item_with_queue(
+            "Disabled",
+            Some(
+                neocogi_ui::test_event_queue!(activation, String, session_tx.clone(), |_queue, _origin, event| event.label)
+                    .unwrap()
+                    .as_com_ref(),
+            ),
+        )
+        .unwrap();
     disabled.set_enabled(false).unwrap();
     file.separator().unwrap();
     let recent = file.submenu("Recent").unwrap();
-    let item = recent.item_observed("old", session_tx.clone(), |event| event.label).unwrap();
+    let item = recent
+        .item_with_queue(
+            "old",
+            Some(
+                neocogi_ui::test_event_queue!(activation, String, session_tx.clone(), |_queue, _origin, event| event.label)
+                    .unwrap()
+                    .as_com_ref(),
+            ),
+        )
+        .unwrap();
     item.set_label("Before mount").unwrap();
     item.set_mark(MenuMark::Checked { checked: false }).unwrap();
     item.set_shortcut_hint("Ctrl+O").unwrap();
@@ -123,7 +141,16 @@ fn standalone_menu_popup_submits_then_hides_without_destroying_its_live_rows() {
     let menus = ui.menus().unwrap();
     let builder = menus.create("Actions").unwrap();
     let (session_tx, session) = std::sync::mpsc::channel();
-    let item = builder.item_observed("Run", session_tx.clone(), |event| event.label).unwrap();
+    let item = builder
+        .item_with_queue(
+            "Run",
+            Some(
+                neocogi_ui::test_event_queue!(activation, String, session_tx.clone(), |_queue, _origin, event| event.label)
+                    .unwrap()
+                    .as_com_ref(),
+            ),
+        )
+        .unwrap();
     let mut popup = menus.popup(window.as_com_ref(), &builder).unwrap();
     let labels = Vec::new();
     popup.show_at(Rect { x: 60, y: 60, width: 20, height: 20 }).unwrap();

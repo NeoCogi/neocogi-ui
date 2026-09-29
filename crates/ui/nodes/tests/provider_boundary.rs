@@ -54,10 +54,18 @@ fn independently_activated_nodes_bind_only_to_their_core_host_and_deliver_events
     let (events_tx, events) = std::sync::mpsc::channel();
     let button = ui
         .widgets()
-        .button(
+        .button_with_queue(
             "nodes-owned activation",
-            events_tx.clone(),
-            move |neocogi_ui::button::Event::Activated(event)| event.label,
+            Some(
+                neocogi_ui::test_event_queue!(
+                    button,
+                    String,
+                    events_tx.clone(),
+                    |_queue, _origin, neocogi_ui::button::Event::Activated(event)| event.label
+                )
+                .unwrap()
+                .as_com_ref(),
+            ),
         )
         .unwrap();
     ui.window("provider boundary", Rect { x: 10, y: 10, width: 300, height: 150 }, &button).unwrap();

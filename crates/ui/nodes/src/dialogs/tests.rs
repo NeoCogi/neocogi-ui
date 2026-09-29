@@ -27,7 +27,13 @@ impl Fixture {
     /// Uses public production runtime and node-provider construction, exactly as plugin clients do.
     fn new() -> Self {
         let (send, messages) = std::sync::mpsc::channel();
-        let queue = neocogi_ui::file_dialog::queue(send, |IFileDialogEvent::Completed(event)| event).unwrap();
+        let queue = neocogi_ui::test_event_queue!(
+            file_dialog,
+            FileDialogCompletion,
+            send,
+            |_queue, _origin, IFileDialogEvent::Completed(event)| event
+        )
+        .unwrap();
         let mut fixture = Self::with_queue(queue);
         fixture.messages = Some(messages);
         fixture
@@ -182,10 +188,18 @@ fn empty_acceptance_and_independent_picker_requests_use_actual_controls() {
     let (second_events_tx, second_events) = std::sync::mpsc::channel();
     let mut second = fixture
         .ui
-        .file_dialog(
+        .file_dialog_with_queue(
             fixture.owner.as_com_ref(),
-            second_events_tx.clone(),
-            move |neocogi_ui::file_dialog::Event::Completed(event)| event,
+            Some(
+                neocogi_ui::test_event_queue!(
+                    file_dialog,
+                    FileDialogCompletion,
+                    second_events_tx.clone(),
+                    |_queue, _origin, neocogi_ui::file_dialog::Event::Completed(event)| event
+                )
+                .unwrap()
+                .as_com_ref(),
+            ),
         )
         .unwrap();
     let mut second_outcomes = Vec::new();
@@ -372,14 +386,30 @@ fn application_callback_opens_picker_and_later_input_reaches_its_new_modal_scope
     let directory = tempfile::tempdir().unwrap();
     // A separate activator lets the picker retain its original ordinary owner and tests cross-window modal routing.
     let (events_tx, events) = std::sync::mpsc::channel();
-    let queue = neocogi_ui::file_dialog::queue(events_tx.clone(), |IFileDialogEvent::Completed(event)| AppMessage::Completed(event)).unwrap();
+    let queue = neocogi_ui::test_event_queue!(
+        file_dialog,
+        AppMessage,
+        events_tx.clone(),
+        |_queue, _origin, IFileDialogEvent::Completed(event)| AppMessage::Completed(event)
+    )
+    .unwrap();
     let mut fixture = Fixture::with_queue(queue);
     let button = fixture
         .ui
         .widgets()
-        .button("open picker", events_tx.clone(), move |neocogi_ui::button::Event::Activated(_)| {
-            AppMessage::Open
-        })
+        .button_with_queue(
+            "open picker",
+            Some(
+                neocogi_ui::test_event_queue!(
+                    button,
+                    AppMessage,
+                    events_tx.clone(),
+                    |_queue, _origin, neocogi_ui::button::Event::Activated(_)| { AppMessage::Open }
+                )
+                .unwrap()
+                .as_com_ref(),
+            ),
+        )
         .unwrap();
     let activator = fixture.ui.window("activator", OWNER_RECT, &button).unwrap();
     /// Both request activation and completion share the application's FIFO.
@@ -440,22 +470,22 @@ fn closed_picker_preserves_all_completed_requests_during_manual_handler_runtime_
 #[test]
 fn completion_mapping_reentry_uses_the_widget_com_gate() {
     let directory = tempfile::tempdir().unwrap();
-    // Deliberate reentrancy probe needs the identity created after its mapper. OnceCell
-    // initializes it once; this fixture-only cycle is released by explicit close below.
-    let target = Rc::new(std::cell::OnceCell::<ComPtr<IFileDialogAbi>>::new());
-    let widget = target.clone();
     let (events_tx, events) = std::sync::mpsc::channel();
-    let queue = neocogi_ui::file_dialog::queue(events_tx.clone(), move |IFileDialogEvent::Completed(message)| {
-        assert_eq!(widget.get().unwrap().active(), Err(neocogi_com::NC_E_BUSY));
-        message
-    })
+    let queue = neocogi_ui::test_event_queue!(
+        file_dialog,
+        FileDialogCompletion,
+        events_tx,
+        |_queue, origin, IFileDialogEvent::Completed(message)| {
+            assert_eq!(origin.active(), Err(neocogi_com::NC_E_BUSY));
+            message
+        }
+    )
     .unwrap();
     let mut fixture = Fixture::with_queue(queue);
-    target.set(fixture.handle.as_interface().add_ref()).ok().unwrap();
     fixture.open(directory.path());
     assert_eq!(fixture.handle.cancel(), Ok(true));
     assert!(matches!(events.try_recv().ok(), Some(FileDialogCompletion::Cancelled)));
-    // Closing releases the deliberately self-capturing mapper; replacement is forbidden.
+    // Closing releases the queue; the receiver never retains the producer.
     fixture.handle.close().unwrap();
 }
 

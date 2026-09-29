@@ -26,12 +26,20 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
     let window = ui.window("combo", RECT, &root).unwrap();
     let (session_tx, session) = std::sync::mpsc::channel();
     let mut combo = ui
-        .combo_box(
+        .combo_box_with_queue(
             window.as_com_ref(),
             &["first", "second"],
             ChoiceSelection::Selected(1),
-            session_tx.clone(),
-            move |neocogi_ui::combo::Event::Changed(event)| ChoiceSelection::try_from(event).unwrap(),
+            Some(
+                neocogi_ui::test_event_queue!(
+                    combo,
+                    ChoiceSelection,
+                    session_tx.clone(),
+                    |_queue, _origin, neocogi_ui::combo::Event::Changed(event)| ChoiceSelection::try_from(event).unwrap()
+                )
+                .unwrap()
+                .as_com_ref(),
+            ),
         )
         .unwrap();
     combo.set_placeholder("Choose a value").unwrap();
@@ -120,13 +128,21 @@ fn combo_choice_menu_uses_shared_submenu_navigation() {
     ];
     let (session_tx, session) = std::sync::mpsc::channel();
     let mut combo = ui
-        .combo_menu(
+        .combo_menu_with_queue(
             window.as_com_ref(),
             menu_text,
             &menu,
             ChoiceSelection::Selected(10),
-            session_tx.clone(),
-            move |neocogi_ui::combo::Event::Changed(event)| ChoiceSelection::try_from(event).unwrap(),
+            Some(
+                neocogi_ui::test_event_queue!(
+                    combo,
+                    ChoiceSelection,
+                    session_tx.clone(),
+                    |_queue, _origin, neocogi_ui::combo::Event::Changed(event)| ChoiceSelection::try_from(event).unwrap()
+                )
+                .unwrap()
+                .as_com_ref(),
+            ),
         )
         .unwrap();
     root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();

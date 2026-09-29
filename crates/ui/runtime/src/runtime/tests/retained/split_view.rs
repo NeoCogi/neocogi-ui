@@ -22,9 +22,16 @@ fn split_drag_clamps_panes_and_preserves_requested_width_on_resize() {
     let mut split = fixture
         .ui
         .widgets()
-        .split_view(settings(SplitAxis::Horizontal), send, move |neocogi_ui::split_view::Event::Changed(event)| {
-            event.position
-        })
+        .split_view_with_queue(
+            settings(SplitAxis::Horizontal),
+            Some(
+                neocogi_ui::test_event_queue!(split_view, i32, send, |_queue, _origin, neocogi_ui::split_view::Event::Changed(event)| {
+                    event.position
+                })
+                .unwrap()
+                .as_com_ref(),
+            ),
+        )
         .unwrap();
     split.insert(0, &first).unwrap().finish().unwrap();
     split.insert(1, &second).unwrap().finish().unwrap();
@@ -147,7 +154,11 @@ fn split_topology_and_settings_are_validated_before_mutation() {
         SplitOptions { handle_width: 0, ..initial },
     ] {
         // Raw enum tags fail transport validation; valid axes reach domain checks.
-        let expected = if bad.axis.is_known() { neocogi_com::NC_E_INVALID_ARG } else { neocogi_com::NC_E_INVALID_TAG };
+        let expected = if bad.axis.is_known() {
+            neocogi_com::NC_E_INVALID_ARG
+        } else {
+            neocogi_com::NC_E_INVALID_TAG
+        };
         assert!(matches!(fixture.ui.widgets().split_view_unobserved(bad), Err(status) if status == expected));
     }
     let mut split = fixture.ui.widgets().split_view_unobserved(initial).unwrap();
@@ -183,7 +194,18 @@ fn split_position_setter_preserves_policy_and_checks_the_real_com_boundary() {
     for axis in [SplitAxis::Horizontal, SplitAxis::Vertical] {
         let fixture = Headless::standard();
         let (send, events) = std::sync::mpsc::channel();
-        let mut split = fixture.ui.widgets().split_view(settings(axis), send, |event| event).unwrap();
+        let mut split = fixture
+            .ui
+            .widgets()
+            .split_view_with_queue(
+                settings(axis),
+                Some(
+                    neocogi_ui::test_event_queue!(split_view, neocogi_ui::split_view::Event, send, |_queue, _origin, event| event)
+                        .unwrap()
+                        .as_com_ref(),
+                ),
+            )
+            .unwrap();
         let mut common = split.node_interface().unwrap();
         // Change every surrounding field after construction. The position setter must
         // operate on this live policy rather than the constructor's original snapshot.
@@ -225,10 +247,25 @@ fn split_position_setter_preserves_policy_and_checks_the_real_com_boundary() {
 fn split_position_setter_cancels_active_drag_and_relayouts_panes() {
     let mut fixture = Headless::standard();
     let (send, events) = std::sync::mpsc::channel();
-    let mut split = fixture.ui.widgets().split_view(settings(SplitAxis::Horizontal), send, |event| event).unwrap();
+    let mut split = fixture
+        .ui
+        .widgets()
+        .split_view_with_queue(
+            settings(SplitAxis::Horizontal),
+            Some(
+                neocogi_ui::test_event_queue!(split_view, neocogi_ui::split_view::Event, send, |_queue, _origin, event| event)
+                    .unwrap()
+                    .as_com_ref(),
+            ),
+        )
+        .unwrap();
     let (first, state) = probe::<0>(&fixture.ui, Size { width: 10, height: 10 }, WidgetOptions::NONE);
     split.insert(0, &first).unwrap().finish().unwrap();
-    split.insert(1, &fixture.ui.widgets().text_block("second", TextWrapping::None).unwrap()).unwrap().finish().unwrap();
+    split
+        .insert(1, &fixture.ui.widgets().text_block("second", TextWrapping::None).unwrap())
+        .unwrap()
+        .finish()
+        .unwrap();
     let _owner = window(&fixture.ui, "setter during capture", Rect { x: 10, y: 10, width: 400, height: 120 }, &split);
     fixture.frame(VIEW).unwrap();
     pointer(&fixture.ui, Point { x: 134, y: 40 }, true);

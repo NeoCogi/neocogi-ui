@@ -3,13 +3,9 @@ use super::*;
 use neocogi_ui_document::*;
 
 /// Prepares the single constructor binding used by these behavioral fixtures.
-fn receiver<C: neocogi_com::events::EventSource, M: 'static>(
-    key: &str,
-    sender: std::sync::mpsc::Sender<M>,
-    map: impl FnMut(neocogi_com::events::EventOf<C>) -> M + 'static,
-) -> Result<EventBindings, NcStatus> {
+fn receiver<C: neocogi_com::events::EventSource>(key: &str, queue: ComPtr<C::Queue>) -> Result<EventBindings, NcStatus> {
     let mut events = EventBindings::new();
-    events.insert::<C, M>(key, sender, map)?;
+    events.insert_queue::<C>(key, queue.as_com_ref())?;
     Ok(events)
 }
 
@@ -69,7 +65,13 @@ fn outputs_rebind_and_queued_old_events_have_distinct_generations() {
     let mut document = Document::new("button");
     document.root = Node::new("save", WidgetSpec::Button { text: "Save".into() });
     let (sender, events) = std::sync::mpsc::channel();
-    let bind = |generation| receiver::<ButtonAbi, _>("save", sender.clone(), move |_: neocogi_ui::button::Event| generation);
+    let bind = |generation| {
+        receiver::<ButtonAbi>(
+            "save",
+            neocogi_ui::test_event_queue!(button, Generation, sender.clone(), |queue, _origin, _| queue.generation, { generation: Generation = generation })
+                .unwrap(),
+        )
+    };
     slot.reload(&document, Resources::new(), bind, |_, _| Ok(())).unwrap();
     fixture.frame(VIEW).unwrap();
     pointer(&fixture.ui, Point { x: 30, y: 30 }, true);
@@ -185,22 +187,25 @@ fn all_builtin_document_controls_construct_and_reload() {
             |_| {
                 let (sender, _events) = std::sync::mpsc::channel::<()>();
                 macro_rules! bind {
-                    ($abi:ty) => {
-                        receiver::<$abi, _>(&document.root.key, sender.clone(), |_| ())
+                    ($kind:ident, $abi:ty) => {
+                        receiver::<$abi>(
+                            &document.root.key,
+                            neocogi_ui::test_event_queue!($kind, (), sender.clone(), |_queue, _origin, _| ()).unwrap(),
+                        )
                     };
                 }
                 match &document.root.widget {
-                    WidgetSpec::Button { .. } => bind!(ButtonAbi),
-                    WidgetSpec::Checkbox { .. } => bind!(CheckboxAbi),
-                    WidgetSpec::Textbox { .. } => bind!(TextboxAbi),
-                    WidgetSpec::TextArea { .. } => bind!(TextAreaAbi),
-                    WidgetSpec::Slider { .. } => bind!(SliderAbi),
-                    WidgetSpec::Number { .. } => bind!(NumberAbi),
-                    WidgetSpec::ListItem { .. } => bind!(ListItemAbi),
-                    WidgetSpec::ListBox { .. } => bind!(ListBoxAbi),
-                    WidgetSpec::Scrollbar { .. } => bind!(ScrollbarAbi),
-                    WidgetSpec::Combo { .. } => bind!(ComboAbi),
-                    WidgetSpec::Split { .. } => bind!(SplitViewAbi),
+                    WidgetSpec::Button { .. } => bind!(button, ButtonAbi),
+                    WidgetSpec::Checkbox { .. } => bind!(checkbox, CheckboxAbi),
+                    WidgetSpec::Textbox { .. } => bind!(textbox, TextboxAbi),
+                    WidgetSpec::TextArea { .. } => bind!(text_area, TextAreaAbi),
+                    WidgetSpec::Slider { .. } => bind!(slider, SliderAbi),
+                    WidgetSpec::Number { .. } => bind!(number, NumberAbi),
+                    WidgetSpec::ListItem { .. } => bind!(list_item, ListItemAbi),
+                    WidgetSpec::ListBox { .. } => bind!(list_box, ListBoxAbi),
+                    WidgetSpec::Scrollbar { .. } => bind!(scrollbar, ScrollbarAbi),
+                    WidgetSpec::Combo { .. } => bind!(combo, ComboAbi),
+                    WidgetSpec::Split { .. } => bind!(split_view, SplitViewAbi),
                     _ => Ok(EventBindings::new()),
                 }
             },
@@ -243,10 +248,24 @@ fn widget_setters_validate_values_and_remain_separate_from_event_delivery() {
     let mut slot = slot(&fixture.ui);
     for widget in [
         WidgetSpec::Checkbox { text: "check".into(), checked: false },
-        WidgetSpec::Slider { value: 1.0, low: 0.0, high: 10.0, step: 1.0, precision: 0 },
+        WidgetSpec::Slider {
+            value: 1.0,
+            low: 0.0,
+            high: 10.0,
+            step: 1.0,
+            precision: 0,
+        },
         WidgetSpec::Number { value: 1.0, step: 1.0, precision: 0 },
-        WidgetSpec::Combo { labels: vec!["one".into()], selected: Some(0), placeholder: "none".into() },
-        WidgetSpec::Disclosure { text: "details".into(), tree: false, expanded: false },
+        WidgetSpec::Combo {
+            labels: vec!["one".into()],
+            selected: Some(0),
+            placeholder: "none".into(),
+        },
+        WidgetSpec::Disclosure {
+            text: "details".into(),
+            tree: false,
+            expanded: false,
+        },
     ] {
         let document = Document {
             version: VERSION,
@@ -255,14 +274,32 @@ fn widget_setters_validate_values_and_remain_separate_from_event_delivery() {
             outputs: vec![],
         };
         let (sender, events) = std::sync::mpsc::channel();
-        slot.reload(&document, Resources::new(), |_| match &document.root.widget {
-            WidgetSpec::Checkbox { .. } => receiver::<CheckboxAbi, _>("root", sender.clone(), |_| ()),
-            WidgetSpec::Slider { .. } => receiver::<SliderAbi, _>("root", sender.clone(), |_| ()),
-            WidgetSpec::Number { .. } => receiver::<NumberAbi, _>("root", sender.clone(), |_| ()),
-            WidgetSpec::Combo { .. } => receiver::<ComboAbi, _>("root", sender.clone(), |_| ()),
-            WidgetSpec::Disclosure { .. } => Ok(EventBindings::new()),
-            _ => unreachable!("setter fixture"),
-        }, |_, _| Ok(())).unwrap();
+        slot.reload(
+            &document,
+            Resources::new(),
+            |_| match &document.root.widget {
+                WidgetSpec::Checkbox { .. } => receiver::<CheckboxAbi>(
+                    "root",
+                    neocogi_ui::test_event_queue!(checkbox, (), sender.clone(), |_queue, _origin, _| ()).unwrap(),
+                ),
+                WidgetSpec::Slider { .. } => receiver::<SliderAbi>(
+                    "root",
+                    neocogi_ui::test_event_queue!(slider, (), sender.clone(), |_queue, _origin, _| ()).unwrap(),
+                ),
+                WidgetSpec::Number { .. } => receiver::<NumberAbi>(
+                    "root",
+                    neocogi_ui::test_event_queue!(number, (), sender.clone(), |_queue, _origin, _| ()).unwrap(),
+                ),
+                WidgetSpec::Combo { .. } => receiver::<ComboAbi>(
+                    "root",
+                    neocogi_ui::test_event_queue!(combo, (), sender.clone(), |_queue, _origin, _| ()).unwrap(),
+                ),
+                WidgetSpec::Disclosure { .. } => Ok(EventBindings::new()),
+                _ => unreachable!("setter fixture"),
+            },
+            |_, _| Ok(()),
+        )
+        .unwrap();
         let component = slot.component().unwrap();
         component.root().unwrap().set_flags(WidgetOptions::NO_INTERACT).unwrap();
         // Keep numeric validation identical for both concrete widget projections.
@@ -374,7 +411,8 @@ fn widget_flag_enablement_preserves_requested_flags_without_capturing_effective_
         match value {
             true => common.clear_flags(WidgetOptions::NO_INTERACT),
             false => common.set_flags(WidgetOptions::NO_INTERACT),
-        }.unwrap();
+        }
+        .unwrap();
         let expected = match value {
             true => WidgetOptions::ALIGN_RIGHT | WidgetOptions::GRAB_SCROLL,
             false => WidgetOptions::ALIGN_RIGHT | WidgetOptions::GRAB_SCROLL | WidgetOptions::NO_INTERACT,
@@ -413,7 +451,13 @@ fn authored_form_rectangles_survive_binary_reload_and_route_real_clicks() {
     slot.reload(
         &document,
         Resources::new(),
-        |generation| receiver::<ButtonAbi, _>("save", sender, move |_: neocogi_ui::button::Event| generation),
+        |generation| {
+            receiver::<ButtonAbi>(
+                "save",
+                neocogi_ui::test_event_queue!(button, Generation, sender, |queue, _origin, _| queue.generation, { generation: Generation = generation })
+                    .unwrap(),
+            )
+        },
         |_, _| Ok(()),
     )
     .unwrap();
@@ -478,7 +522,12 @@ fn selection_offset_and_position_setters_preserve_configuration_and_retire() {
     slot.reload(
         &document,
         Resources::new(),
-        |_| receiver::<ComboAbi, _>("root", sender.clone(), |_| ()),
+        |_| {
+            receiver::<ComboAbi>(
+                "root",
+                neocogi_ui::test_event_queue!(combo, (), sender.clone(), |_queue, _origin, _| ()).unwrap(),
+            )
+        },
         |_, _| Ok(()),
     )
     .unwrap();
@@ -503,7 +552,12 @@ fn selection_offset_and_position_setters_preserve_configuration_and_retire() {
     slot.reload(
         &document,
         Resources::new(),
-        |_| receiver::<ScrollbarAbi, _>("root", sender.clone(), |_| ()),
+        |_| {
+            receiver::<ScrollbarAbi>(
+                "root",
+                neocogi_ui::test_event_queue!(scrollbar, (), sender.clone(), |_queue, _origin, _| ()).unwrap(),
+            )
+        },
         |_, _| Ok(()),
     )
     .unwrap();
@@ -527,7 +581,12 @@ fn selection_offset_and_position_setters_preserve_configuration_and_retire() {
     slot.reload(
         &document,
         Resources::new(),
-        |_| receiver::<SplitViewAbi, _>("root", sender.clone(), |_| ()),
+        |_| {
+            receiver::<SplitViewAbi>(
+                "root",
+                neocogi_ui::test_event_queue!(split_view, (), sender.clone(), |_queue, _origin, _| ()).unwrap(),
+            )
+        },
         |_, _| Ok(()),
     )
     .unwrap();
@@ -567,7 +626,12 @@ fn application_handles_real_click_and_closed_form_retires() {
     slot.reload(
         &document,
         Resources::new(),
-        |_| receiver::<ButtonAbi, _>("button", sender.clone(), |_| ()),
+        |_| {
+            receiver::<ButtonAbi>(
+                "button",
+                neocogi_ui::test_event_queue!(button, (), sender.clone(), |_queue, _origin, _| ()).unwrap(),
+            )
+        },
         |_, _| Ok(()),
     )
     .unwrap();
@@ -613,7 +677,14 @@ fn application_owns_checkbox_actions_and_complete_event_consumption() {
     slot.reload(
         &document,
         Resources::new(),
-        |_| receiver::<CheckboxAbi, _>("source", sender, |neocogi_ui::checkbox::Event::Changed(event)| event.checked),
+        |_| {
+            receiver::<CheckboxAbi>(
+                "source",
+                neocogi_ui::test_event_queue!(checkbox, bool, sender, |_queue, _origin, neocogi_ui::checkbox::Event::Changed(event)| event
+                    .checked)
+                .unwrap(),
+            )
+        },
         |_, _| Ok(()),
     )
     .unwrap();
@@ -666,7 +737,12 @@ fn textbox_enum_stream_drives_form_action_and_public_sink() {
     slot.reload(
         &document,
         Resources::new(),
-        |_| receiver::<TextboxAbi, _>("name", sender, |event: neocogi_ui::textbox::Event| event),
+        |_| {
+            receiver::<TextboxAbi>(
+                "name",
+                neocogi_ui::test_event_queue!(textbox, neocogi_ui::textbox::Event, sender, |_queue, _origin, event| event).unwrap(),
+            )
+        },
         |_, _| Ok(()),
     )
     .unwrap();
@@ -702,8 +778,20 @@ fn construction_bindings_reject_duplicate_unknown_nonemitting_and_wrong_typed_so
         let (sender, messages) = std::sync::mpsc::channel::<()>();
         let mut events = EventBindings::new();
         match wrong_type {
-            true => events.insert::<TextboxAbi, _>(key, sender, |_| ()).unwrap(),
-            false => events.insert::<ButtonAbi, _>(key, sender, |_| ()).unwrap(),
+            true => events
+                .insert_queue::<TextboxAbi>(
+                    key,
+                    neocogi_ui::test_event_queue!(textbox, (), sender, |_queue, _origin, _| ())
+                        .unwrap()
+                        .as_com_ref(),
+                )
+                .unwrap(),
+            false => events
+                .insert_queue::<ButtonAbi>(
+                    key,
+                    neocogi_ui::test_event_queue!(button, (), sender, |_queue, _origin, _| ()).unwrap().as_com_ref(),
+                )
+                .unwrap(),
         }
         assert!(loader.compile_with_events(&document, events).is_err());
         assert!(
@@ -713,9 +801,22 @@ fn construction_bindings_reject_duplicate_unknown_nonemitting_and_wrong_typed_so
     }
     let (sender, messages) = std::sync::mpsc::channel::<()>();
     let mut events = EventBindings::new();
-    events.insert::<ButtonAbi, _>("save", sender, |_| ()).unwrap();
+    events
+        .insert_queue::<ButtonAbi>(
+            "save",
+            neocogi_ui::test_event_queue!(button, (), sender, |_queue, _origin, _| ()).unwrap().as_com_ref(),
+        )
+        .unwrap();
     let (replacement, rejected) = std::sync::mpsc::channel::<()>();
-    assert_eq!(events.insert::<ButtonAbi, _>("save", replacement, |_| ()), Err(neocogi_com::NC_E_INVALID_ARG));
+    assert_eq!(
+        events.insert_queue::<ButtonAbi>(
+            "save",
+            neocogi_ui::test_event_queue!(button, (), replacement, |_queue, _origin, _| ())
+                .unwrap()
+                .as_com_ref()
+        ),
+        Err(neocogi_com::NC_E_INVALID_ARG)
+    );
     assert!(matches!(rejected.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
     let component = loader.compile_with_events(&document, events).unwrap();
     let retained = component.widget::<ButtonAbi>("save").unwrap();
@@ -734,7 +835,7 @@ fn typed_and_binary_candidates_own_constructor_mappings_and_preserve_recipe_byte
     let loader = Loader::new(fixture.ui.clone(), None, Resources::new()).unwrap();
     for binary in [false, true] {
         let (sender, messages) = std::sync::mpsc::channel::<()>();
-        let events = receiver::<ButtonAbi, _>("save", sender, |_| ()).unwrap();
+        let events = receiver::<ButtonAbi>("save", neocogi_ui::test_event_queue!(button, (), sender, |_queue, _origin, _| ()).unwrap()).unwrap();
         let candidate = match binary {
             true => loader.load_with_events(&bytes, events).unwrap(),
             false => loader.compile_with_events(&document, events).unwrap(),
@@ -761,7 +862,7 @@ fn rejected_form_field_validation_releases_new_receivers_and_keeps_previous_gene
         slot.reload(
             &document,
             Resources::new(),
-            |_| receiver::<ButtonAbi, _>("save", sender, |_| ()),
+            |_| receiver::<ButtonAbi>("save", neocogi_ui::test_event_queue!(button, (), sender, |_queue, _origin, _| ()).unwrap()),
             |candidate, _| {
                 // Construction succeeded and owns the mapping, but the application's concrete field is wrong.
                 candidate.widget::<TextboxAbi>("save").map(drop)
@@ -782,7 +883,7 @@ fn compiled_metadata_can_drop_before_the_actual_root_is_mounted() {
         let document = Document::new("independent recipe lifetime");
         let loader = Loader::new(fixture.ui.clone(), None, Resources::new()).unwrap();
         let (sender, messages) = std::sync::mpsc::channel::<()>();
-        let events = receiver::<ButtonAbi, _>("save", sender, |_| ()).unwrap();
+        let events = receiver::<ButtonAbi>("save", neocogi_ui::test_event_queue!(button, (), sender, |_queue, _origin, _| ()).unwrap()).unwrap();
         let compiled = match binary {
             true => loader.load_with_events(&document.to_binary().unwrap(), events).unwrap(),
             false => loader.compile_with_events(&document, events).unwrap(),
@@ -791,7 +892,10 @@ fn compiled_metadata_can_drop_before_the_actual_root_is_mounted() {
         let button = compiled.widget::<ButtonAbi>("save").unwrap();
         drop(compiled);
         assert!(button.label().is_ok());
-        let window = fixture.ui.window("actual compiled root", Rect { x: 10, y: 10, width: 400, height: 300 }, &root).unwrap();
+        let window = fixture
+            .ui
+            .window("actual compiled root", Rect { x: 10, y: 10, width: 400, height: 300 }, &root)
+            .unwrap();
         drop(root);
         assert!(button.label().is_ok(), "the runtime owns the mounted tree");
         assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
@@ -814,7 +918,7 @@ fn rejected_reload_closes_retained_candidate_handles_without_touching_the_live_f
     let result = slot.reload(
         &document,
         Resources::new(),
-        |_| receiver::<ButtonAbi, _>("save", sender, |_| ()),
+        |_| receiver::<ButtonAbi>("save", neocogi_ui::test_event_queue!(button, (), sender, |_queue, _origin, _| ()).unwrap()),
         |candidate, _| {
             retained = Some((candidate.root()?, candidate.widget::<ButtonAbi>("save")?));
             Err(neocogi_com::NC_E_INVALID_ARG)

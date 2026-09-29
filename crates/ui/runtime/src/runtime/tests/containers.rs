@@ -834,36 +834,35 @@ fn descendant_cleanup_diagnostic_still_completes_parent_close() {
 
 /// A captured lifetime makes COM receiver release observable without invoking a
 /// mapper or application handler during terminal cleanup.
-struct MappingLifetime {
+struct QueueLifetime {
     /// Independent test log retained after every widget and queue is destroyed.
-    released: Rc<RefCell<Vec<&'static str>>>,
+    released: std::sync::mpsc::Sender<&'static str>,
     /// Which widget owned this receiver's last reference.
     label: &'static str,
 }
-impl Drop for MappingLifetime {
+impl Drop for QueueLifetime {
     /// Captures must be released in descendant-first order exactly once.
     fn drop(&mut self) {
-        self.released.borrow_mut().push(self.label);
+        let _ = self.released.send(self.label);
     }
 }
 
 /// Explicit closure and final allocation release share descendant-first cleanup;
 /// dropping a mere cloned handle must never close a live widget.
 #[test]
-fn mappings_release_children_before_parent_on_close_and_final_drop() {
-    use neocogi_com::events::EventQueueInterface;
+fn queues_release_children_before_parent_on_close_and_final_drop() {
     for explicit in [false, true] {
         let runtime = runtime();
         let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
-        let released = Rc::new(RefCell::new(Vec::new()));
-        let lifetime = MappingLifetime {
+        let (released, observations) = std::sync::mpsc::channel();
+        let mut observed = Vec::new();
+        let lifetime = QueueLifetime {
             released: released.clone(),
             label: "parent",
         };
-        let queue = SplitViewEventQueueAbi::receiver(move |_, _| {
-            let _ = &lifetime;
-            panic!("close must not invoke mapping")
-        })
+        let (send, _receive) = std::sync::mpsc::channel::<()>();
+        let queue = neocogi_ui::test_event_queue!(split_view, (), send,
+            |queue, _origin, _| { queue.lifetime.released.send("unexpected post").unwrap(); }, { lifetime: QueueLifetime = lifetime })
         .unwrap();
         let mut parent = ui
             .widgets()
@@ -881,11 +880,10 @@ fn mappings_release_children_before_parent_on_close_and_final_drop() {
         drop(queue);
         let mut children = Vec::new();
         for label in ["first", "second"] {
-            let lifetime = MappingLifetime { released: released.clone(), label };
-            let queue = ButtonEventQueueAbi::receiver(move |_, _| {
-                let _ = &lifetime;
-                panic!("close must not invoke mapping")
-            })
+            let lifetime = QueueLifetime { released: released.clone(), label };
+            let (send, _receive) = std::sync::mpsc::channel::<()>();
+            let queue = neocogi_ui::test_event_queue!(button, (), send,
+            |queue, _origin, _| { queue.lifetime.released.send("unexpected post").unwrap(); }, { lifetime: QueueLifetime = lifetime })
             .unwrap();
             let child = ui.widgets().button_with_queue(label, Some(queue.as_com_ref())).unwrap();
             drop(queue);
@@ -893,18 +891,21 @@ fn mappings_release_children_before_parent_on_close_and_final_drop() {
             children.push(child);
         }
         drop(parent.clone());
-        assert!(released.borrow().is_empty());
+        assert!(observations.try_recv().is_err());
         if explicit {
             parent.node_interface().unwrap().close().unwrap();
             parent.node_interface().unwrap().close().unwrap();
-            assert_eq!(&*released.borrow(), &["first", "second", "parent"]);
+            observed.extend(observations.try_iter());
+            assert_eq!(observed, ["first", "second", "parent"]);
         }
         drop(parent);
-        assert_eq!(&*released.borrow(), &["first", "second", "parent"]);
+        observed.extend(observations.try_iter());
+        assert_eq!(observed, ["first", "second", "parent"]);
         for child in &children {
             assert_eq!(child.label(), Err(UI_E_CLOSED));
         }
         drop(children);
-        assert_eq!(&*released.borrow(), &["first", "second", "parent"]);
+        observed.extend(observations.try_iter());
+        assert_eq!(observed, ["first", "second", "parent"]);
     }
 }
