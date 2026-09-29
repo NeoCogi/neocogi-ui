@@ -9,6 +9,8 @@ use std::{
     rc::Rc,
 };
 use crate::boundary::text;
+mod queue;
+use queue::DialogQueue;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
 /// Request state is an ordinary field of the exclusively borrowed picker model.
@@ -76,8 +78,8 @@ impl Request {
 
 /// Node construction data retained by the picker without retaining the core runtime identity.
 struct DialogNodes {
-    /// Posting access supplied to each private child during construction.
-    events_tx: std::sync::mpsc::Sender<Message>,
+    /// One concrete receiver shared by all private children and directory rows.
+    queue: ComPtr<neocogi_com::IUnknown>,
     /// Non-owning host authority reports logical closure after the owning UI is released.
     host: ComPtr<IWidgetHostAbi>,
     /// Provider-shared imported resources used by dynamically rebuilt directory rows.
@@ -86,8 +88,6 @@ struct DialogNodes {
 
 /// One authoritative picker model; live control values are read through their actual COM interfaces.
 struct Model {
-    /// Dynamic directory rows clone posting access when their outputs are connected.
-    events_tx: std::sync::mpsc::Sender<Message>,
     /// Concrete-node construction data with no runtime or window-manager projection.
     nodes: Rc<DialogNodes>,
     /// Stable hidden/reusable modal installed after the eventful root is mounted.
@@ -114,6 +114,10 @@ struct Model {
     files: ScrollAreaWidget,
     /// Complete most recent directory-read diagnostic, also available through the component interface.
     diagnostic: String,
+    /// Toolbar identities and commands remain plain exclusively owned model data.
+    buttons: Vec<(neocogi_com::WeakComPtr<neocogi_ui::ButtonAbi>, Command)>,
+    /// Only installed directory rows may resolve commands, even if old rows remain retained.
+    rows: Vec<(neocogi_com::WeakComPtr<neocogi_ui::ListItemAbi>, Command)>,
 }
 impl Model {
     /// Returns the modal after the one-time construction transaction has installed it.
@@ -172,6 +176,19 @@ impl Model {
 /// Private component messages own every captured value, including exact native paths.
 #[derive(Clone)]
 enum Message {
+    /// Owned button event resolved after traversal against the current component controls.
+    Button(neocogi_com::WeakComPtr<neocogi_ui::ButtonAbi>, neocogi_ui::events::button::Event),
+    /// Owned list_item event resolved after traversal against the current component controls.
+    Row(neocogi_com::WeakComPtr<neocogi_ui::ListItemAbi>, neocogi_ui::events::list_item::Event),
+    /// Owned textbox event resolved after traversal against the current component controls.
+    Text(neocogi_com::WeakComPtr<neocogi_ui::TextboxAbi>, neocogi_ui::events::textbox::Event),
+    /// Owned window event resolved after traversal against the current component controls.
+    Window(neocogi_com::WeakComPtr<IWindowAbi>, neocogi_ui::events::window::Event),
+}
+
+/// Application commands resolved from private child lifetime identities.
+#[derive(Clone)]
+enum Command {
     /// Navigate to the committed directory's parent.
     Up,
     /// Navigate to the platform's native home setting.
@@ -200,6 +217,8 @@ enum Message {
 struct Column {
     /// Actual COM content root to install into the stable scroll controller.
     root: LinearWidget,
+    /// Exact row identities and actions prepared with this content candidate.
+    actions: Vec<(neocogi_com::WeakComPtr<neocogi_ui::ListItemAbi>, Command)>,
 }
 /// Complete directory candidate; neither column becomes live if any native read fails.
 struct Listing {
@@ -232,8 +251,8 @@ fn label(nodes: &Rc<DialogNodes>, value: &str) -> Result<TextBlockWidget, NcStat
     )?))
 }
 /// Constructs a complete command Button through the dynamically implemented factory shorthand.
-fn button(nodes: &Rc<DialogNodes>, value: &str, action: Message) -> Result<neocogi_ui::ButtonWidget, NcStatus> {
-    let queue = neocogi_ui::button::queue(nodes.events_tx.clone(), move |_| action.clone())?;
+fn button(nodes: &Rc<DialogNodes>, value: &str) -> Result<neocogi_ui::ButtonWidget, NcStatus> {
+    let queue = nodes.queue.query::<neocogi_ui::ButtonEventQueueAbi>()?;
     let button = neocogi_ui::ButtonWidget::from_interface(crate::Button::create_com(
         nodes.host.clone(),
         nodes.resources.clone(),
@@ -247,20 +266,22 @@ fn button(nodes: &Rc<DialogNodes>, value: &str, action: Message) -> Result<neoco
 fn column(nodes: &Rc<DialogNodes>, directory: &Path, paths: Vec<PathBuf>, folder: bool) -> Result<Column, NcStatus> {
     let mut children = vec![(label(nodes, if folder { "Folders" } else { "Files" })?.node_interface()?, LayoutTrack::Content)];
     let empty = paths.is_empty();
+    let mut actions = Vec::with_capacity(paths.len());
     for path in paths {
         let display = if folder && directory.parent() == Some(path.as_path()) {
             "..".into()
         } else {
             path.file_name().unwrap_or(path.as_os_str()).to_string_lossy()
         };
-        let action = if folder { Message::Folder(path.clone()) } else { Message::File(path.clone()) };
-        let queue = neocogi_ui::list_item::queue(nodes.events_tx.clone(), move |_| action.clone())?;
+        let action = if folder { Command::Folder(path.clone()) } else { Command::File(path.clone()) };
+        let queue = nodes.queue.query::<neocogi_ui::ListItemEventQueueAbi>()?;
         let mut item = ListItemWidget::from_interface(crate::ListItem::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
             NcCopyFromBufferOffset::new(0, display.as_bytes()),
             Some(queue),
         )?);
+        actions.push((item.as_interface().downgrade()?, action));
         item.set_icon_role(if folder { ContentIcon::ClosedFolder } else { ContentIcon::File })?;
         children.push((item.node_interface()?, LayoutTrack::Content));
     }
@@ -269,6 +290,7 @@ fn column(nodes: &Rc<DialogNodes>, directory: &Path, paths: Vec<PathBuf>, folder
     }
     Ok(Column {
         root: line(nodes, FlowDirection::TopToBottom, CrossSize::Stretch, children)?,
+        actions,
     })
 }
 impl Listing {
@@ -287,18 +309,12 @@ impl FileDialog {
         services.host.check_mutation()?;
         let (events_tx, events) = std::sync::mpsc::channel();
         let nodes = Rc::new(DialogNodes {
-            events_tx: events_tx.clone(),
+            queue: DialogQueue::from_value(DialogQueue::new(events_tx)),
             host: services.host.clone(),
             resources: services.resources.clone(),
         });
-        let path_sink = neocogi_ui::textbox::queue(events_tx.clone(), |event| match event {
-            neocogi_ui::textbox::Event::Changed(_) => Message::PathEdited,
-            neocogi_ui::textbox::Event::Submitted(value) => Message::Navigate(value.text),
-        })?;
-        let filename_sink = neocogi_ui::textbox::queue(events_tx.clone(), |event| match event {
-            neocogi_ui::textbox::Event::Changed(_) => Message::FilenameEdited,
-            neocogi_ui::textbox::Event::Submitted(_) => Message::Accept,
-        })?;
+        let path_sink = nodes.queue.query::<neocogi_ui::TextboxEventQueueAbi>()?;
+        let filename_sink = path_sink.clone();
         let path = TextboxWidget::from_interface(crate::Textbox::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
@@ -311,11 +327,11 @@ impl FileDialog {
             NcCopyFromBufferOffset::new(0, b""),
             Some(filename_sink),
         )?);
-        let up = button(&nodes, "Up", Message::Up)?;
-        let home = button(&nodes, "Home", Message::Home)?;
-        let go = button(&nodes, "Go", Message::Go)?;
-        let accept = button(&nodes, "Open", Message::Accept)?;
-        let cancel = button(&nodes, "Cancel", Message::Cancel)?;
+        let up = button(&nodes, "Up")?;
+        let home = button(&nodes, "Home")?;
+        let go = button(&nodes, "Go")?;
+        let accept = button(&nodes, "Open")?;
+        let cancel = button(&nodes, "Cancel")?;
         let folder_content = column(&nodes, Path::new(""), Vec::new(), true)?;
         let file_content = column(&nodes, Path::new(""), Vec::new(), false)?;
         let folders = ScrollAreaWidget::from_interface(crate::ScrollArea::create_com(
@@ -395,7 +411,6 @@ impl FileDialog {
             completed: Default::default(),
         };
         let mut model = Model {
-            events_tx,
             nodes,
             window: None,
             request,
@@ -409,6 +424,14 @@ impl FileDialog {
             folders,
             files,
             diagnostic: String::new(),
+            rows: Vec::new(),
+            buttons: vec![
+                (up.as_interface().downgrade()?, Command::Up),
+                (home.as_interface().downgrade()?, Command::Home),
+                (go.as_interface().downgrade()?, Command::Go),
+                (accept.as_interface().downgrade()?, Command::Accept),
+                (cancel.as_interface().downgrade()?, Command::Cancel),
+            ],
         };
         let dialog = Self::into_local_cyclic::<IFileDialogAbi>(move |origin| {
             model.request.completed = neocogi_com::events::EventPort::with_queue(queue, origin);
@@ -416,7 +439,7 @@ impl FileDialog {
         })?;
         let root = dialog.query::<IWidgetAbi>()?;
         let windows = services.windows.clone();
-        let window_sink = neocogi_ui::events::window::queue(dialog.try_borrow()?.model.events_tx.clone(), Message::Lifecycle)?;
+        let window_sink = dialog.try_borrow()?.model.nodes.queue.query::<IWindowEventQueueAbi>()?;
         let window_binding = IWindowEventBinding::from_queue(Some(window_sink.as_com_ref()));
         let window = windows.create_dialog(
             parent,
@@ -461,6 +484,7 @@ impl Model {
         // modal before replacement and no caller can substitute a foreign child.
         self.folders.replace_content(&listing.folders.root)?.finish()?;
         self.files.replace_content(&listing.files.root)?.finish()?;
+        self.rows = listing.folders.actions.into_iter().chain(listing.files.actions).collect();
         self.directory = directory;
         self.selected = None;
         self.path_dirty = false;
@@ -516,8 +540,64 @@ impl Model {
 
     /// Handles one child message and completes any navigation before the next message.
     fn update(&mut self, message: Message) -> Result<(), NcStatus> {
+        let message = match message {
+            Message::Button(origin, event) => {
+                drop(event);
+                if origin.upgrade()?.is_none() {
+                    return Ok(());
+                }
+                let action = self
+                    .buttons
+                    .iter()
+                    .find(|(control, _)| control.same_object(&origin))
+                    .map(|(_, action)| action.clone());
+                match action {
+                    Some(action) => action,
+                    None => return Ok(()),
+                }
+            }
+            Message::Row(origin, event) => {
+                drop(event);
+                if origin.upgrade()?.is_none() {
+                    return Ok(());
+                }
+                let action = self
+                    .rows
+                    .iter()
+                    .find(|(control, _)| control.same_object(&origin))
+                    .map(|(_, action)| action.clone());
+                match action {
+                    Some(action) => action,
+                    None => return Ok(()),
+                }
+            }
+            Message::Text(origin, event) => {
+                let Some(origin) = origin.upgrade()? else {
+                    return Ok(());
+                };
+                match (
+                    origin.as_com_ref().same_object(self.path.as_interface()),
+                    origin.as_com_ref().same_object(self.filename.as_interface()),
+                    event,
+                ) {
+                    (true, _, neocogi_ui::textbox::Event::Changed(_)) => Command::PathEdited,
+                    (true, _, neocogi_ui::textbox::Event::Submitted(value)) => Command::Navigate(value.text),
+                    (_, true, neocogi_ui::textbox::Event::Changed(_)) => Command::FilenameEdited,
+                    (_, true, neocogi_ui::textbox::Event::Submitted(_)) => Command::Accept,
+                    _ => return Ok(()),
+                }
+            }
+            // Lifecycle facts remain meaningful after the closed window loses its
+            // final owner; the snapshot itself is owned by this component's inbox.
+            Message::Window(origin, event) => {
+                if !origin.same_object(&self.window()?.downgrade()?) {
+                    return Ok(());
+                }
+                Command::Lifecycle(event)
+            }
+        };
         let directory = match message {
-            Message::Lifecycle(event) => {
+            Command::Lifecycle(event) => {
                 match event {
                     WindowEvent::Hidden | WindowEvent::CloseRequested
                         if self.request.active()
@@ -534,32 +614,32 @@ impl Model {
                 None
             }
             _ if !self.request.active() => None,
-            Message::PathEdited => {
+            Command::PathEdited => {
                 self.path_dirty = true;
                 None
             }
-            Message::FilenameEdited => {
+            Command::FilenameEdited => {
                 self.selected = None;
                 None
             }
-            Message::Up => self.directory.parent().map(Path::to_owned),
-            Message::Home => home_dir(),
-            Message::Go => self.resolve_path(&self.path.text()?),
-            Message::Accept => {
+            Command::Up => self.directory.parent().map(Path::to_owned),
+            Command::Home => home_dir(),
+            Command::Go => self.resolve_path(&self.path.text()?),
+            Command::Accept => {
                 self.accept()?;
                 None
             }
-            Message::Cancel => {
+            Command::Cancel => {
                 self.finish(FileDialogCompletion::Cancelled)?;
                 None
             }
-            Message::Folder(path) => Some(path),
-            Message::File(path) => {
+            Command::Folder(path) => Some(path),
+            Command::File(path) => {
                 self.filename.set_text(&path.file_name().unwrap_or(path.as_os_str()).to_string_lossy())?;
                 self.selected = Some(path);
                 None
             }
-            Message::Navigate(text) => self.resolve_path(&text),
+            Command::Navigate(text) => self.resolve_path(&text),
         };
         if let Some(directory) = directory {
             match self.candidate(&directory) {

@@ -480,3 +480,48 @@ fn mounted_dialog_outlives_client_handles_and_retires_with_its_view() {
     assert_eq!(window.snapshot(), Err(UI_E_CLOSED));
     drop(runtime);
 }
+
+/// All private producer kinds project the same queue object, and retired rows
+/// cannot become commands merely because a client still retains their COM value.
+#[test]
+fn shared_child_queue_discards_events_from_replaced_directory_rows() {
+    use neocogi_com::NcValueRef;
+    let mut fixture = Fixture::new();
+    let directory = tempfile::tempdir().unwrap();
+    let replacement = tempfile::tempdir().unwrap();
+    std::fs::write(directory.path().join("old.txt"), b"old").unwrap();
+    fixture.open(directory.path());
+    let (mut queue, old) = {
+        let dialog = fixture.widget.try_borrow().unwrap();
+        let queue = dialog.model.nodes.queue.query::<neocogi_ui::ListItemEventQueueAbi>().unwrap();
+        let buttons = dialog.model.nodes.queue.query::<neocogi_ui::ButtonEventQueueAbi>().unwrap();
+        let text = dialog.model.nodes.queue.query::<neocogi_ui::TextboxEventQueueAbi>().unwrap();
+        assert!(queue.as_com_ref().same_object(buttons.as_com_ref()));
+        assert!(queue.as_com_ref().same_object(text.as_com_ref()));
+        let old = dialog
+            .model
+            .rows
+            .iter()
+            .find(|(_, action)| matches!(action, Command::File(_)))
+            .unwrap()
+            .0
+            .upgrade()
+            .unwrap()
+            .unwrap();
+        (queue, old)
+    };
+    // Post through the real generated ABI before replacing the row's membership.
+    let event = neocogi_ui::list_item::Event::Activated(Activation { label: "old.txt".into() });
+    queue.post(old.as_com_ref(), NcValueRef::new(&event).unwrap()).unwrap();
+    {
+        let mut dialog = fixture.widget.try_borrow_mut().unwrap();
+        let listing = dialog.model.candidate(replacement.path()).unwrap();
+        dialog.model.install(replacement.path().to_owned(), listing, true).unwrap();
+        while IWidget::dispatch_next(&mut *dialog).unwrap() {}
+        assert!(dialog.model.selected.is_none());
+        assert_eq!(dialog.model.filename.text().unwrap(), "");
+    }
+    // A retained old origin is still a live COM allocation, but is no longer a
+    // member of the installed listing and cannot select a stale native path.
+    assert!(old.downgrade().unwrap().upgrade().unwrap().is_some());
+}

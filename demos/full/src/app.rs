@@ -63,6 +63,9 @@ use neocogi_demo_assets::themes::Theme;
 use neocogi_demo_host::{AppState, Host, HostError};
 use neocogi_com::{ComInterface, ComPtr, ComRef, NC_E_INVALID_ARG, NcCopyFromBufferOffset, NcStatus};
 use std::{cell::RefCell, rc::Rc};
+mod queue;
+pub(super) use queue::Inputs;
+use neocogi_com::WeakComPtr;
 
 /// Application-owned combo values never cross the ABI as an erased generic collection.
 const FRUIT: [&str; 4] = ["Apple", "Banana", "Cherry", "Date"];
@@ -93,9 +96,9 @@ pub(super) fn append<I: ComInterface>(parent: &mut LinearWidget, child: &Widget<
 pub(super) fn label(ui: &Ui, text: &str) -> Result<TextBlockWidget, NcStatus> {
     ui.widgets().text_block(text, TextWrapping::None)
 }
-/// Routing captured by every numeric queue in this application.
-/// One explicit sum lets the generic COM adapter share its implementation across
-/// palette, metric and background controls while retaining each control's target.
+/// Application commands associated with slider lifetime identities.
+/// Palette, metric and background controls share one concrete receiver; their
+/// targets are resolved as data after the application inbox is drained.
 #[derive(Clone, Copy)]
 pub(super) enum NumericTarget {
     /// Packed background color channel selected by its bit shift.
@@ -117,8 +120,8 @@ impl NumericTarget {
 }
 
 /// Shared framed, centered numeric control used by the palette and background editors.
-pub(super) fn slider(ui: &Ui, value: f32, high: f32, sender: std::sync::mpsc::Sender<Message>, target: NumericTarget) -> Result<SliderWidget, NcStatus> {
-    let mut control = ui.widgets().slider(
+pub(super) fn slider(ui: &Ui, value: f32, high: f32, queue: &mut Inputs, target: NumericTarget) -> Result<SliderWidget, NcStatus> {
+    let mut control = ui.widgets().slider_with_queue(
         SliderOptions {
             value,
             low: 0.,
@@ -126,21 +129,17 @@ pub(super) fn slider(ui: &Ui, value: f32, high: f32, sender: std::sync::mpsc::Se
             step: 1.,
             precision: 0,
         },
-        sender,
-        move |neocogi_ui::slider::Event::Changed(event)| target.message(event),
+        Some(queue.queue.query::<SliderEventQueueAbi>()?.as_com_ref()),
     )?;
+    queue.sliders.push((control.as_interface().downgrade()?, target));
     control.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
     Ok(control)
 }
-/// Owns the same typed activation mapper for individual buttons and shared samples.
-/// The action is captured as data, so each helper does not emit different COM glue.
-fn activation_sink(sender: std::sync::mpsc::Sender<Message>, action: Action) -> Result<ComPtr<ButtonEventQueueAbi>, NcStatus> {
-    neocogi_ui::button::queue(sender, move |neocogi_ui::button::Event::Activated(event)| Message::Activate(action, event))
-}
 /// Creates a concrete button with its action queue already supplied to the factory.
-fn button(ui: &Ui, events_tx: &std::sync::mpsc::Sender<Message>, text: &str, action: Action) -> Result<ButtonWidget, NcStatus> {
-    let queue = activation_sink(events_tx.clone(), action)?;
+fn button(ui: &Ui, events_tx: &mut Inputs, text: &str, action: Action) -> Result<ButtonWidget, NcStatus> {
+    let queue = events_tx.queue.query::<ButtonEventQueueAbi>()?;
     let mut control = ui.widgets().button_with_queue(text, Some(queue.as_com_ref()))?;
+    events_tx.buttons.push((control.as_interface().downgrade()?, action));
     control.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
     Ok(control)
 }
@@ -159,16 +158,21 @@ fn floating<I: ComInterface>(ui: &Ui, desktop: ComRef<'_, IWindowAbi>, title: &s
 
 /// One application protocol combines native snapshots with explicit routing data.
 pub(super) enum Message {
-    /// A configured command and its captured display label.
-    Activate(Action, Activation),
-    /// Captured text submitted by the log entry control.
-    Text(TextSubmitted),
-    /// Selection committed by the combo control.
-    Choice(ChoiceSelection),
-    /// Native file-dialog result, including cancellation.
-    File(FileDialogCompletion),
-    /// Committed main-window lifecycle transition.
-    Window(WindowEvent),
+    /// Owned button snapshot and nonowning source, resolved only during application dispatch.
+    Button(WeakComPtr<ButtonAbi>, neocogi_ui::events::button::Event),
+    /// Owned slider snapshot and nonowning source, resolved only during application dispatch.
+    Slider(WeakComPtr<SliderAbi>, neocogi_ui::events::slider::Event),
+    /// Owned activation snapshot and nonowning source, resolved only during application dispatch.
+    Menu(WeakComPtr<IMenuItemAbi>, neocogi_ui::events::activation::Event),
+    /// Owned textbox snapshot and nonowning source, resolved only during application dispatch.
+    Textbox(WeakComPtr<TextboxAbi>, neocogi_ui::events::textbox::Event),
+    /// Owned combo snapshot and nonowning source, resolved only during application dispatch.
+    Combo(WeakComPtr<ComboAbi>, neocogi_ui::events::combo::Event),
+    /// Owned file_dialog snapshot and nonowning source, resolved only during application dispatch.
+    FileDialog(WeakComPtr<IFileDialogAbi>, neocogi_ui::events::file_dialog::Event),
+    /// Owned window snapshot and nonowning source, resolved only during application dispatch.
+    WindowEvent(WeakComPtr<IWindowAbi>, neocogi_ui::events::window::Event),
+
     /// Background channel selector and its new numeric value.
     Background(u32, NumericChanged),
     /// Palette editor's explicit local command.
@@ -177,6 +181,8 @@ pub(super) enum Message {
 
 /// Application state owns only models and editing/event capabilities needed by its actions.
 pub(super) struct State {
+    /// Plain owned control identities and the one shared posting capability.
+    inputs: Inputs,
     /// A retained runtime projection reads during handlers and installs after dispatch returns.
     pub(super) ui: Ui,
     /// Named palette authoring and the actual retained editor controls.
@@ -275,11 +281,67 @@ impl AppState for State {
     /// Interprets one message using ordinary exclusive application state.
     fn update(&mut self, message: Message) -> Result<(), NcStatus> {
         match message {
-            Message::Activate(action, event) => self.activate(action, &event),
-            Message::Text(event) => self.text_submitted(&event),
-            Message::Choice(event) => self.choice_changed(&event),
-            Message::File(event) => self.file_selected(&event),
-            Message::Window(event) => self.window_changed(&event),
+            Message::Button(origin, neocogi_ui::events::button::Event::Activated(event)) => {
+                if origin.upgrade()?.is_none() {
+                    return Ok(());
+                }
+                let action = self
+                    .inputs
+                    .buttons
+                    .iter()
+                    .find(|(control, _)| control.same_object(&origin))
+                    .map(|(_, action)| *action);
+                match action {
+                    Some(action) => self.activate(action, &event),
+                    None => Ok(()),
+                }
+            }
+            Message::Menu(origin, event) => {
+                if origin.upgrade()?.is_none() {
+                    return Ok(());
+                }
+                let action = self
+                    .inputs
+                    .menus
+                    .iter()
+                    .find(|(control, _)| control.same_object(&origin))
+                    .map(|(_, action)| *action);
+                match action {
+                    Some(action) => self.activate(action, &event),
+                    None => Ok(()),
+                }
+            }
+            Message::Slider(origin, neocogi_ui::events::slider::Event::Changed(event)) => {
+                if origin.upgrade()?.is_none() {
+                    return Ok(());
+                }
+                let target = self
+                    .inputs
+                    .sliders
+                    .iter()
+                    .find(|(control, _)| control.same_object(&origin))
+                    .map(|(_, target)| *target);
+                match target {
+                    Some(target) => self.update(target.message(event)),
+                    None => Ok(()),
+                }
+            }
+            Message::Textbox(origin, event) => match (origin.upgrade()?, event) {
+                (Some(_), neocogi_ui::events::textbox::Event::Submitted(event)) => self.text_submitted(&event),
+                _ => Ok(()),
+            },
+            Message::Combo(origin, neocogi_ui::events::combo::Event::Changed(event)) => match origin.upgrade()? {
+                Some(_) => self.choice_changed(&ChoiceSelection::try_from(event)?),
+                None => Ok(()),
+            },
+            Message::FileDialog(origin, neocogi_ui::events::file_dialog::Event::Completed(event)) => match origin.upgrade()? {
+                Some(_) => self.file_selected(&event),
+                None => Ok(()),
+            },
+            Message::WindowEvent(origin, event) => match origin.upgrade()? {
+                Some(_) => self.window_changed(&event),
+                None => Ok(()),
+            },
             Message::Background(shift, event) => self.background_changed(shift, &event),
             Message::Style(message) => self.style.update(&self.ui, message),
         }
@@ -484,8 +546,10 @@ impl LeafContent for Triangle {
 }
 
 /// Supplies each menu action's typed mapping before publishing its declaration.
-fn menu_item(menu: &MenuBuilder, send: &std::sync::mpsc::Sender<Message>, text: &str, action: Action) -> Result<MenuItem, NcStatus> {
-    menu.item_observed(text, send.clone(), move |event| Message::Activate(action, event))
+fn menu_item(menu: &MenuBuilder, send: &mut Inputs, text: &str, action: Action) -> Result<MenuItem, NcStatus> {
+    let item = menu.item_with_queue(text, Some(send.queue.query::<IMenuItemEventQueueAbi>()?.as_com_ref()))?;
+    send.menus.push((item.as_interface().downgrade()?, action));
+    Ok(item)
 }
 
 /// Creates the complete demo with the same structural desktop and floating examples on every backend.
@@ -493,7 +557,8 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
     neocogi_demo_host::initialize()?;
     let host = Host::new("neocogi-ui COM Demo", Size { width: 1200, height: 800 }, neocogi_demo_assets::load_bundle()?)?;
     let ui = &host.ui;
-    let (events_tx, events) = std::sync::mpsc::channel();
+    let (sender, events) = std::sync::mpsc::channel();
+    let mut events_tx = Inputs::new(sender);
     let grid = Rc::new(RefCell::new(GridState::default()));
     let grid_widget = ui.widgets().leaf(GridViewWidget::new(grid.clone()), WidgetOptions::NONE)?;
     let desktop = ui.window("X-Y Grid Surface", rect(0, 0, 1200, 800), &grid_widget)?;
@@ -502,7 +567,7 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
     desktop.set_options(WindowOptions::NO_TITLE | WindowOptions::NO_CLOSE | WindowOptions::NO_RESIZE | WindowOptions::NO_PADDING)?;
     let mut main_body = column(ui)?;
     let main_scroll = ui.widgets().scroll_area(&main_body, true)?;
-    let lifecycle = neocogi_ui::events::window::queue(events_tx.clone(), Message::Window)?;
+    let lifecycle = events_tx.queue.query::<IWindowEventQueueAbi>()?;
     let demo = ui.child_window_with_queue(
         desktop.as_com_ref(),
         "Demo Window",
@@ -512,76 +577,68 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
     )?;
     demo.set_options(WindowOptions::FRAME | WindowOptions::MINIMIZE_BUTTON | WindowOptions::MAXIMIZE_BUTTON)?;
     let info = [label(ui, "40, 40")?, label(ui, "300, 450")?, label(ui, "0.0")?];
-    let combo = ui.combo_box(
+    let combo = ui.combo_box_with_queue(
         demo.as_com_ref(),
         &FRUIT,
         ChoiceSelection::Selected(0),
-        events_tx.clone(),
-        |neocogi_ui::combo::Event::Changed(event)| Message::Choice(ChoiceSelection::try_from(event).expect("checked COM event")),
+        Some(events_tx.queue.query::<ComboEventQueueAbi>()?.as_com_ref()),
     )?;
     let menus = ui.menus()?;
     let popup_menu = menus.create("Test Popup")?;
-    menu_item(&popup_menu, &events_tx, "Hello", Action::Log)?;
-    menu_item(&popup_menu, &events_tx, "World", Action::Log)?;
+    menu_item(&popup_menu, &mut events_tx, "Hello", Action::Log)?;
+    menu_item(&popup_menu, &mut events_tx, "World", Action::Log)?;
     let test_popup = menus.popup(demo.as_com_ref(), &popup_menu)?;
     let bar = menus.create("Demo Menu")?;
     let file = bar.submenu("File")?;
-    menu_item(&file, &events_tx, "New Session", Action::New)?;
-    let open_item = menu_item(&file, &events_tx, "Open File...", Action::Open)?;
+    menu_item(&file, &mut events_tx, "New Session", Action::New)?;
+    let open_item = menu_item(&file, &mut events_tx, "Open File...", Action::Open)?;
     open_item.set_shortcut_hint("Ctrl+O")?;
     file.separator()?;
-    menu_item(&file, &events_tx, "Clear Log", Action::Clear)?;
+    menu_item(&file, &mut events_tx, "Clear Log", Action::Clear)?;
     let view = bar.submenu("View")?;
-    let auto_item = menu_item(&view, &events_tx, "Auto-scroll Log", Action::AutoScroll)?;
+    let auto_item = menu_item(&view, &mut events_tx, "Auto-scroll Log", Action::AutoScroll)?;
     auto_item.set_mark(MenuMark::Checked { checked: true })?;
-    menu_item(&view, &events_tx, "Show Textures", Action::ShowTextures)?;
+    menu_item(&view, &mut events_tx, "Show Textures", Action::ShowTextures)?;
     let spacing_menu = view.submenu("Spacing")?;
     let spacing = [
-        menu_item(&spacing_menu, &events_tx, "Comfortable", Action::Spacing(true))?,
-        menu_item(&spacing_menu, &events_tx, "Compact", Action::Spacing(false))?,
+        menu_item(&spacing_menu, &mut events_tx, "Comfortable", Action::Spacing(true))?,
+        menu_item(&spacing_menu, &mut events_tx, "Compact", Action::Spacing(false))?,
     ];
     let theme_menu = view.submenu("Theme")?;
     let mut themes = Vec::new();
     for theme in Theme::ALL {
-        let item = menu_item(&theme_menu, &events_tx, theme.label(), Action::Theme(theme))?;
+        let item = menu_item(&theme_menu, &mut events_tx, theme.label(), Action::Theme(theme))?;
         item.set_mark(MenuMark::Radio { selected: theme == Theme::Default })?;
         themes.push((theme, item));
     }
     let help = bar.submenu("Help")?;
-    menu_item(&help, &events_tx, "About", Action::About)?;
+    menu_item(&help, &mut events_tx, "About", Action::About)?;
     menus.attach_bar(demo.as_com_ref(), &bar)?;
     let bar = menus.create("Grid Menu")?;
     let grid_menu = bar.submenu("Grid")?;
-    menu_item(&grid_menu, &events_tx, "Reset View", Action::ResetGrid)?;
-    let minor_item = menu_item(&grid_menu, &events_tx, "Minor Lines", Action::MinorLines)?;
+    menu_item(&grid_menu, &mut events_tx, "Reset View", Action::ResetGrid)?;
+    let minor_item = menu_item(&grid_menu, &mut events_tx, "Minor Lines", Action::MinorLines)?;
     minor_item.set_mark(MenuMark::Checked { checked: true })?;
     grid_menu.separator()?;
-    menu_item(&grid_menu, &events_tx, "Show Demo Window", Action::ShowDemo)?;
-    menu_item(&grid_menu, &events_tx, "About", Action::About)?;
+    menu_item(&grid_menu, &mut events_tx, "Show Demo Window", Action::ShowDemo)?;
+    menu_item(&grid_menu, &mut events_tx, "About", Action::About)?;
     menus.attach_bar(desktop.as_com_ref(), &bar)?;
     let mut log = label(ui, "Welcome to neocogi-ui.")?;
     log.set_font_role(FontRole::Mono)?;
     let log_scroll = ui.widgets().scroll_area(&log, true)?;
-    // Ignore edit snapshots before queueing; only submissions are app commands.
-    let entry_sink = neocogi_ui::textbox::filter_queue(events_tx.clone(), |event| match event {
-        neocogi_ui::textbox::Event::Changed(_) => None,
-        neocogi_ui::textbox::Event::Submitted(value) => Some(Message::Text(value)),
-    })?;
+    let entry_sink = events_tx.queue.query::<TextboxEventQueueAbi>()?;
     let mut entry = ui.widgets().textbox_with_queue("", Some(entry_sink.as_com_ref()))?;
     entry.set_font_role(FontRole::Mono)?;
-    let (style, style_root) = StyleEditor::new(ui, &events_tx)?;
+    let (style, style_root) = StyleEditor::new(ui, &mut events_tx)?;
     floating(ui, desktop.as_com_ref(), "Flat Palette / Skin Metrics", rect(350, 250, 300, 240), &style_root)?;
     let background = ui.widgets().color_swatch(grid.borrow().background, "#5A5F64")?;
     #[cfg(not(target_arch = "wasm32"))]
-    let file_dialog = Some(
-        ui.file_dialog(demo.as_com_ref(), events_tx.clone(), |neocogi_ui::file_dialog::Event::Completed(event)| {
-            Message::File(event)
-        })?,
-    );
+    let file_dialog = Some(ui.file_dialog_with_queue(demo.as_com_ref(), Some(events_tx.queue.query::<IFileDialogEventQueueAbi>()?.as_com_ref()))?);
     #[cfg(target_arch = "wasm32")]
     let file_dialog = None;
     open_item.set_enabled(file_dialog.is_some())?;
-    let state = State {
+    let mut state = State {
+        inputs: events_tx,
         ui: ui.clone(),
         style,
         grid,
@@ -607,8 +664,8 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
         fps: 0.,
         next_fps: 0.,
     };
-    build_controls(&host, &state, &events_tx, &mut main_body)?;
-    build_examples(&host, &state, &events_tx)?;
+    build_controls(&host, &mut state, &mut main_body)?;
+    build_examples(&host, &mut state)?;
     Ok((host, state, events))
 }
 
@@ -619,7 +676,8 @@ pub(super) fn run() -> Result<(), HostError> {
 }
 
 /// Builds the main scrolling control sampler without duplicating widget state or storing authoring closures.
-fn build_controls(host: &Host, state: &State, events_tx: &std::sync::mpsc::Sender<Message>, content: &mut LinearWidget) -> Result<(), HostError> {
+fn build_controls(host: &Host, state: &mut State, content: &mut LinearWidget) -> Result<(), HostError> {
+    let events_tx = &mut state.inputs;
     let ui = &state.ui;
     let mut info = section(ui, content, "Window Info", DisclosureStyle::Header, false)?;
     for (name, value) in ["Position", "Size", "FPS"].into_iter().zip(&state.info) {
@@ -688,7 +746,7 @@ fn build_controls(host: &Host, state: &State, events_tx: &std::sync::mpsc::Sende
             ui,
             ((state.grid.borrow().background >> shift) & 255) as f32,
             255.,
-            events_tx.clone(),
+            events_tx,
             NumericTarget::Background(shift),
         )?;
         append(&mut line, &label(ui, name)?, LayoutTrack::Fixed { extent: 46 })?;
@@ -732,7 +790,8 @@ fn build_controls(host: &Host, state: &State, events_tx: &std::sync::mpsc::Sende
 }
 
 /// Mounts the log, typography, layout and custom drawing examples as ordinary structural children.
-fn build_examples(host: &Host, state: &State, events_tx: &std::sync::mpsc::Sender<Message>) -> Result<(), HostError> {
+fn build_examples(host: &Host, state: &mut State) -> Result<(), HostError> {
+    let events_tx = &mut state.inputs;
     let ui = &state.ui;
     let desktop = state.desktop.as_com_ref();
     let mut log = column(ui)?;
@@ -785,7 +844,7 @@ fn build_examples(host: &Host, state: &State, events_tx: &std::sync::mpsc::Sende
         &ui.widgets().leaf(Suzanne::new(host.renderer.as_com_ref())?, WidgetOptions::NONE)?,
     )?;
     // All sample buttons share this parent destination; each widget retains it at creation.
-    let sample_sink = activation_sink(events_tx.clone(), Action::Log)?;
+    let sample_sink = events_tx.queue.query::<ButtonEventQueueAbi>()?;
     for (sample, title, area) in [
         (
             neocogi_ui_samples::directions(ui, Some(sample_sink.as_com_ref()))?,
@@ -798,6 +857,9 @@ fn build_examples(host: &Host, state: &State, events_tx: &std::sync::mpsc::Sende
             rect(530, 270, 280, 260),
         ),
     ] {
+        for button in &sample.buttons {
+            events_tx.buttons.push((button.as_interface().downgrade()?, Action::Log));
+        }
         floating(ui, desktop, title, area, &sample.content)?;
     }
     Ok(())

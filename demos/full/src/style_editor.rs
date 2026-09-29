@@ -188,7 +188,7 @@ pub(super) struct StyleEditor {
 }
 impl StyleEditor {
     /// Builds the same 72 color sliders and five metrics inside one ordinary scrolling tree.
-    pub(super) fn new(ui: &Ui, events_tx: &std::sync::mpsc::Sender<super::app::Message>) -> Result<(Self, ScrollAreaWidget), NcStatus> {
+    pub(super) fn new(ui: &Ui, events_tx: &mut super::app::Inputs) -> Result<(Self, ScrollAreaWidget), NcStatus> {
         let base = ui.assets()?;
         // Activation belongs to this application; the UI runtime has no asset-provider dependency.
         let runtime = neocogi_com::Runtime::global();
@@ -204,7 +204,7 @@ impl StyleEditor {
             let mut line = row(ui)?;
             append(&mut line, &label(ui, role.label())?, LayoutTrack::Fixed { extent: 80 })?;
             let color = role.value(&mut palette);
-            let channel_slider = |channel: Channel, value: u8| slider(ui, value as f32, 255., events_tx.clone(), NumericTarget::Color(role, channel));
+            let mut channel_slider = |channel: Channel, value: u8| slider(ui, value as f32, 255., events_tx, NumericTarget::Color(role, channel));
             let channels = [
                 channel_slider(Channel::Red, color.r)?,
                 channel_slider(Channel::Green, color.g)?,
@@ -223,7 +223,7 @@ impl StyleEditor {
         for metric in Metric::ALL {
             let (name, high) = metric.presentation();
             let mut line = row(ui)?;
-            let control = slider(ui, *metric.value(&mut metrics) as f32, high, events_tx.clone(), NumericTarget::Metric(metric))?;
+            let control = slider(ui, *metric.value(&mut metrics) as f32, high, events_tx, NumericTarget::Metric(metric))?;
             append(&mut line, &label(ui, name)?, LayoutTrack::Fixed { extent: 80 })?;
             append(&mut line, &control, LayoutTrack::Flex { weight: 1. })?;
             append(&mut content, &line, LayoutTrack::Content)?;
