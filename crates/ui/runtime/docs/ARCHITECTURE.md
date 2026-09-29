@@ -260,7 +260,7 @@ consumed pointer or at an exact screen-space rectangle. It keeps that screen anc
 shown elsewhere and does not follow later owner movement. `PopupHandle` parameters keep these
 operations separate from window operations at compile time.
 
-`Ui::combo_box` constructs an unmounted header and one compact selection-menu popup in one runtime
+`Ui::combo_box_with_queue` constructs an unmounted header and one compact selection-menu popup in one runtime
 operation. Both command and choice menus occupy the same popup forest, layout, paint, pointer, and
 keyboard machinery; neither uses a retained row widget. Above that boundary, `RuntimeContext`
 owns a `ComboBoxManager` association between the generic `PopupHandle` and a runtime-private typed

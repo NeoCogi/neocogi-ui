@@ -12,7 +12,7 @@ supplies common options, lifecycle, update, measurement, painting, editing, and
 optional event families.
 
 Controls that require a structural owner at construction use their dedicated `Ui`
-method. In particular, `Ui::combo_box` creates a header together with its private
+method. In particular, `Ui::combo_box_with_queue` creates a header together with its private
 selection-menu popup after receiving the popup's owning window.
 
 ## Construction and ownership
@@ -20,10 +20,9 @@ selection-menu popup after receiving the popup's owning window.
 ```rust,no_run
 use neocogi_ui::{CrossSize, FlowDirection, IWindowAbi,
     LayoutTrack, LinearEdge, Rect, Ui};
-use neocogi_com::{ComPtr, NcStatus};
-fn install(ui: &Ui, sender: &std::sync::mpsc::Sender<bool>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-    let checkbox = ui.widgets().checkbox("Enable preview", false, sender.clone(),
-        |neocogi_ui::checkbox::Event::Changed(event)| event.checked)?;
+use neocogi_com::{ComPtr, ComRef, NcStatus};
+fn install(ui: &Ui, queue: ComRef<'_, neocogi_ui::CheckboxEventQueueAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+    let checkbox = ui.widgets().checkbox_with_queue("Enable preview", false, Some(queue))?;
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     column.insert(0, &checkbox, LinearEdge::new(LayoutTrack::Content))?.finish()?;
     ui.window("Settings", Rect { x: 40, y: 40, width: 260, height: 120 }, &column)
@@ -62,9 +61,9 @@ shared capabilities are documented in `neocogi-ui-core-contracts`, concrete
 classes in `neocogi-ui-nodes-contracts`, and clients in the facade's API reference.
 
 Combo boxes retain a selection-menu hierarchy but no generic application payload.
-`Ui::combo_box(parent, items, ChoiceSelection::None, sender, mapper)` is the flat convenience: it
+`Ui::combo_box_with_queue(parent, items, ChoiceSelection::None, queue)` is the flat convenience: it
 assigns each label an ID equal to its ordinal, displays the `Select…` fallback, and
-allows `set_placeholder` to replace that fallback. `Ui::combo_menu` instead consumes
+allows `set_placeholder` to replace that fallback. `Ui::combo_menu_with_queue` instead consumes
 the NCIDL-generated core `ChoiceMenuEntry` preorder sequence and `MenuTextRange` values,
 so submenus and stable application-defined leaf IDs cross COM without a handwritten
 parallel structure. Every branch declares its direct-child count; invalid UTF-8

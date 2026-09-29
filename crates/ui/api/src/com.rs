@@ -850,163 +850,49 @@ impl ListBoxWidget {
 }
 
 impl WidgetFactory {
-    /// Creates an unmounted button with one lifetime-bound queue.
-    /// The generated adapter owns the sender and mapper; construction failure releases both.
-    pub fn button<M: 'static>(
-        &self,
-        label: &str,
-        sender: std::sync::mpsc::Sender<M>,
-        map: impl FnMut(crate::button::Event) -> M + 'static,
-    ) -> Result<ButtonWidget, NcStatus> {
-        let queue = crate::button::queue(sender, map)?;
-        self.button_with_queue(label, Some(queue.as_com_ref()))
-    }
-
     /// Creates an explicitly unobserved button without allocating a destination.
     pub fn button_unobserved(&self, label: &str) -> Result<ButtonWidget, NcStatus> {
         self.button_with_queue(label, None)
-    }
-    /// Creates an unmounted checkbox with one lifetime-bound queue.
-    /// The generated adapter owns the sender and mapper; construction failure releases both.
-    pub fn checkbox<M: 'static>(
-        &self,
-        label: &str,
-        checked: bool,
-        sender: std::sync::mpsc::Sender<M>,
-        map: impl FnMut(crate::checkbox::Event) -> M + 'static,
-    ) -> Result<CheckboxWidget, NcStatus> {
-        let queue = crate::checkbox::queue(sender, map)?;
-        self.checkbox_with_queue(label, checked, Some(queue.as_com_ref()))
     }
 
     /// Creates an explicitly unobserved checkbox without allocating a destination.
     pub fn checkbox_unobserved(&self, label: &str, checked: bool) -> Result<CheckboxWidget, NcStatus> {
         self.checkbox_with_queue(label, checked, None)
     }
-    /// Creates an unmounted textbox with one lifetime-bound queue.
-    /// The generated adapter owns the sender and mapper; construction failure releases both.
-    pub fn textbox<M: 'static>(
-        &self,
-        text: &str,
-        sender: std::sync::mpsc::Sender<M>,
-        map: impl FnMut(crate::textbox::Event) -> M + 'static,
-    ) -> Result<TextboxWidget, NcStatus> {
-        let queue = crate::textbox::queue(sender, map)?;
-        self.textbox_with_queue(text, Some(queue.as_com_ref()))
-    }
 
     /// Creates an explicitly unobserved textbox without allocating a destination.
     pub fn textbox_unobserved(&self, text: &str) -> Result<TextboxWidget, NcStatus> {
         self.textbox_with_queue(text, None)
-    }
-    /// Creates an unmounted text area with one lifetime-bound queue.
-    /// The generated adapter owns the sender and mapper; construction failure releases both.
-    pub fn text_area<M: 'static>(
-        &self,
-        text: &str,
-        wrapping: TextWrapping,
-        scrolling: bool,
-        sender: std::sync::mpsc::Sender<M>,
-        map: impl FnMut(crate::text_area::Event) -> M + 'static,
-    ) -> Result<TextAreaWidget, NcStatus> {
-        let queue = crate::text_area::queue(sender, map)?;
-        self.text_area_with_queue(text, wrapping, scrolling, Some(queue.as_com_ref()))
     }
 
     /// Creates an explicitly unobserved text area without allocating a destination.
     pub fn text_area_unobserved(&self, text: &str, wrapping: TextWrapping, scrolling: bool) -> Result<TextAreaWidget, NcStatus> {
         self.text_area_with_queue(text, wrapping, scrolling, None)
     }
-    /// Creates an unmounted slider with one lifetime-bound queue.
-    /// The generated adapter owns the sender and mapper; construction failure releases both.
-    pub fn slider<M: 'static>(
-        &self,
-        options: SliderOptions,
-        sender: std::sync::mpsc::Sender<M>,
-        map: impl FnMut(crate::slider::Event) -> M + 'static,
-    ) -> Result<SliderWidget, NcStatus> {
-        let queue = crate::slider::queue(sender, map)?;
-        self.slider_with_queue(options, Some(queue.as_com_ref()))
-    }
 
     /// Creates an explicitly unobserved slider without allocating a destination.
     pub fn slider_unobserved(&self, options: SliderOptions) -> Result<SliderWidget, NcStatus> {
         self.slider_with_queue(options, None)
-    }
-    /// Creates an unmounted number with one lifetime-bound queue.
-    /// The generated adapter owns the sender and mapper; construction failure releases both.
-    pub fn number<M: 'static>(
-        &self,
-        options: NumberOptions,
-        sender: std::sync::mpsc::Sender<M>,
-        map: impl FnMut(crate::number::Event) -> M + 'static,
-    ) -> Result<NumberWidget, NcStatus> {
-        let queue = crate::number::queue(sender, map)?;
-        self.number_with_queue(options, Some(queue.as_com_ref()))
     }
 
     /// Creates an explicitly unobserved number without allocating a destination.
     pub fn number_unobserved(&self, options: NumberOptions) -> Result<NumberWidget, NcStatus> {
         self.number_with_queue(options, None)
     }
-    /// Creates an unmounted list item with one lifetime-bound queue.
-    /// The generated adapter owns the sender and mapper; construction failure releases both.
-    pub fn list_item<M: 'static>(
-        &self,
-        label: &str,
-        sender: std::sync::mpsc::Sender<M>,
-        map: impl FnMut(crate::list_item::Event) -> M + 'static,
-    ) -> Result<ListItemWidget, NcStatus> {
-        let queue = crate::list_item::queue(sender, map)?;
-        self.list_item_with_queue(label, Some(queue.as_com_ref()))
-    }
 
     /// Creates an explicitly unobserved list item without allocating a destination.
     pub fn list_item_unobserved(&self, label: &str) -> Result<ListItemWidget, NcStatus> {
         self.list_item_with_queue(label, None)
-    }
-    /// Creates an unmounted list box with one lifetime-bound queue.
-    /// The generated adapter owns the sender and mapper; construction failure releases both.
-    pub fn list_box<M: 'static>(
-        &self,
-        label: &str,
-        sender: std::sync::mpsc::Sender<M>,
-        map: impl FnMut(crate::list_box::Event) -> M + 'static,
-    ) -> Result<ListBoxWidget, NcStatus> {
-        let queue = crate::list_box::queue(sender, map)?;
-        self.list_box_with_queue(label, Some(queue.as_com_ref()))
     }
 
     /// Creates an explicitly unobserved list box without allocating a destination.
     pub fn list_box_unobserved(&self, label: &str) -> Result<ListBoxWidget, NcStatus> {
         self.list_box_with_queue(label, None)
     }
-    /// Creates an unmounted scrollbar with one lifetime-bound queue.
-    /// The generated adapter owns the sender and mapper; construction failure releases both.
-    pub fn scrollbar<M: 'static>(
-        &self,
-        range: ScrollRange,
-        sender: std::sync::mpsc::Sender<M>,
-        map: impl FnMut(crate::scrollbar::Event) -> M + 'static,
-    ) -> Result<ScrollbarWidget, NcStatus> {
-        let queue = crate::scrollbar::queue(sender, map)?;
-        self.scrollbar_with_queue(range, Some(queue.as_com_ref()))
-    }
 
     /// Creates an explicitly unobserved scrollbar without allocating a destination.
     pub fn scrollbar_unobserved(&self, range: ScrollRange) -> Result<ScrollbarWidget, NcStatus> {
         self.scrollbar_with_queue(range, None)
-    }
-    /// Creates an unmounted split view with one lifetime-bound queue.
-    /// The generated adapter owns the sender and mapper; construction failure releases both.
-    pub fn split_view<M: 'static>(
-        &self,
-        settings: SplitOptions,
-        sender: std::sync::mpsc::Sender<M>,
-        map: impl FnMut(crate::split_view::Event) -> M + 'static,
-    ) -> Result<SplitViewWidget, NcStatus> {
-        let queue = crate::split_view::queue(sender, map)?;
-        self.split_view_with_queue(settings, Some(queue.as_com_ref()))
     }
 
     /// Creates an explicitly unobserved split view without allocating a destination.
@@ -1016,18 +902,6 @@ impl WidgetFactory {
 }
 
 impl Ui {
-    /// Constructs a choice header with one queue owned by its core choice model.
-    pub fn combo_box<Item: AsRef<str>, M: 'static>(
-        &self,
-        parent: ComRef<'_, IWindowAbi>,
-        items: &[Item],
-        selection: ChoiceSelection,
-        sender: std::sync::mpsc::Sender<M>,
-        map: impl FnMut(crate::combo::Event) -> M + 'static,
-    ) -> Result<ComboWidget, NcStatus> {
-        let queue = crate::combo::queue(sender, map)?;
-        self.combo_box_with_queue(parent, items, selection, Some(queue.as_com_ref()))
-    }
     /// Constructs an unobserved choice header without a dummy destination allocation.
     pub fn combo_box_unobserved<Item: AsRef<str>>(
         &self,
@@ -1037,19 +911,7 @@ impl Ui {
     ) -> Result<ComboWidget, NcStatus> {
         self.combo_box_with_queue(parent, items, selection, None)
     }
-    /// Constructs a hierarchical choice header with one constructor-bound queue.
-    pub fn combo_menu<M: 'static>(
-        &self,
-        parent: ComRef<'_, IWindowAbi>,
-        text: &str,
-        entries: &[ChoiceMenuEntry],
-        selection: ChoiceSelection,
-        sender: std::sync::mpsc::Sender<M>,
-        map: impl FnMut(crate::combo::Event) -> M + 'static,
-    ) -> Result<ComboWidget, NcStatus> {
-        let queue = crate::combo::queue(sender, map)?;
-        self.combo_menu_with_queue(parent, text, entries, selection, Some(queue.as_com_ref()))
-    }
+
     /// Constructs an unobserved hierarchical choice header.
     pub fn combo_menu_unobserved(
         &self,
@@ -1063,16 +925,6 @@ impl Ui {
 }
 
 impl Ui {
-    /// Creates the hidden picker with one upward queue retained for its lifetime.
-    pub fn file_dialog<M: 'static>(
-        &self,
-        parent: ComRef<'_, IWindowAbi>,
-        sender: std::sync::mpsc::Sender<M>,
-        map: impl FnMut(crate::file_dialog::Event) -> M + 'static,
-    ) -> Result<crate::FileDialog, NcStatus> {
-        let queue = crate::file_dialog::queue(sender, map)?;
-        self.file_dialog_with_queue(parent, Some(queue.as_com_ref()))
-    }
     /// Creates an explicitly unobserved picker without allocating a destination.
     pub fn file_dialog_unobserved(&self, parent: ComRef<'_, IWindowAbi>) -> Result<crate::FileDialog, NcStatus> {
         self.file_dialog_with_queue(parent, None)

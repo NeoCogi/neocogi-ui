@@ -148,12 +148,8 @@ fn static_com_editing_and_webgl() {
     let runtime = Runtime::global();
     // SAFETY: All descriptions and referenced code/data live in this statically linked wasm.
     unsafe {
-        runtime
-            .register_factory_plugin_description(nc_ui::factory_plugin_description())
-            .unwrap();
-        runtime
-            .register_factory_plugin_description(nc_ui_nodes::factory_plugin_description())
-            .unwrap();
+        runtime.register_factory_plugin_description(nc_ui::factory_plugin_description()).unwrap();
+        runtime.register_factory_plugin_description(nc_ui_nodes::factory_plugin_description()).unwrap();
         runtime.register_factory_plugin_description(nc_gfx::factory_plugin_description()).unwrap();
         runtime.register_factory_plugin_description(crate::factory_plugin_description()).unwrap();
     }
@@ -185,7 +181,7 @@ fn static_com_editing_and_webgl() {
         .unwrap();
     let widgets = nodes.bind(core.as_com_ref()).unwrap();
     let ui = neocogi_ui::Ui::from_interfaces(core, widgets).unwrap();
-    let editor = ui.widgets().textbox("").unwrap();
+    let editor = ui.widgets().textbox_unobserved("").unwrap();
     let window = ui
         .window("Editable COM window", Rect { x: 10, y: 10, width: 400, height: 180 }, &editor)
         .unwrap();

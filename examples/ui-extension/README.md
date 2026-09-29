@@ -46,8 +46,9 @@ receives one typed queue for that whole enum. There is no later attachment API.
 The counter posts both variants after committing state. Composite close retires
 children first, then local resources and common state; final Drop calls close.
 
-The [acceptance host](../../demos/smoke/src/extension.rs) creates its queue through
-`neocogi_com::events::mapped_queue` and passes it into `ExtensionProvider::counter`.
+The [acceptance host](../../demos/smoke/src/extension.rs) implements the concrete
+`CounterEventQueue` on an object containing its channel sender and passes that
+projection into `ExtensionProvider::counter`.
 Its application handler matches `CounterEvent` after traversal releases widget
 borrows. `CounterAbi::IDL_INTERFACE` and `CounterEvent::IDL_TYPE` supply generated
 metadata. The root `ExtensionProvider` also

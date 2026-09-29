@@ -2,6 +2,16 @@
 
 ## 0.0.0 (unreleased)
 
+- Complete the concrete `IEventQueue<Object, Event>` migration across applications,
+  composites, designer previews and test fixtures. Remove generated callback
+  receiver classes, `mapped_queue`, per-event queue builders and sender/mapper
+  constructors. Applications own one concrete sender-bearing COM queue per
+  behavioral inbox; mutable command selection stays in ordinary model state.
+  Reject retained old controls through current membership and preview generation.
+  Cover module scaffolding/generation/build and real factory delivery through
+  cargo-neocogi, including allocation-free contract builds. Earlier observer and
+  callback entries below record superseded designs, not supported compatibility APIs.
+
 - Put private composite dispatch on `IWidget` and remove `IEventOwner`, the
   view/controller mount pair and separate retirement lifecycle. FileDialog owns
   its inline layout, model and receiver in one allocation. The application uses

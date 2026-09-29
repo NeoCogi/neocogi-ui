@@ -54,7 +54,9 @@ impl ButtonEventQueue for AppQueue {
     fn post(&mut self, origin: ComRef<'_, ButtonAbi>, event: NcValueRef<'_, ButtonEvent>)
         -> Result<(), NcStatus>
     {
-        let message = AppMessage::Button(origin.downgrade()?, event.to_owned()?);
+        let event = event.to_owned()?;
+        neocogi_ui::button::validate(&event)?;
+        let message = AppMessage::Button(origin.downgrade()?, event);
         let _ = self.sender.send(message);
         Ok(())
     }
@@ -74,11 +76,14 @@ access when they drain their inbox. A receiver must not call widget methods
 synchronously during `post`: the emitting widget still holds its exclusive call
 gate. Acquiring a weak reference operates only on lifetime bookkeeping.
 
-`mapped_queue` and the facade's `button::queue` / `textbox::queue` remain optional
-conveniences for small applications. They allocate a callback receiver; they are
-not required by the factory ABI. Facade convenience mappers consume the event
-only. `mapped_queue` additionally supplies the typed weak origin. Applications
-that need one shared allocation implement the concrete queue interfaces directly.
+`*_with_queue` accepts a concrete queue projection and `*_unobserved` selects
+permanent non-delivery. IDL emits the ordinary queue trait, checked wire methods,
+and producer type association; it emits no callback receiver class. The former
+`receiver`, `mapped_queue`, per-event `queue`/`filter_queue`, and sender/mapper
+constructor helpers have been removed. Keeping those paths had preserved one
+adapter allocation and closure specialization per observed widget in the demos
+and tools. The concrete application-owned queue is now the only observed path.
+
 An application also chooses its own queue capacity and disconnected/full policy;
 COM does not prescribe an unbounded Rust channel.
 
@@ -186,7 +191,10 @@ origin before enqueueing; it never executes application behavior synchronously.
 The IDL construction fixture crosses actual generated factory and queue thunks,
 including permanent unobserved/closed behavior, failed construction, malformed
 binding tags, inconsistent event declarations and compile-time rejection of late
-attachment. Runtime tests use real widget origins and routed input. A concrete
+attachment and the removed receiver-construction helper. The cargo-neocogi module
+integration test scaffolds a contract, runs the owning build script and explicit
+generate/build commands, then exercises a shared concrete queue through real
+factory and producer calls. Runtime tests use real widget origins and routed input. A concrete
 application test implements two queue interfaces on one allocation, verifies FIFO
 snapshots and origin identity, then destroys both widgets while retaining their
 queued messages. COM tests separately exercise C callers, wrong revisions,

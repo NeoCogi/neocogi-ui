@@ -59,16 +59,7 @@ impl MenuBuilder {
             )?,
         })
     }
-    /// Captures activations into the application queue without later installation.
-    pub fn item_observed<M: 'static>(
-        &self,
-        label: &str,
-        sender: std::sync::mpsc::Sender<M>,
-        map: impl FnMut(neocogi_ui_core_contracts::Activation) -> M + 'static,
-    ) -> Result<MenuItem, NcStatus> {
-        let queue = crate::events::activation::queue(sender, map)?;
-        self.item_with_queue(label, Some(queue.as_com_ref()))
-    }
+
     /// Appends a noninteractive separator in exact declaration order.
     pub fn separator(&self) -> Result<(), NcStatus> {
         self.interface.separator()

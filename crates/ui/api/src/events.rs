@@ -1,35 +1,44 @@
-//! Typed COM output mappings into standard Rust channels.
-//! Mappers translate owned snapshots immediately. The UI invokes the application's
-//! ordinary mutable consumer later, after releasing traversal borrows.
+//! Typed event-domain validation and deferred application dispatch.
+//! Applications implement concrete queue traits on an object containing their sender.
+//! Each constructor borrows the appropriate queue projection; one behavioral inbox
+//! can serve many widgets without allocating per-widget callback adapters.
 //!
 //! ```no_run
-//! use neocogi_ui::{IApplicationDispatcherAbi, Size, Ui, events::{self, Controller, EventModel}};
-//! use neocogi_com::NcStatus;
-//!
-//! /// Ordinary application state is owned by one persistent controller.
+//! use neocogi_com::{ComRef, NcStatus, NcValueRef, WeakComPtr};
+//! use neocogi_ui::{ButtonAbi, ButtonEventQueueAbi, IApplicationDispatcherAbi, Size, Ui,
+//!     button, events::{Controller, EventModel}};
+//! #[neocogi_com::com_object(neocogi_ui::nodes::ButtonEventQueue)]
+//! struct AppQueue { send: std::sync::mpsc::Sender<(WeakComPtr<ButtonAbi>, button::Event)> }
+//! impl neocogi_ui::nodes::ButtonEventQueue for AppQueue {
+//!     fn post(&mut self, origin: ComRef<'_, ButtonAbi>, event: NcValueRef<'_, button::Event>) -> Result<(), NcStatus> {
+//!         let event = event.to_owned()?;
+//!         button::validate(&event)?;
+//!         let _ = self.send.send((origin.downgrade()?, event));
+//!         Ok(())
+//!     }
+//! }
 //! struct Counter { count: u32 }
 //! impl EventModel for Counter {
-//!     type Message = ();
-//!     fn handle(&mut self, (): ()) -> Result<(), NcStatus> {
-//!         self.count += 1;
+//!     type Message = (WeakComPtr<ButtonAbi>, button::Event);
+//!     fn handle(&mut self, (origin, event): Self::Message) -> Result<(), NcStatus> {
+//!         if origin.upgrade()?.is_some() {
+//!             match event { button::Event::Activated(_) => self.count += 1 }
+//!         }
 //!         Ok(())
 //!     }
 //! }
 //! fn example(ui: &Ui, size: Size) -> Result<u32, NcStatus> {
 //!     let (send, messages) = std::sync::mpsc::channel();
-//!     let button = ui.widgets().button("Count", send, |_| ())?;
+//!     let queue = AppQueue::from_value(AppQueue { send }).query::<ButtonEventQueueAbi>()?;
+//!     let button = ui.widgets().button_with_queue("Count", Some(queue.as_com_ref()))?;
 //!     let app = Controller::into_local(Controller::new(Counter { count: 0 }, messages));
-//!     let owner = app.query::<IApplicationDispatcherAbi>()?;
-//!     // Keep both handles across frames; neither update creates an adapter.
-//!     ui.update_with_events(size, owner.as_com_ref())?;
-//!     ui.update_with_events(size, owner.as_com_ref())?;
+//!     let dispatcher = app.query::<IApplicationDispatcherAbi>()?;
+//!     ui.update_with_events(size, dispatcher.as_com_ref())?;
+//!     ui.update_with_events(size, dispatcher.as_com_ref())?;
 //!     let count = app.try_borrow()?.model.count;
 //!     Ok(count)
 //! }
 //! ```
-/// Installs a typed COM mapping into a standard application or component channel.
-pub use neocogi_com::events::mapped_queue;
-
 /// Owned application fixtures for integration tests, without borrowed callback adapters.
 #[cfg(feature = "test-support")]
 pub mod testing;
@@ -91,133 +100,53 @@ fn valid_file_dialog_path(event: &FileDialogCompletion) -> Result<(), NcStatus> 
     completed_file_path(event).map(|_| ())
 }
 
-/// Adds the standard channel transport to one generated queue contract.
-/// The mapper executes during posting; owner state is handled when its inbox drains.
-macro_rules! widget_queue {
-    ($module:ident, $event:path, $abi:ident, $validate:expr) => {
-        /// Construction-time queue and owned event variants for this widget.
+/// Publishes the concrete event type and its one authoritative domain validator.
+/// Queue objects invoke this check after acquiring their typed ABI payload.
+macro_rules! widget_event {
+    ($module:ident, $event:path, $validate:expr) => {
+        /// Complete event variants and domain validation for this producer kind.
         pub mod $module {
             use super::*;
-            /// The IDL-derived local sum of this widget's output payloads.
+            /// The IDL-derived owned sum of this producer's output payloads.
             pub use $event as Event;
 
-            /// Creates one queue containing its sender and mapper inline.
-            /// A disconnected owner discards future messages without failing UI input.
-            pub fn queue<M: 'static>(
-                sender: std::sync::mpsc::Sender<M>,
-                mut map: impl FnMut(Event) -> M + 'static,
-            ) -> Result<neocogi_com::ComPtr<$abi>, NcStatus> {
-                filter_queue(sender, move |event| Some(map(event)))
-            }
-
-            /// Checks the concrete event domain independently of its consumer or transport.
-            /// Form-owned queues call this same boundary check before queueing events.
+            /// Checks domain invariants independently of the consumer or transport.
+            /// Generated forms and handwritten concrete queues share this boundary.
             pub fn validate(event: &Event) -> Result<(), NcStatus> {
                 ($validate)(event)
-            }
-
-            /// Creates an queue that can ignore output variants before queueing.
-            /// Domain checks run before the mapper, including for ignored variants.
-            pub fn filter_queue<M: 'static>(
-                sender: std::sync::mpsc::Sender<M>,
-                mut map: impl FnMut(Event) -> Option<M> + 'static,
-            ) -> Result<neocogi_com::ComPtr<$abi>, NcStatus> {
-                <$abi as neocogi_com::events::EventQueueInterface>::receiver(move |_origin, event| {
-                    validate(&event)?;
-                    if let Some(message) = map(event) {
-                        let _ = sender.send(message);
-                    }
-                    Ok(())
-                })
             }
         }
     };
 }
-widget_queue!(button, neocogi_ui_nodes_contracts::ButtonEvent, ButtonEventQueueAbi, |_: &Event| Ok::<
-    (),
-    NcStatus,
->(()));
-widget_queue!(checkbox, neocogi_ui_nodes_contracts::CheckboxEvent, CheckboxEventQueueAbi, |_: &Event| Ok::<
-    (),
-    NcStatus,
->(()));
-widget_queue!(
-    textbox,
-    neocogi_ui_nodes_contracts::TextboxEvent,
-    TextboxEventQueueAbi,
-    |event: &Event| match event {
-        Event::Changed(value) => valid_text_cursor(&value.text, value.cursor),
-        Event::Submitted(_) => Ok(()),
-    }
-);
-widget_queue!(
-    text_area,
-    neocogi_ui_nodes_contracts::TextAreaEvent,
-    TextAreaEventQueueAbi,
-    |event: &Event| match event {
-        Event::Changed(value) => valid_text_cursor(&value.text, value.cursor),
-        Event::Submitted(_) => Ok(()),
-    }
-);
-widget_queue!(
-    slider,
-    neocogi_ui_nodes_contracts::SliderEvent,
-    SliderEventQueueAbi,
-    |event: &Event| match event {
-        Event::Changed(value) => valid_numeric(value),
-    }
-);
-widget_queue!(
-    number,
-    neocogi_ui_nodes_contracts::NumberEvent,
-    NumberEventQueueAbi,
-    |event: &Event| match event {
-        Event::Changed(value) => valid_numeric(value),
-    }
-);
-widget_queue!(list_item, neocogi_ui_nodes_contracts::ListItemEvent, ListItemEventQueueAbi, |_: &Event| Ok::<
-    (),
-    NcStatus,
->(()));
-widget_queue!(list_box, neocogi_ui_nodes_contracts::ListBoxEvent, ListBoxEventQueueAbi, |_: &Event| Ok::<
-    (),
-    NcStatus,
->(()));
-widget_queue!(
-    scrollbar,
-    neocogi_ui_nodes_contracts::ScrollbarEvent,
-    ScrollbarEventQueueAbi,
-    |event: &Event| match event {
-        Event::Changed(value) => valid_scrollbar(value),
-    }
-);
-widget_queue!(
-    split_view,
-    neocogi_ui_nodes_contracts::SplitViewEvent,
-    SplitViewEventQueueAbi,
-    |event: &Event| match event {
-        Event::Changed(value) => valid_split(value),
-    }
-);
-widget_queue!(combo, neocogi_ui_core_contracts::IChoiceMenuEvent, ComboEventQueueAbi, |_: &Event| Ok::<
-    (),
-    NcStatus,
->(()));
-widget_queue!(
-    file_dialog,
-    neocogi_ui_core_contracts::IFileDialogEvent,
-    IFileDialogEventQueueAbi,
-    |event: &Event| match event {
-        Event::Completed(value) => valid_file_dialog_path(value),
-    }
-);
+widget_event!(button, neocogi_ui_nodes_contracts::ButtonEvent, |_: &Event| Ok::<(), NcStatus>(()));
+widget_event!(checkbox, neocogi_ui_nodes_contracts::CheckboxEvent, |_: &Event| Ok::<(), NcStatus>(()));
+widget_event!(textbox, neocogi_ui_nodes_contracts::TextboxEvent, |event: &Event| match event {
+    Event::Changed(value) => valid_text_cursor(&value.text, value.cursor),
+    Event::Submitted(_) => Ok(()),
+});
+widget_event!(text_area, neocogi_ui_nodes_contracts::TextAreaEvent, |event: &Event| match event {
+    Event::Changed(value) => valid_text_cursor(&value.text, value.cursor),
+    Event::Submitted(_) => Ok(()),
+});
+widget_event!(slider, neocogi_ui_nodes_contracts::SliderEvent, |event: &Event| match event {
+    Event::Changed(value) => valid_numeric(value),
+});
+widget_event!(number, neocogi_ui_nodes_contracts::NumberEvent, |event: &Event| match event {
+    Event::Changed(value) => valid_numeric(value),
+});
+widget_event!(list_item, neocogi_ui_nodes_contracts::ListItemEvent, |_: &Event| Ok::<(), NcStatus>(()));
+widget_event!(list_box, neocogi_ui_nodes_contracts::ListBoxEvent, |_: &Event| Ok::<(), NcStatus>(()));
+widget_event!(scrollbar, neocogi_ui_nodes_contracts::ScrollbarEvent, |event: &Event| match event {
+    Event::Changed(value) => valid_scrollbar(value),
+});
+widget_event!(split_view, neocogi_ui_nodes_contracts::SplitViewEvent, |event: &Event| match event {
+    Event::Changed(value) => valid_split(value),
+});
+widget_event!(combo, neocogi_ui_core_contracts::IChoiceMenuEvent, |_: &Event| Ok::<(), NcStatus>(()));
+widget_event!(file_dialog, neocogi_ui_core_contracts::IFileDialogEvent, |event: &Event| match event {
+    Event::Completed(value) => valid_file_dialog_path(value),
+});
 
-widget_queue!(window, neocogi_ui_core_contracts::WindowEvent, IWindowEventQueueAbi, valid_window_event);
-widget_queue!(popup, neocogi_ui_core_contracts::PopupDismissed, IPopupEventQueueAbi, |_: &Event| Ok::<
-    (),
-    NcStatus,
->(()));
-widget_queue!(activation, neocogi_ui_core_contracts::Activation, IMenuItemEventQueueAbi, |_: &Event| Ok::<
-    (),
-    NcStatus,
->(()));
+widget_event!(window, neocogi_ui_core_contracts::WindowEvent, valid_window_event);
+widget_event!(popup, neocogi_ui_core_contracts::PopupDismissed, |_: &Event| Ok::<(), NcStatus>(()));
+widget_event!(activation, neocogi_ui_core_contracts::Activation, |_: &Event| Ok::<(), NcStatus>(()));

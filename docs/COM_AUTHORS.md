@@ -70,17 +70,20 @@ field comment must name that constraint.
 ## Typed events and application state
 
 A persistent `events::Controller<Model>` owns ordinary application state and a
-standard `std::sync::mpsc::Receiver<Model::Message>`. Pass a sender and mapper when constructing observed widgets, targeting
-that private protocol. Implement `EventModel::handle(&mut self, message)`
+standard `std::sync::mpsc::Receiver<Model::Message>`. Implement the concrete queue
+traits on one COM object containing the sender, and pass its typed projections
+when constructing observed widgets. Implement `EventModel::handle(&mut self, message)`
 with ordinary matching and retain the controller's checked `IApplicationDispatcher`
 projection across frames:
 
 ```rust
 let (send, messages) = std::sync::mpsc::channel();
-let button = ui.widgets().button("Open", send.clone(),
-    |neocogi_ui::button::Event::Activated(event)| AppMessage::Activated(event.label))?;
-let picker = ui.file_dialog(window.as_com_ref(), send,
-    |neocogi_ui::file_dialog::Event::Completed(result)| AppMessage::Completed { destination: 0, result })?;
+// AppQueue implements ButtonEventQueue and IFileDialogEventQueue, posting AppMessage.
+let queue = AppQueue::from_value(AppQueue { send });
+let buttons = queue.query::<ButtonEventQueueAbi>()?;
+let dialogs = queue.query::<IFileDialogEventQueueAbi>()?;
+let button = ui.widgets().button_with_queue("Open", Some(buttons.as_com_ref()))?;
+let picker = ui.file_dialog_with_queue(window.as_com_ref(), Some(dialogs.as_com_ref()))?;
 let app = neocogi_ui::events::Controller::into_local(
     neocogi_ui::events::Controller::new(model, messages),
 );
@@ -121,10 +124,11 @@ and [IDL syntax](IDL_MODULES.md#concrete-messages-and-streams).
 
 Commit state before calling `self.events.post(&ProducerEvent::Variant(message))?`.
 Queue `post` runs synchronously and should only acquire data and a weak origin;
-UI behavior belongs in the later consumer. Rust cannot prove closure purity.
-Receivers acquire the checked borrowed event with `to_owned()`. Facade callback
-helpers also validate domain values before calling their optional mapper. Captures must be owned or
-`'static`; the later controller owns its ordinary mutable model.
+UI behavior belongs in the later consumer. Receivers acquire the checked borrowed
+event with `to_owned()` and invoke the event module's `validate` function before
+posting. COM checks wire validity; this domain validation checks restrictions such
+as finite numeric values and text cursor boundaries. The later controller owns
+its ordinary mutable model.
 
 A custom class intended for authored forms has at most one constructor receiver.
 IDL-generated `*Abi::IDL_INTERFACE.event_queue` records that queue's exact identity
@@ -136,14 +140,13 @@ allocation. Generated forms expose actual concrete widget projections.
 
 Each widget has one lifetime consumer selected during construction.
 Applications can implement concrete `*EventQueue` traits on one shared COM object.
-`textbox::queue` optionally creates a callback adapter separately; `textbox::filter_queue` can
-discard selected variants. `*_with_queue` passes it through the COM factory;
+`*_with_queue` passes a concrete receiver through the COM factory;
 `*_unobserved` chooses permanent non-delivery. There is no later attachment API.
 Windows, popups, menus, built-ins and custom plugins use this same discipline.
 Logical teardown calls `events.close()`, releases the queue and weak origin, and permanently
 rejects later emission. Explicit queue handles retain their own
-captures. Already queued facts retain their values; channel disconnection
-successfully discards future mapped values. Delivery failures propagate after
+fields. Already queued facts retain their values; the repository queues discard
+future posts successfully on channel disconnection. Delivery failures propagate after
 the state transition and do not roll it back. See the
 [class event stream guide](CLASS_EVENT_STREAMS.md) for the complete state machine.
 
@@ -655,7 +658,7 @@ reference never transfers the parent's topology authority.
 
 ## Combo and compact menus
 
-Create a combo through `Ui::combo_box(parent, items, selection)`, not the ordinary
+Create a combo through `Ui::combo_box_with_queue(parent, items, selection, queue)`, not the ordinary
 widget factory. The runtime needs the parent up front because it constructs one
 private popup definition with a real structural owner at the same time as the
 unmounted header. The caller then inserts the returned `ComboWidget` into that
@@ -735,7 +738,8 @@ shape or destination validation leaves the complete declaration usable.
 let menus = ui.menus()?;
 let bar = menus.create("")?;
 let file = bar.submenu("File")?;
-let open = file.item_observed("Open", sender.clone(), |event| AppMessage::Open(event.label))?;
+let menu_queue = app_queue.query::<IMenuItemEventQueueAbi>()?;
+let open = file.item_with_queue("Open", Some(menu_queue.as_com_ref()))?;
 open.set_shortcut_hint("Ctrl+O")?; // Presentation text, not a shortcut binding.
 open.set_mark(MenuMark::Checked { checked: false })?;
 file.separator()?;
@@ -794,15 +798,15 @@ Construct the component with its completion queue, then open it from an ordinary
 application handler:
 
 ```rust
-let mut picker = ui.file_dialog(window.as_com_ref(), send,
-    |neocogi_ui::file_dialog::Event::Completed(result)| AppMessage::Completed(result))?;
+let completions = app_queue.query::<IFileDialogEventQueueAbi>()?;
+let mut picker = ui.file_dialog_with_queue(window.as_com_ref(), Some(completions.as_com_ref()))?;
 let mut request = FileDialogRequest::new(native_directory);
 request.title = "Choose a document".to_owned();
 picker.open(&request)?;
 ui.update_with_events(drawable_size, owner.as_com_ref())?;
 ```
 
-The mapper receives `file_dialog::Event::Completed`, containing the generated
+The concrete queue receives `file_dialog::Event::Completed`, containing the generated
 `FileDialogCompletion::Accepted { path }` or `Cancelled`. `neocogi_ui::events::completed_file_path` copies the exact
 host-native `PathBuf` when the application needs it; display text is never
 reconstructed as a lookup key.

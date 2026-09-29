@@ -165,12 +165,12 @@ host-bound factory. `Ui::from_interfaces(runtime, factory)` verifies that both s
 same canonical `IWidgetHost` identity before the facade permits construction. No class ID,
 untyped argument object, private runtime pointer, or root identifier crosses that boundary.
 
-Supply a sender and typed mapper when constructing observed widgets, for example
-`ui.widgets().textbox("", sender, mapper)`. The helper creates one typed COM queue
-and passes it in the factory's `EventBinding<Textbox, TextboxEvent>` argument before the
-widget is published. To share one queue allocation across widgets, implement their
-concrete `*EventQueue` traits on one application object and use `*_with_queue`.
-The queue can capture a typed weak origin without retaining the widget.
+Implement concrete `*EventQueue` traits on one application COM object containing
+its channel sender. Supply the appropriate projection through `*_with_queue`, for
+example `ui.widgets().textbox_with_queue("", Some(texts.as_com_ref()))`. Widgets
+can share that queue allocation; each posts its typed event and public origin.
+The queue validates the event and can capture a typed weak origin without retaining
+the widget. Application behavior runs later when its inbox drains.
 `textbox_unobserved` chooses permanent non-delivery. See [the event architecture](docs/CLASS_EVENT_STREAMS.md). A persistent
 `events::Controller<Model>` owns ordinary model state and its standard channel
 receiver. Resolve `IApplicationDispatcher` once, then call

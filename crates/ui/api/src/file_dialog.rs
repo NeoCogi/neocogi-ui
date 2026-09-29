@@ -1,11 +1,10 @@
 //! Standard native-path file-picker requests with one construction-time queue.
 //!
 //! ```no_run
-//! use neocogi_ui::{Ui, IWindowAbi, FileDialogRequest};
+//! use neocogi_ui::{Ui, IWindowAbi, IFileDialogEventQueueAbi, FileDialogRequest};
 //! use neocogi_com::{ComRef, NcStatus};
-//! fn example(ui: &Ui, owner: ComRef<'_, IWindowAbi>) -> Result<(), NcStatus> {
-//!     let (sender, messages) = std::sync::mpsc::channel();
-//!     let mut picker = ui.file_dialog(owner, sender, |neocogi_ui::file_dialog::Event::Completed(value)| value)?;
+//! fn example(ui: &Ui, owner: ComRef<'_, IWindowAbi>, queue: ComRef<'_, IFileDialogEventQueueAbi>) -> Result<(), NcStatus> {
+//!     let mut picker = ui.file_dialog_with_queue(owner, Some(queue))?;
 //!     picker.open(&FileDialogRequest::new(std::path::Path::new(".")))?;
 //!     // Keep the picker and consume messages through the application's normal inbox.
 //!     Ok(())
@@ -101,4 +100,4 @@ impl FileDialog {
 }
 
 /// Constructor-bound completion queue and its generated local event type.
-pub use crate::events::file_dialog::{Event, queue, filter_queue};
+pub use crate::events::file_dialog::Event;

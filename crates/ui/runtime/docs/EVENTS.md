@@ -8,8 +8,7 @@ Widgets post typed facts to their constructor-selected application COM queue. A 
 component consumes its children's messages and emits its own public results
 upward. The application consumes the final public messages. A concrete application queue
 can implement several `*EventQueue` traits and share one allocation across widgets
-through `*_with_queue`. Convenience constructors additionally accept a sender and
-typed mapper, allocating a callback receiver. Applications may use `Controller<Model>`; a behavioral composite owns its inbox
+through `*_with_queue`. Applications may use `Controller<Model>`; a behavioral composite owns its inbox
 and implements `IWidget::dispatch_next` on the same concrete widget.
 
 ## Application construction and frames
@@ -18,11 +17,24 @@ The application owns its model and receiver in one persistent controller. The
 host resolves its COM projection once and borrows it on each update:
 
 ```rust,no_run
-use neocogi_com::NcStatus;
+use neocogi_com::{ComRef, NcStatus, NcValueRef};
 use neocogi_ui::{events::{self, Controller, EventModel}, IApplicationDispatcherAbi, Size, Ui};
 
 /// Application commands stay in the host binary.
 enum Message { Activated(String) }
+#[neocogi_com::com_object(neocogi_ui::nodes::ButtonEventQueue)]
+/// One application receiver may serve all buttons posting this protocol.
+struct AppQueue { send: std::sync::mpsc::Sender<Message> }
+impl neocogi_ui::nodes::ButtonEventQueue for AppQueue {
+    /// This handler records a captured fact and does not need to retain its origin.
+    fn post(&mut self, _: ComRef<'_, neocogi_ui::ButtonAbi>, value: NcValueRef<'_, neocogi_ui::button::Event>) -> Result<(), NcStatus> {
+        let event = value.to_owned()?;
+        neocogi_ui::button::validate(&event)?;
+        let neocogi_ui::button::Event::Activated(value) = event;
+        let _ = self.send.send(Message::Activated(value.label));
+        Ok(())
+    }
+}
 /// Plain fields are mutated under the controller's existing COM gate.
 struct App { count: u32 }
 impl EventModel for App {
@@ -40,8 +52,8 @@ impl EventModel for App {
 
 fn example(ui: &Ui, size: Size) -> Result<(), NcStatus> {
     let (send, messages) = std::sync::mpsc::channel();
-    let button = ui.widgets().button("Count", send,
-        |neocogi_ui::button::Event::Activated(event)| Message::Activated(event.label))?;
+    let queue = AppQueue::from_value(AppQueue { send }).query::<neocogi_ui::ButtonEventQueueAbi>()?;
+    let button = ui.widgets().button_with_queue("Count", Some(queue.as_com_ref()))?;
     // Insert button into the application's ordinary widget tree before updating.
     let app = Controller::into_local(Controller::new(App { count: 0 }, messages));
     let owner = app.query::<IApplicationDispatcherAbi>()?;
@@ -73,7 +85,7 @@ short local guards; those guards end before event dispatch.
 A frame performs no controller allocation, revocation-state allocation, interface
 query, or root reference-count change in this adapter. It still crosses a COM
 method and polls the receiver. Channel blocks and owned message payloads may
-allocate. The standard-channel helpers and generated forms use unbounded `mpsc::channel`
+allocate. The repository applications and generated forms use unbounded `mpsc::channel`
 transport: dispatch work limits and per-value decode budgets do not bound total
 queued memory. An application needing a bound must implement its concrete queue
 with an explicit nonblocking overflow policy; `post` must not wait for the same
@@ -85,8 +97,7 @@ UI thread to drain its inbox. An allocation regression compares 64 warmed ordina
 Getters and setters belong to the concrete widget class or its appropriate COM
 interface. A getter returns a current snapshot; a setter validates and applies
 an application request synchronously, returning its result. Event queues receive
-facts emitted by the widget and, through the standard adapter, enqueue the
-behavioral parent's mapped messages. Similar argument types do not make these
+facts emitted by the widget and enqueue the behavioral parent's owned messages. Similar argument types do not make these
 contracts interchangeable. Ordinary state setters do not synthesize user edits.
 
 Selective operations preserve the widget's other current settings. Use
@@ -107,65 +118,57 @@ Declare cross-COM facts as concrete NCIDL structs/enums. The factory accepts
 supplies the typed receiver before construction. A published widget has no
 receiver-installation method, including through inherited projections.
 
-The Rust facade supplies the standard channel adapter:
+The Rust facade accepts the queue's concrete projection:
 
 ```rust,no_run
-use neocogi_ui::{textbox, Ui};
-use neocogi_com::NcStatus;
-enum Message { Name(String), Submit(String) }
-fn example(ui: &Ui) -> Result<(), NcStatus> {
-    let (send, messages) = std::sync::mpsc::channel();
-    let name = ui.widgets().textbox("", send, |event| match event {
-        textbox::Event::Changed(value) => Message::Name(value.text),
-        textbox::Event::Submitted(value) => Message::Submit(value.text),
-    })?;
-    // Retain messages in the owner's normal controller and mount name in its view.
+use neocogi_ui::{Ui, TextboxEventQueueAbi};
+use neocogi_com::{ComRef, NcStatus};
+fn example(ui: &Ui, queue: ComRef<'_, TextboxEventQueueAbi>) -> Result<(), NcStatus> {
+    let name = ui.widgets().textbox_with_queue("", Some(queue))?;
+    // Mount name in the view; the application owns the queue's receiver and model.
     Ok(())
 }
 ```
 
-`textbox::queue(sender, mapper)` creates the same adapter separately, for
-`textbox_with_queue(text, Some(queue.as_com_ref()))`. `filter_queue` permits dropping
-selected variants before enqueueing. `textbox_unobserved(text)` leaves the
-widget permanently unobserved and allocates no receiver.
-
-An observed convenience constructor creates one COM receiver holding the mapper
-and sender inline, then passes it through the COM factory's typed binding value.
-There is no extra event queue per widget. Construction failure releases temporary
-captures. Custom factories use the same `EventBinding<Object, Event>`; applications can build
-the receiver with `neocogi_com::events::mapped_queue`.
+`textbox_unobserved(text)` leaves the widget permanently unobserved and allocates
+no receiver. The old sender/mapper constructors and callback receiver helpers are
+removed. A queue implementation can match `Changed` and `Submitted` before posting
+if its application deliberately ignores one variant; validate both variants first.
 
 ```text
 widget commits state
   → calls post(origin, event) on its one concrete IEventQueue<Object, Event>
-  → generated codec validates/copies/retains the concrete message
-  → UI domain validation precedes the owner's typed mapper
+  → application queue acquires the checked event and validates its domain
+  → queue captures a weak origin when later identity is needed
   → Sender::send queues the owned private message
-  → runtime invokes the owner's dispatch_next at a safe boundary
+  → runtime invokes the application's dispatch_next at a safe boundary
   → Controller receives one value and calls model.handle(&mut self, value)
 ```
 
-Mappers execute synchronously inside the producer's call. They translate values
-and attach routing information; UI behavior belongs in the later model handler.
-Captures must be owned or otherwise `'static`. The ordinary channel adapter adds
-no `Any`, local pointer cast, or handwritten unsafe callback machinery. COM object
-allocation, vtables and wire codecs still use the shared checked ABI machinery.
-The existing `LocalCom` controller access separately contains unsafe pointer
-reconstruction under its borrow gate; the stream adapter does not replace it.
+`post` runs synchronously inside the producer's call. It acquires input facts;
+UI behavior belongs in the later model handler. Store channel senders and any
+immutable queue policy directly in the concrete receiver. Keep mutable command
+selection in the application model and change it through `&mut self`. Never call
+back into the active emitting widget or retain the behavioral parent's model.
 
-Use `std::sync::mpsc::channel()`. Clone its sender for each observed child.
-Neither threads nor `Message: Send` are needed while endpoints stay on the UI
-thread. A blocking bounded sender could prevent that thread from reaching its
-receiver. Posting does not wake the host; external work still needs scheduling.
+The examples use `std::sync::mpsc::channel()` and one shared queue per behavioral
+inbox. Neither threads nor `Message: Send` are needed while endpoints stay on the
+UI thread. Channel capacity and overflow behavior belong to the application; a
+blocking bounded send could prevent that thread from reaching its receiver.
+Posting does not wake the host; external work still needs scheduling.
 
-An owner receives its channel's sequential UI-thread send order. Separate channels
-have no global FIFO. Already queued facts keep their values and routing after
-producer closure. Dropping the receiver discards pending work. Subsequent valid
-posts still run the mapper and discard the translated message on disconnection;
-this is a successful producer no-op. Logical widget closure releases its queue,
-including when editing handles remain alive. Explicitly retained queue handles
-keep their own captures alive. Capture routing data rather than the producer or
-owning UI to avoid reference cycles.
+One channel preserves its sequential UI-thread send order; separate channels
+have no global FIFO. Already queued facts retain their payload after producer
+closure. The repository's concrete queues treat a disconnected receiver as a
+successful no-op. An independent queue can report its own post error, which does
+not undo committed producer state. Logical widget closure releases its queue even
+while editing handles survive. Explicit queue handles retain only their own fields.
+
+A weak origin identifies an allocation, not current form membership. Final strong
+release expires it; logical close with a retained handle does not. Rebuilt controls
+must be checked against current fields or command membership, and reloaded forms
+also check their generation. A completed dialog result can remain useful after its
+origin dies, so expiration is not a universal reason to discard all events.
 
 Node controls, choice menus, file dialogs, windows, popups, and menu items all
 receive their sole optional queue during construction. No public operation can
@@ -188,7 +191,7 @@ The built-in `HostedWidget` and application `LeafContent` helpers supply that
 no-op default. IDL methods remain declarations; independent plugins implement
 the common method explicitly.
 
-Construct child controls with typed mappings into the composite's inbox. The
+Construct child controls with projections of the composite's concrete queue. The
 composite emits declared public results into its enclosing behavioral parent's
 channel. Private messages do not automatically bubble through structural
 containers. One output stream still has one constructor-selected consumer.
@@ -239,7 +242,7 @@ its active COM borrow prevents recursive close. The runtime retains pending
 close work in descendant-first order and finishes it after the call returns,
 including on handler errors. No successor is dispatched to the removed subtree.
 Composite close drops its receiver and pending private messages, then releases
-its event mapping. An active file request settles cancellation once. Already
+its outward event queue. An active file request settles cancellation once. Already
 posted application messages stay in the application's queue.
 
 A caller-held LocalCom guard can still prevent close at that boundary. Update
@@ -275,7 +278,7 @@ replacement leaves closure of the old subtree with the runtime.
 
 ## Static and dynamic linkage
 
-Typed mappings, channels and models compile into the binary that owns them.
+Concrete queue implementations, channels and models compile into the binary that owns them.
 `IWidget` and the single-method `IApplicationDispatcher` belong to UI core
 contracts. Closed queue specializations belong alongside their event types.
 The COM process runtime has no UI event loop. Hosts and plugins use the same

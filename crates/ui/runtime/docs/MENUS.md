@@ -16,14 +16,14 @@ before and after mounting; they never keep a removed menu surface logically open
 
 ```rust,no_run
 use neocogi_ui::{ IWindowAbi, Rect, Ui};
-use neocogi_com::{ComPtr, NcStatus};
-fn install(ui: &Ui, sender: &std::sync::mpsc::Sender<String>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+use neocogi_com::{ComPtr, ComRef, NcStatus};
+fn install(ui: &Ui, queue: ComRef<'_, neocogi_ui::IMenuItemEventQueueAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
     let body = ui.widgets().button_unobserved("Document")?;
     let window = ui.window("Editor", Rect { x: 20, y: 20, width: 640, height: 480 }, &body)?;
     let menus = ui.menus()?;
     let bar = menus.create("Editor menu")?;
     let file = bar.submenu("File")?;
-    let open = file.item_observed("Open", sender.clone(), |event| event.label)?;
+    let open = file.item_with_queue("Open", Some(queue))?;
     open.set_shortcut_hint("Ctrl+O")?;
     let save = file.item("Save")?;
     save.set_enabled(false)?;

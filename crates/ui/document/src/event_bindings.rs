@@ -1,15 +1,15 @@
 //! Application-owned receivers supplied before any authored widget is constructed.
 use crate::{CustomWidgetRegistry, Document, WidgetSpec};
 use neocogi_com::{ComPtr, IUnknown, NcGuid, NcStatus, NC_E_INVALID_ARG};
-use neocogi_com::events::{EventOf, EventSource, mapped_queue};
-use std::{collections::BTreeMap, sync::mpsc::Sender};
+use neocogi_com::events::EventSource;
+use std::collections::BTreeMap;
 
 /// One construction attempt's receivers, indexed by authored widget key.
 ///
 /// Each entry retains an ordinary COM object implementing one exact `IEventQueue<Object, Event>`.
 /// Its payload never becomes untyped: metadata preflight and the concrete factory both
 /// check the receiver's COM identity. Missing entries mean permanently unobserved widgets.
-/// Receivers and mappings are live application state and are never serialized.
+/// Receivers are live application state and are never serialized.
 #[derive(Default)]
 pub struct EventBindings {
     /// Unique keys prevent a second consumer from silently replacing the first.
@@ -19,23 +19,6 @@ impl EventBindings {
     /// Starts an attempt with all widgets unobserved.
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Captures the application's queue and mapping before the widget exists.
-    /// `C` identifies the product's constructor contract, not an interface to query on it.
-    pub fn insert<C: EventSource, M: 'static>(
-        &mut self,
-        key: impl Into<String>,
-        sender: Sender<M>,
-        mut map: impl FnMut(EventOf<C>) -> M + 'static,
-    ) -> Result<(), NcStatus> {
-        let key = key.into();
-        if key.is_empty() || self.receivers.contains_key(&key) {
-            return Err(NC_E_INVALID_ARG);
-        }
-        let receiver = mapped_queue::<C::Queue, M>(sender, move |_origin, event| map(event))?.query()?;
-        self.receivers.insert(key, receiver);
-        Ok(())
     }
 
     /// Registers a shared application queue without allocating a per-widget mapper.
