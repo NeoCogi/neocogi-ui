@@ -212,18 +212,11 @@ fn nested_container_layout_scopes_expire_and_teardown_closes_descendants() {
     let (child, child_editor, child_probe) = container(&runtime, Rc::clone(&history));
     let mut leaf = button(&runtime);
     child_editor
-        .insert(
-            0,
-            leaf.query::<IWidgetAbi>().unwrap().as_com_ref(),
-        )
+        .insert(0, leaf.query::<IWidgetAbi>().unwrap().as_com_ref())
         .unwrap()
         .finish()
         .unwrap();
-    parent_editor
-        .insert(0, child.as_com_ref())
-        .unwrap()
-        .finish()
-        .unwrap();
+    parent_editor.insert(0, child.as_com_ref()).unwrap().finish().unwrap();
     let child_view = child_editor.view().unwrap();
     let window = mount(&runtime, &parent).unwrap();
     runtime.update(SIZE).unwrap();
@@ -250,15 +243,8 @@ fn container_topology_rejects_cycles_shared_collections_and_reentrant_edits() {
     let runtime = runtime();
     let (a, a_editor, a_probe) = container(&runtime, Rc::default());
     let (b, b_editor, _) = container(&runtime, Rc::default());
-    a_editor
-        .insert(0, b.as_com_ref())
-        .unwrap()
-        .finish()
-        .unwrap();
-    assert_eq!(
-        b_editor.insert(0, a.as_com_ref()),
-        Err(UI_E_OWNER)
-    );
+    a_editor.insert(0, b.as_com_ref()).unwrap().finish().unwrap();
+    assert_eq!(b_editor.insert(0, a.as_com_ref()), Err(UI_E_OWNER));
     assert_eq!(a_editor.view().unwrap().child_count().unwrap(), 1);
     assert_eq!(b_editor.view().unwrap().child_count().unwrap(), 0);
     *a_probe.mount_edit.borrow_mut() = Some(b_editor.clone());
@@ -281,14 +267,7 @@ fn failed_container_layout_retries_without_caching_failed_parent_geometry() {
     let runtime = runtime();
     let (root, editor, probe) = container(&runtime, Rc::default());
     let leaf = button(&runtime);
-    editor
-        .insert(
-            0,
-            leaf.query::<IWidgetAbi>().unwrap().as_com_ref(),
-        )
-        .unwrap()
-        .finish()
-        .unwrap();
+    editor.insert(0, leaf.query::<IWidgetAbi>().unwrap().as_com_ref()).unwrap().finish().unwrap();
     let _window = mount(&runtime, &root).unwrap();
     // A later root must not receive speculative geometry after an earlier root fails.
     let (later_root, _later_editor, later_probe) = container(&runtime, Rc::default());
@@ -320,14 +299,7 @@ fn final_child_writer_release_during_layout_closes_retained_descendants() {
     let runtime = runtime();
     let (root, editor, probe) = container(&runtime, Rc::default());
     let leaf = button(&runtime);
-    editor
-        .insert(
-            0,
-            leaf.query::<IWidgetAbi>().unwrap().as_com_ref(),
-        )
-        .unwrap()
-        .finish()
-        .unwrap();
+    editor.insert(0, leaf.query::<IWidgetAbi>().unwrap().as_com_ref()).unwrap().finish().unwrap();
     let view = editor.view().unwrap();
     drop(editor);
     let window = mount(&runtime, &root).unwrap();
@@ -360,11 +332,7 @@ fn layout_service_rejects_direct_reentry_without_holding_an_interior_borrow() {
     let (root, editor, probe) = container(&runtime, Rc::default());
     let (leaf, leaf_probe) = recorded_leaf(&runtime);
     *probe.leaf_probe.borrow_mut() = Some(leaf_probe.clone());
-    editor
-        .insert(0, leaf.as_interface())
-        .unwrap()
-        .finish()
-        .unwrap();
+    editor.insert(0, leaf.as_interface()).unwrap().finish().unwrap();
     let window = mount(&runtime, &root).unwrap();
     runtime.update(SIZE).unwrap();
     assert!(leaf_probe.measures.get() > 0);
@@ -693,7 +661,10 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
     assert_eq!(root.query::<ITextEditorAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     assert_eq!(root.query::<ScrollAreaAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     let mut scroll = area.scrolling().unwrap();
-    assert_eq!(scroll.node_interface().unwrap().query::<IUnknown>().unwrap().as_raw().object, identity.as_raw().object);
+    assert_eq!(
+        scroll.node_interface().unwrap().query::<IUnknown>().unwrap().as_raw().object,
+        identity.as_raw().object
+    );
     let structural = root.query::<IContainerLayoutAbi>().unwrap().children().unwrap();
     assert_eq!(structural.child_count().unwrap(), 3);
     let surface = structural.child(0).unwrap().query::<IContainerLayoutAbi>().unwrap();
@@ -864,7 +835,7 @@ fn descendant_cleanup_diagnostic_still_completes_parent_close() {
 /// A captured lifetime makes COM receiver release observable without invoking a
 /// mapper or application handler during terminal cleanup.
 struct MappingLifetime {
-    /// Independent test log retained after every widget and sink is destroyed.
+    /// Independent test log retained after every widget and queue is destroyed.
     released: Rc<RefCell<Vec<&'static str>>>,
     /// Which widget owned this receiver's last reference.
     label: &'static str,
@@ -880,7 +851,7 @@ impl Drop for MappingLifetime {
 /// dropping a mere cloned handle must never close a live widget.
 #[test]
 fn mappings_release_children_before_parent_on_close_and_final_drop() {
-    use neocogi_com::events::MessageSinkInterface;
+    use neocogi_com::events::EventQueueInterface;
     for explicit in [false, true] {
         let runtime = runtime();
         let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
@@ -889,14 +860,14 @@ fn mappings_release_children_before_parent_on_close_and_final_drop() {
             released: released.clone(),
             label: "parent",
         };
-        let sink = SplitViewSinkAbi::receiver(move |_| {
+        let queue = SplitViewEventQueueAbi::receiver(move |_, _| {
             let _ = &lifetime;
             panic!("close must not invoke mapping")
         })
         .unwrap();
         let mut parent = ui
             .widgets()
-            .split_view_with_sink(
+            .split_view_with_queue(
                 SplitOptions {
                     axis: SplitAxis::Horizontal,
                     position: 30,
@@ -904,20 +875,20 @@ fn mappings_release_children_before_parent_on_close_and_final_drop() {
                     minimum_second: 0,
                     handle_width: 4,
                 },
-                Some(sink.as_com_ref()),
+                Some(queue.as_com_ref()),
             )
             .unwrap();
-        drop(sink);
+        drop(queue);
         let mut children = Vec::new();
         for label in ["first", "second"] {
             let lifetime = MappingLifetime { released: released.clone(), label };
-            let sink = ButtonSinkAbi::receiver(move |_| {
+            let queue = ButtonEventQueueAbi::receiver(move |_, _| {
                 let _ = &lifetime;
                 panic!("close must not invoke mapping")
             })
             .unwrap();
-            let child = ui.widgets().button_with_sink(label, Some(sink.as_com_ref())).unwrap();
-            drop(sink);
+            let child = ui.widgets().button_with_queue(label, Some(queue.as_com_ref())).unwrap();
+            drop(queue);
             parent.insert(children.len() as u32, &child).unwrap().finish().unwrap();
             children.push(child);
         }

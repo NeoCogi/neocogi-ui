@@ -61,7 +61,7 @@ impl IConstructionHost for UiFactory {
 impl IFileDialogs for UiFactory {
     /// Creates the standard picker as an eventful mounted composite owned by the nodes plugin.
     fn create(&self, parent: ComRef<'_, IWindowAbi>, events: neocogi_com::NcValueRef<'_, IFileDialogEventBinding>) -> Result<ComPtr<IFileDialogAbi>, NcStatus> {
-        crate::dialogs::create(self.services.clone(), parent, events.to_owned()?.into_sink())
+        crate::dialogs::create(self.services.clone(), parent, events.to_owned()?.into_queue())
     }
 }
 
@@ -80,7 +80,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
             input,
             wrapping,
             scrolling,
-            events.to_owned()?.into_sink(),
+            events.to_owned()?.into_queue(),
         )
     }
 
@@ -111,7 +111,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
             self.services.host.clone(),
             self.services.resources.clone(),
             settings,
-            events.to_owned()?.into_sink(),
+            events.to_owned()?.into_queue(),
         )
     }
 
@@ -144,7 +144,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
             self.services.resources.clone(),
             checked,
             label,
-            events.to_owned()?.into_sink(),
+            events.to_owned()?.into_queue(),
         )
     }
 
@@ -159,7 +159,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
             self.services.host.clone(),
             self.services.resources.clone(),
             input,
-            events.to_owned()?.into_sink(),
+            events.to_owned()?.into_queue(),
         )
     }
 
@@ -176,7 +176,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
             self.services.host.clone(),
             self.services.resources.clone(),
             options,
-            events.to_owned()?.into_sink(),
+            events.to_owned()?.into_queue(),
         )
     }
 
@@ -187,7 +187,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
             self.services.host.clone(),
             self.services.resources.clone(),
             options,
-            events.to_owned()?.into_sink(),
+            events.to_owned()?.into_queue(),
         )
     }
 
@@ -208,7 +208,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
             self.services.host.clone(),
             self.services.resources.clone(),
             label,
-            events.to_owned()?.into_sink(),
+            events.to_owned()?.into_queue(),
         )
     }
 
@@ -223,7 +223,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
             self.services.host.clone(),
             self.services.resources.clone(),
             label,
-            events.to_owned()?.into_sink(),
+            events.to_owned()?.into_queue(),
         )
     }
 
@@ -234,7 +234,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
             self.services.host.clone(),
             self.services.resources.clone(),
             range,
-            events.to_owned()?.into_sink(),
+            events.to_owned()?.into_queue(),
         )
     }
 
@@ -251,7 +251,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
             self.services.resources.clone(),
             label,
             options,
-            events.to_owned()?.into_sink(),
+            events.to_owned()?.into_queue(),
         )
     }
 
@@ -265,8 +265,12 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
         events: neocogi_com::NcValueRef<'_, ComboEventBinding>,
     ) -> Result<ComPtr<ComboAbi>, NcStatus> {
         self.services.host.check_mutation()?;
-        let sink = events.to_owned()?.into_sink().map(|sink| sink.query::<IChoiceMenuSinkAbi>()).transpose()?;
-        let binding = IChoiceMenuEventBinding::from_sink(sink.as_ref().map(ComPtr::as_com_ref));
+        let forwarder = events
+            .to_owned()?
+            .into_queue()
+            .map(|queue| crate::widgets::ComboEventForwarder::into_local(crate::widgets::ComboEventForwarder { queue, origin: None }));
+        let receiver = forwarder.as_ref().map(|forwarder| forwarder.query::<IChoiceMenuEventQueueAbi>()).transpose()?;
+        let binding = IChoiceMenuEventBinding::from_queue(receiver.as_ref().map(ComPtr::as_com_ref));
         let menu = self
             .services
             .choices
@@ -276,6 +280,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
             self.services.resources.clone(),
             menu,
             crate::widgets::DEFAULT_COMBO_PLACEHOLDER.to_owned(),
+            forwarder,
         )
     }
 }

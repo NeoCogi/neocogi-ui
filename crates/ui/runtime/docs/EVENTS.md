@@ -1,3 +1,7 @@
+> Current origin/lifetime contract: [typed event queues and weak origins](../../../../docs/CLASS_EVENT_STREAMS.md).
+> A receiver borrows the typed emitting object and event, then queues an owned
+> snapshot with a weak origin. One application COM queue can serve many widgets.
+
 # Typed events and widget-owned dispatch
 
 Widgets post typed facts into their owner's standard Rust channel. A nested
@@ -73,7 +77,7 @@ allocate. An allocation regression compares 64 warmed ordinary updates with
 
 Getters and setters belong to the concrete widget class or its appropriate COM
 interface. A getter returns a current snapshot; a setter validates and applies
-an application request synchronously, returning its result. Event sinks receive
+an application request synchronously, returning its result. Event queues receive
 facts emitted by the widget and, through the standard adapter, enqueue the
 behavioral parent's mapped messages. Similar argument types do not make these
 contracts interchangeable. Ordinary state setters do not synthesize user edits.
@@ -91,7 +95,7 @@ event. `set_settings` remains the explicit whole-policy replacement. The combo's
 ## Construction and posting
 
 Declare cross-COM facts as concrete NCIDL structs/enums. The factory accepts
-`EventBinding<Event>`; several event kinds are variants of one message, such as
+`EventBinding<Object, Event>`; several event kinds are variants of one message, such as
 `TextboxEvent::Changed` and `TextboxEvent::Submitted`. Its behavioral parent
 supplies the typed receiver before construction. A published widget has no
 receiver-installation method, including through inherited projections.
@@ -113,20 +117,20 @@ fn example(ui: &Ui) -> Result<(), NcStatus> {
 }
 ```
 
-`textbox::sink(sender, mapper)` creates the same adapter separately, for
-`textbox_with_sink(text, Some(sink.as_com_ref()))`. `filter_sink` permits dropping
+`textbox::queue(sender, mapper)` creates the same adapter separately, for
+`textbox_with_queue(text, Some(queue.as_com_ref()))`. `filter_queue` permits dropping
 selected variants before enqueueing. `textbox_unobserved(text)` leaves the
 widget permanently unobserved and allocates no receiver.
 
 An observed convenience constructor creates one COM receiver holding the mapper
 and sender inline, then passes it through the COM factory's typed binding value.
 There is no extra event queue per widget. Construction failure releases temporary
-captures. Custom factories use the same `EventBinding<E>`; applications can build
-the receiver with `neocogi_com::events::mapped_sink`.
+captures. Custom factories use the same `EventBinding<Object, Event>`; applications can build
+the receiver with `neocogi_com::events::mapped_queue`.
 
 ```text
 widget commits state
-  → calls post on its one concrete IMessageSink<Event>
+  → calls post(origin, event) on its one concrete IEventQueue<Object, Event>
   → generated codec validates/copies/retains the concrete message
   → UI domain validation precedes the owner's typed mapper
   → Sender::send queues the owned private message
@@ -151,13 +155,13 @@ An owner receives its channel's sequential UI-thread send order. Separate channe
 have no global FIFO. Already queued facts keep their values and routing after
 producer closure. Dropping the receiver discards pending work. Subsequent valid
 posts still run the mapper and discard the translated message on disconnection;
-this is a successful producer no-op. Logical widget closure releases its sink,
-including when editing handles remain alive. Explicitly retained sink handles
+this is a successful producer no-op. Logical widget closure releases its queue,
+including when editing handles remain alive. Explicitly retained queue handles
 keep their own captures alive. Capture routing data rather than the producer or
 owning UI to avoid reference cycles.
 
 Node controls, choice menus, file dialogs, windows, popups, and menu items all
-receive their sole optional sink during construction. No public operation can
+receive their sole optional queue during construction. No public operation can
 install or replace it later. Teardown releases it permanently; an unobserved
 preview discards events for its entire lifetime.
 
@@ -266,7 +270,7 @@ replacement leaves closure of the old subtree with the runtime.
 
 Typed mappings, channels and models compile into the binary that owns them.
 `IWidget` and the single-method `IApplicationDispatcher` belong to UI core
-contracts. Closed sink specializations belong alongside their event types.
+contracts. Closed queue specializations belong alongside their event types.
 The COM process runtime has no UI event loop. Hosts and plugins use the same
 contracts and must be rebuilt together after this ABI change.
 

@@ -52,23 +52,29 @@ impl IMenuBuilder for Builder {
     ) -> Result<ComPtr<IMenuItemAbi>, NcStatus> {
         let runtime = self.owner()?;
         let label = text(input)?;
-        let (handle, item) = crate::MenuItem::create(MenuItemParameters::new(label), events.to_owned()?.into_sink());
-        let slot = {
-            let mut data = self.declaration.menu.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
-            let menu = menu_at(data.as_mut().ok_or(UI_E_CLOSED)?, &self.path)?;
-            let slot = menu.entries.len();
+        let queue = events.to_owned()?.into_queue();
+        let mut data = self.declaration.menu.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
+        let menu = menu_at(data.as_mut().ok_or(UI_E_CLOSED)?, &self.path)?;
+        // Complete all fallible declaration checks before publishing the COM
+        // item and forest record with the same fixed weak origin.
+        let slot = menu.entries.len();
+        let object = Item::from_value_cyclic::<IMenuItemAbi>(|origin| {
+            let (handle, item) = crate::MenuItem::create(MenuItemParameters::new(label), Some(neocogi_com::events::EventPort::with_queue(queue, origin)));
             menu.entries.push(MenuEntry::Item(item));
-            slot
-        };
-        Ok(Item::from_value(Item {
-            runtime: Rc::downgrade(&runtime),
-            declaration: Rc::downgrade(&self.declaration),
-            path: self.path.clone(),
-            slot,
-            handle,
-        })
-        .query()
-        .expect("menu item declares IMenuItem"))
+            Item {
+                runtime: Rc::downgrade(&runtime),
+                declaration: Rc::downgrade(&self.declaration),
+                path: self.path.clone(),
+                slot,
+                handle,
+            }
+        })?;
+        let interface = object.query::<IMenuItemAbi>()?;
+        match &mut menu.entries[slot] {
+            MenuEntry::Item(item) => item.record.origin = Some(interface.clone()),
+            _ => unreachable!("constructor inserted an item at this slot"),
+        }
+        Ok(interface)
     }
     /// Preserves separators as direct compact rows with no event source or widget allocation.
     fn separator(&self) -> Result<(), NcStatus> {
@@ -318,25 +324,19 @@ impl IMenus for Runtime {
         events: neocogi_com::NcValueRef<'_, IPopupEventBinding>,
     ) -> Result<ComPtr<IPopupAbi>, NcStatus> {
         self.storage.factory.host.check_mutation()?;
-        let sink = events.to_owned()?.into_sink();
+        let queue = events.to_owned()?.into_queue();
         let parent = self.storage.parent(window)?;
         let declaration = self.storage.menu_declaration(menu)?;
         let mut context = self.storage.context()?;
         context.window_manager.window_visible(&parent).map_err(windows::status)?;
         let menu = declaration.menu.try_borrow_mut().map_err(|_| UI_E_BUSY)?.take().ok_or(UI_E_CLOSED)?;
-        let popup = context
-            .window_manager
-            .create_menu_popup(&parent, menu, sink)
-            .unwrap_or_else(|_| unreachable!("authenticated parent cannot disappear before registration"));
-        let identity = windows::LogicalPopup::from_value(windows::LogicalPopup {
-            runtime: Rc::downgrade(&self.storage),
-            popup: popup.clone(),
-            closed: false,
-        });
-        self.storage.mounts.borrow_mut().push(SurfaceMount {
-            surface: NativeSurface::Popup(popup),
-            identity: identity.clone(),
-        });
+        let (identity, surface) = windows::LogicalPopup::create(Rc::downgrade(&self.storage), queue, |events| {
+            context
+                .window_manager
+                .create_menu_popup(&parent, menu, events)
+                .unwrap_or_else(|_| unreachable!("authenticated parent cannot disappear before registration"))
+        })?;
+        self.storage.mounts.borrow_mut().push(SurfaceMount { surface, identity: identity.clone() });
         self.storage.pending.set(true);
         identity.query()
     }

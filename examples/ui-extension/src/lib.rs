@@ -126,13 +126,13 @@ struct CounterObject {
 }
 impl CounterObject {
     /// Validates runtime authority and publishes one fully initialized counter identity.
-    fn create(host: ComRef<'_, IWidgetHostAbi>, sink: Option<ComPtr<neocogi_demo_contracts::CounterSinkAbi>>) -> Result<ComPtr<CounterAbi>, NcStatus> {
+    fn create(host: ComRef<'_, IWidgetHostAbi>, queue: Option<ComPtr<neocogi_demo_contracts::CounterEventQueueAbi>>) -> Result<ComPtr<CounterAbi>, NcStatus> {
         host.check_mutation()?;
-        Self::from_value(Self {
+        Self::from_value_cyclic::<CounterAbi>(move |origin| Self {
             common: Common::new(host, WidgetOptions::FRAME),
             count: 0,
-            event: neocogi_com::events::EventPort::with_sink(sink),
-        })
+            event: neocogi_com::events::EventPort::with_queue(queue, origin),
+        })?
         .query()
     }
 
@@ -359,12 +359,12 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
             return Err(NC_E_INVALID_ARG);
         }
         // Catalog transport carries a COM receiver, never an untyped event payload.
-        // Validate the selected product's exact sink before allocating any widget.
+        // Validate the selected product's exact queue before allocating any widget.
         CounterObject::create(
             host,
             match events.to_owned()? {
                 neocogi_ui_document_contracts::WidgetEventBinding::Unobserved => None,
-                neocogi_ui_document_contracts::WidgetEventBinding::Observed(sink) => Some(sink.query()?),
+                neocogi_ui_document_contracts::WidgetEventBinding::Observed(queue) => Some(queue.query()?),
             },
         )?
         .query::<IWidgetAbi>()
@@ -378,7 +378,7 @@ impl ExtensionProvider for ExtensionProviderObject {
         host: ComRef<'_, IWidgetHostAbi>,
         events: neocogi_com::NcValueRef<'_, neocogi_demo_contracts::CounterEventBinding>,
     ) -> Result<ComPtr<CounterAbi>, NcStatus> {
-        CounterObject::create(host, events.to_owned()?.into_sink())
+        CounterObject::create(host, events.to_owned()?.into_queue())
     }
 
     /// One empty editor is the only topology allocation; no native child list is created in this plugin.

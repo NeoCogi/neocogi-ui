@@ -196,6 +196,9 @@ impl MenuItemId {
 
 /// Concrete semantic record owned by a declaration and then by exactly one menu surface.
 pub(crate) struct MenuItemRecord {
+    /// COM-origin capability retained by the semantic row owner until removal.
+    /// The capability points back only weakly, so this introduces no ownership cycle.
+    pub(crate) origin: Option<neocogi_com::ComPtr<neocogi_ui_core_contracts::IMenuItemAbi>>,
     /// Process-unique identity preserved across the declaration-to-surface ownership transfer.
     id: MenuItemId,
     /// Mutable presentation and interaction values stored without a second mirror type.
@@ -215,14 +218,19 @@ pub struct MenuItem {
 
 impl MenuItem {
     /// Creates one uniquely owned item declaration and its non-owning application capability.
-    pub fn create(parameters: MenuItemParameters, sink: Option<neocogi_com::ComPtr<neocogi_ui_core_contracts::IMenuItemSinkAbi>>) -> (MenuItemHandle, Self) {
+    pub fn create(parameters: MenuItemParameters, queue: Option<neocogi_ui_core_contracts::IMenuItemEventPort>) -> (MenuItemHandle, Self) {
         // The record owns its optional destination through declaration-to-surface transfer;
         // its handle needs only the stable identity used for checked lookup.
         let id = MenuItemId::allocate();
-        let submitted_event = neocogi_com::events::EventPort::with_sink(sink);
+        let submitted_event = queue.unwrap_or_default();
         let handle = MenuItemHandle::new(id);
         let item = Self {
-            record: MenuItemRecord { id, parameters, submitted_event },
+            record: MenuItemRecord {
+                id,
+                parameters,
+                submitted_event,
+                origin: None,
+            },
         };
         (handle, item)
     }

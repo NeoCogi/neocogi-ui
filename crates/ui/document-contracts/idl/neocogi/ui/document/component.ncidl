@@ -24,7 +24,7 @@ interface IDesignWidgetCatalog {
     fn describe(&self, index: u32, output: &mut [u8]) -> Result<u32>;
     /// Constructs one widget through COM using its stable catalog index and
     /// encoded, previously validated constructor properties. Before allocating any
-    /// widget, query an observed receiver for the selected product's exact sink.
+    /// widget, query an observed receiver for the selected product's exact queue.
     /// Retain that one receiver until close; unobserved is permanent.
     fn create_widget(&self, index: u32, host: &IWidgetHost, properties: &[u8], events: &WidgetEventBinding) -> Result<ComPtr<IWidget>>;
 }
@@ -32,7 +32,7 @@ interface IDesignWidgetCatalog {
 #[version(1)]
 /// Constructor-only receiver transport for a heterogeneous custom-widget catalog.
 /// Observed carries a COM capability, never an untyped event payload. The selected
-/// factory queries its exact IMessageSink<E> before publishing the widget.
+/// factory queries its exact IEventQueue<Object, Event> before publishing the widget.
 enum WidgetEventBinding {
     /// Permanently suppress delivery for this instance, including designer previews.
     Unobserved,

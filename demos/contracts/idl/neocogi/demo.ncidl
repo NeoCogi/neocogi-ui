@@ -66,7 +66,7 @@ interface IInset: IContainer {
 /// Stateless plugin factory receiving runtime authority explicitly for each custom object.
 factory ExtensionProvider: IDesignWidgetCatalog {
     /// Creates a counter whose complete state belongs to the returned COM identity.
-    fn counter(&self, host: &IWidgetHost, events: &EventBinding<CounterEvent>) -> Result<ComPtr<Counter>>;
+    fn counter(&self, host: &IWidgetHost, events: &EventBinding<Counter, CounterEvent>) -> Result<ComPtr<Counter>>;
     /// Creates an empty custom container; child attachment follows the same rules as built-ins.
     fn inset(&self, host: &IWidgetHost) -> Result<ComPtr<IInset>>;
 }

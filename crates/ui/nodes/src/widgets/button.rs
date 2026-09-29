@@ -334,12 +334,15 @@ impl Button {
         resources: crate::widget_object::SharedAssets,
         label: NcCopyFromBufferOffset<'_, u8>,
         options: WidgetOptions,
-        sink: Option<ComPtr<neocogi_ui_nodes_contracts::ButtonSinkAbi>>,
+        queue: Option<ComPtr<neocogi_ui_nodes_contracts::ButtonEventQueueAbi>>,
     ) -> Result<ComPtr<ButtonAbi>, NcStatus> {
         let mut value = Self::build(host, label, options, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
-        value.events = neocogi_com::events::EventPort::with_sink(sink);
-        Ok(Self::from_value(value).query().expect("Button declares its callable class contract"))
+        Self::from_value_cyclic::<ButtonAbi>(move |origin| {
+            value.events = neocogi_com::events::EventPort::with_queue(queue, origin);
+            value
+        })?
+        .query()
     }
 
     /// Builds one button with either directly imported or runtime-shared resources.
@@ -439,15 +442,16 @@ impl neocogi_ui_nodes_contracts::Button for Button {
 #[cfg(all(test, target_pointer_width = "64"))]
 #[test]
 fn com_object_control_is_independent_of_interface_count() {
-    // Refcount, padding and the shared call guard occupy 16 bytes on this target.
+    // The call gate occupies one word in the payload. Arc owns its private
+    // strong/weak header outside this storage; this is not total allocation size.
     // No per-interface fields remain; handles carry their selected tables.
     // The constructor receiver is not an interface implemented by the widget.
     assert_eq!(Button::COM_INTERFACE_COUNT, 4);
     println!(
-        "Button: state={}, allocation={}",
+        "Button: state={}, payload={}",
         core::mem::size_of::<Button>(),
         core::mem::size_of::<ButtonComObject>()
     );
-    assert_eq!(core::mem::offset_of!(ButtonComObject, value), 16);
-    assert_eq!(core::mem::size_of::<ButtonComObject>(), core::mem::size_of::<Button>() + 16);
+    assert_eq!(core::mem::offset_of!(ButtonComObject, value), 8);
+    assert_eq!(core::mem::size_of::<ButtonComObject>(), core::mem::size_of::<Button>() + 8);
 }

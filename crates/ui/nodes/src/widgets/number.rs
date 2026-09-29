@@ -142,18 +142,14 @@ impl Number {
         self.edit.editing
     }
 
-    /// Returns the native event endpoint emitted after every user-originated value change.
+    /// Test construction consumes the bare algorithm before fixing its real weak origin.
     #[cfg(test)]
-    pub fn changed(
-        &mut self,
-    ) -> impl FnOnce(Box<dyn FnMut(crate::NumericChanged) -> Result<(), neocogi_com::NcStatus>>) -> Result<(), neocogi_com::NcStatus> + '_ {
-        |mut consume| {
-            let receiver = <neocogi_ui_nodes_contracts::NumberSinkAbi as neocogi_com::events::MessageSinkInterface>::receiver(
-                move |neocogi_ui_nodes_contracts::NumberEvent::Changed(event)| consume(event),
-            )?;
-            self.events = neocogi_com::events::EventPort::with_sink(Some(receiver));
-            Ok(())
-        }
+    pub(crate) fn into_observed(mut self, queue: ComPtr<neocogi_ui_nodes_contracts::NumberEventQueueAbi>) -> neocogi_com::LocalCom<Self> {
+        Self::into_local_cyclic::<NumberAbi>(move |origin| {
+            self.events = neocogi_com::events::EventPort::with_queue(Some(queue), origin);
+            self
+        })
+        .unwrap()
     }
 
     /// Measures the formatted number label.
@@ -262,7 +258,7 @@ impl crate::widget_object::WidgetAlgorithm for Number {
 }
 
 impl crate::widget_object::HostedWidget for Number {
-    /// Releases sinks, revokes outstanding clipboard receipts, and drops local history.
+    /// Releases queues, revokes outstanding clipboard receipts, and drops local history.
     fn close_contents(&mut self) {
         crate::widget_object::WidgetAlgorithm::close_events(self);
         self.edit = NumberEditState::default();
@@ -304,12 +300,15 @@ impl Number {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         options: NumberOptions,
-        sink: Option<ComPtr<neocogi_ui_nodes_contracts::NumberSinkAbi>>,
+        queue: Option<ComPtr<neocogi_ui_nodes_contracts::NumberEventQueueAbi>>,
     ) -> Result<ComPtr<NumberAbi>, NcStatus> {
         let mut value = Self::build(host, options, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
-        value.events = neocogi_com::events::EventPort::with_sink(sink);
-        Ok(Self::from_value(value).query().expect("Number declares its callable class contract"))
+        Self::from_value_cyclic::<NumberAbi>(move |origin| {
+            value.events = neocogi_com::events::EventPort::with_queue(queue, origin);
+            value
+        })?
+        .query()
     }
 
     /// Builds one number editor with either directly imported or runtime-shared resources.

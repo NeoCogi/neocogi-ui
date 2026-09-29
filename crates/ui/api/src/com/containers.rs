@@ -149,13 +149,11 @@ macro_rules! container_proxy {
             /// Inserts the actual child object after validating the complete relationship.
             /// Err leaves topology unchanged; Ok requires inspecting its separate teardown status when relevant.
             pub fn insert(&mut self, index: u32, child: &impl Mountable, edge: $edge) -> Result<ChildEditResult, NcStatus> {
-                self.interface
-                    .insert(index, child.mount_widget()?.as_com_ref(), edge)
+                self.interface.insert(index, child.mount_widget()?.as_com_ref(), edge)
             }
             /// Replaces one subtree and relationship together. Ok reports committed replacement even if old-child teardown failed.
             pub fn replace(&mut self, index: u32, child: &impl Mountable, edge: $edge) -> Result<ChildEditResult, NcStatus> {
-                self.interface
-                    .replace(index, child.mount_widget()?.as_com_ref(), edge)
+                self.interface.replace(index, child.mount_widget()?.as_com_ref(), edge)
             }
             /// Removes and closes one subtree; call the returned outcome's finish after observing the committed edit.
             pub fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus> {
@@ -241,10 +239,10 @@ fn encoded_tracks(tracks: &[LayoutTrack]) -> Vec<LayoutTrackAbi> {
 
 impl WidgetFactory {
     /// Creates an empty split; insert panes in first/second ownership order.
-    pub fn split_view_with_sink(&self, settings: SplitOptions, sink: Option<ComRef<'_, SplitViewSinkAbi>>) -> Result<SplitViewWidget, NcStatus> {
+    pub fn split_view_with_queue(&self, settings: SplitOptions, queue: Option<ComRef<'_, SplitViewEventQueueAbi>>) -> Result<SplitViewWidget, NcStatus> {
         Ok(SplitViewWidget::from_interface(self.interface.create_split_view(
             settings,
-            neocogi_com::NcValueRef::new(&SplitViewEventBinding::from_sink(sink))?,
+            neocogi_com::NcValueRef::new(&SplitViewEventBinding::from_queue(queue))?,
         )?))
     }
     /// Creates a disclosure whose body starts empty and whose header owns the supplied label.
@@ -258,8 +256,7 @@ impl WidgetFactory {
     /// Constructs a framed scroll composite around one unmounted application widget.
     pub fn scroll_area(&self, content: &impl Mountable, enabled: bool) -> Result<ScrollAreaWidget, NcStatus> {
         Ok(ScrollAreaWidget::from_interface(
-            self.interface
-                .create_scroll_area(content.mount_widget()?.as_com_ref(), enabled)?,
+            self.interface.create_scroll_area(content.mount_widget()?.as_com_ref(), enabled)?,
         ))
     }
     /// Creates an empty directional container with one complete axis/cross configuration.

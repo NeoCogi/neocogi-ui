@@ -3,7 +3,7 @@
 //! The root forest stores only generic menu surfaces and popup ownership. This module connects
 //! one public header, one authoritative typed state, and one private choice-popup definition.
 
-use neocogi_ui_core_contracts::IChoiceMenuSinkAbi;
+use neocogi_ui_core_contracts::IChoiceMenuEventQueueAbi;
 use crate::menu::{Menu, MenuEntry};
 use crate::window_manager::{PopupHandle, SurfaceMutationError, WindowManager};
 use neocogi_com::{
@@ -124,19 +124,19 @@ impl ChoiceMenuState {
         menu_text: String,
         entries: Vec<ChoiceMenuEntryAbi>,
         selection: Option<u64>,
-        sink: Option<ComPtr<IChoiceMenuSinkAbi>>,
+        queue: Option<ComPtr<IChoiceMenuEventQueueAbi>>,
     ) -> Result<ComPtr<IChoiceMenuStateAbi>, NcStatus> {
         validate_menu(&menu_text, &entries, selection)?;
-        let state = Self {
+        Self::from_value_cyclic::<IChoiceMenuAbi>(move |origin| Self {
             menu_text,
             entries,
             selection,
             revision: 0,
             popup_anchor: Rect::default(),
             popup: ChoicePopupLifecycle::Closed,
-            changed_event: neocogi_com::events::EventPort::with_sink(sink),
-        };
-        Self::from_value(state).query()
+            changed_event: neocogi_com::events::EventPort::with_queue(queue, origin),
+        })?
+        .query()
     }
 
     /// Advances the semantic revision after one observable model change.
@@ -435,7 +435,7 @@ impl ChoiceMenuController {
             Err(error) => return Err(surface_status(error)),
         };
         // Menu routing only stages a stable leaf identity. Commit it here, after the root forest
-        // released input borrows and before application event sinks can observe the new value.
+        // released input borrows and before application event queues can observe the new value.
         if let Some(choice) = manager.take_choice_submission(&self.popup).map_err(surface_status)? {
             self.state.submit(choice)?;
         }

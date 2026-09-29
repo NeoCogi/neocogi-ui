@@ -18,6 +18,14 @@ pub(crate) struct Algorithm<W> {
     _owner: ComPtr<UiRuntimeAbi>,
 }
 impl<W> Algorithm<W> {
+    /// Transfers the concrete value into its real COM allocation while preserving
+    /// the fixture host through all local guards and final widget destruction.
+    pub(crate) fn map<T>(self, wrap: impl FnOnce(W) -> T) -> Algorithm<T> {
+        Algorithm {
+            value: wrap(self.value),
+            _owner: self._owner,
+        }
+    }
     /// Supplies the actual host and resource imports to the normal concrete constructor.
     pub(crate) fn new(options: WidgetOption, construct: impl FnOnce(WidgetRuntime) -> W) -> Self {
         let owner = super::create_runtime(super::test_atlas());

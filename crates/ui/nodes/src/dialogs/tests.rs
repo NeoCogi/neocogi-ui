@@ -27,13 +27,13 @@ impl Fixture {
     /// Uses public production runtime and node-provider construction, exactly as plugin clients do.
     fn new() -> Self {
         let (send, messages) = std::sync::mpsc::channel();
-        let sink = neocogi_ui::file_dialog::sink(send, |IFileDialogEvent::Completed(event)| event).unwrap();
-        let mut fixture = Self::with_sink(sink);
+        let queue = neocogi_ui::file_dialog::queue(send, |IFileDialogEvent::Completed(event)| event).unwrap();
+        let mut fixture = Self::with_queue(queue);
         fixture.messages = Some(messages);
         fixture
     }
     /// Supplies specialized test mappings before the widget and its window exist.
-    fn with_sink(sink: ComPtr<IFileDialogSinkAbi>) -> Self {
+    fn with_queue(queue: ComPtr<IFileDialogEventQueueAbi>) -> Self {
         let bundle = crate::SkinBundle::from_atlas(crate::test_support::test_atlas());
         let source = crate::test_support::assets::export_bundle(&bundle).unwrap();
         let gfx = neocogi_ui_support::test_support::gfx_factory();
@@ -42,7 +42,7 @@ impl Fixture {
         let body = ui.widgets().button_unobserved("background").unwrap();
         let owner = ui.window("owner", OWNER_RECT, &body).unwrap();
         let services = crate::factory::NodeServices::bind(runtime.as_com_ref()).unwrap();
-        let widget = FileDialog::new(services, owner.as_com_ref(), Some(sink)).unwrap();
+        let widget = FileDialog::new(services, owner.as_com_ref(), Some(queue)).unwrap();
         let interface = widget.query().unwrap();
         let handle = neocogi_ui::FileDialog::from_interface(interface);
         Self {
@@ -81,15 +81,7 @@ impl Fixture {
     }
     /// Returns the actual current dynamic file root to verify transactional replacement and handle preservation.
     fn file_root(&self) -> ComPtr<IWidgetAbi> {
-        self.widget
-            .try_borrow()
-            .unwrap()
-            .model
-            .files
-            .content()
-            .unwrap()
-            .node_interface()
-            .unwrap()
+        self.widget.try_borrow().unwrap().model.files.content().unwrap().node_interface().unwrap()
     }
 }
 /// Connects the real picker completion protocol to a consumer-owned inbox.
@@ -112,10 +104,7 @@ fn save_request_preserves_suggested_filename_and_rejects_directory_components() 
     request.filename = "new theme.json".into();
     fixture.handle.open(&request).unwrap();
     assert_eq!(fixture.widget.try_borrow().unwrap().model.accept.label().unwrap(), "Save");
-    assert_eq!(
-        fixture.widget.try_borrow().unwrap().model.filename.text().unwrap(),
-        "new theme.json"
-    );
+    assert_eq!(fixture.widget.try_borrow().unwrap().model.filename.text().unwrap(), "new theme.json");
     // Traverse the real modal and submit its suggested filename, without requiring
     // an existing file or manufacturing a completion in the test.
     fixture.tabs(6);
@@ -232,10 +221,7 @@ fn typed_filename_acceptance_uses_real_controls_and_completes_before_update_retu
     assert_eq!(&*app.state(), &[Some(directory.path().join(" file name "))]);
     assert_eq!(fixture.handle.active(), Ok(false));
     assert_eq!(fixture.handle.window().unwrap().snapshot().unwrap().visibility, Visibility::Hidden);
-    assert_eq!(
-        fixture.widget.try_borrow().unwrap().model.filename.text().unwrap(),
-        " file name "
-    );
+    assert_eq!(fixture.widget.try_borrow().unwrap().model.filename.text().unwrap(), " file name ");
     assert_eq!(fixture.handle.cancel(), Ok(false));
     fixture.handle.close().unwrap();
 }
@@ -386,8 +372,8 @@ fn application_callback_opens_picker_and_later_input_reaches_its_new_modal_scope
     let directory = tempfile::tempdir().unwrap();
     // A separate activator lets the picker retain its original ordinary owner and tests cross-window modal routing.
     let (events_tx, events) = std::sync::mpsc::channel();
-    let sink = neocogi_ui::file_dialog::sink(events_tx.clone(), |IFileDialogEvent::Completed(event)| AppMessage::Completed(event)).unwrap();
-    let mut fixture = Fixture::with_sink(sink);
+    let queue = neocogi_ui::file_dialog::queue(events_tx.clone(), |IFileDialogEvent::Completed(event)| AppMessage::Completed(event)).unwrap();
+    let mut fixture = Fixture::with_queue(queue);
     let button = fixture
         .ui
         .widgets()
@@ -459,12 +445,12 @@ fn completion_mapping_reentry_uses_the_widget_com_gate() {
     let target = Rc::new(std::cell::OnceCell::<ComPtr<IFileDialogAbi>>::new());
     let widget = target.clone();
     let (events_tx, events) = std::sync::mpsc::channel();
-    let sink = neocogi_ui::file_dialog::sink(events_tx.clone(), move |IFileDialogEvent::Completed(message)| {
+    let queue = neocogi_ui::file_dialog::queue(events_tx.clone(), move |IFileDialogEvent::Completed(message)| {
         assert_eq!(widget.get().unwrap().active(), Err(neocogi_com::NC_E_BUSY));
         message
     })
     .unwrap();
-    let mut fixture = Fixture::with_sink(sink);
+    let mut fixture = Fixture::with_queue(queue);
     target.set(fixture.handle.as_interface().add_ref()).ok().unwrap();
     fixture.open(directory.path());
     assert_eq!(fixture.handle.cancel(), Ok(true));
@@ -481,9 +467,7 @@ fn mounted_dialog_outlives_client_handles_and_retires_with_its_view() {
     let messages = session(&mut fixture);
     fixture.open(directory.path());
     let window = fixture.handle.window().unwrap();
-    let Fixture {
-        ui, runtime, owner, handle, widget, ..
-    } = fixture;
+    let Fixture { ui, runtime, owner, handle, widget, .. } = fixture;
     drop(handle);
     drop(widget);
     assert_eq!(window.snapshot().unwrap().visibility, Visibility::Visible);

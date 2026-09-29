@@ -228,12 +228,15 @@ impl Checkbox {
         resources: crate::widget_object::SharedAssets,
         checked: bool,
         label: NcCopyFromBufferOffset<'_, u8>,
-        sink: Option<ComPtr<neocogi_ui_nodes_contracts::CheckboxSinkAbi>>,
+        queue: Option<ComPtr<neocogi_ui_nodes_contracts::CheckboxEventQueueAbi>>,
     ) -> Result<ComPtr<CheckboxAbi>, NcStatus> {
         let mut value = Self::build(host, checked, label, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
-        value.events = neocogi_com::events::EventPort::with_sink(sink);
-        Ok(Self::from_value(value).query().expect("Checkbox declares its callable class contract"))
+        Self::from_value_cyclic::<CheckboxAbi>(move |origin| {
+            value.events = neocogi_com::events::EventPort::with_queue(queue, origin);
+            value
+        })?
+        .query()
     }
 
     /// Builds one checkbox with either directly imported or runtime-shared resources.
@@ -290,15 +293,16 @@ impl neocogi_ui_nodes_contracts::Checkbox for Checkbox {
 #[cfg(all(test, target_pointer_width = "64"))]
 #[test]
 fn com_object_control_is_independent_of_interface_count() {
-    // Refcount, padding and the shared call guard occupy 16 bytes on this target.
+    // The call gate occupies one word in the payload. Arc owns its private
+    // strong/weak header outside this storage; this is not total allocation size.
     // No per-interface fields remain; handles carry their selected tables.
     // The constructor receiver is not an interface implemented by the widget.
     assert_eq!(Checkbox::COM_INTERFACE_COUNT, 4);
     println!(
-        "Checkbox: state={}, allocation={}",
+        "Checkbox: state={}, payload={}",
         core::mem::size_of::<Checkbox>(),
         core::mem::size_of::<CheckboxComObject>()
     );
-    assert_eq!(core::mem::offset_of!(CheckboxComObject, value), 16);
-    assert_eq!(core::mem::size_of::<CheckboxComObject>(), core::mem::size_of::<Checkbox>() + 16);
+    assert_eq!(core::mem::offset_of!(CheckboxComObject, value), 8);
+    assert_eq!(core::mem::size_of::<CheckboxComObject>(), core::mem::size_of::<Checkbox>() + 8);
 }

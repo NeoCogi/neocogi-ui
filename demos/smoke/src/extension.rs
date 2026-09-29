@@ -35,8 +35,8 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
         .activate_plugin_factory::<ExtensionProviderAbi>(neocogi_com::guid_from_qualified_name("neocogi.example.ui-extension"))?;
     let host = ui.widgets().host()?;
     let (events_tx, events) = std::sync::mpsc::channel();
-    let sink = neocogi_com::events::mapped_sink::<neocogi_demo_contracts::CounterSinkAbi, _>(events_tx, Message::Counter)?;
-    let binding = neocogi_demo_contracts::CounterEventBinding::from_sink(Some(sink.as_com_ref()));
+    let queue = neocogi_com::events::mapped_queue::<neocogi_demo_contracts::CounterEventQueueAbi, _>(events_tx, |_origin, event| Message::Counter(event))?;
+    let binding = neocogi_demo_contracts::CounterEventBinding::from_queue(Some(queue.as_com_ref()));
     let mut counter = provider.counter(host.as_com_ref(), neocogi_com::NcValueRef::new(&binding)?)?;
     let probe: ComPtr<IWidgetProbeAbi> = counter.query()?;
     let widget: ComPtr<IWidgetAbi> = counter.query()?;
@@ -48,10 +48,7 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let parent_probe: ComPtr<IWidgetProbeAbi> = inset.query()?;
     inset.set_child(widget.as_com_ref())?.finish()?;
     let mut another = provider.inset(host.as_com_ref())?;
-    assert_eq!(
-        another.set_child(widget.as_com_ref()).err(),
-        Some(UI_E_OWNER)
-    );
+    assert_eq!(another.set_child(widget.as_com_ref()).err(), Some(UI_E_OWNER));
     assert_eq!(another.children()?.child_count()?, 0);
     let root = Widget::from_interface(inset.clone());
     // Capability discovery happens once while wiring the application, never during UI phases.
@@ -114,9 +111,7 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let replacement = provider.counter(host.as_com_ref(), neocogi_com::NcValueRef::new(&CounterEventBinding::Unobserved)?)?;
     let replacement_widget: ComPtr<IWidgetAbi> = replacement.query()?;
     let replacement_probe: ComPtr<IWidgetProbeAbi> = replacement.query()?;
-    inset
-        .set_child(replacement_widget.as_com_ref())?
-        .finish()?;
+    inset.set_child(replacement_widget.as_com_ref())?.finish()?;
     ui.update_with_events(size, owner.as_com_ref())?;
     window.close()?;
     assert_eq!(replacement.count(), Err(UI_E_CLOSED));

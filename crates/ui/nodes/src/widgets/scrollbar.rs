@@ -569,12 +569,15 @@ impl Scrollbar {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         range: ScrollRange,
-        sink: Option<ComPtr<neocogi_ui_nodes_contracts::ScrollbarSinkAbi>>,
+        queue: Option<ComPtr<neocogi_ui_nodes_contracts::ScrollbarEventQueueAbi>>,
     ) -> Result<ComPtr<ScrollbarAbi>, NcStatus> {
         let mut value = Self::build(host, range, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
-        value.events = neocogi_com::events::EventPort::with_sink(sink);
-        Ok(Self::from_value(value).query().expect("Scrollbar declares its callable class contract"))
+        Self::from_value_cyclic::<ScrollbarAbi>(move |origin| {
+            value.events = neocogi_com::events::EventPort::with_queue(queue, origin);
+            value
+        })?
+        .query()
     }
 
     /// Builds one scrollbar with either directly imported or runtime-shared resources.

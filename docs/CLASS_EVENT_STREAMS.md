@@ -1,225 +1,159 @@
-# Constructor-bound widget events
+# Typed event queues and weak origins
 
-An emitting widget owns one typed event port, with one receiver selected by its
-behavioral parent **during construction**. Several event kinds are variants of
-one enum, such as `TextboxEvent::Changed` and `TextboxEvent::Submitted`. They do
-not create separate ports. Event routing belongs to application code.
+A producer has one constructor-selected queue for its entire event enum. The
+application implements the queue's concrete COM interface and enqueues its own
+messages. Widget getters and setters stay on the widget's ordinary interfaces.
+There is no attach operation, receiver replacement, event-owner object, or visual
+routing language. Application behavior runs after the emitting widget returns.
 
-The IDL uses ordinary interfaces, classes, factories, enums and structs. It has
-no widget keyword, event declaration, per-variant subscription, or visual routing
-language. The former `IEventStream::attach` protocol and `com_class(event = ...)`
-option have been removed. A published object has no receiver-installation method.
+## Contract and syntax
 
-## Construction and delivery
-
-```mermaid
-sequenceDiagram
-    participant P as Behavioral parent
-    participant S as Typed COM sink in application
-    participant F as Widget factory in plugin
-    participant W as Widget
-    participant Q as Application queue
-    P->>S: Capture sender and mapping function
-    P->>F: create(initial data, Observed(sink))
-    F->>W: Initialize the sole event port with sink
-    F-->>P: Return complete widget
-    P->>P: Publish or mount form
-    W->>W: Commit interaction state
-    W->>S: post(borrowed Event)
-    S->>S: Validate and acquire owned Event
-    S->>Q: Send mapped AppMessage
-    P->>Q: Drain at safe update boundary
-    P->>P: Handle with mutable application state
-```
-
-In text: the application builds a sink, passes it into the factory, and receives
-a fully initialized widget. Later the widget calls that sink, whose mapper posts
-to the application queue. Application behavior runs after traversal releases
-its borrows. There is no intermediate loader queue or form relay.
-
-The sink owns the sender and a typed mapping closure in the application's binary.
-Neither the application's private message type nor a Rust closure crosses COM.
-The widget does not receive `Rc<RefCell<Parent>>`, a parent pointer, or a function
-pointer with an unspecified lifetime. It retains an ordinary checked COM receiver.
-Mapping runs synchronously: it should capture facts, not reenter the emitter or
-run application behavior under the emitter's mutable COM call gate.
-
-## Ordinary IDL contracts
-
-Versions and imports are omitted in this illustration:
-
-```text
-interface IMessageSink<E> {
-    fn post(&mut self, message: &E) -> Result<()>;
-}
-enum EventBinding<E> {
-    Unobserved,
-    Observed(ComPtr<IMessageSink<E>>),
-}
-enum TextboxEvent {
-    Changed(TextChanged),
-    Submitted(TextSubmitted),
-}
-class Textbox: IWidget + ILeafLayout {
-    fn set_text(&mut self, text: &[u8]) -> Result<()>;
-}
-factory Widgets {
-    fn create_textbox(&self, text: &[u8], events: &EventBinding<TextboxEvent>)
-        -> Result<ComPtr<Textbox>>;
-}
-```
-
-`EventBinding` is an ordinary library enum using the checked recursive value ABI.
-`Observed` owns a `ComPtr` to the exact `IMessageSink<E>` specialization.
-`Unobserved` chooses permanent non-delivery, useful for previews. It is not an
-empty subscription slot. Closing or dropping the widget never permits rebinding.
-
-Each closed sink specialization has a concrete vtable, deterministic IID and ABI
-signature. Different generated Rust names for the same specialization can be
-bridged by checked `QueryInterface`. Event payloads always retain their concrete
-value types; `IUnknown` is never used as an event payload substitute.
-
-The backend finds methods returning `ComPtr<Product>` in the product's declaring
-contract module. An `EventBinding<E>` argument identifies its constructor receiver.
-It generates `ProductEventBinding`, `ProductSinkAbi`, `ProductSink`,
-`ProductSinkVtblFor`, `ProductEventPort`, and an `EventSource` implementation for
-`ProductAbi`. Two binding arguments on one constructor, or different event types
-among that product's constructors, are rejected. Constructors without a binding
-can intentionally create unobserved products.
-
-This association is local to the declaring module: importing a downstream
-factory cannot change a published product's metadata. A custom factory returning
-a product from another module must honor that product's canonical receiver
-contract. IDL cannot prove the implementation's ownership discipline; a foreign
-implementation remains responsible for retaining exactly that receiver and
-releasing it correctly, as with every other COM contract.
-
-The product's `IDL_INTERFACE.event_sink` describes the **receiver**, not an
-interface implemented by the product. Interface inheritance therefore cannot
-introduce another consumer slot. Commands remain in the product's own interface
-chain, independently of the event receiver. `com_class(Contract)` allocates the
-ordinary concrete implementation; it does not generate event attachment methods.
-
-## Producer ownership and closure
-
-The implementation keeps a private `ProductEventPort` field. Its constructor
-decodes `events.to_owned()?.into_sink()` and initializes
-`EventPort::with_sink(receiver)` before publishing any widget identity. Internal
-composites pass that receiver to their actual emitter: TextArea to its editor,
-Combo to its choice model. They do not add forwarding ports.
-
-| State selected at construction | `post` | `close` |
-| --- | --- | --- |
-| Open with receiver | Call the sole typed receiver | Drop receiver and become Closed |
-| Open without receiver | Succeed without delivery | Become Closed |
-| Closed | Return `NC_E_CLOSED` | Remain Closed |
-
-```mermaid
-stateDiagram-v2
-    [*] --> Observed: constructor supplies receiver
-    [*] --> Unobserved: constructor selects no receiver
-    Observed --> Closed: close or final destruction
-    Unobserved --> Closed: close or final destruction
-    Closed --> Closed: repeated close
-```
-
-There is no transition from Unobserved to Observed, or between receivers.
-`EventPort` mutates through `&mut self`; ordinary COM borrowing supplies reentry
-checks. Cloning a `ComPtr` shares the same producer and never creates another port.
-Dropping a cloned handle does not close a live widget. Final allocation release
-runs the concrete widget's `Drop`, which invokes its idempotent `close` path.
-
-Composite closure proceeds in this order:
-
-1. Check that closure is currently allowed; an already closed widget succeeds.
-2. Close descendants. A refusal before their cleanup commits leaves the parent open.
-3. Release the parent's mapping and local editing/gesture resources.
-4. Mark the parent closed. Return any diagnostic from cleanup that already committed.
-
-No cancellation protocol is introduced. A committed cleanup diagnostic does not
-undo removal or reopen the parent. Ordinary ownership drops receiver references
-on final destruction even if a best-effort close reports an error. Explicit
-closure remains necessary when external COM handles retain a removed widget.
-
-A structural parent need not consume events. A textbox inside a scroll area can
-send directly to its form's queue. A behavioral composite such as FileDialog
-consumes its private children's events and exposes its own completion protocol.
-
-## Application code and generated forms
+These are ordinary generic library declarations, not UI-specific IDL syntax:
 
 ```rust,ignore
-let (sender, messages) = std::sync::mpsc::channel();
-let save = ui.widgets().button("Save", sender.clone(), AppMessage::SaveButton)?;
-let name = ui.widgets().textbox("", sender.clone(), AppMessage::NameTextbox)?;
+interface IEventQueue<Object, Event> {
+    fn post(&mut self, origin: &Object, event: &Event) -> Result<()>;
+}
+enum EventBinding<Object, Event> {
+    Unobserved,
+    Observed(ComPtr<IEventQueue<Object, Event>>),
+}
+class Button: IWidget { /* getters, setters and widget operations */ }
+enum ButtonEvent { Activated(Activation) }
+factory Widgets {
+    fn button(&self, label: &[u8], events: &EventBinding<Button, ButtonEvent>)
+        -> Result<ComPtr<Button>>;
+}
 ```
 
-Here `SaveButton(ButtonEvent)` and `NameTextbox(TextboxEvent)` are tuple variants
-of the application's enum; their variant constructors are mapping functions.
-`textbox::sink` creates the adapter separately, and `textbox_with_sink` supplies
-it through the same COM constructor. `filter_sink` can omit selected variants
-from the queue while remaining the one consumer. `_unobserved` helpers allocate
-no receiver. Windows and popups offer `*_with_sink`; menus offer
-`item_observed`, `item_with_sink`, and `popup_with_sink`.
+`Object` must be an interface/class; `Event` must be a declared value. The IDL
+backend checks that the binding names the constructor's returned product as its
+origin, that a constructor accepts at most one binding, and that constructors of
+the same product agree on the event type. Generics still produce concrete ABI
+interfaces and checked value codecs. Neither Rust generics nor channels cross COM.
 
-Generated forms retain typed widget fields and require a handler per emitting
-widget. They expose two separate setup functions:
+`post` borrows both arguments for the synchronous call. Generated Rust receives
+`ComRef<'_, ButtonAbi>` and `NcValueRef<'_, ButtonEvent>`. Retaining the event
+requires `to_owned()`, which uses the existing checked, budgeted value decoder.
+Retaining only the origin's identity requires `origin.downgrade()`.
 
-- `events(generation, sender)` builds an `EventBindings` table **before** loading.
-- `bind(&component)` checks and resolves concrete widget and input fields after
-  construction; it does not install receivers.
+## One concrete application queue
 
-`Loader::compile_with_events(document, bindings)` and
-`load_with_events(bytes, bindings)` validate every supplied key and exact receiver
-identity before construction. Duplicate entries, unknown keys, bindings for
-non-emitting widgets, and wrong event types are errors. Missing entries mean
-permanently unobserved widgets. Plain `prepare` and `load` choose that policy for
-all nodes. Live mappings never appear in persisted documents.
+A single object can implement `ButtonEventQueue` and `TextboxEventQueue`. Every
+button can share its button projection and every textbox its textbox projection.
+The following abbreviated Rust illustrates the application-owned boundary:
 
-`ReloadSlot::reload(document, resources, make_events, check_fields)` assigns an
-attempt generation, prepares receivers, constructs the candidate, checks its
-fields, and then publishes it. Any failure preserves the old component and
-releases candidate mappings. Generated messages carry that generation; the
-application checks `slot.accepts(message.generation)` before dispatching their
-`Event` through its `Handlers` implementation. An omitted handler fails Rust
-compilation. Handlers can edit the form's actual typed widget fields.
+```rust,ignore
+enum AppMessage {
+    Button(WeakComPtr<ButtonAbi>, ButtonEvent),
+    Textbox(WeakComPtr<TextboxAbi>, TextboxEvent),
+}
+#[com_object(interfaces(ButtonEventQueue, TextboxEventQueue))]
+struct AppQueue { sender: std::sync::mpsc::Sender<AppMessage> }
+impl ButtonEventQueue for AppQueue {
+    fn post(&mut self, origin: ComRef<'_, ButtonAbi>, event: NcValueRef<'_, ButtonEvent>)
+        -> Result<(), NcStatus>
+    {
+        let message = AppMessage::Button(origin.downgrade()?, event.to_owned()?);
+        let _ = self.sender.send(message);
+        Ok(())
+    }
+}
+// TextboxEventQueue::post performs the corresponding typed acquisition.
+let app_queue = AppQueue::from_value(AppQueue { sender });
+let buttons = app_queue.query::<ButtonEventQueueAbi>()?;
+let texts = app_queue.query::<TextboxEventQueueAbi>()?;
+let button = ui.widgets().button_with_queue("Save", Some(buttons.as_com_ref()))?;
+let textbox = ui.widgets().textbox_with_queue("", Some(texts.as_com_ref()))?;
+```
 
-## Independently built custom plugins
+The concrete implementation owns a sender, not the application model or parent
+widget. Its methods use `&mut self`. It needs neither `Any`, a callback registry,
+nor a `RefCell<Parent>`. Application handlers receive ordinary mutable model
+access when they drain their inbox. A receiver must not call widget methods
+synchronously during `post`: the emitting widget still holds its exclusive call
+gate. Acquiring a weak reference operates only on lifetime bookkeeping.
 
-`IDesignWidgetCatalog::describe` transports catalog revision 6: the concrete
-product identity, constructor receiver IID/signature, complete reachable value
-graph, Rust binding paths, and property defaults. The designer need not link the
-plugin's contract crate to inspect that data or render an unobserved preview.
+`mapped_queue` and the facade's `button::queue` / `textbox::queue` remain optional
+conveniences for small applications. They allocate a callback receiver; they are
+not required by the factory ABI. Facade convenience mappers consume the event
+only. `mapped_queue` additionally supplies the typed weak origin. Applications
+that need one shared allocation implement the concrete queue interfaces directly.
+An application also chooses its own queue capacity and disconnected/full policy;
+COM does not prescribe an unbounded Rust channel.
 
-The common `create_widget` call receives a `WidgetEventBinding`: Unobserved, or
-Observed holding a COM `IUnknown` reference. This transports an object capability
-through a heterogeneous catalog, not an untyped event. The selected plugin
-constructor **must query its exact `IMessageSink<E>` before allocating the widget**.
-A wrong sink fails that query. The loader checks each supplied receiver against the registered catalog
-descriptor before construction; the registry checks the returned widget against
-its product IID.
-It never queries the widget for a receiver interface.
+## Ownership and destruction
 
-Compiled application forms still depend on the custom contract crate to name
-actual widget fields and event values. The generic designer inspects custom
-event shapes; it does not dynamically interpret unknown event payloads for its
-preview trace. Application routing remains application code.
+```mermaid
+flowchart LR
+    Tree["Tree owns widget"] --> Widget["Widget: one fixed queue and weak self origin"]
+    Widget --> Queue["Application queue COM object"]
+    Queue --> Sender["Channel sender"]
+    Sender --> Message["Owned event plus weak origin"]
+    Message -. "upgrade if still alive" .-> Widget
+    Consumer["Application owns receiver and model"] --> Message
+```
 
-## Costs and error boundaries
+The weak edge retains lifetime bookkeeping, not the widget value. Last strong
+release destroys the value and all its resources immediately. `upgrade()` then
+returns `Ok(None)` permanently, even if another allocation later reuses memory.
+Generated objects use one private Arc allocation; its empty inline storage and
+strong/weak header remain allocated until the last weak token leaves. Both
+`ComPtr` and `WeakComPtr` occupy two words. Weak origins are not free storage, but
+they avoid retaining the widget's resources and descendants through queued work.
+See [core ABI v11](../crates/com/docs/abi-v11.md) for the C lifetime protocol,
+threading permissions, atomic promotion and foreign provider obligations.
 
-A standard sink is one COM allocation containing its mapper and sender. The
-widget factory retains that receiver; there is no second relay allocation.
-Event acquisition uses the normal recursive wire checks, shared allocation
-budget and fallible reservations. Owned strings and channel storage can allocate.
-This is not a promise of allocation-free posting.
+Logical `IWidget::close` is separate from final destruction. Closing retires
+children, releases its queue and weak origin, and prevents further emission.
+Close is idempotent and Drop also performs cleanup. A separately retained closed
+widget still upgrades successfully; its editing methods return the closed status.
+Weak validity alone therefore does not establish that an object is open or belongs
+to the current form. Form generation/membership checks still serve that purpose.
 
-A receiver error is returned after any producer state change that already
-committed. Already queued values survive producer closure. A disconnected queue
-still runs the mapper, then discards the translated value successfully. Closing
-releases the widget's receiver reference; separately retained sink handles can
-keep captures alive. Capturing the producer itself in its mapper can create a
-reference cycle, so ordinary mappings should capture senders and immutable IDs.
+Already queued facts are not retracted. A file-dialog result can remain useful
+after the dialog has died. A handler wanting to edit an origin upgrades it and
+handles absence; a handler interested only in the captured result need not
+upgrade. There is no automatic universal rule to discard messages on expiration.
 
-See [COM receiver API](../crates/com/api/EVENTS.md),
-[runtime scheduling](../crates/ui/runtime/docs/EVENTS.md),
-[generated forms](../crates/ui/document/README.md), and
-[IDL syntax](IDL_MODULES.md).
+## Construction and composites
+
+A generated COM class offers `from_value_cyclic` / `into_local_cyclic`: its builder
+receives a weak origin before the value is published. Upgrade during that builder
+returns None. An initialization panic cannot publish or resurrect the object.
+`EventPort::with_queue(queue, origin)` fixes delivery in the constructor; it has
+no public installation or replacement method. Unobserved instances need no queue
+allocation and never become observed later.
+
+TextArea's private editor posts with the enclosing TextArea identity. Its factory
+retains local access to the unpublished editor only long enough to fix that origin.
+Combo's core choice menu has its own public contract, so a private typed bridge
+forwards its borrowed event with the enclosing Combo origin. The bridge copies no
+payload and its one origin is completed before construction returns. These private
+construction steps cannot become an application attachment protocol.
+
+Window/popup forest records own delivery storage and retain their COM capabilities
+for their semantic lifetime. Native menu rows similarly retain their public COM
+origin; discarding an application's editing handle must not kill a still-visible
+row's origin. Those capabilities refer back to the forest/declaration weakly.
+
+## Inspection and custom widgets
+
+The IDL compiler derives the queue identity and reachable event value graph from
+the factory signature. The producer does not implement its receiver interface:
+inspection must not search the widget's QueryInterface ancestry for that queue.
+Independent widget plugins publish this information through `IDesignWidgetCatalog`.
+The catalog's `event_queue` replaces the old `event_sink` field, and its version is
+advanced. Designer inspection and construction use the same contract for built-in
+and custom widgets; application message types remain private to the application.
+
+## Verification
+
+The IDL construction fixture crosses actual generated factory and queue thunks,
+including permanent unobserved/closed behavior, failed construction, malformed
+binding tags, inconsistent event declarations and compile-time rejection of late
+attachment. Runtime tests use real widget origins and routed input. A concrete
+application test implements two queue interfaces on one allocation, verifies FIFO
+snapshots and origin identity, then destroys both widgets while retaining their
+queued messages. COM tests separately exercise C callers, wrong revisions,
+thread-local compile failures, shared promotion races and final value destruction.

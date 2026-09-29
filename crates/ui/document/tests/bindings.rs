@@ -99,8 +99,8 @@ fn custom_factory_cannot_omit_its_constructor_event_graph() {
         abi: &neocogi_demo_contracts::CounterAbi::INTERFACE_DESCRIPTOR,
         chain: &neocogi_demo_contracts::CounterAbi::INTERFACE_CHAIN,
         rust_abi: "neocogi_demo_contracts::CounterAbi",
-        event_sink: Some(neocogi_com::design::IdlEventSink {
-            abi: &neocogi_demo_contracts::CounterSinkAbi::INTERFACE_DESCRIPTOR,
+        event_queue: Some(neocogi_com::design::IdlEventQueue {
+            abi: &neocogi_demo_contracts::CounterEventQueueAbi::INTERFACE_DESCRIPTOR,
             message: &neocogi_demo_contracts::CounterEvent::IDL_TYPE,
         }),
         values: &[],

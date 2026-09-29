@@ -304,10 +304,10 @@ fn title_drag_and_close_deliver_window_events_through_the_production_session() {
     let body = fixture.ui.widgets().button_unobserved("body").unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
     let observations = Vec::new();
-    let sink = neocogi_ui::events::window::sink(events_tx.clone(), |event| event).unwrap();
+    let queue = neocogi_ui::events::window::queue(events_tx.clone(), |event| event).unwrap();
     let owner = fixture
         .ui
-        .window_with_sink("chrome", Rect { x: 30, y: 30, width: 180, height: 120 }, &body, Some(sink.as_com_ref()))
+        .window_with_queue("chrome", Rect { x: 30, y: 30, width: 180, height: 120 }, &body, Some(queue.as_com_ref()))
         .unwrap();
     fixture.frame(VIEW).unwrap();
     pointer(&fixture.ui, Point { x: 70, y: 40 }, true);

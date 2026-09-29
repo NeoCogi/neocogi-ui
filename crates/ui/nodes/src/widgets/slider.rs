@@ -398,7 +398,7 @@ impl crate::widget_object::WidgetAlgorithm for Slider {
 }
 
 impl crate::widget_object::HostedWidget for Slider {
-    /// Releases sinks, revokes outstanding clipboard receipts, and drops local history.
+    /// Releases queues, revokes outstanding clipboard receipts, and drops local history.
     fn close_contents(&mut self) {
         crate::widget_object::WidgetAlgorithm::close_events(self);
         self.edit = NumberEditState::default();
@@ -500,24 +500,27 @@ mod tests {
         }
     }
 
-    /// Drains queued numeric values after the temporary sink installation borrow ends.
+    /// Drains queued numeric values after the temporary queue installation borrow ends.
     type NumericDispatcher = Box<dyn FnMut(&mut Vec<Real>) -> bool>;
 
     /// Collects the shared numeric message from either control through its generated concrete receiver.
-    fn numeric_dispatcher(
-        install: impl FnOnce(Box<dyn FnMut(neocogi_ui_nodes_contracts::NumericChanged) -> Result<(), NcStatus>>) -> Result<(), NcStatus>,
-    ) -> NumericDispatcher {
+    fn numeric_dispatcher<T>(
+        install: impl FnOnce(Box<dyn FnMut(neocogi_ui_nodes_contracts::NumericChanged) -> Result<(), NcStatus>>) -> Result<T, NcStatus>,
+    ) -> (T, NumericDispatcher) {
         let (events_tx, events) = std::sync::mpsc::channel();
-        install(Box::new(move |event| {
+        let widget = install(Box::new(move |event| {
             let _ = events_tx.send(event.value);
             Ok(())
         }))
         .unwrap();
-        Box::new(move |values| {
-            let before = values.len();
-            values.extend(events.try_iter());
-            values.len() != before
-        })
+        (
+            widget,
+            Box::new(move |values| {
+                let before = values.len();
+                values.extend(events.try_iter());
+                values.len() != before
+            }),
+        )
     }
 
     /// Verifies formatting precision is a small validated value rather than an allocation-sized
@@ -680,17 +683,23 @@ mod tests {
 
     #[test]
     fn slider_wheel_snaps_fractional_step_from_lower_bound() {
-        let mut slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
+        let slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
             SliderParameters::with_opt(1.15, 1.0, 2.0, 0.2, precision(2), WidgetOption::FRAME)
                 .expect("finite ascending fractional slider parameters must validate"),
         );
-        let mut dispatcher = numeric_dispatcher(|mut consume| {
-            let receiver = <neocogi_ui_nodes_contracts::SliderSinkAbi as neocogi_com::events::MessageSinkInterface>::receiver(
-                move |neocogi_ui_nodes_contracts::SliderEvent::Changed(event)| consume(event),
+        let (slider, mut dispatcher) = numeric_dispatcher(|mut consume| {
+            let receiver = <neocogi_ui_nodes_contracts::SliderEventQueueAbi as neocogi_com::events::EventQueueInterface>::receiver(
+                move |_origin, neocogi_ui_nodes_contracts::SliderEvent::Changed(event)| consume(event),
             )?;
-            slider.events = neocogi_com::events::EventPort::with_sink(Some(receiver));
-            Ok(())
+            Ok(slider.map(|mut value| {
+                Slider::into_local_cyclic::<neocogi_ui_nodes_contracts::SliderAbi>(move |origin| {
+                    value.events = neocogi_com::events::EventPort::with_queue(Some(receiver), origin);
+                    value
+                })
+                .unwrap()
+            }))
         });
+        let mut slider = slider.try_borrow_mut().unwrap();
         run_slider_once(&mut slider, rect(0, 0, 100, 20), Vec::new(), true, false, false, Some(vec2(0, 1)));
 
         assert_real_close(slider.value(), 1.4);
@@ -837,10 +846,16 @@ mod tests {
 
     #[test]
     fn number_drag_records_a_typed_change_and_programmatic_setter_is_silent() {
-        let mut number = crate::test_support::algorithm::Algorithm::<Number>::from(
+        let number = crate::test_support::algorithm::Algorithm::<Number>::from(
             NumberParameters::new(0.0, 2.0, DecimalPrecision::ZERO).expect("finite non-negative number parameters must validate"),
         );
-        let mut dispatcher = numeric_dispatcher(number.changed());
+        let (number, mut dispatcher) = numeric_dispatcher(|mut consume| {
+            let receiver = <neocogi_ui_nodes_contracts::NumberEventQueueAbi as neocogi_com::events::EventQueueInterface>::receiver(
+                move |_origin, neocogi_ui_nodes_contracts::NumberEvent::Changed(event)| consume(event),
+            )?;
+            Ok(number.map(|value| value.into_observed(receiver)))
+        });
+        let mut number = number.try_borrow_mut().unwrap();
         let mut values = Vec::new();
         number.set_value(4.0);
         assert!(!dispatcher(&mut values));
@@ -916,16 +931,22 @@ mod tests {
 
     #[test]
     fn slider_programmatic_setter_is_silent() {
-        let mut slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
+        let slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
             SliderParameters::new(0.0, -5.0, 5.0).expect("finite ascending slider parameters must validate"),
         );
-        let mut dispatcher = numeric_dispatcher(|mut consume| {
-            let receiver = <neocogi_ui_nodes_contracts::SliderSinkAbi as neocogi_com::events::MessageSinkInterface>::receiver(
-                move |neocogi_ui_nodes_contracts::SliderEvent::Changed(event)| consume(event),
+        let (slider, mut dispatcher) = numeric_dispatcher(|mut consume| {
+            let receiver = <neocogi_ui_nodes_contracts::SliderEventQueueAbi as neocogi_com::events::EventQueueInterface>::receiver(
+                move |_origin, neocogi_ui_nodes_contracts::SliderEvent::Changed(event)| consume(event),
             )?;
-            slider.events = neocogi_com::events::EventPort::with_sink(Some(receiver));
-            Ok(())
+            Ok(slider.map(|mut value| {
+                Slider::into_local_cyclic::<neocogi_ui_nodes_contracts::SliderAbi>(move |origin| {
+                    value.events = neocogi_com::events::EventPort::with_queue(Some(receiver), origin);
+                    value
+                })
+                .unwrap()
+            }))
         });
+        let mut slider = slider.try_borrow_mut().unwrap();
         slider.set_value(4.0);
         assert_eq!(slider.value(), 4.0);
         assert!(!dispatcher(&mut Vec::new()));
@@ -934,16 +955,22 @@ mod tests {
     /// Eventless blur commits are user edits and share the step policy of pointer/key/wheel input.
     #[test]
     fn slider_text_commit_on_blur_snaps_once_and_reports_changed_geometry() {
-        let mut slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
+        let slider = crate::test_support::algorithm::Algorithm::<Slider>::from(
             SliderParameters::with_opt(2.0, 0.0, 10.0, 1.0, DecimalPrecision::ZERO, WidgetOption::FRAME).unwrap(),
         );
-        let mut dispatcher = numeric_dispatcher(|mut consume| {
-            let receiver = <neocogi_ui_nodes_contracts::SliderSinkAbi as neocogi_com::events::MessageSinkInterface>::receiver(
-                move |neocogi_ui_nodes_contracts::SliderEvent::Changed(event)| consume(event),
+        let (slider, mut dispatcher) = numeric_dispatcher(|mut consume| {
+            let receiver = <neocogi_ui_nodes_contracts::SliderEventQueueAbi as neocogi_com::events::EventQueueInterface>::receiver(
+                move |_origin, neocogi_ui_nodes_contracts::SliderEvent::Changed(event)| consume(event),
             )?;
-            slider.events = neocogi_com::events::EventPort::with_sink(Some(receiver));
-            Ok(())
+            Ok(slider.map(|mut value| {
+                Slider::into_local_cyclic::<neocogi_ui_nodes_contracts::SliderAbi>(move |origin| {
+                    value.events = neocogi_com::events::EventPort::with_queue(Some(receiver), origin);
+                    value
+                })
+                .unwrap()
+            }))
         });
+        let mut slider = slider.try_borrow_mut().unwrap();
         slider.edit.editing = true;
         // Enter through the editing contract instead of reaching into the private numeric buffer.
         run_slider_once(
@@ -1044,12 +1071,15 @@ impl Slider {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         options: SliderOptions,
-        sink: Option<ComPtr<neocogi_ui_nodes_contracts::SliderSinkAbi>>,
+        queue: Option<ComPtr<neocogi_ui_nodes_contracts::SliderEventQueueAbi>>,
     ) -> Result<ComPtr<SliderAbi>, NcStatus> {
         let mut value = Self::build(host, options, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
-        value.events = neocogi_com::events::EventPort::with_sink(sink);
-        Ok(Self::from_value(value).query().expect("Slider declares its callable class contract"))
+        Self::from_value_cyclic::<SliderAbi>(move |origin| {
+            value.events = neocogi_com::events::EventPort::with_queue(queue, origin);
+            value
+        })?
+        .query()
     }
 
     /// Builds one slider with either directly imported or runtime-shared resources.

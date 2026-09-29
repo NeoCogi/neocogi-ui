@@ -61,13 +61,13 @@ fn checked_title(title: NcCopyFromBufferOffset<'_, u8>) -> Result<String, NcStat
 /// Concrete creation policy; the parent capability is authenticated before this value is built.
 enum Placement {
     /// Independent window in an application-selectable fixed layer.
-    Root(Option<ComPtr<IWindowSinkAbi>>),
+    Root(Option<ComPtr<IWindowEventQueueAbi>>),
     /// Visible structural child of an ordinary window.
-    Child(WindowHandle, Option<ComPtr<IWindowSinkAbi>>),
+    Child(WindowHandle, Option<ComPtr<IWindowEventQueueAbi>>),
     /// Hidden modal dialog owned by an ordinary window.
-    Dialog(WindowHandle, Option<ComPtr<IWindowSinkAbi>>),
+    Dialog(WindowHandle, Option<ComPtr<IWindowEventQueueAbi>>),
     /// Hidden auto-sized popup owned by a live ordinary window or dialog.
-    Popup(WindowHandle, Option<ComPtr<IPopupSinkAbi>>),
+    Popup(WindowHandle, Option<ComPtr<IPopupEventQueueAbi>>),
 }
 
 impl RuntimeStorage {
@@ -118,35 +118,25 @@ impl RuntimeStorage {
         // Root windows and child collections use the same checked mount boundary.
         let node = self.factory.mount_node(root, None)?;
         let manager = &mut context.window_manager;
-        let surface = match placement {
-            Placement::Root(sink) => NativeSurface::Window(manager.create_window(Window::new(title, local_rect(rect), node), sink)),
-            Placement::Child(parent, sink) => NativeSurface::Window(
+        let (identity, surface) = match placement {
+            Placement::Root(queue) => LogicalWindow::create(Rc::downgrade(self), queue, |events| {
+                manager.create_window(Window::new(title, local_rect(rect), node), events)
+            })?,
+            Placement::Child(parent, queue) => LogicalWindow::create(Rc::downgrade(self), queue, |events| {
                 manager
-                    .create_child_window(&parent, Window::new(title, local_rect(rect), node), sink)
-                    .expect("authenticated ordinary parent cannot change during an exclusive transaction"),
-            ),
-            Placement::Dialog(parent, sink) => NativeSurface::Window(
+                    .create_child_window(&parent, Window::new(title, local_rect(rect), node), events)
+                    .expect("authenticated ordinary parent cannot change during an exclusive transaction")
+            })?,
+            Placement::Dialog(parent, queue) => LogicalWindow::create(Rc::downgrade(self), queue, |events| {
                 manager
-                    .create_dialog(&parent, Window::new(title, local_rect(rect), node), sink)
-                    .expect("authenticated ordinary owner cannot change during an exclusive transaction"),
-            ),
-            Placement::Popup(parent, sink) => NativeSurface::Popup(
+                    .create_dialog(&parent, Window::new(title, local_rect(rect), node), events)
+                    .expect("authenticated ordinary owner cannot change during an exclusive transaction")
+            })?,
+            Placement::Popup(parent, queue) => LogicalPopup::create(Rc::downgrade(self), queue, |events| {
                 manager
-                    .create_popup(&parent, &title, node, sink)
-                    .expect("authenticated popup owner cannot disappear during an exclusive transaction"),
-            ),
-        };
-        let identity = match &surface {
-            NativeSurface::Window(window) => LogicalWindow::from_value(LogicalWindow {
-                runtime: Rc::downgrade(self),
-                window: window.clone(),
-                closed: Cell::new(false),
-            }),
-            NativeSurface::Popup(popup) => LogicalPopup::from_value(LogicalPopup {
-                runtime: Rc::downgrade(self),
-                popup: popup.clone(),
-                closed: false,
-            }),
+                    .create_popup(&parent, &title, node, events)
+                    .expect("authenticated popup owner cannot disappear during an exclusive transaction")
+            })?,
         };
         self.mounts.borrow_mut().push(SurfaceMount { surface, identity: identity.clone() });
         self.pending.set(true);
@@ -163,7 +153,9 @@ impl IWindowManager for Runtime {
         root: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>,
         events: neocogi_com::NcValueRef<'_, IWindowEventBinding>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-        self.storage.create(Placement::Root(events.to_owned()?.into_sink()), title, rect, root)?.query()
+        self.storage
+            .create(Placement::Root(events.to_owned()?.into_queue()), title, rect, root)?
+            .query()
     }
     /// Authenticates the parent's COM identity before validating ordinary-child policy.
     fn create_child(
@@ -176,7 +168,7 @@ impl IWindowManager for Runtime {
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.storage
             .create(
-                Placement::Child(self.storage.parent(parent)?, events.to_owned()?.into_sink()),
+                Placement::Child(self.storage.parent(parent)?, events.to_owned()?.into_queue()),
                 title,
                 rect,
                 root,
@@ -194,7 +186,7 @@ impl IWindowManager for Runtime {
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.storage
             .create(
-                Placement::Dialog(self.storage.parent(parent)?, events.to_owned()?.into_sink()),
+                Placement::Dialog(self.storage.parent(parent)?, events.to_owned()?.into_queue()),
                 title,
                 rect,
                 root,
@@ -211,7 +203,7 @@ impl IWindowManager for Runtime {
     ) -> Result<ComPtr<IPopupAbi>, NcStatus> {
         self.storage
             .create(
-                Placement::Popup(self.storage.parent(parent)?, events.to_owned()?.into_sink()),
+                Placement::Popup(self.storage.parent(parent)?, events.to_owned()?.into_queue()),
                 title,
                 Rect::default(),
                 root,
@@ -250,6 +242,22 @@ struct LogicalWindow {
 }
 
 impl LogicalWindow {
+    /// Publishes a forest record and its COM origin in one infallible transaction
+    /// after the caller has validated parent, content and placement policy.
+    fn create(
+        runtime: Weak<RuntimeStorage>,
+        queue: Option<ComPtr<IWindowEventQueueAbi>>,
+        register: impl FnOnce(Option<IWindowEventPort>) -> WindowHandle,
+    ) -> Result<(ComPtr<IUnknown>, NativeSurface), NcStatus> {
+        let local = Self::into_local_cyclic::<IWindowAbi>(|origin| Self {
+            runtime,
+            window: register(Some(neocogi_com::events::EventPort::with_queue(queue, origin))),
+            closed: Cell::new(false),
+        })?;
+        let surface = NativeSurface::Window(local.try_borrow()?.window.clone());
+        Ok((local.query()?, surface))
+    }
+
     /// Secures a live owner while allowing observational reads in layout and paint.
     fn owner(&self) -> Result<Rc<RuntimeStorage>, NcStatus> {
         if self.closed.get() {
@@ -390,6 +398,22 @@ enum PopupEdit {
 }
 
 impl LogicalPopup {
+    /// Fixes the queue's public origin while constructing the authoritative
+    /// popup record; no receiver installation API escapes to applications.
+    pub(super) fn create(
+        runtime: Weak<RuntimeStorage>,
+        queue: Option<ComPtr<IPopupEventQueueAbi>>,
+        register: impl FnOnce(Option<IPopupEventPort>) -> PopupHandle,
+    ) -> Result<(ComPtr<IUnknown>, NativeSurface), NcStatus> {
+        let local = Self::into_local_cyclic::<IPopupAbi>(|origin| Self {
+            runtime,
+            popup: register(Some(neocogi_com::events::EventPort::with_queue(queue, origin))),
+            closed: false,
+        })?;
+        let surface = NativeSurface::Popup(local.try_borrow()?.popup.clone());
+        Ok((local.query()?, surface))
+    }
+
     /// Retains the live owner for one synchronous checked call.
     fn owner(&self) -> Result<Rc<RuntimeStorage>, NcStatus> {
         if self.closed {

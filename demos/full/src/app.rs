@@ -93,7 +93,7 @@ pub(super) fn append<I: ComInterface>(parent: &mut LinearWidget, child: &Widget<
 pub(super) fn label(ui: &Ui, text: &str) -> Result<TextBlockWidget, NcStatus> {
     ui.widgets().text_block(text, TextWrapping::None)
 }
-/// Routing captured by every numeric sink in this application.
+/// Routing captured by every numeric queue in this application.
 /// One explicit sum lets the generic COM adapter share its implementation across
 /// palette, metric and background controls while retaining each control's target.
 #[derive(Clone, Copy)]
@@ -134,13 +134,13 @@ pub(super) fn slider(ui: &Ui, value: f32, high: f32, sender: std::sync::mpsc::Se
 }
 /// Owns the same typed activation mapper for individual buttons and shared samples.
 /// The action is captured as data, so each helper does not emit different COM glue.
-fn activation_sink(sender: std::sync::mpsc::Sender<Message>, action: Action) -> Result<ComPtr<ButtonSinkAbi>, NcStatus> {
-    neocogi_ui::button::sink(sender, move |neocogi_ui::button::Event::Activated(event)| Message::Activate(action, event))
+fn activation_sink(sender: std::sync::mpsc::Sender<Message>, action: Action) -> Result<ComPtr<ButtonEventQueueAbi>, NcStatus> {
+    neocogi_ui::button::queue(sender, move |neocogi_ui::button::Event::Activated(event)| Message::Activate(action, event))
 }
-/// Creates a concrete button with its action sink already supplied to the factory.
+/// Creates a concrete button with its action queue already supplied to the factory.
 fn button(ui: &Ui, events_tx: &std::sync::mpsc::Sender<Message>, text: &str, action: Action) -> Result<ButtonWidget, NcStatus> {
-    let sink = activation_sink(events_tx.clone(), action)?;
-    let mut control = ui.widgets().button_with_sink(text, Some(sink.as_com_ref()))?;
+    let queue = activation_sink(events_tx.clone(), action)?;
+    let mut control = ui.widgets().button_with_queue(text, Some(queue.as_com_ref()))?;
     control.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
     Ok(control)
 }
@@ -502,8 +502,8 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
     desktop.set_options(WindowOptions::NO_TITLE | WindowOptions::NO_CLOSE | WindowOptions::NO_RESIZE | WindowOptions::NO_PADDING)?;
     let mut main_body = column(ui)?;
     let main_scroll = ui.widgets().scroll_area(&main_body, true)?;
-    let lifecycle = neocogi_ui::events::window::sink(events_tx.clone(), Message::Window)?;
-    let demo = ui.child_window_with_sink(
+    let lifecycle = neocogi_ui::events::window::queue(events_tx.clone(), Message::Window)?;
+    let demo = ui.child_window_with_queue(
         desktop.as_com_ref(),
         "Demo Window",
         rect(40, 40, 300, 450),
@@ -563,11 +563,11 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
     log.set_font_role(FontRole::Mono)?;
     let log_scroll = ui.widgets().scroll_area(&log, true)?;
     // Ignore edit snapshots before queueing; only submissions are app commands.
-    let entry_sink = neocogi_ui::textbox::filter_sink(events_tx.clone(), |event| match event {
+    let entry_sink = neocogi_ui::textbox::filter_queue(events_tx.clone(), |event| match event {
         neocogi_ui::textbox::Event::Changed(_) => None,
         neocogi_ui::textbox::Event::Submitted(value) => Some(Message::Text(value)),
     })?;
-    let mut entry = ui.widgets().textbox_with_sink("", Some(entry_sink.as_com_ref()))?;
+    let mut entry = ui.widgets().textbox_with_queue("", Some(entry_sink.as_com_ref()))?;
     entry.set_font_role(FontRole::Mono)?;
     let (style, style_root) = StyleEditor::new(ui, &events_tx)?;
     floating(ui, desktop.as_com_ref(), "Flat Palette / Skin Metrics", rect(350, 250, 300, 240), &style_root)?;

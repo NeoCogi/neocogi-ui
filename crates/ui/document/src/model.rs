@@ -529,8 +529,8 @@ impl WidgetSpec {
     }
     /// The built-in class's complete resolved stream, taken from generated IDL metadata.
     /// Custom kinds obtain the equivalent owned description through their COM catalog.
-    pub fn event_stream(&self) -> Option<neocogi_com::design::IdlEventSink> {
-        self.event_source_metadata()?.event_sink
+    pub fn event_stream(&self) -> Option<neocogi_com::design::IdlEventQueue> {
+        self.event_source_metadata()?.event_queue
     }
     /// Whether authored font selection has a concrete setter, including a disclosure's header.
     pub fn supports_font(&self) -> bool {

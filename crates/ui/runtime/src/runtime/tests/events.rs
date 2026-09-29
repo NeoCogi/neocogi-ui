@@ -9,22 +9,22 @@ fn constructor_sink_allocates_once_and_drops_with_logical_widget_closure() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let (sender, receiver) = std::sync::mpsc::channel();
     let measurement = crate::test_support::AllocationMeasurement::begin();
-    let sink = neocogi_ui::textbox::sink(sender, |event| event).unwrap();
+    let queue = neocogi_ui::textbox::queue(sender, |event| event).unwrap();
     let allocations = measurement.finish();
-    assert_eq!(allocations.events, 1, "sender and mapper must live inside the one COM sink allocation");
+    assert_eq!(allocations.events, 1, "sender and mapper must live inside the one COM queue allocation");
 
     let measurement = crate::test_support::AllocationMeasurement::begin();
     let unobserved = ui.widgets().textbox_unobserved("same").unwrap();
     let absent = measurement.finish();
     let measurement = crate::test_support::AllocationMeasurement::begin();
-    let observed = ui.widgets().textbox_with_sink("same", Some(sink.as_com_ref())).unwrap();
+    let observed = ui.widgets().textbox_with_queue("same", Some(queue.as_com_ref())).unwrap();
     let present = measurement.finish();
-    assert_eq!(present, absent, "the factory only retains a present sink; absence needs no dummy object");
-    drop(sink);
+    assert_eq!(present, absent, "the factory only retains a present queue; absence needs no dummy object");
+    drop(queue);
     assert!(matches!(receiver.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
     observed.node_interface().unwrap().close().unwrap();
     assert!(matches!(receiver.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
-    // The closed editing handle can outlive its sink without retaining its captures.
+    // The closed editing handle can outlive its queue without retaining its captures.
     assert_eq!(observed.text(), Err(UI_E_CLOSED));
     drop(unobserved);
 }
@@ -124,8 +124,8 @@ fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
         })
         .unwrap();
 
-    let sink = neocogi_ui::events::window::sink(events_tx.clone(), Mutation::Window).unwrap();
-    let previous = ui.window_with_sink("first", RECT, &button, Some(sink.as_com_ref())).unwrap();
+    let queue = neocogi_ui::events::window::queue(events_tx.clone(), Mutation::Window).unwrap();
+    let previous = ui.window_with_queue("first", RECT, &button, Some(queue.as_com_ref())).unwrap();
     // Move every callback dependency into the persistent model; retain separate
     // assertion capabilities only where the test also needs direct observations.
     let app = TestApp::new(
@@ -357,9 +357,9 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     ui.update_with_events(SIZE, app.as_interface()).unwrap();
     assert!(app.state().ends_with(&["changed:☃:3".to_owned(), "submitted:☃".to_owned()]));
     let popup_content = ui.widgets().text_block("popup", TextWrapping::None).unwrap();
-    let sink = neocogi_ui::events::popup::sink(session_tx.clone(), |_| "dismissed".to_owned()).unwrap();
+    let queue = neocogi_ui::events::popup::queue(session_tx.clone(), |_| "dismissed".to_owned()).unwrap();
     let mut popup = ui
-        .popup_with_sink(window.as_com_ref(), "popup", &popup_content, Some(sink.as_com_ref()))
+        .popup_with_queue(window.as_com_ref(), "popup", &popup_content, Some(queue.as_com_ref()))
         .unwrap();
     popup.show_at(Rect { x: 100, y: 100, width: 20, height: 20 }).unwrap();
     ui.update_with_events(SIZE, app.as_interface()).unwrap();
@@ -418,8 +418,8 @@ fn real_lifecycle_cascade_is_deferred_until_each_consumer_returns() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let button = ui.widgets().button_unobserved("cascade").unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
-    let sink = neocogi_ui::events::window::sink(events_tx.clone(), |event| event).unwrap();
-    let window = ui.window_with_sink("cascade", RECT, &button, Some(sink.as_com_ref())).unwrap();
+    let queue = neocogi_ui::events::window::queue(events_tx.clone(), |event| event).unwrap();
+    let window = ui.window_with_queue("cascade", RECT, &button, Some(queue.as_com_ref())).unwrap();
     window.set_visibility(Visibility::Hidden).unwrap();
     let app = TestApp::new((0, window.clone()), events, |(observed, window), event| {
         if event == WindowEvent::Hidden {
@@ -507,7 +507,7 @@ fn failed_post_preserves_committed_widget_state_and_requires_a_new_frame() {
     let (events_tx, events) = std::sync::mpsc::channel();
     let (renderer, _) = renderer();
     let mut reject_next = true;
-    let sink = <NumberSinkAbi as neocogi_com::events::MessageSinkInterface>::receiver(move |neocogi_ui::number::Event::Changed(event)| {
+    let queue = <NumberEventQueueAbi as neocogi_com::events::EventQueueInterface>::receiver(move |_origin, neocogi_ui::number::Event::Changed(event)| {
         // A receiver may reject one post and recover without changing the
         // widget's construction-time destination or undoing its committed value.
         match std::mem::replace(&mut reject_next, false) {
@@ -521,7 +521,7 @@ fn failed_post_preserves_committed_widget_state_and_requires_a_new_frame() {
     .unwrap();
     let number = ui
         .widgets()
-        .number_with_sink(NumberOptions { value: 9.0, step: 1.0, precision: 0 }, Some(sink.as_com_ref()))
+        .number_with_queue(NumberOptions { value: 9.0, step: 1.0, precision: 0 }, Some(queue.as_com_ref()))
         .unwrap();
     let window = ui.window("post failure", RECT, &number).unwrap();
     ui.update(SIZE).unwrap();
@@ -544,13 +544,13 @@ fn failed_post_preserves_committed_widget_state_and_requires_a_new_frame() {
 #[test]
 fn failed_lifecycle_post_preserves_visibility_and_returns_its_receiver_error() {
     /// Foreign consumer rejects this committed lifecycle fact without enqueueing it.
-    fn reject(_: WindowEvent) -> Result<(), NcStatus> {
+    fn reject(_: neocogi_com::WeakComPtr<IWindowAbi>, _: WindowEvent) -> Result<(), NcStatus> {
         Err(NC_E_INVALID_ARG)
     }
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let button = ui.widgets().button_unobserved("lifecycle").unwrap();
-    let sink = <IWindowSinkAbi as neocogi_com::events::MessageSinkInterface>::receiver(reject).unwrap();
-    let window = ui.window_with_sink("post failure", RECT, &button, Some(sink.as_com_ref())).unwrap();
+    let queue = <IWindowEventQueueAbi as neocogi_com::events::EventQueueInterface>::receiver(reject).unwrap();
+    let window = ui.window_with_queue("post failure", RECT, &button, Some(queue.as_com_ref())).unwrap();
     assert_eq!(window.set_visibility(Visibility::Hidden), Err(NC_E_INVALID_ARG));
     assert_eq!(window.snapshot().unwrap().visibility, Visibility::Hidden);
 

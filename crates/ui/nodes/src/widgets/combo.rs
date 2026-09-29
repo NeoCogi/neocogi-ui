@@ -265,9 +265,16 @@ impl Combo {
         resources: crate::widget_object::SharedAssets,
         menu: ComPtr<IChoiceMenuAbi>,
         placeholder: String,
+        forwarder: Option<neocogi_com::LocalCom<ComboEventForwarder>>,
     ) -> Result<ComPtr<ComboAbi>, NcStatus> {
         let value = Self::build(host, &resources, menu, placeholder)?;
-        Ok(Self::from_value(value).query().expect("Combo declares its callable class contract"))
+        Self::from_value_cyclic::<ComboAbi>(move |origin| {
+            if let Some(forwarder) = forwarder {
+                forwarder.try_borrow_mut().expect("unpublished event forwarder is idle").origin = Some(origin);
+            }
+            value
+        })?
+        .query()
     }
 
     /// Builds one header with runtime-shared resources and no semantic-state mirror.
@@ -359,5 +366,31 @@ impl neocogi_ui_nodes_contracts::Combo for Combo {
     /// Resolves one exact named font before replacing the Combo's selection.
     fn set_named_font(&mut self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         set_direct_named_font(self, name)
+    }
+}
+
+/// Private composition bridge: the core menu emits its own origin, while the
+/// application observes the public Combo. No event payload is copied here.
+#[neocogi_com::com_object(neocogi_ui_core_contracts::IChoiceMenuEventQueue)]
+pub(crate) struct ComboEventForwarder {
+    /// Final application queue, fixed before the private menu is created.
+    pub(crate) queue: ComPtr<neocogi_ui_nodes_contracts::ComboEventQueueAbi>,
+    /// Filled exactly once by the enclosing Combo constructor, before publication.
+    /// No public method can replace this origin or its queue.
+    pub(crate) origin: Option<neocogi_com::WeakComPtr<ComboAbi>>,
+}
+impl neocogi_ui_core_contracts::IChoiceMenuEventQueue for ComboEventForwarder {
+    /// Forwards the borrowed snapshot with the public identity, without entering
+    /// either object's widget state or performing application behavior.
+    fn post(
+        &mut self,
+        _origin: neocogi_com::ComRef<'_, IChoiceMenuAbi>,
+        event: neocogi_com::NcValueRef<'_, neocogi_ui_core_contracts::IChoiceMenuEvent>,
+    ) -> Result<(), NcStatus> {
+        let origin = match &self.origin {
+            Some(origin) => origin.upgrade()?.ok_or(neocogi_com::NC_E_CLOSED)?,
+            None => return Err(neocogi_com::NC_E_BUSY),
+        };
+        self.queue.post(origin.as_com_ref(), event)
     }
 }

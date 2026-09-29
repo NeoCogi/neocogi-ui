@@ -221,12 +221,15 @@ impl ListBox {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         label: NcCopyFromBufferOffset<'_, u8>,
-        sink: Option<ComPtr<neocogi_ui_nodes_contracts::ListBoxSinkAbi>>,
+        queue: Option<ComPtr<neocogi_ui_nodes_contracts::ListBoxEventQueueAbi>>,
     ) -> Result<ComPtr<ListBoxAbi>, NcStatus> {
         let mut value = Self::build(host, label, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
-        value.events = neocogi_com::events::EventPort::with_sink(sink);
-        Ok(Self::from_value(value).query().expect("ListBox declares its callable class contract"))
+        Self::from_value_cyclic::<ListBoxAbi>(move |origin| {
+            value.events = neocogi_com::events::EventPort::with_queue(queue, origin);
+            value
+        })?
+        .query()
     }
 
     /// Builds one list box with either directly imported or runtime-shared resources.

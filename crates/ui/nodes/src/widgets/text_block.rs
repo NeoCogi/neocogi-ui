@@ -341,10 +341,15 @@ impl neocogi_ui_nodes_contracts::TextBlock for TextBlock {
 #[cfg(all(test, target_pointer_width = "64"))]
 #[test]
 fn com_object_control_is_independent_of_interface_count() {
-    // Refcount, padding and the shared call guard occupy 16 bytes on this target.
+    // The call gate occupies one word in the payload. Arc owns its private
+    // strong/weak header outside this storage; this is not total allocation size.
     // No per-interface fields remain; handles carry their selected tables.
     assert_eq!(TextBlock::COM_INTERFACE_COUNT, 4);
-    println!("TextBlock: state={}, allocation={}", core::mem::size_of::<TextBlock>(), core::mem::size_of::<TextBlockComObject>());
-    assert_eq!(core::mem::offset_of!(TextBlockComObject, value), 16);
-    assert_eq!(core::mem::size_of::<TextBlockComObject>(), core::mem::size_of::<TextBlock>() + 16);
+    println!(
+        "TextBlock: state={}, payload={}",
+        core::mem::size_of::<TextBlock>(),
+        core::mem::size_of::<TextBlockComObject>()
+    );
+    assert_eq!(core::mem::offset_of!(TextBlockComObject, value), 8);
+    assert_eq!(core::mem::size_of::<TextBlockComObject>(), core::mem::size_of::<TextBlock>() + 8);
 }

@@ -1384,7 +1384,7 @@ impl WindowManager {
         window: Window,
         options: WindowOption,
         visible: bool,
-        sink: Option<neocogi_com::ComPtr<neocogi_ui_core_contracts::IWindowSinkAbi>>,
+        queue: Option<neocogi_ui_core_contracts::IWindowEventPort>,
     ) -> WindowHandle {
         // Public child/dialog entry points authenticate and classify the owner before moving the
         // Window here. Keep registration infallible after that transfer: this is the boundary that
@@ -1399,7 +1399,7 @@ impl WindowManager {
 
         // The handle copies only identity. The forest owns the optional destination directly.
         let id = RootId::allocate();
-        let events = neocogi_com::events::EventPort::with_sink(sink);
+        let events = queue.unwrap_or_default();
         self.surfaces.insert_root(SurfaceNode {
             key: SurfaceKey::Root(id),
             parent: parent.map(SurfaceKey::Root),
@@ -1427,9 +1427,9 @@ impl WindowManager {
     }
 
     /// Creates an open independent window from one complete retained definition.
-    pub fn create_window(&mut self, window: Window, sink: Option<neocogi_com::ComPtr<neocogi_ui_core_contracts::IWindowSinkAbi>>) -> WindowHandle {
+    pub fn create_window(&mut self, window: Window, queue: Option<neocogi_ui_core_contracts::IWindowEventPort>) -> WindowHandle {
         // Independent construction has no fallible owner edge.
-        self.register_window(RootMode::Normal { layer: DEFAULT_LAYER }, None, window, WindowOption::FRAME, true, sink)
+        self.register_window(RootMode::Normal { layer: DEFAULT_LAYER }, None, window, WindowOption::FRAME, true, queue)
     }
 
     /// Creates one visible ordinary window structurally owned by `parent`.
@@ -1438,7 +1438,7 @@ impl WindowManager {
         &mut self,
         parent: &WindowHandle,
         window: Window,
-        sink: Option<neocogi_com::ComPtr<neocogi_ui_core_contracts::IWindowSinkAbi>>,
+        queue: Option<neocogi_ui_core_contracts::IWindowEventPort>,
     ) -> Result<WindowHandle, SurfaceCreationError<Window>> {
         // Authenticate and classify the parent while `window` remains local. On either validation
         // failure, move that exact value into the concrete error instead of dropping its unique
@@ -1447,7 +1447,7 @@ impl WindowManager {
             Ok(parent) => parent,
             Err(reason) => return Err(SurfaceCreationError::new(reason, window)),
         };
-        Ok(self.register_window(RootMode::Child, Some(parent), window, WindowOption::FRAME, true, sink))
+        Ok(self.register_window(RootMode::Child, Some(parent), window, WindowOption::FRAME, true, queue))
     }
 
     /// Creates a hidden modal dialog directly owned by an independent or structural child window.
@@ -1456,7 +1456,7 @@ impl WindowManager {
         &mut self,
         owner: &WindowHandle,
         window: Window,
-        sink: Option<neocogi_com::ComPtr<neocogi_ui_core_contracts::IWindowSinkAbi>>,
+        queue: Option<neocogi_ui_core_contracts::IWindowEventPort>,
     ) -> Result<WindowHandle, SurfaceCreationError<Window>> {
         // A dialog accepts the same ordinary owner roles as a structural child but reports its own
         // policy reason. Keep the Window untouched until both capability and role checks pass.
@@ -1464,7 +1464,7 @@ impl WindowManager {
             Ok(owner) => owner,
             Err(reason) => return Err(SurfaceCreationError::new(reason, window)),
         };
-        Ok(self.register_window(RootMode::Modal, Some(owner), window, WindowOption::FRAME, false, sink))
+        Ok(self.register_window(RootMode::Modal, Some(owner), window, WindowOption::FRAME, false, queue))
     }
 
     /// Creates a hidden top-level popup definition inside one window or dialog.
@@ -1474,7 +1474,7 @@ impl WindowManager {
         owner: &WindowHandle,
         name: &str,
         content: Node,
-        sink: Option<neocogi_com::ComPtr<neocogi_ui_core_contracts::IPopupSinkAbi>>,
+        queue: Option<neocogi_ui_core_contracts::IPopupEventPort>,
     ) -> Result<PopupHandle, SurfaceCreationError<Node>> {
         // Resolve the authenticated window capability while the Node is still owned locally. Once
         // validation succeeds, application-popup registration is an infallible ownership transfer.
@@ -1484,7 +1484,7 @@ impl WindowManager {
         };
         // A top-level popup's sole parent edge points directly to its owning root.
         let surface = Surface::new(name.to_owned(), Self::default_popup_options(), Recti::default(), content);
-        Ok(self.register_application_popup(SurfaceKey::Root(owner), surface, sink))
+        Ok(self.register_application_popup(SurfaceKey::Root(owner), surface, queue))
     }
 
     /// Creates a hidden standalone menu popup inside one window or dialog.
@@ -1493,7 +1493,7 @@ impl WindowManager {
         &mut self,
         owner: &WindowHandle,
         menu: crate::Menu,
-        sink: Option<neocogi_com::ComPtr<neocogi_ui_core_contracts::IPopupSinkAbi>>,
+        queue: Option<neocogi_ui_core_contracts::IPopupEventPort>,
     ) -> Result<PopupHandle, SurfaceCreationError<crate::Menu>> {
         // Authenticate while the complete recursive declaration remains recoverable by the caller.
         let owner = match self.window_id(owner) {
@@ -1502,7 +1502,7 @@ impl WindowManager {
         };
         let (name, entries) = menu.into_parts();
         let (rows, children) = Self::consume_menu_entries(entries);
-        let handle = self.register_application_popup(SurfaceKey::Root(owner), Surface::menu(name, MenuSurface::new(rows, true)), sink);
+        let handle = self.register_application_popup(SurfaceKey::Root(owner), Surface::menu(name, MenuSurface::new(rows, true)), queue);
 
         // Nested declarations retain the same relational children used beneath a menu-bar heading.
         // Only the root popup has an application handle and exact screen anchor.
@@ -1653,15 +1653,10 @@ impl WindowManager {
     }
 
     /// Registers one application-addressable popup below an already validated root.
-    fn register_application_popup(
-        &mut self,
-        parent: SurfaceKey,
-        surface: Surface,
-        sink: Option<neocogi_com::ComPtr<neocogi_ui_core_contracts::IPopupSinkAbi>>,
-    ) -> PopupHandle {
+    fn register_application_popup(&mut self, parent: SurfaceKey, surface: Surface, queue: Option<neocogi_ui_core_contracts::IPopupEventPort>) -> PopupHandle {
         let id = PopupId::allocate();
         // The forest record owns delivery; the handle needs only its existing lookup identity.
-        let events = neocogi_com::events::EventPort::with_sink(sink);
+        let events = queue.unwrap_or_default();
         self.surfaces.insert_popup(SurfaceNode {
             key: SurfaceKey::Popup(id),
             parent: Some(parent),

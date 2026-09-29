@@ -2,12 +2,12 @@
 
 use super::*;
 use neocogi_ui_support::test_support::events::TestApp;
-use neocogi_ui_core_contracts::{Activation, IMenuItemSinkAbi};
+use neocogi_ui_core_contracts::Activation;
 
 /// A typed fixture sender and its one application inbox, created together.
 struct Emitter {
-    /// Real COM receiver performs owned decoding before posting into the inbox.
-    source: ComPtr<IMenuItemSinkAbi>,
+    /// Private Rust queue injects owned fixture messages into real composite dispatch.
+    source: std::sync::mpsc::Sender<Activation>,
     /// Moved once into the owning controller; subsequent setup is rejected by the fixture.
     messages: Option<std::sync::mpsc::Receiver<Activation>>,
 }
@@ -15,7 +15,7 @@ impl Emitter {
     /// Constructs complete delivery before any component can publish this source.
     fn create() -> Self {
         let (send, messages) = std::sync::mpsc::channel();
-        let source = neocogi_ui::events::activation::sink(send, |event| event).unwrap();
+        let source = send;
         Self { source, messages: Some(messages) }
     }
 }
@@ -28,7 +28,7 @@ struct PrivateRecord {
     /// Component name used to prove child/surface ordering at the boundary.
     name: &'static str,
     /// Optional public output makes upward delivery explicit rather than exposing child events.
-    forward: Option<ComPtr<IMenuItemSinkAbi>>,
+    forward: Option<std::sync::mpsc::Sender<Activation>>,
     /// One ordinary tree edit, consumed before entering foreign topology code.
     edit: Edit,
 }
@@ -38,9 +38,7 @@ impl PrivateRecord {
     fn handle(&mut self, trace: &Trace) -> Result<(), NcStatus> {
         trace.borrow_mut().push(self.name);
         if let Some(source) = &self.forward {
-            source
-                .clone()
-                .post(neocogi_com::NcValueRef::new(&Activation { label: self.name.into() }).unwrap())?;
+            let _ = source.send(Activation { label: self.name.into() });
         }
         // A consumed edit cannot repeat during a later dispatch sweep.
         match std::mem::replace(&mut self.edit, Edit::None) {
@@ -90,23 +88,24 @@ fn component(
     trace: &Trace,
     name: &'static str,
     source: &mut Emitter,
-    forward: Option<ComPtr<IMenuItemSinkAbi>>,
+    forward: Option<std::sync::mpsc::Sender<Activation>>,
     edit: Edit,
 ) -> (neocogi_ui::Widget<IWidgetAbi>, neocogi_ui::LinearWidget) {
     let messages = source.messages.take().expect("one consumer per fixture source");
     let (widget, shell) = super::composite_fixture::Composite::build(
-        ui, Consumer { trace: trace.clone(), record: PrivateRecord { name, forward, edit } }, messages,
+        ui,
+        Consumer {
+            trace: trace.clone(),
+            record: PrivateRecord { name, forward, edit },
+        },
+        messages,
     );
     (neocogi_ui::Widget::from_interface(widget.query().unwrap()), shell)
 }
 
 /// Emits a captured fixture fact without entering any application callback.
 fn emit(source: &Emitter) {
-    source
-        .source
-        .clone()
-        .post(neocogi_com::NcValueRef::new(&Activation { label: "fixture".into() }).unwrap())
-        .unwrap();
+    let _ = source.source.send(Activation { label: "fixture".into() });
 }
 
 /// Three actual component levels forward upward before the application, with no manual child pumping.

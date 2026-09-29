@@ -143,12 +143,12 @@ impl SplitView {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         settings: SplitOptions,
-        sink: Option<ComPtr<neocogi_ui_nodes_contracts::SplitViewSinkAbi>>,
+        queue: Option<ComPtr<neocogi_ui_nodes_contracts::SplitViewEventQueueAbi>>,
     ) -> Result<ComPtr<SplitViewAbi>, NcStatus> {
         validate(settings)?;
         let editor = host.create_children()?;
         let runtime = WidgetRuntime::for_resources(host, WidgetOption::NONE, Some(&resources))?;
-        let value = Self {
+        let mut value = Self {
             runtime,
             editor,
             count: 0,
@@ -156,9 +156,13 @@ impl SplitView {
             partition: Partition::default(),
             drag: Drag::Idle,
             pointer: None,
-            events: neocogi_com::events::EventPort::with_sink(sink),
+            events: Default::default(),
         };
-        Ok(Self::from_value(value).query().expect("SplitView declares its concrete contract"))
+        Self::from_value_cyclic::<SplitViewAbi>(move |origin| {
+            value.events = neocogi_com::events::EventPort::with_queue(queue, origin);
+            value
+        })?
+        .query()
     }
 
     /// Retires geometry and gesture state after a committed topology or policy edit.

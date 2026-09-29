@@ -28,7 +28,7 @@
 //! }
 //! ```
 /// Installs a typed COM mapping into a standard application or component channel.
-pub use neocogi_com::events::mapped_sink;
+pub use neocogi_com::events::mapped_queue;
 
 /// Owned application fixtures for integration tests, without borrowed callback adapters.
 #[cfg(feature = "test-support")]
@@ -91,42 +91,38 @@ fn valid_file_dialog_path(event: &FileDialogCompletion) -> Result<(), NcStatus> 
     completed_file_path(event).map(|_| ())
 }
 
-/// Generated connectors are exercised against checked foreign producer calls.
-#[cfg(test)]
-mod connector_tests;
-
-/// Adds the standard channel transport to one generated sink contract.
+/// Adds the standard channel transport to one generated queue contract.
 /// The mapper executes during posting; owner state is handled when its inbox drains.
-macro_rules! widget_sink {
+macro_rules! widget_queue {
     ($module:ident, $event:path, $abi:ident, $validate:expr) => {
-        /// Construction-time sink and owned event variants for this widget.
+        /// Construction-time queue and owned event variants for this widget.
         pub mod $module {
             use super::*;
             /// The IDL-derived local sum of this widget's output payloads.
             pub use $event as Event;
 
-            /// Creates one sink containing its sender and mapper inline.
+            /// Creates one queue containing its sender and mapper inline.
             /// A disconnected owner discards future messages without failing UI input.
-            pub fn sink<M: 'static>(
+            pub fn queue<M: 'static>(
                 sender: std::sync::mpsc::Sender<M>,
                 mut map: impl FnMut(Event) -> M + 'static,
             ) -> Result<neocogi_com::ComPtr<$abi>, NcStatus> {
-                filter_sink(sender, move |event| Some(map(event)))
+                filter_queue(sender, move |event| Some(map(event)))
             }
 
             /// Checks the concrete event domain independently of its consumer or transport.
-            /// Form-owned sinks call this same boundary check before queueing events.
+            /// Form-owned queues call this same boundary check before queueing events.
             pub fn validate(event: &Event) -> Result<(), NcStatus> {
                 ($validate)(event)
             }
 
-            /// Creates an sink that can ignore output variants before queueing.
+            /// Creates an queue that can ignore output variants before queueing.
             /// Domain checks run before the mapper, including for ignored variants.
-            pub fn filter_sink<M: 'static>(
+            pub fn filter_queue<M: 'static>(
                 sender: std::sync::mpsc::Sender<M>,
                 mut map: impl FnMut(Event) -> Option<M> + 'static,
             ) -> Result<neocogi_com::ComPtr<$abi>, NcStatus> {
-                <$abi as neocogi_com::events::MessageSinkInterface>::receiver(move |event| {
+                <$abi as neocogi_com::events::EventQueueInterface>::receiver(move |_origin, event| {
                     validate(&event)?;
                     if let Some(message) = map(event) {
                         let _ = sender.send(message);
@@ -137,78 +133,91 @@ macro_rules! widget_sink {
         }
     };
 }
-widget_sink!(button, neocogi_ui_nodes_contracts::ButtonEvent, ButtonSinkAbi, |_: &Event| Ok::<(), NcStatus>(
-    ()
-));
-widget_sink!(checkbox, neocogi_ui_nodes_contracts::CheckboxEvent, CheckboxSinkAbi, |_: &Event| Ok::<
+widget_queue!(button, neocogi_ui_nodes_contracts::ButtonEvent, ButtonEventQueueAbi, |_: &Event| Ok::<
     (),
     NcStatus,
 >(()));
-widget_sink!(textbox, neocogi_ui_nodes_contracts::TextboxEvent, TextboxSinkAbi, |event: &Event| match event {
-    Event::Changed(value) => valid_text_cursor(&value.text, value.cursor),
-    Event::Submitted(_) => Ok(()),
-});
-widget_sink!(
-    text_area,
-    neocogi_ui_nodes_contracts::TextAreaEvent,
-    TextAreaSinkAbi,
+widget_queue!(checkbox, neocogi_ui_nodes_contracts::CheckboxEvent, CheckboxEventQueueAbi, |_: &Event| Ok::<
+    (),
+    NcStatus,
+>(()));
+widget_queue!(
+    textbox,
+    neocogi_ui_nodes_contracts::TextboxEvent,
+    TextboxEventQueueAbi,
     |event: &Event| match event {
         Event::Changed(value) => valid_text_cursor(&value.text, value.cursor),
         Event::Submitted(_) => Ok(()),
     }
 );
-widget_sink!(slider, neocogi_ui_nodes_contracts::SliderEvent, SliderSinkAbi, |event: &Event| match event {
-    Event::Changed(value) => valid_numeric(value),
-});
-widget_sink!(number, neocogi_ui_nodes_contracts::NumberEvent, NumberSinkAbi, |event: &Event| match event {
-    Event::Changed(value) => valid_numeric(value),
-});
-widget_sink!(list_item, neocogi_ui_nodes_contracts::ListItemEvent, ListItemSinkAbi, |_: &Event| Ok::<
+widget_queue!(
+    text_area,
+    neocogi_ui_nodes_contracts::TextAreaEvent,
+    TextAreaEventQueueAbi,
+    |event: &Event| match event {
+        Event::Changed(value) => valid_text_cursor(&value.text, value.cursor),
+        Event::Submitted(_) => Ok(()),
+    }
+);
+widget_queue!(
+    slider,
+    neocogi_ui_nodes_contracts::SliderEvent,
+    SliderEventQueueAbi,
+    |event: &Event| match event {
+        Event::Changed(value) => valid_numeric(value),
+    }
+);
+widget_queue!(
+    number,
+    neocogi_ui_nodes_contracts::NumberEvent,
+    NumberEventQueueAbi,
+    |event: &Event| match event {
+        Event::Changed(value) => valid_numeric(value),
+    }
+);
+widget_queue!(list_item, neocogi_ui_nodes_contracts::ListItemEvent, ListItemEventQueueAbi, |_: &Event| Ok::<
     (),
     NcStatus,
 >(()));
-widget_sink!(
-    list_box,
-    neocogi_ui_nodes_contracts::ListBoxEvent,
-    ListBoxSinkAbi,
-    |_: &Event| Ok::<(), NcStatus>(())
-);
-widget_sink!(
+widget_queue!(list_box, neocogi_ui_nodes_contracts::ListBoxEvent, ListBoxEventQueueAbi, |_: &Event| Ok::<
+    (),
+    NcStatus,
+>(()));
+widget_queue!(
     scrollbar,
     neocogi_ui_nodes_contracts::ScrollbarEvent,
-    ScrollbarSinkAbi,
+    ScrollbarEventQueueAbi,
     |event: &Event| match event {
         Event::Changed(value) => valid_scrollbar(value),
     }
 );
-widget_sink!(
+widget_queue!(
     split_view,
     neocogi_ui_nodes_contracts::SplitViewEvent,
-    SplitViewSinkAbi,
+    SplitViewEventQueueAbi,
     |event: &Event| match event {
         Event::Changed(value) => valid_split(value),
     }
 );
-widget_sink!(
-    combo,
-    neocogi_ui_core_contracts::IChoiceMenuEvent,
-    ComboSinkAbi,
-    |_: &Event| Ok::<(), NcStatus>(())
-);
-widget_sink!(
+widget_queue!(combo, neocogi_ui_core_contracts::IChoiceMenuEvent, ComboEventQueueAbi, |_: &Event| Ok::<
+    (),
+    NcStatus,
+>(()));
+widget_queue!(
     file_dialog,
     neocogi_ui_core_contracts::IFileDialogEvent,
-    IFileDialogSinkAbi,
+    IFileDialogEventQueueAbi,
     |event: &Event| match event {
         Event::Completed(value) => valid_file_dialog_path(value),
     }
 );
 
-widget_sink!(window, neocogi_ui_core_contracts::WindowEvent, IWindowSinkAbi, valid_window_event);
-widget_sink!(popup, neocogi_ui_core_contracts::PopupDismissed, IPopupSinkAbi, |_: &Event| Ok::<(), NcStatus>(
-    ()
-));
-widget_sink!(activation, neocogi_ui_core_contracts::Activation, IMenuItemSinkAbi, |_: &Event| Ok::<
+widget_queue!(window, neocogi_ui_core_contracts::WindowEvent, IWindowEventQueueAbi, valid_window_event);
+widget_queue!(popup, neocogi_ui_core_contracts::PopupDismissed, IPopupEventQueueAbi, |_: &Event| Ok::<
+    (),
+    NcStatus,
+>(()));
+widget_queue!(activation, neocogi_ui_core_contracts::Activation, IMenuItemEventQueueAbi, |_: &Event| Ok::<
     (),
     NcStatus,
 >(()));

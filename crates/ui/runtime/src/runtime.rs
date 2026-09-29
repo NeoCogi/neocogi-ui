@@ -214,7 +214,7 @@ impl IChoiceMenus for Runtime {
         selection: ChoiceSelectionAbi,
         events: neocogi_com::NcValueRef<'_, IChoiceMenuEventBinding>,
     ) -> Result<ComPtr<IChoiceMenuAbi>, NcStatus> {
-        choices::create_choice_menu(&self.storage, parent, menu_text, entries, selection, events.to_owned()?.into_sink())
+        choices::create_choice_menu(&self.storage, parent, menu_text, entries, selection, events.to_owned()?.into_queue())
     }
 }
 
@@ -471,7 +471,12 @@ impl Runtime {
 
     /// Settles descendants and layout before consuming one application message.
     /// Every topology change invalidates the snapshot before another widget can be dispatched.
-    fn dispatch_boundary(&self, dispatcher: Option<ComRef<'_, IApplicationDispatcherAbi>>, dimensions: Dimensioni, remaining: &mut u32) -> Result<(), NcStatus> {
+    fn dispatch_boundary(
+        &self,
+        dispatcher: Option<ComRef<'_, IApplicationDispatcherAbi>>,
+        dimensions: Dimensioni,
+        remaining: &mut u32,
+    ) -> Result<(), NcStatus> {
         loop {
             // Exhaustion stops before another dequeue. Reaching the exact ceiling also
             // returns LIMIT: proving quiescence would require inspecting foreign queues.

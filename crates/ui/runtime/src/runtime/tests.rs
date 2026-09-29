@@ -2,8 +2,8 @@
 use super::*;
 use neocogi_ui_nodes_contracts::*;
 use neocogi_com::{INcStringComPtrExt, NC_E_BUSY, NcCopyToBufferOffset};
-mod containers;
 mod composite_fixture;
+mod containers;
 mod embedded_input;
 mod widget_flags;
 
@@ -234,9 +234,7 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
         .unwrap();
     let _disclosure = factory.create_disclosure(label, DisclosureStyle::Header, false).unwrap();
     let content = button.query::<IWidgetAbi>().unwrap();
-    let _scroll = factory
-        .create_scroll_area(content.as_com_ref(), true)
-        .unwrap();
+    let _scroll = factory.create_scroll_area(content.as_com_ref(), true).unwrap();
     let area = factory
         .create_text_area(
             label,
@@ -936,51 +934,19 @@ fn child_editor_validates_before_claiming_and_closes_retained_views() {
     let view = editor.view().unwrap();
     assert_eq!(view.query::<IChildrenEditorAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     assert_eq!(
-        editor.insert(
-            1,
-            first.query::<IWidgetAbi>().unwrap().as_com_ref()
-        ),
+        editor.insert(1, first.query::<IWidgetAbi>().unwrap().as_com_ref()),
         Err(neocogi_com::NC_E_OUT_OF_RANGE)
     );
+    assert_eq!(editor.insert(0, foreign.query::<IWidgetAbi>().unwrap().as_com_ref()), Err(UI_E_OWNER));
+    editor.insert(0, first.query::<IWidgetAbi>().unwrap().as_com_ref()).unwrap().finish().unwrap();
+    assert_eq!(editor.insert(1, first.query::<IWidgetAbi>().unwrap().as_com_ref()), Err(UI_E_OWNER));
     assert_eq!(
-        editor.insert(
-            0,
-            foreign.query::<IWidgetAbi>().unwrap().as_com_ref()
-        ),
-        Err(UI_E_OWNER)
-    );
-    editor
-        .insert(
-            0,
-            first.query::<IWidgetAbi>().unwrap().as_com_ref(),
-        )
-        .unwrap()
-        .finish()
-        .unwrap();
-    assert_eq!(
-        editor.insert(
-            1,
-            first.query::<IWidgetAbi>().unwrap().as_com_ref()
-        ),
-        Err(UI_E_OWNER)
-    );
-    assert_eq!(
-        editor.replace(
-            1,
-            second.query::<IWidgetAbi>().unwrap().as_com_ref()
-        ),
+        editor.replace(1, second.query::<IWidgetAbi>().unwrap().as_com_ref()),
         Err(neocogi_com::NC_E_OUT_OF_RANGE)
     );
     assert_eq!(view.child_count().unwrap(), 1);
     let held_child = view.child(0).unwrap();
-    editor
-        .replace(
-            0,
-            second.query::<IWidgetAbi>().unwrap().as_com_ref(),
-        )
-        .unwrap()
-        .finish()
-        .unwrap();
+    editor.replace(0, second.query::<IWidgetAbi>().unwrap().as_com_ref()).unwrap().finish().unwrap();
     assert_eq!(held_child.properties(), Err(UI_E_CLOSED));
     assert_eq!(view.child_count().unwrap(), 1);
     drop(editor);
@@ -1006,21 +972,9 @@ fn child_edit_reports_committed_topology_separately_from_teardown_failure() {
         runtime: runtime.clone(),
         probe: probe.clone(),
     });
-    editor
-        .insert(
-            0,
-            object.query::<IWidgetAbi>().unwrap().as_com_ref(),
-        )
-        .unwrap()
-        .finish()
-        .unwrap();
+    editor.insert(0, object.query::<IWidgetAbi>().unwrap().as_com_ref()).unwrap().finish().unwrap();
     let replacement = self::button(&runtime);
-    let outcome = editor
-        .replace(
-            0,
-            replacement.query::<IWidgetAbi>().unwrap().as_com_ref(),
-        )
-        .unwrap();
+    let outcome = editor.replace(0, replacement.query::<IWidgetAbi>().unwrap().as_com_ref()).unwrap();
     assert_eq!(outcome.finish(), Err(NC_E_INVALID_ARG));
     assert_eq!(probe.closes.get(), 1);
     assert_eq!(view.child_count().unwrap(), 1);
@@ -1402,6 +1356,7 @@ fn builtin_scoped_paint_preserves_alignment_with_inline_semantic_state() {
 }
 
 mod component_events;
+mod event_queues;
 mod events;
 mod widget_dispatch;
 

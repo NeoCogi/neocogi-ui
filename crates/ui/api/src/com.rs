@@ -21,13 +21,13 @@ pub mod nodes {
 }
 pub use neocogi_ui_nodes_contracts::{
     TextAreaEventBinding, CheckboxEventBinding, TextboxEventBinding, SliderEventBinding, NumberEventBinding, ListItemEventBinding, ListBoxEventBinding,
-    ScrollbarEventBinding, ButtonEventBinding, ComboEventBinding, SplitViewEventBinding, ComboSinkAbi, ButtonSinkAbi, CheckboxSinkAbi, TextboxSinkAbi,
-    TextAreaSinkAbi, SliderSinkAbi, NumberSinkAbi, ListItemSinkAbi, ListBoxSinkAbi, ScrollbarSinkAbi, SplitViewSinkAbi, Button, ButtonAbi, Checkbox,
-    CheckboxAbi, ChildCrossSize, ColorSwatch, ColorSwatchAbi, Combo, ComboAbi, ContentIcon, CrossSize, CrossSizeAbi, Disclosure, DisclosureAbi,
-    DisclosureStyle, FillStates, FlowDirection, Grid, GridAbi, GridExtent, LayoutTrack, LayoutTrackAbi, Linear, LinearAbi, LinearEdge, ListBox, ListBoxAbi,
-    ListItem, ListItemAbi, Number, NumberAbi, NumberOptions, ScrollArea, ScrollAreaAbi, ScrollAxis, ScrollRange, Scrollbar, ScrollbarAbi, Slider, FormAbi,
-    SliderAbi, SliderOptions, SplitAxis, SplitChanged, SplitOptions, SplitView, SplitViewAbi, TextArea, TextAreaAbi, TextBlock, TextBlockAbi, Textbox,
-    TextboxAbi, UiFactory, UiFactoryAbi,
+    ScrollbarEventBinding, ButtonEventBinding, ComboEventBinding, SplitViewEventBinding, ComboEventQueueAbi, ButtonEventQueueAbi, CheckboxEventQueueAbi,
+    TextboxEventQueueAbi, TextAreaEventQueueAbi, SliderEventQueueAbi, NumberEventQueueAbi, ListItemEventQueueAbi, ListBoxEventQueueAbi, ScrollbarEventQueueAbi,
+    SplitViewEventQueueAbi, Button, ButtonAbi, Checkbox, CheckboxAbi, ChildCrossSize, ColorSwatch, ColorSwatchAbi, Combo, ComboAbi, ContentIcon, CrossSize,
+    CrossSizeAbi, Disclosure, DisclosureAbi, DisclosureStyle, FillStates, FlowDirection, Grid, GridAbi, GridExtent, LayoutTrack, LayoutTrackAbi, Linear,
+    LinearAbi, LinearEdge, ListBox, ListBoxAbi, ListItem, ListItemAbi, Number, NumberAbi, NumberOptions, ScrollArea, ScrollAreaAbi, ScrollAxis, ScrollRange,
+    Scrollbar, ScrollbarAbi, Slider, FormAbi, SliderAbi, SliderOptions, SplitAxis, SplitChanged, SplitOptions, SplitView, SplitViewAbi, TextArea, TextAreaAbi,
+    TextBlock, TextBlockAbi, Textbox, TextboxAbi, UiFactory, UiFactoryAbi,
 };
 pub use neocogi_gfx_contracts::{
     AssetLoader, AssetLoaderAbi, DrawPoint, GfxPluginFactory, GfxPluginFactoryAbi, IAssetBuilder, IAssetBuilderAbi, IGfxDiagnostics, IGfxDiagnosticsAbi,
@@ -286,33 +286,33 @@ impl WidgetFactory {
     }
 
     /// Creates a fixed multiline editor and its real scroll children with one shared offset model.
-    pub fn text_area_with_sink(
+    pub fn text_area_with_queue(
         &self,
         text: &str,
         wrapping: TextWrapping,
         scrolling: bool,
-        sink: Option<ComRef<'_, TextAreaSinkAbi>>,
+        queue: Option<ComRef<'_, TextAreaEventQueueAbi>>,
     ) -> Result<TextAreaWidget, NcStatus> {
         Ok(TextAreaWidget::from_interface(self.interface.create_text_area(
             NcCopyFromBufferOffset::new(0, text.as_bytes()),
             wrapping,
             scrolling,
-            neocogi_com::NcValueRef::new(&TextAreaEventBinding::from_sink(sink))?,
+            neocogi_com::NcValueRef::new(&TextAreaEventBinding::from_queue(queue))?,
         )?))
     }
     /// Constructs an initialized, unmounted checkbox in this runtime.
-    pub fn checkbox_with_sink(&self, label: &str, checked: bool, sink: Option<ComRef<'_, CheckboxSinkAbi>>) -> Result<CheckboxWidget, NcStatus> {
+    pub fn checkbox_with_queue(&self, label: &str, checked: bool, queue: Option<ComRef<'_, CheckboxEventQueueAbi>>) -> Result<CheckboxWidget, NcStatus> {
         Ok(CheckboxWidget::from_interface(self.interface.create_checkbox(
             checked,
             NcCopyFromBufferOffset::new(0, label.as_bytes()),
-            neocogi_com::NcValueRef::new(&CheckboxEventBinding::from_sink(sink))?,
+            neocogi_com::NcValueRef::new(&CheckboxEventBinding::from_queue(queue))?,
         )?))
     }
     /// Constructs an initialized, unmounted textbox in this runtime.
-    pub fn textbox_with_sink(&self, text: &str, sink: Option<ComRef<'_, TextboxSinkAbi>>) -> Result<TextboxWidget, NcStatus> {
+    pub fn textbox_with_queue(&self, text: &str, queue: Option<ComRef<'_, TextboxEventQueueAbi>>) -> Result<TextboxWidget, NcStatus> {
         Ok(TextboxWidget::from_interface(self.interface.create_textbox(
             NcCopyFromBufferOffset::new(0, text.as_bytes()),
-            neocogi_com::NcValueRef::new(&TextboxEventBinding::from_sink(sink))?,
+            neocogi_com::NcValueRef::new(&TextboxEventBinding::from_queue(queue))?,
         )?))
     }
     /// Constructs an initialized, unmounted text block in this runtime.
@@ -322,18 +322,18 @@ impl WidgetFactory {
         ))
     }
     /// Constructs an initialized, unmounted slider in this runtime.
-    pub fn slider_with_sink(&self, options: SliderOptions, sink: Option<ComRef<'_, SliderSinkAbi>>) -> Result<SliderWidget, NcStatus> {
-        Ok(SliderWidget::from_interface(
-            self.interface
-                .create_slider(options, neocogi_com::NcValueRef::new(&SliderEventBinding::from_sink(sink))?)?,
-        ))
+    pub fn slider_with_queue(&self, options: SliderOptions, queue: Option<ComRef<'_, SliderEventQueueAbi>>) -> Result<SliderWidget, NcStatus> {
+        Ok(SliderWidget::from_interface(self.interface.create_slider(
+            options,
+            neocogi_com::NcValueRef::new(&SliderEventBinding::from_queue(queue))?,
+        )?))
     }
     /// Constructs an initialized, unmounted number in this runtime.
-    pub fn number_with_sink(&self, options: NumberOptions, sink: Option<ComRef<'_, NumberSinkAbi>>) -> Result<NumberWidget, NcStatus> {
-        Ok(NumberWidget::from_interface(
-            self.interface
-                .create_number(options, neocogi_com::NcValueRef::new(&NumberEventBinding::from_sink(sink))?)?,
-        ))
+    pub fn number_with_queue(&self, options: NumberOptions, queue: Option<ComRef<'_, NumberEventQueueAbi>>) -> Result<NumberWidget, NcStatus> {
+        Ok(NumberWidget::from_interface(self.interface.create_number(
+            options,
+            neocogi_com::NcValueRef::new(&NumberEventBinding::from_queue(queue))?,
+        )?))
     }
     /// Constructs an initialized, unmounted color swatch in this runtime.
     pub fn color_swatch(&self, rgba: u32, label: &str) -> Result<ColorSwatchWidget, NcStatus> {
@@ -342,24 +342,24 @@ impl WidgetFactory {
         ))
     }
     /// Constructs an initialized, unmounted list item in this runtime.
-    pub fn list_item_with_sink(&self, label: &str, sink: Option<ComRef<'_, ListItemSinkAbi>>) -> Result<ListItemWidget, NcStatus> {
+    pub fn list_item_with_queue(&self, label: &str, queue: Option<ComRef<'_, ListItemEventQueueAbi>>) -> Result<ListItemWidget, NcStatus> {
         Ok(ListItemWidget::from_interface(self.interface.create_list_item(
             NcCopyFromBufferOffset::new(0, label.as_bytes()),
-            neocogi_com::NcValueRef::new(&ListItemEventBinding::from_sink(sink))?,
+            neocogi_com::NcValueRef::new(&ListItemEventBinding::from_queue(queue))?,
         )?))
     }
     /// Constructs an initialized, unmounted list box in this runtime.
-    pub fn list_box_with_sink(&self, label: &str, sink: Option<ComRef<'_, ListBoxSinkAbi>>) -> Result<ListBoxWidget, NcStatus> {
+    pub fn list_box_with_queue(&self, label: &str, queue: Option<ComRef<'_, ListBoxEventQueueAbi>>) -> Result<ListBoxWidget, NcStatus> {
         Ok(ListBoxWidget::from_interface(self.interface.create_list_box(
             NcCopyFromBufferOffset::new(0, label.as_bytes()),
-            neocogi_com::NcValueRef::new(&ListBoxEventBinding::from_sink(sink))?,
+            neocogi_com::NcValueRef::new(&ListBoxEventBinding::from_queue(queue))?,
         )?))
     }
     /// Constructs an initialized, unmounted scrollbar in this runtime.
-    pub fn scrollbar_with_sink(&self, range: ScrollRange, sink: Option<ComRef<'_, ScrollbarSinkAbi>>) -> Result<ScrollbarWidget, NcStatus> {
+    pub fn scrollbar_with_queue(&self, range: ScrollRange, queue: Option<ComRef<'_, ScrollbarEventQueueAbi>>) -> Result<ScrollbarWidget, NcStatus> {
         Ok(ScrollbarWidget::from_interface(self.interface.create_scrollbar(
             range,
-            neocogi_com::NcValueRef::new(&ScrollbarEventBinding::from_sink(sink))?,
+            neocogi_com::NcValueRef::new(&ScrollbarEventBinding::from_queue(queue))?,
         )?))
     }
 
@@ -369,11 +369,11 @@ impl WidgetFactory {
     }
 
     /// Creates and initializes an unmounted button in one concrete API operation.
-    pub fn button_with_sink(&self, label: &str, sink: Option<ComRef<'_, ButtonSinkAbi>>) -> Result<ButtonWidget, NcStatus> {
+    pub fn button_with_queue(&self, label: &str, queue: Option<ComRef<'_, ButtonEventQueueAbi>>) -> Result<ButtonWidget, NcStatus> {
         Ok(ButtonWidget::from_interface(self.interface.create_button(
             NcCopyFromBufferOffset::new(0, label.as_bytes()),
             WidgetOptions::FRAME,
-            neocogi_com::NcValueRef::new(&ButtonEventBinding::from_sink(sink))?,
+            neocogi_com::NcValueRef::new(&ButtonEventBinding::from_queue(queue))?,
         )?))
     }
 }
@@ -477,12 +477,12 @@ impl Ui {
         self.runtime.set_clipboard(clipboard)
     }
     /// Creates one complete combo box with the contract-defined fallback and selection state.
-    pub fn combo_box_with_sink<Item: AsRef<str>>(
+    pub fn combo_box_with_queue<Item: AsRef<str>>(
         &self,
         parent: ComRef<'_, IWindowAbi>,
         items: &[Item],
         selection: ChoiceSelection,
-        sink: Option<ComRef<'_, ComboSinkAbi>>,
+        queue: Option<ComRef<'_, ComboEventQueueAbi>>,
     ) -> Result<ComboWidget, NcStatus> {
         let (menu_text, entries) = encoded_combo_items(items)?;
         let combo = self.factory.interface.create_combo_box(
@@ -490,19 +490,19 @@ impl Ui {
             NcCopyFromBufferOffset::new(0, &menu_text),
             NcCopyFromBufferOffset::new(0, &entries),
             selection.into(),
-            neocogi_com::NcValueRef::new(&ComboEventBinding::from_sink(sink))?,
+            neocogi_com::NcValueRef::new(&ComboEventBinding::from_queue(queue))?,
         )?;
         Ok(ComboWidget::from_interface(combo))
     }
 
     /// Creates a combo from the generated preorder menu contract and its shared UTF-8 storage.
-    pub fn combo_menu_with_sink(
+    pub fn combo_menu_with_queue(
         &self,
         parent: ComRef<'_, IWindowAbi>,
         menu_text: &str,
         entries: &[ChoiceMenuEntry],
         selection: ChoiceSelection,
-        sink: Option<ComRef<'_, ComboSinkAbi>>,
+        queue: Option<ComRef<'_, ComboEventQueueAbi>>,
     ) -> Result<ComboWidget, NcStatus> {
         let entries = combo_menu_abi(entries);
         let combo = self.factory.interface.create_combo_box(
@@ -510,18 +510,22 @@ impl Ui {
             NcCopyFromBufferOffset::new(0, menu_text.as_bytes()),
             NcCopyFromBufferOffset::new(0, &entries),
             selection.into(),
-            neocogi_com::NcValueRef::new(&ComboEventBinding::from_sink(sink))?,
+            neocogi_com::NcValueRef::new(&ComboEventBinding::from_queue(queue))?,
         )?;
         Ok(ComboWidget::from_interface(combo))
     }
 
     /// Creates a hidden standard file picker using the actual runtime's modal and COM controls.
-    pub fn file_dialog_with_sink(&self, parent: ComRef<'_, IWindowAbi>, sink: Option<ComRef<'_, IFileDialogSinkAbi>>) -> Result<crate::FileDialog, NcStatus> {
+    pub fn file_dialog_with_queue(
+        &self,
+        parent: ComRef<'_, IWindowAbi>,
+        queue: Option<ComRef<'_, IFileDialogEventQueueAbi>>,
+    ) -> Result<crate::FileDialog, NcStatus> {
         Ok(crate::FileDialog::from_interface(
             self.factory
                 .interface
                 .query::<IFileDialogsAbi>()?
-                .create(parent, neocogi_com::NcValueRef::new(&IFileDialogEventBinding::from_sink(sink))?)?,
+                .create(parent, neocogi_com::NcValueRef::new(&IFileDialogEventBinding::from_queue(queue))?)?,
         ))
     }
 
@@ -547,82 +551,82 @@ impl Ui {
     }
     /// Mounts the actual widget object in a new logical window.
     pub fn window(&self, title: &str, rect: Rect, root: &impl Mountable) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-        self.window_with_sink(title, rect, root, None)
+        self.window_with_queue(title, rect, root, None)
     }
     /// Constructs with its final typed receiver before returning the surface.
-    pub fn window_with_sink(
+    pub fn window_with_queue(
         &self,
         title: &str,
         rect: Rect,
         root: &impl Mountable,
-        sink: Option<ComRef<'_, IWindowSinkAbi>>,
+        queue: Option<ComRef<'_, IWindowEventQueueAbi>>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.windows.create_window(
             NcCopyFromBufferOffset::new(0, title.as_bytes()),
             rect,
             root.mount_widget()?.as_com_ref(),
-            neocogi_com::NcValueRef::new(&IWindowEventBinding::from_sink(sink))?,
+            neocogi_com::NcValueRef::new(&IWindowEventBinding::from_queue(queue))?,
         )
     }
     /// Mounts a structural child under a live window from this UI.
     pub fn child_window(&self, parent: ComRef<'_, IWindowAbi>, title: &str, rect: Rect, root: &impl Mountable) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-        self.child_window_with_sink(parent, title, rect, root, None)
+        self.child_window_with_queue(parent, title, rect, root, None)
     }
     /// Constructs with its final typed receiver before returning the surface.
-    pub fn child_window_with_sink(
+    pub fn child_window_with_queue(
         &self,
         parent: ComRef<'_, IWindowAbi>,
         title: &str,
         rect: Rect,
         root: &impl Mountable,
-        sink: Option<ComRef<'_, IWindowSinkAbi>>,
+        queue: Option<ComRef<'_, IWindowEventQueueAbi>>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.windows.create_child(
             parent,
             NcCopyFromBufferOffset::new(0, title.as_bytes()),
             rect,
             root.mount_widget()?.as_com_ref(),
-            neocogi_com::NcValueRef::new(&IWindowEventBinding::from_sink(sink))?,
+            neocogi_com::NcValueRef::new(&IWindowEventBinding::from_queue(queue))?,
         )
     }
     /// Mounts a hidden modal dialog; show it after initialization with set_visibility.
     pub fn dialog(&self, parent: ComRef<'_, IWindowAbi>, title: &str, rect: Rect, root: &impl Mountable) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-        self.dialog_with_sink(parent, title, rect, root, None)
+        self.dialog_with_queue(parent, title, rect, root, None)
     }
     /// Constructs with its final typed receiver before returning the surface.
-    pub fn dialog_with_sink(
+    pub fn dialog_with_queue(
         &self,
         parent: ComRef<'_, IWindowAbi>,
         title: &str,
         rect: Rect,
         root: &impl Mountable,
-        sink: Option<ComRef<'_, IWindowSinkAbi>>,
+        queue: Option<ComRef<'_, IWindowEventQueueAbi>>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.windows.create_dialog(
             parent,
             NcCopyFromBufferOffset::new(0, title.as_bytes()),
             rect,
             root.mount_widget()?.as_com_ref(),
-            neocogi_com::NcValueRef::new(&IWindowEventBinding::from_sink(sink))?,
+            neocogi_com::NcValueRef::new(&IWindowEventBinding::from_queue(queue))?,
         )
     }
     /// Mounts a hidden auto-sized popup with a distinct popup capability.
     pub fn popup(&self, parent: ComRef<'_, IWindowAbi>, title: &str, root: &impl Mountable) -> Result<ComPtr<IPopupAbi>, NcStatus> {
-        self.popup_with_sink(parent, title, root, None)
+        self.popup_with_queue(parent, title, root, None)
     }
     /// Constructs with its final typed receiver before returning the surface.
-    pub fn popup_with_sink(
+    pub fn popup_with_queue(
         &self,
         parent: ComRef<'_, IWindowAbi>,
         title: &str,
         root: &impl Mountable,
-        sink: Option<ComRef<'_, IPopupSinkAbi>>,
+        queue: Option<ComRef<'_, IPopupEventQueueAbi>>,
     ) -> Result<ComPtr<IPopupAbi>, NcStatus> {
         self.windows.create_popup(
             parent,
             NcCopyFromBufferOffset::new(0, title.as_bytes()),
             root.mount_widget()?.as_com_ref(),
-            neocogi_com::NcValueRef::new(&IPopupEventBinding::from_sink(sink))?,
+            neocogi_com::NcValueRef::new(&IPopupEventBinding::from_queue(queue))?,
         )
     }
     /// Queues a typed host event while keeping its text buffer local to this call.
@@ -846,7 +850,7 @@ impl ListBoxWidget {
 }
 
 impl WidgetFactory {
-    /// Creates an unmounted button with one lifetime-bound sink.
+    /// Creates an unmounted button with one lifetime-bound queue.
     /// The generated adapter owns the sender and mapper; construction failure releases both.
     pub fn button<M: 'static>(
         &self,
@@ -854,15 +858,15 @@ impl WidgetFactory {
         sender: std::sync::mpsc::Sender<M>,
         map: impl FnMut(crate::button::Event) -> M + 'static,
     ) -> Result<ButtonWidget, NcStatus> {
-        let sink = crate::button::sink(sender, map)?;
-        self.button_with_sink(label, Some(sink.as_com_ref()))
+        let queue = crate::button::queue(sender, map)?;
+        self.button_with_queue(label, Some(queue.as_com_ref()))
     }
 
     /// Creates an explicitly unobserved button without allocating a destination.
     pub fn button_unobserved(&self, label: &str) -> Result<ButtonWidget, NcStatus> {
-        self.button_with_sink(label, None)
+        self.button_with_queue(label, None)
     }
-    /// Creates an unmounted checkbox with one lifetime-bound sink.
+    /// Creates an unmounted checkbox with one lifetime-bound queue.
     /// The generated adapter owns the sender and mapper; construction failure releases both.
     pub fn checkbox<M: 'static>(
         &self,
@@ -871,15 +875,15 @@ impl WidgetFactory {
         sender: std::sync::mpsc::Sender<M>,
         map: impl FnMut(crate::checkbox::Event) -> M + 'static,
     ) -> Result<CheckboxWidget, NcStatus> {
-        let sink = crate::checkbox::sink(sender, map)?;
-        self.checkbox_with_sink(label, checked, Some(sink.as_com_ref()))
+        let queue = crate::checkbox::queue(sender, map)?;
+        self.checkbox_with_queue(label, checked, Some(queue.as_com_ref()))
     }
 
     /// Creates an explicitly unobserved checkbox without allocating a destination.
     pub fn checkbox_unobserved(&self, label: &str, checked: bool) -> Result<CheckboxWidget, NcStatus> {
-        self.checkbox_with_sink(label, checked, None)
+        self.checkbox_with_queue(label, checked, None)
     }
-    /// Creates an unmounted textbox with one lifetime-bound sink.
+    /// Creates an unmounted textbox with one lifetime-bound queue.
     /// The generated adapter owns the sender and mapper; construction failure releases both.
     pub fn textbox<M: 'static>(
         &self,
@@ -887,15 +891,15 @@ impl WidgetFactory {
         sender: std::sync::mpsc::Sender<M>,
         map: impl FnMut(crate::textbox::Event) -> M + 'static,
     ) -> Result<TextboxWidget, NcStatus> {
-        let sink = crate::textbox::sink(sender, map)?;
-        self.textbox_with_sink(text, Some(sink.as_com_ref()))
+        let queue = crate::textbox::queue(sender, map)?;
+        self.textbox_with_queue(text, Some(queue.as_com_ref()))
     }
 
     /// Creates an explicitly unobserved textbox without allocating a destination.
     pub fn textbox_unobserved(&self, text: &str) -> Result<TextboxWidget, NcStatus> {
-        self.textbox_with_sink(text, None)
+        self.textbox_with_queue(text, None)
     }
-    /// Creates an unmounted text area with one lifetime-bound sink.
+    /// Creates an unmounted text area with one lifetime-bound queue.
     /// The generated adapter owns the sender and mapper; construction failure releases both.
     pub fn text_area<M: 'static>(
         &self,
@@ -905,15 +909,15 @@ impl WidgetFactory {
         sender: std::sync::mpsc::Sender<M>,
         map: impl FnMut(crate::text_area::Event) -> M + 'static,
     ) -> Result<TextAreaWidget, NcStatus> {
-        let sink = crate::text_area::sink(sender, map)?;
-        self.text_area_with_sink(text, wrapping, scrolling, Some(sink.as_com_ref()))
+        let queue = crate::text_area::queue(sender, map)?;
+        self.text_area_with_queue(text, wrapping, scrolling, Some(queue.as_com_ref()))
     }
 
     /// Creates an explicitly unobserved text area without allocating a destination.
     pub fn text_area_unobserved(&self, text: &str, wrapping: TextWrapping, scrolling: bool) -> Result<TextAreaWidget, NcStatus> {
-        self.text_area_with_sink(text, wrapping, scrolling, None)
+        self.text_area_with_queue(text, wrapping, scrolling, None)
     }
-    /// Creates an unmounted slider with one lifetime-bound sink.
+    /// Creates an unmounted slider with one lifetime-bound queue.
     /// The generated adapter owns the sender and mapper; construction failure releases both.
     pub fn slider<M: 'static>(
         &self,
@@ -921,15 +925,15 @@ impl WidgetFactory {
         sender: std::sync::mpsc::Sender<M>,
         map: impl FnMut(crate::slider::Event) -> M + 'static,
     ) -> Result<SliderWidget, NcStatus> {
-        let sink = crate::slider::sink(sender, map)?;
-        self.slider_with_sink(options, Some(sink.as_com_ref()))
+        let queue = crate::slider::queue(sender, map)?;
+        self.slider_with_queue(options, Some(queue.as_com_ref()))
     }
 
     /// Creates an explicitly unobserved slider without allocating a destination.
     pub fn slider_unobserved(&self, options: SliderOptions) -> Result<SliderWidget, NcStatus> {
-        self.slider_with_sink(options, None)
+        self.slider_with_queue(options, None)
     }
-    /// Creates an unmounted number with one lifetime-bound sink.
+    /// Creates an unmounted number with one lifetime-bound queue.
     /// The generated adapter owns the sender and mapper; construction failure releases both.
     pub fn number<M: 'static>(
         &self,
@@ -937,15 +941,15 @@ impl WidgetFactory {
         sender: std::sync::mpsc::Sender<M>,
         map: impl FnMut(crate::number::Event) -> M + 'static,
     ) -> Result<NumberWidget, NcStatus> {
-        let sink = crate::number::sink(sender, map)?;
-        self.number_with_sink(options, Some(sink.as_com_ref()))
+        let queue = crate::number::queue(sender, map)?;
+        self.number_with_queue(options, Some(queue.as_com_ref()))
     }
 
     /// Creates an explicitly unobserved number without allocating a destination.
     pub fn number_unobserved(&self, options: NumberOptions) -> Result<NumberWidget, NcStatus> {
-        self.number_with_sink(options, None)
+        self.number_with_queue(options, None)
     }
-    /// Creates an unmounted list item with one lifetime-bound sink.
+    /// Creates an unmounted list item with one lifetime-bound queue.
     /// The generated adapter owns the sender and mapper; construction failure releases both.
     pub fn list_item<M: 'static>(
         &self,
@@ -953,15 +957,15 @@ impl WidgetFactory {
         sender: std::sync::mpsc::Sender<M>,
         map: impl FnMut(crate::list_item::Event) -> M + 'static,
     ) -> Result<ListItemWidget, NcStatus> {
-        let sink = crate::list_item::sink(sender, map)?;
-        self.list_item_with_sink(label, Some(sink.as_com_ref()))
+        let queue = crate::list_item::queue(sender, map)?;
+        self.list_item_with_queue(label, Some(queue.as_com_ref()))
     }
 
     /// Creates an explicitly unobserved list item without allocating a destination.
     pub fn list_item_unobserved(&self, label: &str) -> Result<ListItemWidget, NcStatus> {
-        self.list_item_with_sink(label, None)
+        self.list_item_with_queue(label, None)
     }
-    /// Creates an unmounted list box with one lifetime-bound sink.
+    /// Creates an unmounted list box with one lifetime-bound queue.
     /// The generated adapter owns the sender and mapper; construction failure releases both.
     pub fn list_box<M: 'static>(
         &self,
@@ -969,15 +973,15 @@ impl WidgetFactory {
         sender: std::sync::mpsc::Sender<M>,
         map: impl FnMut(crate::list_box::Event) -> M + 'static,
     ) -> Result<ListBoxWidget, NcStatus> {
-        let sink = crate::list_box::sink(sender, map)?;
-        self.list_box_with_sink(label, Some(sink.as_com_ref()))
+        let queue = crate::list_box::queue(sender, map)?;
+        self.list_box_with_queue(label, Some(queue.as_com_ref()))
     }
 
     /// Creates an explicitly unobserved list box without allocating a destination.
     pub fn list_box_unobserved(&self, label: &str) -> Result<ListBoxWidget, NcStatus> {
-        self.list_box_with_sink(label, None)
+        self.list_box_with_queue(label, None)
     }
-    /// Creates an unmounted scrollbar with one lifetime-bound sink.
+    /// Creates an unmounted scrollbar with one lifetime-bound queue.
     /// The generated adapter owns the sender and mapper; construction failure releases both.
     pub fn scrollbar<M: 'static>(
         &self,
@@ -985,15 +989,15 @@ impl WidgetFactory {
         sender: std::sync::mpsc::Sender<M>,
         map: impl FnMut(crate::scrollbar::Event) -> M + 'static,
     ) -> Result<ScrollbarWidget, NcStatus> {
-        let sink = crate::scrollbar::sink(sender, map)?;
-        self.scrollbar_with_sink(range, Some(sink.as_com_ref()))
+        let queue = crate::scrollbar::queue(sender, map)?;
+        self.scrollbar_with_queue(range, Some(queue.as_com_ref()))
     }
 
     /// Creates an explicitly unobserved scrollbar without allocating a destination.
     pub fn scrollbar_unobserved(&self, range: ScrollRange) -> Result<ScrollbarWidget, NcStatus> {
-        self.scrollbar_with_sink(range, None)
+        self.scrollbar_with_queue(range, None)
     }
-    /// Creates an unmounted split view with one lifetime-bound sink.
+    /// Creates an unmounted split view with one lifetime-bound queue.
     /// The generated adapter owns the sender and mapper; construction failure releases both.
     pub fn split_view<M: 'static>(
         &self,
@@ -1001,18 +1005,18 @@ impl WidgetFactory {
         sender: std::sync::mpsc::Sender<M>,
         map: impl FnMut(crate::split_view::Event) -> M + 'static,
     ) -> Result<SplitViewWidget, NcStatus> {
-        let sink = crate::split_view::sink(sender, map)?;
-        self.split_view_with_sink(settings, Some(sink.as_com_ref()))
+        let queue = crate::split_view::queue(sender, map)?;
+        self.split_view_with_queue(settings, Some(queue.as_com_ref()))
     }
 
     /// Creates an explicitly unobserved split view without allocating a destination.
     pub fn split_view_unobserved(&self, settings: SplitOptions) -> Result<SplitViewWidget, NcStatus> {
-        self.split_view_with_sink(settings, None)
+        self.split_view_with_queue(settings, None)
     }
 }
 
 impl Ui {
-    /// Constructs a choice header with one sink owned by its core choice model.
+    /// Constructs a choice header with one queue owned by its core choice model.
     pub fn combo_box<Item: AsRef<str>, M: 'static>(
         &self,
         parent: ComRef<'_, IWindowAbi>,
@@ -1021,8 +1025,8 @@ impl Ui {
         sender: std::sync::mpsc::Sender<M>,
         map: impl FnMut(crate::combo::Event) -> M + 'static,
     ) -> Result<ComboWidget, NcStatus> {
-        let sink = crate::combo::sink(sender, map)?;
-        self.combo_box_with_sink(parent, items, selection, Some(sink.as_com_ref()))
+        let queue = crate::combo::queue(sender, map)?;
+        self.combo_box_with_queue(parent, items, selection, Some(queue.as_com_ref()))
     }
     /// Constructs an unobserved choice header without a dummy destination allocation.
     pub fn combo_box_unobserved<Item: AsRef<str>>(
@@ -1031,9 +1035,9 @@ impl Ui {
         items: &[Item],
         selection: ChoiceSelection,
     ) -> Result<ComboWidget, NcStatus> {
-        self.combo_box_with_sink(parent, items, selection, None)
+        self.combo_box_with_queue(parent, items, selection, None)
     }
-    /// Constructs a hierarchical choice header with one constructor-bound sink.
+    /// Constructs a hierarchical choice header with one constructor-bound queue.
     pub fn combo_menu<M: 'static>(
         &self,
         parent: ComRef<'_, IWindowAbi>,
@@ -1043,8 +1047,8 @@ impl Ui {
         sender: std::sync::mpsc::Sender<M>,
         map: impl FnMut(crate::combo::Event) -> M + 'static,
     ) -> Result<ComboWidget, NcStatus> {
-        let sink = crate::combo::sink(sender, map)?;
-        self.combo_menu_with_sink(parent, text, entries, selection, Some(sink.as_com_ref()))
+        let queue = crate::combo::queue(sender, map)?;
+        self.combo_menu_with_queue(parent, text, entries, selection, Some(queue.as_com_ref()))
     }
     /// Constructs an unobserved hierarchical choice header.
     pub fn combo_menu_unobserved(
@@ -1054,23 +1058,23 @@ impl Ui {
         entries: &[ChoiceMenuEntry],
         selection: ChoiceSelection,
     ) -> Result<ComboWidget, NcStatus> {
-        self.combo_menu_with_sink(parent, text, entries, selection, None)
+        self.combo_menu_with_queue(parent, text, entries, selection, None)
     }
 }
 
 impl Ui {
-    /// Creates the hidden picker with one upward sink retained for its lifetime.
+    /// Creates the hidden picker with one upward queue retained for its lifetime.
     pub fn file_dialog<M: 'static>(
         &self,
         parent: ComRef<'_, IWindowAbi>,
         sender: std::sync::mpsc::Sender<M>,
         map: impl FnMut(crate::file_dialog::Event) -> M + 'static,
     ) -> Result<crate::FileDialog, NcStatus> {
-        let sink = crate::file_dialog::sink(sender, map)?;
-        self.file_dialog_with_sink(parent, Some(sink.as_com_ref()))
+        let queue = crate::file_dialog::queue(sender, map)?;
+        self.file_dialog_with_queue(parent, Some(queue.as_com_ref()))
     }
     /// Creates an explicitly unobserved picker without allocating a destination.
     pub fn file_dialog_unobserved(&self, parent: ComRef<'_, IWindowAbi>) -> Result<crate::FileDialog, NcStatus> {
-        self.file_dialog_with_sink(parent, None)
+        self.file_dialog_with_queue(parent, None)
     }
 }

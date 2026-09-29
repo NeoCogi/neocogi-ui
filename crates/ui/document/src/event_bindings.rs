@@ -1,12 +1,12 @@
 //! Application-owned receivers supplied before any authored widget is constructed.
 use crate::{CustomWidgetRegistry, Document, WidgetSpec};
 use neocogi_com::{ComPtr, IUnknown, NcGuid, NcStatus, NC_E_INVALID_ARG};
-use neocogi_com::events::{EventOf, EventSource, mapped_sink};
+use neocogi_com::events::{EventOf, EventSource, mapped_queue};
 use std::{collections::BTreeMap, sync::mpsc::Sender};
 
 /// One construction attempt's receivers, indexed by authored widget key.
 ///
-/// Each entry retains an ordinary COM object implementing one exact `IMessageSink<E>`.
+/// Each entry retains an ordinary COM object implementing one exact `IEventQueue<Object, Event>`.
 /// Its payload never becomes untyped: metadata preflight and the concrete factory both
 /// check the receiver's COM identity. Missing entries mean permanently unobserved widgets.
 /// Receivers and mappings are live application state and are never serialized.
@@ -27,14 +27,26 @@ impl EventBindings {
         &mut self,
         key: impl Into<String>,
         sender: Sender<M>,
-        map: impl FnMut(EventOf<C>) -> M + 'static,
+        mut map: impl FnMut(EventOf<C>) -> M + 'static,
     ) -> Result<(), NcStatus> {
         let key = key.into();
         if key.is_empty() || self.receivers.contains_key(&key) {
             return Err(NC_E_INVALID_ARG);
         }
-        let receiver = mapped_sink::<C::Sink, M>(sender, map)?.query()?;
+        let receiver = mapped_queue::<C::Queue, M>(sender, move |_origin, event| map(event))?.query()?;
         self.receivers.insert(key, receiver);
+        Ok(())
+    }
+
+    /// Registers a shared application queue without allocating a per-widget mapper.
+    /// The concrete queue may implement several product queue interfaces. Exact
+    /// constructor metadata is checked during preflight before any widget is made.
+    pub fn insert_queue<C: EventSource>(&mut self, key: impl Into<String>, queue: neocogi_com::ComRef<'_, C::Queue>) -> Result<(), NcStatus> {
+        let key = key.into();
+        if key.is_empty() || self.receivers.contains_key(&key) {
+            return Err(NC_E_INVALID_ARG);
+        }
+        self.receivers.insert(key, queue.add_ref().query()?);
         Ok(())
     }
 
@@ -45,14 +57,14 @@ impl EventBindings {
             match &node.widget {
                 WidgetSpec::Custom { kind, .. } => {
                     let interface = custom.interface(kind).map_err(|_| NC_E_INVALID_ARG)?;
-                    let sink = interface.event_sink.as_ref().ok_or(NC_E_INVALID_ARG)?;
-                    receiver.supports_interface_bytes(NcGuid::from_uuid_bytes(sink.iid), &sink.signature)?;
+                    let queue = interface.event_queue.as_ref().ok_or(NC_E_INVALID_ARG)?;
+                    receiver.supports_interface_bytes(NcGuid::from_uuid_bytes(queue.iid), &queue.signature)?;
                 }
                 widget => {
-                    let sink = widget.event_stream().ok_or(NC_E_INVALID_ARG)?;
+                    let queue = widget.event_stream().ok_or(NC_E_INVALID_ARG)?;
                     // SAFETY: Built-in descriptors are generated static storage, not foreign input.
-                    let signature = unsafe { sink.abi.abi_signature.as_bytes() }?.try_into().map_err(|_| NC_E_INVALID_ARG)?;
-                    receiver.supports_interface_bytes(sink.abi.interface_id, signature)?;
+                    let signature = unsafe { queue.abi.abi_signature.as_bytes() }?.try_into().map_err(|_| NC_E_INVALID_ARG)?;
+                    receiver.supports_interface_bytes(queue.abi.interface_id, signature)?;
                 }
             }
         }

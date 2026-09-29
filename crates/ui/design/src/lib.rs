@@ -55,7 +55,7 @@ pub const MAX_DESIGN_DESCRIPTOR_BYTES: usize = 64 * 1024;
 /// Current authoring descriptor schema revision.
 /// Revision 6 describes the constructor receiver separately from the product
 /// interface chain: widgets no longer expose a mutable event-stream projection.
-pub const DESIGN_DESCRIPTOR_VERSION: u32 = 6;
+pub const DESIGN_DESCRIPTOR_VERSION: u32 = 7;
 
 /// Owned structural field expression copied through the COM design catalog.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -204,8 +204,8 @@ impl From<&neocogi_com::design::IdlType> for DesignType {
 /// The exact receiver accepted by the product constructor, separate from class ancestry.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct DesignEventSink {
-    /// Closed generic IMessageSink<E> identity.
+pub struct DesignEventQueue {
+    /// Closed generic IEventQueue<Object, Event> identity.
     pub iid: [u8; 16],
     /// Receiver ABI signature, including the complete event layout.
     pub signature: [u8; 32],
@@ -224,14 +224,14 @@ pub struct DesignInterface {
     /// Public Rust `*Abi` projection used by generated forms; checked by [`neocogi_com::validate_rust_path`].
     pub rust_abi: String,
     /// Optional constructor receiver; this is not an interface implemented by the widget.
-    pub event_sink: Option<DesignEventSink>,
+    pub event_queue: Option<DesignEventQueue>,
     /// Complete finite value graph reachable from the product and its event value.
     pub values: Vec<DesignType>,
 }
 impl DesignInterface {
     /// Resolves the receiver's canonical event value edge through the authoritative graph.
     pub fn event_value(&self) -> Option<&DesignType> {
-        let stream = self.event_sink.as_ref()?;
+        let stream = self.event_queue.as_ref()?;
         self.values.iter().find(|value| value.qualified_name == stream.message)
     }
 }
@@ -263,10 +263,10 @@ impl DesignWidgetManifest {
             .try_into()
             .map_err(|_| "IDL interface has a non-SHA-256 signature")?;
         let stream = source
-            .event_sink
+            .event_queue
             .as_ref()
-            .map(|output| -> Result<DesignEventSink, String> {
-                Ok(DesignEventSink {
+            .map(|output| -> Result<DesignEventQueue, String> {
+                Ok(DesignEventQueue {
                     iid: output.abi.interface_id.to_uuid_bytes(),
                     // SAFETY: IDL owns this immutable static descriptor.
                     signature: unsafe { output.abi.abi_signature.as_bytes() }
@@ -285,7 +285,7 @@ impl DesignWidgetManifest {
                 iid: source.abi.interface_id.to_uuid_bytes(),
                 signature: digest,
                 rust_abi: source.rust_abi.to_owned(),
-                event_sink: stream,
+                event_queue: stream,
                 values: source.values.iter().map(DesignType::from).collect(),
             },
         };
@@ -309,7 +309,7 @@ impl DesignWidgetManifest {
         {
             return Err("Invalid design widget property defaults".into());
         }
-        if let Some(output) = &self.interface.event_sink {
+        if let Some(output) = &self.interface.event_queue {
             if output.iid == [0; 16] || !qualified_name(&output.message) {
                 return Err("Invalid design widget output metadata".into());
             }
@@ -486,7 +486,7 @@ mod tests {
                 signature: [2; 32],
                 rust_abi: "example_contracts::CounterAbi".into(),
                 values: vec![],
-                event_sink: Some(DesignEventSink {
+                event_queue: Some(DesignEventQueue {
                     iid: [2; 16],
                     signature: [3; 32],
                     message: "example.CounterEvent".into(),
@@ -565,7 +565,7 @@ mod tests {
     #[test]
     fn logical_names_do_not_use_rust_keyword_rules() {
         let mut manifest = counter_manifest();
-        manifest.interface.event_sink.as_mut().unwrap().message = "example.type".into();
+        manifest.interface.event_queue.as_mut().unwrap().message = "example.type".into();
         manifest.interface.values[0].qualified_name = "example.type".into();
         manifest.interface.values[0].rust_type = "example_contracts::r#type".into();
         manifest.validate().unwrap();

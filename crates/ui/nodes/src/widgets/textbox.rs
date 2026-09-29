@@ -398,7 +398,7 @@ impl crate::widget_object::WidgetAlgorithm for Textbox {
 }
 
 impl crate::widget_object::HostedWidget for Textbox {
-    /// Releases sinks, revokes outstanding clipboard receipts, and drops local history.
+    /// Releases queues, revokes outstanding clipboard receipts, and drops local history.
     fn close_contents(&mut self) {
         crate::widget_object::WidgetAlgorithm::close_events(self);
         self.editing = super::editing::Editing::default();
@@ -438,19 +438,30 @@ mod tests {
     }
 
     /// Maps both enum variants into one ordinary consumer FIFO, preserving their actual post order.
-    fn text_dispatcher(textbox: &mut Textbox) -> impl FnMut(&mut Vec<RecordedEvent>) -> bool + use<> {
+    fn text_dispatcher(
+        textbox: crate::test_support::algorithm::Algorithm<Textbox>,
+    ) -> (
+        crate::test_support::algorithm::Algorithm<neocogi_com::LocalCom<Textbox>>,
+        impl FnMut(&mut Vec<RecordedEvent>) -> bool,
+    ) {
         let (events_tx, events) = std::sync::mpsc::channel();
-        let sink = neocogi_ui::textbox::sink(events_tx, |event| match event {
+        let queue = neocogi_ui::textbox::queue(events_tx, |event| match event {
             neocogi_ui::textbox::Event::Changed(value) => RecordedEvent::Changed(value.text, value.cursor),
             neocogi_ui::textbox::Event::Submitted(value) => RecordedEvent::Submitted(value.text),
         })
         .unwrap();
-        textbox.events = neocogi_com::events::EventPort::with_sink(Some(sink));
-        move |values| {
+        let textbox = textbox.map(|mut value| {
+            Textbox::into_local_cyclic::<TextboxAbi>(move |origin| {
+                value.events = neocogi_com::events::EventPort::with_queue(Some(queue), origin);
+                value
+            })
+            .unwrap()
+        });
+        (textbox, move |values: &mut Vec<RecordedEvent>| {
             let before = values.len();
             values.extend(events.try_iter());
             values.len() != before
-        }
+        })
     }
 
     fn update_textbox(textbox: &mut Textbox, focused: bool, input: Vec<UiInputEvent>) {
@@ -539,8 +550,9 @@ mod tests {
 
     #[test]
     fn text_events_preserve_complete_snapshots_and_consumer_fifo() {
-        let mut textbox = crate::test_support::algorithm::Algorithm::<Textbox>::from(TextboxParameters::new(""));
-        let mut dispatcher = text_dispatcher(&mut textbox);
+        let textbox = crate::test_support::algorithm::Algorithm::<Textbox>::from(TextboxParameters::new(""));
+        let (textbox, mut dispatcher) = text_dispatcher(textbox);
+        let mut textbox = textbox.try_borrow_mut().unwrap();
 
         update_textbox(
             &mut textbox,
@@ -571,8 +583,9 @@ mod tests {
 
     #[test]
     fn programmatic_text_and_cursor_setters_are_silent() {
-        let mut textbox = crate::test_support::algorithm::Algorithm::<Textbox>::from(TextboxParameters::new("initial"));
-        let mut dispatcher = text_dispatcher(&mut textbox);
+        let textbox = crate::test_support::algorithm::Algorithm::<Textbox>::from(TextboxParameters::new("initial"));
+        let (textbox, mut dispatcher) = text_dispatcher(textbox);
+        let mut textbox = textbox.try_borrow_mut().unwrap();
         textbox.set_text("replacement");
         textbox.set_cursor(3);
         textbox.move_cursor_to_end();
@@ -636,12 +649,15 @@ impl Textbox {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         text: NcCopyFromBufferOffset<'_, u8>,
-        sink: Option<ComPtr<neocogi_ui_nodes_contracts::TextboxSinkAbi>>,
+        queue: Option<ComPtr<neocogi_ui_nodes_contracts::TextboxEventQueueAbi>>,
     ) -> Result<ComPtr<TextboxAbi>, NcStatus> {
         let mut value = Self::build(host, text, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
-        value.events = neocogi_com::events::EventPort::with_sink(sink);
-        Ok(Self::from_value(value).query().expect("Textbox declares its callable class contract"))
+        Self::from_value_cyclic::<TextboxAbi>(move |origin| {
+            value.events = neocogi_com::events::EventPort::with_queue(queue, origin);
+            value
+        })?
+        .query()
     }
 
     /// Builds one textbox with either directly imported or runtime-shared resources.
@@ -698,15 +714,16 @@ impl neocogi_ui_nodes_contracts::Textbox for Textbox {
 #[cfg(all(test, target_pointer_width = "64"))]
 #[test]
 fn com_object_control_is_independent_of_interface_count() {
-    // Refcount, padding and the shared call guard occupy 16 bytes on this target.
+    // The call gate occupies one word in the payload. Arc owns its private
+    // strong/weak header outside this storage; this is not total allocation size.
     // No per-interface fields remain; handles carry their selected tables.
     // The constructor receiver is not an interface implemented by the widget.
     assert_eq!(Textbox::COM_INTERFACE_COUNT, 4);
     println!(
-        "Textbox: state={}, allocation={}",
+        "Textbox: state={}, payload={}",
         core::mem::size_of::<Textbox>(),
         core::mem::size_of::<TextboxComObject>()
     );
-    assert_eq!(core::mem::offset_of!(TextboxComObject, value), 16);
-    assert_eq!(core::mem::size_of::<TextboxComObject>(), core::mem::size_of::<Textbox>() + 16);
+    assert_eq!(core::mem::offset_of!(TextboxComObject, value), 8);
+    assert_eq!(core::mem::size_of::<TextboxComObject>(), core::mem::size_of::<Textbox>() + 8);
 }

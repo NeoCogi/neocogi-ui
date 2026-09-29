@@ -233,13 +233,13 @@ fn label(nodes: &Rc<DialogNodes>, value: &str) -> Result<TextBlockWidget, NcStat
 }
 /// Constructs a complete command Button through the dynamically implemented factory shorthand.
 fn button(nodes: &Rc<DialogNodes>, value: &str, action: Message) -> Result<neocogi_ui::ButtonWidget, NcStatus> {
-    let sink = neocogi_ui::button::sink(nodes.events_tx.clone(), move |_| action.clone())?;
+    let queue = neocogi_ui::button::queue(nodes.events_tx.clone(), move |_| action.clone())?;
     let button = neocogi_ui::ButtonWidget::from_interface(crate::Button::create_com(
         nodes.host.clone(),
         nodes.resources.clone(),
         NcCopyFromBufferOffset::new(0, value.as_bytes()),
         WidgetOptions::FRAME,
-        Some(sink),
+        Some(queue),
     )?);
     Ok(button)
 }
@@ -254,12 +254,12 @@ fn column(nodes: &Rc<DialogNodes>, directory: &Path, paths: Vec<PathBuf>, folder
             path.file_name().unwrap_or(path.as_os_str()).to_string_lossy()
         };
         let action = if folder { Message::Folder(path.clone()) } else { Message::File(path.clone()) };
-        let sink = neocogi_ui::list_item::sink(nodes.events_tx.clone(), move |_| action.clone())?;
+        let queue = neocogi_ui::list_item::queue(nodes.events_tx.clone(), move |_| action.clone())?;
         let mut item = ListItemWidget::from_interface(crate::ListItem::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
             NcCopyFromBufferOffset::new(0, display.as_bytes()),
-            Some(sink),
+            Some(queue),
         )?);
         item.set_icon_role(if folder { ContentIcon::ClosedFolder } else { ContentIcon::File })?;
         children.push((item.node_interface()?, LayoutTrack::Content));
@@ -283,7 +283,7 @@ impl Listing {
 
 impl FileDialog {
     /// Constructs one hidden modal from actual COM controls; no native widget handle or generic application state enters its ABI.
-    fn new(services: Rc<NodeServices>, parent: ComRef<'_, IWindowAbi>, sink: Option<ComPtr<IFileDialogSinkAbi>>) -> Result<LocalCom<Self>, NcStatus> {
+    fn new(services: Rc<NodeServices>, parent: ComRef<'_, IWindowAbi>, queue: Option<ComPtr<IFileDialogEventQueueAbi>>) -> Result<LocalCom<Self>, NcStatus> {
         services.host.check_mutation()?;
         let (events_tx, events) = std::sync::mpsc::channel();
         let nodes = Rc::new(DialogNodes {
@@ -291,11 +291,11 @@ impl FileDialog {
             host: services.host.clone(),
             resources: services.resources.clone(),
         });
-        let path_sink = neocogi_ui::textbox::sink(events_tx.clone(), |event| match event {
+        let path_sink = neocogi_ui::textbox::queue(events_tx.clone(), |event| match event {
             neocogi_ui::textbox::Event::Changed(_) => Message::PathEdited,
             neocogi_ui::textbox::Event::Submitted(value) => Message::Navigate(value.text),
         })?;
-        let filename_sink = neocogi_ui::textbox::sink(events_tx.clone(), |event| match event {
+        let filename_sink = neocogi_ui::textbox::queue(events_tx.clone(), |event| match event {
             neocogi_ui::textbox::Event::Changed(_) => Message::FilenameEdited,
             neocogi_ui::textbox::Event::Submitted(_) => Message::Accept,
         })?;
@@ -392,9 +392,9 @@ impl FileDialog {
         }
         let request = Request {
             phase: RequestPhase::Idle,
-            completed: neocogi_com::events::EventPort::with_sink(sink),
+            completed: Default::default(),
         };
-        let model = Model {
+        let mut model = Model {
             events_tx,
             nodes,
             window: None,
@@ -410,11 +410,14 @@ impl FileDialog {
             files,
             diagnostic: String::new(),
         };
-        let dialog = Self::into_local(Self { shell, model, messages: Some(events) });
+        let dialog = Self::into_local_cyclic::<IFileDialogAbi>(move |origin| {
+            model.request.completed = neocogi_com::events::EventPort::with_queue(queue, origin);
+            Self { shell, model, messages: Some(events) }
+        })?;
         let root = dialog.query::<IWidgetAbi>()?;
         let windows = services.windows.clone();
-        let window_sink = neocogi_ui::events::window::sink(dialog.try_borrow()?.model.events_tx.clone(), Message::Lifecycle)?;
-        let window_binding = IWindowEventBinding::from_sink(Some(window_sink.as_com_ref()));
+        let window_sink = neocogi_ui::events::window::queue(dialog.try_borrow()?.model.events_tx.clone(), Message::Lifecycle)?;
+        let window_binding = IWindowEventBinding::from_queue(Some(window_sink.as_com_ref()));
         let window = windows.create_dialog(
             parent,
             NcCopyFromBufferOffset::new(0, b"Open File"),
@@ -733,9 +736,9 @@ impl IFileDialog for FileDialog {
 pub(crate) fn create(
     services: Rc<NodeServices>,
     parent: ComRef<'_, IWindowAbi>,
-    sink: Option<ComPtr<IFileDialogSinkAbi>>,
+    queue: Option<ComPtr<IFileDialogEventQueueAbi>>,
 ) -> Result<ComPtr<IFileDialogAbi>, NcStatus> {
-    FileDialog::new(services, parent, sink)?.query()
+    FileDialog::new(services, parent, queue)?.query()
 }
 
 /// Reads the platform home setting without converting its native encoding to Unicode.
