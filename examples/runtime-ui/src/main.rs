@@ -1,17 +1,39 @@
 //! Loads a UI document without linking its concrete widgets into application code.
-use neocogi_com::NcStatus;
+use neocogi_com::{ComPtr, ComRef, WeakComPtr, NcValueRef, NcStatus, IUnknown};
 use neocogi_ui_document::EventBindings;
 use neocogi_demo_host::{AppState, Host, HostError};
 use neocogi_ui::*;
-use neocogi_ui_document::{Document, Generation, ReloadSlot, Resources};
+use neocogi_ui_document::{Document, ReloadSlot, Resources};
 use std::sync::mpsc::{self, Sender};
 
-/// Application messages carry the component generation that emitted them.
+/// Application messages retain nonowning identities, checked against the current component.
 enum Message {
     /// Re-read the selected file, or the built-in document.
-    Reload,
+    Reload(WeakComPtr<IMenuItemAbi>),
     /// The component's public Save action, independent of its widget layout.
-    Save(Generation),
+    Save(WeakComPtr<ButtonAbi>),
+}
+#[neocogi_com::com_object(interfaces(neocogi_ui::nodes::ButtonEventQueue, neocogi_ui::IMenuItemEventQueue))]
+/// One application receiver is reused across every document replacement and the static menu.
+struct AppQueue {
+    /// Queued origins never keep a removed component or control alive.
+    sender: Sender<Message>,
+}
+impl neocogi_ui::nodes::ButtonEventQueue for AppQueue {
+    /// Acquire the activation before returning; current-form membership is checked at dispatch.
+    fn post(&mut self, origin: ComRef<'_, ButtonAbi>, event: NcValueRef<'_, neocogi_ui::button::Event>) -> Result<(), NcStatus> {
+        neocogi_ui::button::validate(&event.to_owned()?)?;
+        let _ = self.sender.send(Message::Save(origin.downgrade()?));
+        Ok(())
+    }
+}
+impl neocogi_ui::IMenuItemEventQueue for AppQueue {
+    /// Static menus use the same queue but retain their own exact origin type.
+    fn post(&mut self, origin: ComRef<'_, IMenuItemAbi>, event: NcValueRef<'_, Activation>) -> Result<(), NcStatus> {
+        neocogi_ui::events::activation::validate(&event.to_owned()?)?;
+        let _ = self.sender.send(Message::Reload(origin.downgrade()?));
+        Ok(())
+    }
 }
 /// Application state owns its current component and uses checked concrete widget handles.
 struct State {
@@ -19,8 +41,10 @@ struct State {
     slot: ReloadSlot,
     /// Source path is a host concern, never interpreted by the COM loader.
     path: Option<std::path::PathBuf>,
-    /// Connects replacement components to the same application inbox.
-    sender: Sender<Message>,
+    /// Supplies the same concrete receiver to every replacement component.
+    queue: ComPtr<IUnknown>,
+    /// Exact menu entry accepted as a reload command.
+    reload_item: MenuItem,
     /// Counts application-handled button activations.
     saves: u64,
 }
@@ -38,13 +62,13 @@ impl State {
             }
             None => Document::new("Runtime-loaded UI"),
         };
-        let sender = self.sender.clone();
+        let queue = self.queue.query::<ButtonEventQueueAbi>().map_err(|error| error.to_string())?;
         let outcome = self.slot.reload(
             &document,
             Resources::new(),
-            move |generation| {
+            move |_| {
                 let mut events = EventBindings::new();
-                events.insert::<ButtonAbi, _>("save", sender, move |_| Message::Save(generation))?;
+                events.insert_queue::<ButtonAbi>("save", queue.as_com_ref())?;
                 Ok(events)
             },
             |component, _| {
@@ -63,20 +87,31 @@ impl AppState for State {
     /// Runtime calls application handlers only at its normal safe mutation boundary.
     fn update(&mut self, message: Message) -> Result<(), NcStatus> {
         match message {
-            Message::Reload => {
+            Message::Reload(origin) => {
+                let Some(origin) = origin.upgrade()? else {
+                    return Ok(());
+                };
+                if !origin.as_com_ref().same_object(self.reload_item.as_interface()) {
+                    return Ok(());
+                }
                 if let Err(error) = self.reload() {
                     eprintln!("Reload: {error}");
                 }
             }
-            Message::Save(generation) if self.slot.accepts(generation) => {
-                self.saves += 1;
+            Message::Save(origin) => {
+                let Some(origin) = origin.upgrade()? else {
+                    return Ok(());
+                };
                 if let Some(component) = self.slot.component() {
+                    if !origin.as_com_ref().same_object(component.widget::<ButtonAbi>("save")?.as_interface()) {
+                        return Ok(());
+                    }
+                    self.saves += 1;
                     component
                         .widget::<TextBlockAbi>("title")?
                         .set_text(&format!("Save requested {} times", self.saves))?;
                 }
             }
-            Message::Save(_) => {} // An old queued event cannot affect the replacement view.
         }
         Ok(())
     }
@@ -94,13 +129,16 @@ fn run() -> Result<(), HostError> {
     let (sender, receiver) = mpsc::channel();
     let menus = host.ui.menus()?;
     let bar = menus.create("Runtime UI")?;
-    bar.submenu("File")?.item_observed("Reload", sender.clone(), |_| Message::Reload)?;
+    let queue = AppQueue::from_value(AppQueue { sender });
+    let reload_item = bar
+        .submenu("File")?
+        .item_with_queue("Reload", Some(queue.query::<IMenuItemEventQueueAbi>()?.as_com_ref()))?;
     menus.attach_bar(window.as_com_ref(), &bar)?;
     #[cfg(not(target_arch = "wasm32"))]
     let path = std::env::args_os().nth(1).map(std::path::PathBuf::from);
     #[cfg(target_arch = "wasm32")]
     let path = None;
-    let mut state = State { slot, path, sender, saves: 0 };
+    let mut state = State { slot, path, queue, reload_item, saves: 0 };
     state.reload().map_err(HostError::Message)?;
     host.run(state, receiver)
 }

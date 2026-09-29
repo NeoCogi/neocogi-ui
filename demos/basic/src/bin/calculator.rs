@@ -30,7 +30,7 @@
 //! Calculator with concrete application state and typed COM button handlers.
 use neocogi_ui::*;
 use neocogi_demo_host::{AppState, Host, HostError, report_exit};
-use neocogi_com::{ComPtr, NcStatus};
+use neocogi_com::{ComPtr, ComRef, NcStatus, NcValueRef, WeakComPtr};
 
 /// Maximum typed display length; calculated results retain the existing decimal formatting policy.
 const DISPLAY_MAX_LEN: usize = 24;
@@ -327,6 +327,21 @@ impl Calculator {
     }
 }
 
+#[neocogi_com::com_object(neocogi_ui::nodes::ButtonEventQueue)]
+/// One concrete receiver for the entire keypad; action selection belongs to State.
+struct KeypadQueue {
+    /// Only weak origins are needed for the button's sole activation variant.
+    send: std::sync::mpsc::Sender<WeakComPtr<ButtonAbi>>,
+}
+impl neocogi_ui::nodes::ButtonEventQueue for KeypadQueue {
+    /// Validate foreign payloads before queueing; presentation labels do not identify keys.
+    fn post(&mut self, origin: ComRef<'_, ButtonAbi>, event: NcValueRef<'_, neocogi_ui::button::Event>) -> Result<(), NcStatus> {
+        neocogi_ui::button::validate(&event.to_owned()?)?;
+        let _ = self.send.send(origin.downgrade()?);
+        Ok(())
+    }
+}
+
 /// Local calculator model and editing capability; topology remains in the UI plugin.
 struct State {
     /// The fixed calculator panel follows the platform drawable rectangle.
@@ -335,13 +350,21 @@ struct State {
     display: TextboxWidget,
     /// Arithmetic and formatting are ordinary concrete Rust state, independent of any plugin.
     calculator: Calculator,
+    /// Application-owned keypad associations; no widget retains this model.
+    keys: Vec<(WeakComPtr<ButtonAbi>, Action)>,
 }
 impl AppState for State {
-    /// All keypad ports map to the existing calculator command enum.
-    type Message = Action;
+    /// All keypad controls post to one concrete queue and are resolved by identity.
+    type Message = WeakComPtr<ButtonAbi>;
     /// Consumes one command using exclusive access to the ordinary arithmetic model.
-    fn update(&mut self, action: Action) -> Result<(), NcStatus> {
-        self.calculator.apply(action);
+    fn update(&mut self, origin: WeakComPtr<ButtonAbi>) -> Result<(), NcStatus> {
+        if origin.upgrade()?.is_none() {
+            return Ok(());
+        }
+        let Some((_, action)) = self.keys.iter().find(|(key, _)| key.same_object(&origin)) else {
+            return Ok(());
+        };
+        self.calculator.apply(*action);
         self.display.set_text(self.calculator.display_text())
     }
 
@@ -374,12 +397,14 @@ fn run() -> Result<(), HostError> {
         .finish()?;
     let window = host.ui.window("Calculator", Rect { x: 0, y: 0, width: 320, height: 420 }, &tree)?;
     window.set_options(WindowOptions::FRAME | WindowOptions::NO_RESIZE | WindowOptions::NO_TITLE)?;
-    let state = State {
+    let mut state = State {
         window,
         display,
         calculator: Calculator::new(),
+        keys: Vec::new(),
     };
     let (events_tx, events) = std::sync::mpsc::channel();
+    let queue = KeypadQueue::from_value(KeypadQueue { send: events_tx }).query::<ButtonEventQueueAbi>()?;
     for (index, (label, action)) in [
         ("AC", Action::ClearAll),
         ("CE", Action::ClearEntry),
@@ -405,7 +430,8 @@ fn run() -> Result<(), HostError> {
     .into_iter()
     .enumerate()
     {
-        let mut button = host.ui.widgets().button(label, events_tx.clone(), move |_| action)?;
+        let mut button = host.ui.widgets().button_with_queue(label, Some(queue.as_com_ref()))?;
+        state.keys.push((button.as_interface().downgrade()?, action));
         button.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
         grid.insert(index as u32, &button, GridExtent { columns: 1, rows: 1 })?.finish()?;
     }

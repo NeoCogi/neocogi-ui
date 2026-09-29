@@ -5,7 +5,20 @@ use neocogi_demo_contracts::*;
 /// Host-local facts prove plugins never need the consumer's message enum.
 enum Message {
     /// Complete event from the counter's one physical port.
-    Counter(CounterEvent),
+    Counter(neocogi_com::WeakComPtr<CounterAbi>, CounterEvent),
+}
+#[neocogi_com::com_object(neocogi_demo_contracts::CounterEventQueue)]
+/// The host implements the independently generated custom-widget queue directly.
+struct CounterQueue {
+    /// Producer lifetimes remain weak while messages wait in the host inbox.
+    sender: std::sync::mpsc::Sender<Message>,
+}
+impl CounterEventQueue for CounterQueue {
+    /// Acquire the custom payload through its checked ABI before the producer returns.
+    fn post(&mut self, origin: ComRef<'_, CounterAbi>, event: neocogi_com::NcValueRef<'_, CounterEvent>) -> Result<(), NcStatus> {
+        let _ = self.sender.send(Message::Counter(origin.downgrade()?, event.to_owned()?));
+        Ok(())
+    }
 }
 /// Host-local controller owns its labels and the extension's editing projection.
 struct Model {
@@ -18,12 +31,19 @@ impl events::EventModel for Model {
     type Message = Message;
     /// Handles the independent plugin's concrete public event protocol.
     fn handle(&mut self, message: Message) -> Result<(), NcStatus> {
-        match message {
-            Message::Counter(CounterEvent::Activated(event)) => {
+        let Message::Counter(origin, event) = message;
+        let Some(origin) = origin.upgrade()? else {
+            return Ok(());
+        };
+        if !origin.as_com_ref().same_object(self.counter.as_com_ref()) {
+            return Ok(());
+        }
+        match event {
+            CounterEvent::Activated(event) => {
                 self.labels.push(event.label);
                 self.counter.set_count(100)?;
             }
-            Message::Counter(CounterEvent::Changed(event)) => self.labels.push(format!("count={}", event.value)),
+            CounterEvent::Changed(event) => self.labels.push(format!("count={}", event.value)),
         }
         Ok(())
     }
@@ -35,7 +55,7 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
         .activate_plugin_factory::<ExtensionProviderAbi>(neocogi_com::guid_from_qualified_name("neocogi.example.ui-extension"))?;
     let host = ui.widgets().host()?;
     let (events_tx, events) = std::sync::mpsc::channel();
-    let queue = neocogi_com::events::mapped_queue::<neocogi_demo_contracts::CounterEventQueueAbi, _>(events_tx, |_origin, event| Message::Counter(event))?;
+    let queue = CounterQueue::from_value(CounterQueue { sender: events_tx }).query::<CounterEventQueueAbi>()?;
     let binding = neocogi_demo_contracts::CounterEventBinding::from_queue(Some(queue.as_com_ref()));
     let mut counter = provider.counter(host.as_com_ref(), neocogi_com::NcValueRef::new(&binding)?)?;
     let probe: ComPtr<IWidgetProbeAbi> = counter.query()?;

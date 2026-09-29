@@ -1,7 +1,7 @@
 //! Small native host using the static facade/contracts and runtime binding.
 //! Implementations may be loaded from an assembly or linked into one monolith.
 use neocogi_ui::*;
-use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
+use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, NcValueRef, WeakComPtr};
 use std::{error::Error, time::Duration};
 #[cfg(feature = "extension")]
 mod extension;
@@ -15,12 +15,36 @@ struct ClickModel {
     button: ButtonWidget,
 }
 impl events::EventModel for ClickModel {
-    type Message = String;
+    type Message = (WeakComPtr<ButtonAbi>, events::Activation);
     /// Uses the captured label and commits the next presentation before later input.
-    fn handle(&mut self, label: String) -> Result<(), NcStatus> {
+    fn handle(&mut self, (origin, event): Self::Message) -> Result<(), NcStatus> {
+        let Some(origin) = origin.upgrade()? else {
+            return Ok(());
+        };
+        if !origin.as_com_ref().same_object(self.button.as_interface()) {
+            return Ok(());
+        }
+        let label = event.label;
         self.count += 1;
         println!("button submitted: {label}");
         self.button.set_label(&format!("Clicked {} times", self.count))
+    }
+}
+
+#[neocogi_com::com_object(neocogi_ui::nodes::ButtonEventQueue)]
+/// One receiver owned by the smoke host's persistent click behavior.
+struct ClickQueue {
+    /// Message payloads own their labels but never strongly retain their producer.
+    sender: std::sync::mpsc::Sender<(WeakComPtr<ButtonAbi>, events::Activation)>,
+}
+impl neocogi_ui::nodes::ButtonEventQueue for ClickQueue {
+    /// Validates the generated payload and posts the button's one activation variant.
+    fn post(&mut self, origin: ComRef<'_, ButtonAbi>, event: NcValueRef<'_, neocogi_ui::button::Event>) -> Result<(), NcStatus> {
+        let event = event.to_owned()?;
+        neocogi_ui::button::validate(&event)?;
+        let neocogi_ui::button::Event::Activated(event) = event;
+        let _ = self.sender.send((origin.downgrade()?, event));
+        Ok(())
     }
 }
 
@@ -179,11 +203,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         assert_eq!(ui.widgets().host()?.as_raw().object, host.as_raw().object);
     }
     let (session_tx, session) = std::sync::mpsc::channel();
-    let mut button = ui
-        .widgets()
-        .button("Hello across COM", session_tx.clone(), |neocogi_ui::button::Event::Activated(event)| {
-            event.label
-        })?;
+    let queue = ClickQueue::from_value(ClickQueue { sender: session_tx }).query::<ButtonEventQueueAbi>()?;
+    let mut button = ui.widgets().button_with_queue("Hello across COM", Some(queue.as_com_ref()))?;
     let window = ui.window("Dynamic UI", Rect { x: 40, y: 40, width: 500, height: 200 }, &button)?;
     let app = events::Controller::into_local(events::Controller::new(ClickModel { count: 0, button: button.clone() }, session));
     let owner = app.query::<IApplicationDispatcherAbi>()?;
@@ -342,9 +363,34 @@ fn smoke_key(ui: &Ui, key: KeyCode, value: u32) -> Result<(), NcStatus> {
 /// Smoke application facts from independent menu and completion protocols.
 enum ComponentMessage {
     /// Captured menu activation label.
-    Menu(events::Activation),
+    Menu(WeakComPtr<IMenuItemAbi>, events::Activation),
     /// Exact native file completion.
-    File(FileDialogCompletion),
+    File(WeakComPtr<IFileDialogAbi>, FileDialogCompletion),
+}
+#[neocogi_com::com_object(interfaces(neocogi_ui::IMenuItemEventQueue, neocogi_ui::IFileDialogEventQueue))]
+/// Menus and file outcomes share one concrete queue across independently built plugins.
+struct ComponentQueue {
+    /// Host-local messages preserve each producer's exact weak interface type.
+    sender: std::sync::mpsc::Sender<ComponentMessage>,
+}
+impl IMenuItemEventQueue for ComponentQueue {
+    /// Takes ownership of the activation while its foreign source storage is live.
+    fn post(&mut self, origin: ComRef<'_, IMenuItemAbi>, event: NcValueRef<'_, Activation>) -> Result<(), NcStatus> {
+        let event = event.to_owned()?;
+        events::activation::validate(&event)?;
+        let _ = self.sender.send(ComponentMessage::Menu(origin.downgrade()?, event));
+        Ok(())
+    }
+}
+impl IFileDialogEventQueue for ComponentQueue {
+    /// Validates the native-path capability before delivering a completion snapshot.
+    fn post(&mut self, origin: ComRef<'_, IFileDialogAbi>, event: NcValueRef<'_, IFileDialogEvent>) -> Result<(), NcStatus> {
+        let event = event.to_owned()?;
+        events::file_dialog::validate(&event)?;
+        let IFileDialogEvent::Completed(event) = event;
+        let _ = self.sender.send(ComponentMessage::File(origin.downgrade()?, event));
+        Ok(())
+    }
 }
 /// Owned assertion model combines independent public component protocols.
 struct ComponentModel {
@@ -358,8 +404,18 @@ impl events::EventModel for ComponentModel {
     /// Checks the captured fact and mutates ordinary host state after traversal.
     fn handle(&mut self, message: ComponentMessage) -> Result<(), NcStatus> {
         match message {
-            ComponentMessage::Menu(event) => assert_eq!(event.label, "Menu command"),
-            ComponentMessage::File(event) => assert_eq!(events::completed_file_path(&event)?.as_deref(), Some(self.expected_path.as_path())),
+            ComponentMessage::Menu(origin, event) => {
+                if origin.upgrade()?.is_none() {
+                    return Ok(());
+                }
+                assert_eq!(event.label, "Menu command");
+            }
+            ComponentMessage::File(origin, event) => {
+                if origin.upgrade()?.is_none() {
+                    return Ok(());
+                }
+                assert_eq!(events::completed_file_path(&event)?.as_deref(), Some(self.expected_path.as_path()));
+            }
         }
         self.count += 1;
         Ok(())
@@ -376,7 +432,10 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let menus = ui.menus()?;
     let bar = menus.create("")?;
     let (events_tx, events) = std::sync::mpsc::channel();
-    let item = bar.submenu("File")?.item_observed("Menu command", events_tx.clone(), ComponentMessage::Menu)?;
+    let queue = ComponentQueue::from_value(ComponentQueue { sender: events_tx });
+    let item = bar
+        .submenu("File")?
+        .item_with_queue("Menu command", Some(queue.query::<IMenuItemEventQueueAbi>()?.as_com_ref()))?;
     menus.attach_bar(window.as_com_ref(), &bar)?;
     let app = events::Controller::into_local(events::Controller::new(
         ComponentModel {
@@ -393,9 +452,7 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     }
     ui.update_with_events(size, owner.as_com_ref())?;
     assert_eq!(app.try_borrow()?.model.count, 1);
-    let mut picker = ui.file_dialog(window.as_com_ref(), events_tx.clone(), |neocogi_ui::file_dialog::Event::Completed(event)| {
-        ComponentMessage::File(event)
-    })?;
+    let mut picker = ui.file_dialog_with_queue(window.as_com_ref(), Some(queue.query::<IFileDialogEventQueueAbi>()?.as_com_ref()))?;
     let mut request = FileDialogRequest::new(&directory.0);
     request.rect = Rect { x: 10, y: 10, width: 620, height: 370 };
     picker.open(&request)?;
