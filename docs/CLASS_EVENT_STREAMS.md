@@ -81,8 +81,8 @@ permanent non-delivery. IDL emits the ordinary queue trait, checked wire methods
 and producer type association; it emits no callback receiver class. The former
 `receiver`, `mapped_queue`, per-event `queue`/`filter_queue`, and sender/mapper
 constructor helpers have been removed. Keeping those paths had preserved one
-adapter allocation and closure specialization per observed widget in the demos
-and tools. The concrete application-owned queue is now the only observed path.
+adapter allocation per observed widget and separate compiled specializations per
+mapper type in the demos and tools. The concrete application-owned queue is now the only observed path.
 
 An application also chooses its own queue capacity and disconnected/full policy;
 COM does not prescribe an unbounded Rust channel.
