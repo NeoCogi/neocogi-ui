@@ -102,8 +102,8 @@ When reusing one dialog across requests, request identity remains application/do
 policy; binding does not manufacture an invocation ID absent from the protocol.
 
 Declare cross-COM facts as concrete structs/enums and pass one
-`EventBinding<Event>` into the factory. Multiple event kinds are cases of that
-enum. The behavioral parent creates its typed sink before construction; the
+`EventBinding<Object, Event>` into the factory. Multiple event kinds are cases of that
+enum. The behavioral parent creates its typed queue before construction; the
 factory retains it in a private `ContractEventPort` before publishing the widget.
 `#[com_class(Contract)]` does not generate event installation methods. There is
 no later binding operation. See [the complete contract](CLASS_EVENT_STREAMS.md)
@@ -120,33 +120,34 @@ and [IDL syntax](IDL_MODULES.md#concrete-messages-and-streams).
 | `Event::Completed` | FileDialog | `FileDialogCompletion` |
 
 Commit state before calling `self.events.post(&ProducerEvent::Variant(message))?`.
-Mapping runs synchronously and should only translate data or attach routing IDs;
+Queue `post` runs synchronously and should only acquire data and a weak origin;
 UI behavior belongs in the later consumer. Rust cannot prove closure purity.
-Generated methods validate/copy/retain the concrete wire message, and the UI shim
-validates domain values before calling the mapper. Captures must be owned or
+Receivers acquire the checked borrowed event with `to_owned()`. Facade callback
+helpers also validate domain values before calling their optional mapper. Captures must be owned or
 `'static`; the later controller owns its ordinary mutable model.
 
 A custom class intended for authored forms has at most one constructor receiver.
-IDL-generated `*Abi::IDL_INTERFACE.event_sink` records that sink's exact identity
+IDL-generated `*Abi::IDL_INTERFACE.event_queue` records that queue's exact identity
 and complete event graph independently of the product's interface chain.
 `IDesignWidgetCatalog` transports those descriptions through COM. The loader
-checks supplied sinks before construction and the advertised class after it.
-A plugin's common catalog constructor must also query its exact typed sink before
+checks supplied queues before construction and the advertised class after it.
+A plugin's common catalog constructor must also query its exact typed queue before
 allocation. Generated forms expose actual concrete widget projections.
 
 Each widget has one lifetime consumer selected during construction.
-`textbox::sink` creates that adapter separately; `textbox::filter_sink` can
-discard selected variants. `*_with_sink` passes it through the COM factory;
+Applications can implement concrete `*EventQueue` traits on one shared COM object.
+`textbox::queue` optionally creates a callback adapter separately; `textbox::filter_queue` can
+discard selected variants. `*_with_queue` passes it through the COM factory;
 `*_unobserved` chooses permanent non-delivery. There is no later attachment API.
 Windows, popups, menus, built-ins and custom plugins use this same discipline.
-Logical teardown calls `events.close()`, releases the sink, and permanently
-rejects later emission. Explicit sink handles retain their own
+Logical teardown calls `events.close()`, releases the queue and weak origin, and permanently
+rejects later emission. Explicit queue handles retain their own
 captures. Already queued facts retain their values; channel disconnection
 successfully discards future mapped values. Delivery failures propagate after
 the state transition and do not roll it back. See the
 [class event stream guide](CLASS_EVENT_STREAMS.md) for the complete state machine.
 
-Behavioral composites bind their children to sinks targeting a private typed
+Behavioral composites bind their children to queues targeting a private typed
 channel, then own the receiver and model as fields of the concrete widget.
 Implement `IWidget::dispatch_next(&mut self)` and mount that actual widget.
 There is no separate event-owner identity or second mount/retire lifecycle.
@@ -789,7 +790,7 @@ active handler returns. Retaining a picker does not retain its runtime. The
 static facade depends only on contracts and COM support; Rust model state never
 crosses the ABI.
 
-Construct the component with its completion sink, then open it from an ordinary
+Construct the component with its completion queue, then open it from an ordinary
 application handler:
 
 ```rust

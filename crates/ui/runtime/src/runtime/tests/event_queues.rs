@@ -236,3 +236,68 @@ fn one_application_queue_handles_two_widget_types_without_retaining_origins() {
     }
     assert!(messages.try_recv().is_err());
 }
+
+/// Composite implementation children must never escape as the public event origin.
+/// The weak message remains readable after closing and dropping the whole composite.
+#[test]
+fn composite_queues_report_outer_origins_without_retaining_their_children() {
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let (send, messages) = std::sync::mpsc::channel();
+    let queue = neocogi_com::events::mapped_queue::<TextAreaEventQueueAbi, _>(send, |origin, event| (origin, event)).unwrap();
+    let area = ui
+        .widgets()
+        .text_area_with_queue("", TextWrapping::Word, true, Some(queue.as_com_ref()))
+        .unwrap();
+    let origin = area.as_interface().downgrade().unwrap();
+    let window = ui.window("area origin", RECT, &area).unwrap();
+    key_for_origin_test(&ui, KeyCode::Tab);
+    ui.input(UiInput::Text, "outer text").unwrap();
+    ui.update(SIZE).unwrap();
+    window.close().unwrap();
+    drop((window, area, queue));
+    let (captured, event) = messages.try_recv().unwrap();
+    assert!(captured.same_object(&origin));
+    assert!(captured.upgrade().unwrap().is_none());
+    assert!(matches!(event, TextAreaEvent::Changed(TextChanged { text, .. }) if text == "outer text"));
+
+    let mut root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
+    let window = ui.window("combo origin", RECT, &root).unwrap();
+    let (send, messages) = std::sync::mpsc::channel();
+    let queue = neocogi_com::events::mapped_queue::<ComboEventQueueAbi, _>(send, |origin, event| (origin, event)).unwrap();
+    let combo = ui
+        .combo_box_with_queue(
+            window.as_com_ref(),
+            &["first", "second"],
+            ChoiceSelection::Selected(0),
+            Some(queue.as_com_ref()),
+        )
+        .unwrap();
+    let origin = combo.as_interface().downgrade().unwrap();
+    root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
+    for key in [KeyCode::Tab, KeyCode::Enter, KeyCode::ArrowDown, KeyCode::Enter] {
+        key_for_origin_test(&ui, key);
+    }
+    ui.update(SIZE).unwrap();
+    window.close().unwrap();
+    drop((window, root, combo, queue));
+    let (captured, event) = messages.try_recv().unwrap();
+    assert!(captured.same_object(&origin));
+    assert!(captured.upgrade().unwrap().is_none());
+    let neocogi_ui::combo::Event::Changed(selection) = event;
+    assert_eq!(ChoiceSelection::try_from(selection).unwrap(), ChoiceSelection::Selected(1));
+}
+
+/// Sends an ordinary key to the production runtime without directly invoking a port.
+fn key_for_origin_test(ui: &neocogi_ui::Ui, key: KeyCode) {
+    ui.input(
+        UiInput::Key(KeyStroke {
+            key,
+            value: 0,
+            pressed: true,
+            repeat: false,
+            modifiers: 0,
+        }),
+        "",
+    )
+    .unwrap();
+}

@@ -4,9 +4,12 @@
 
 # Typed events and widget-owned dispatch
 
-Widgets post typed facts into their owner's standard Rust channel. A nested
+Widgets post typed facts to their constructor-selected application COM queue. A nested
 component consumes its children's messages and emits its own public results
-upward. The application consumes the final public messages. Built-in widget constructors accept the owner's sender and a typed mapper. Applications may use `Controller<Model>`; a behavioral composite owns its inbox
+upward. The application consumes the final public messages. A concrete application queue
+can implement several `*EventQueue` traits and share one allocation across widgets
+through `*_with_queue`. Convenience constructors additionally accept a sender and
+typed mapper, allocating a callback receiver. Applications may use `Controller<Model>`; a behavioral composite owns its inbox
 and implements `IWidget::dispatch_next` on the same concrete widget.
 
 ## Application construction and frames
@@ -70,7 +73,11 @@ short local guards; those guards end before event dispatch.
 A frame performs no controller allocation, revocation-state allocation, interface
 query, or root reference-count change in this adapter. It still crosses a COM
 method and polls the receiver. Channel blocks and owned message payloads may
-allocate. An allocation regression compares 64 warmed ordinary updates with
+allocate. The standard-channel helpers and generated forms use unbounded `mpsc::channel`
+transport: dispatch work limits and per-value decode budgets do not bound total
+queued memory. An application needing a bound must implement its concrete queue
+with an explicit nonblocking overflow policy; `post` must not wait for the same
+UI thread to drain its inbox. An allocation regression compares 64 warmed ordinary updates with
 64 updates using an empty persistent root and checks for zero extra allocations.
 
 ## Widget methods and event notifications

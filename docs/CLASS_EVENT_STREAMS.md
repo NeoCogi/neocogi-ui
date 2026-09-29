@@ -143,9 +143,43 @@ The IDL compiler derives the queue identity and reachable event value graph from
 the factory signature. The producer does not implement its receiver interface:
 inspection must not search the widget's QueryInterface ancestry for that queue.
 Independent widget plugins publish this information through `IDesignWidgetCatalog`.
-The catalog's `event_queue` replaces the old `event_sink` field, and its version is
-advanced. Designer inspection and construction use the same contract for built-in
+Catalog revision 8 carries `event_queue`, including its exact IID/signature and
+public Rust implementation trait path (`rust_trait`). COM validates this binding
+path using the same policy as interface and value paths. The designer does not
+infer custom Rust trait names from widget names. Designer inspection and construction use the same contract for built-in
 and custom widgets; application message types remain private to the application.
+
+## Generated forms
+
+One generated `FormQueue` implements the concrete queue contracts for all emitting
+fields. Instances of the same widget type share its corresponding receiver; a
+weak origin distinguishes them. A form without events allocates no queue.
+
+```mermaid
+flowchart LR
+    B1["Button save"] --> Q["One FormQueue"]
+    B2["Button cancel"] --> Q
+    T["Textbox name"] --> Q
+    Q --> M["Message: generation + weak origin + owned event"]
+    M --> G["Check current generation"]
+    G --> R["Resolve origin against current Form fields"]
+    R --> H["Dispatch required widget-specific handler with &mut App"]
+```
+
+`Message.event` is a `QueuedEvent`, with one variant per concrete queue contract.
+After checking `slot.accepts(message.generation)`, call
+`message.event.resolve(&app.form)?` to obtain an optional widget-specific `Event`.
+Then call `event.dispatch(&mut app)?`. Resolution and mutable behavior are separate
+so handlers can use their own form fields without a second borrow of the application.
+Expired or unrelated origins yield None. Retained closed origins still need the
+generation check; weak lifetime is not a substitute for form membership.
+
+The generated `Handlers` trait continues to require one method per emitting
+widget, including two distinct buttons. Missing handlers fail Rust compilation.
+`bind` resolves fields without changing event ownership. This design uses one
+queue allocation per construction attempt and no per-widget mapper allocations.
+Each generated `post` validates/acquires its borrowed payload and captures a weak
+origin before enqueueing; it never executes application behavior synchronously.
 
 ## Verification
 
@@ -157,3 +191,8 @@ application test implements two queue interfaces on one allocation, verifies FIF
 snapshots and origin identity, then destroys both widgets while retaining their
 queued messages. COM tests separately exercise C callers, wrong revisions,
 thread-local compile failures, shared promotion races and final value destruction.
+
+Compiled generated-form regressions exercise repeated classes, eventless forms,
+custom COM catalogs, raw Rust identifier paths, live input, mutable handlers, and
+replacement with strongly retained old fields. Composite regressions verify that
+TextArea and Combo messages identify their public object and do not keep it alive.

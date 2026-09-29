@@ -135,7 +135,8 @@ fn generated_event_handler_uses_widget_methods_after_receiving_the_user_event() 
     assert_eq!(form.widget_root_0.label().unwrap(), "Before click");
     let message = events.try_recv().unwrap();
     assert!(slot.accepts(message.generation));
-    message.event.dispatch(&mut form).unwrap();
+    let event = message.event.resolve(&form).unwrap().unwrap();
+    event.dispatch(&mut form).unwrap();
     assert_eq!(form.widget_root_0.label().unwrap(), "Handled by application");
     assert!(matches!(events.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
 }

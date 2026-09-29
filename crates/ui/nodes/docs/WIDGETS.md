@@ -51,7 +51,7 @@ pointers. Final COM release frees the allocation separately.
 | `ColorSwatch` | Color preview and optional label | None |
 
 Each emitting class owns one event port initialized from its factory's
-`EventBinding<Event>` argument. The receiver is fixed before publication;
+`EventBinding<Object, Event>` argument. The receiver is fixed before publication;
 there is no later attachment operation.
 `neocogi_ui::textbox::Event`, for example, is the actual contract message enum
 covering both Changed and Submitted.
@@ -170,9 +170,9 @@ Custom drawing uses the painter's solid geometry/image methods or an owned
 `IRenderItem` implemented by the renderer assembly.
 
 External controls use the same constructor contract: one
-`EventBinding<EditorEvent>`, with all event kinds in its complete enum.
-The application creates the typed sink before calling the custom factory;
-producers cache only that receiver. No inherited interface adds another port.
+`EventBinding<Editor, EditorEvent>`, with all event kinds in its complete enum.
+The application creates the typed queue before calling the custom factory;
+producers retain that receiver and a weak public origin. No inherited interface adds another port.
 Dispatch consumes local messages and never consults a class registry.
 
 ## Native text input and cancellation

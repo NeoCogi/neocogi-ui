@@ -31,7 +31,7 @@ The contracts live in [the demo IDL module](../../demos/contracts/idl/neocogi/de
 `class Counter: IWidget + ILeafLayout + IWidgetProbe`
 is the concrete counter contract; `IInset: IContainer` is a reusable capability.
 The registered `ExtensionProvider` factory constructs both with a typed
-`IWidgetHost` argument; Counter also receives `EventBinding<CounterEvent>`. Factories are the only parameterless activation roots.
+`IWidgetHost` argument; Counter also receives `EventBinding<Counter, CounterEvent>`. Factories are the only parameterless activation roots.
 
 During attachment the runtime queries and caches each control's layout capability
 beside `IWidget`; later update, layout, and paint calls use those cached pointers.
@@ -42,19 +42,19 @@ ownership, logical closure and sticky invalidation. The counter stores its value
 once and owns a `CounterEventPort` initialized before the factory publishes it.
 `CounterEvent` is an ordinary IDL enum containing `Activated(Activation)` and
 `Changed(CounterChanged)`; the latter nests the committed count. The factory
-receives one typed sink for that whole enum. There is no later attachment API.
+receives one typed queue for that whole enum. There is no later attachment API.
 The counter posts both variants after committing state. Composite close retires
 children first, then local resources and common state; final Drop calls close.
 
-The [acceptance host](../../demos/smoke/src/extension.rs) creates its sink through
-`neocogi_com::events::mapped_sink` and passes it into `ExtensionProvider::counter`.
+The [acceptance host](../../demos/smoke/src/extension.rs) creates its queue through
+`neocogi_com::events::mapped_queue` and passes it into `ExtensionProvider::counter`.
 Its application handler matches `CounterEvent` after traversal releases widget
 borrows. `CounterAbi::IDL_INTERFACE` and `CounterEvent::IDL_TYPE` supply generated
 metadata. The root `ExtensionProvider` also
 implements the shared `IDesignWidgetCatalog` COM interface. Its `describe`
 method copies the counter's typed authoring descriptor through COM, and
 `create_widget` accepts the host and optional COM receiver, queries that receiver
-for `CounterSinkAbi`, and only then constructs the counter. A wrong sink is
+for `CounterEventQueueAbi`, and only then constructs the counter. A wrong queue is
 rejected by the plugin even when a caller bypasses registry preflight.
 The unlinked native designer can load this library with `--plugin` and discover
 the counter without a Rust registration hook. A UI document stores only its kind

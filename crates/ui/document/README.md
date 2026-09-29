@@ -19,7 +19,7 @@ and parent-owned layout edges. Each node has a unique stable key. Its physical
 event port count is zero or one. A text editor's single port carries the whole
 `TextboxEvent` or `TextAreaEvent` enum, including `Changed` and `Submitted`.
 An event stream has one receiver selected by the behavioral parent during
-construction. Generated forms prepare typed sinks before the loader creates
+construction. Generated forms prepare a shared typed queue before the loader creates
 widgets. There is no later attachment method, intermediate loader queue, or form
 relay. An omitted receiver chooses permanent non-delivery.
 
@@ -50,7 +50,7 @@ There is no separate command record, setter receiver, named input lookup, or
 `as_interface()`; the designer does not maintain a catalog of custom setters.
 
 These calls validate and apply changes synchronously and return their result.
-Event sinks have a different role: they acquire emitted facts and enqueue the
+Event queues have a different role: they acquire emitted facts and enqueue the
 behavioral parent's mapped messages. Getters and ordinary state setters do not
 publish user-interaction events. Application code decides when a state change
 should also trigger application behavior.
@@ -73,6 +73,7 @@ cargo run -p neocogi-ui-document --example export_bindings -- form.ui.json > bin
 
 The generated module contains `Form` with checked concrete fields for all
 built-in nodes, an `Event` enum with one variant per emitting node, a
+`QueuedEvent` with a weak origin and owned event per distinct queue contract, a
 reload-generation-tagged `Message`, and a `Handlers` trait with one required
 method per emitting node. No handler body is generated. Regenerate after
 changing node keys or widget types and keep `impl Handlers` in application-owned
@@ -100,7 +101,7 @@ impl generated::Handlers for generated::Form {
 The actual method and field ordinals come from the generated file. First use
 `generated::events(generation, sender)` in the reload receiver callback. Then use
 `generated::bind(component)` in the field-validation callback and retain that
-`Form` only after successful publication. The first function constructs sinks;
+`Form` only after successful publication. The first function constructs one application queue object for all emitting fields;
 the second resolves widget fields without changing event ownership.
 
 ```rust,ignore
@@ -112,15 +113,37 @@ let outcome = slot.reload(&document, resources,
 let mut form = candidate_form.unwrap();
 ```
 
-Before dispatch, check `slot.accepts(message.generation)`; stale events from
-replaced candidates must not update the current form. Call
-`message.event.dispatch(&mut form)` only at the application's safe update boundary.
+At the application's safe update boundary, first check the reload generation,
+then resolve the weak origin against the current form's concrete fields:
+
+```rust,ignore
+for message in receiver.try_iter() {
+    if slot.accepts(message.generation) {
+        if let Some(event) = message.event.resolve(&form)? {
+            event.dispatch(&mut form)?;
+        }
+    }
+}
+```
+
+`resolve` finishes its immutable form borrow before the mutable handler runs.
+When behavior lives on `App { form, model }`, resolve against `&app.form`, then
+call `event.dispatch(&mut app)`. Two buttons share one queue receiver while their
+origins select separate required handlers. Expired or foreign origins return
+`None`; no current widget is substituted. Weak promotion alone does not reject
+a closed widget retained by an old form, so the generation check remains required.
+
+Generated forms allocate one queue for the whole construction attempt and none
+when there are no events. The queue owns only a sender and generation, not form
+fields or application state. It acquires each event and weak origin once. Code
+interested only in an old captured result can inspect `QueuedEvent` directly;
+resolving it into a current widget handler is an explicit application decision.
 
 ## Reload, ownership, and authored state
 
 `ReloadSlot` owns one stable container.
 `reload(document, resources, make_events, check_fields)` prepares receivers,
-validates all keys and exact sink contracts, constructs the unmounted candidate,
+validates all keys and exact queue contracts, constructs the unmounted candidate,
 checks concrete fields, and only then replaces the old child. Failed preparation preserves the
 published component. Candidate cleanup closes partial trees and combo popups.
 The returned teardown status reports old-content cleanup after publication; it
@@ -178,9 +201,10 @@ An independently built plugin can expose `IDesignWidgetCatalog` on its root COM
 factory. The registry reads bounded, versioned descriptions through the catalog's
 `describe` method, copies the IDL struct/enum/message shape and typed property
 defaults into owned data, and retains the catalog for `create_widget` calls.
-Catalog revision 6 describes the constructor sink IID/signature. `create_widget`
-receives `WidgetEventBinding`; the plugin must query its exact typed sink before
-allocating the widget. Mismatched sinks fail before publication.
+Catalog revision 8 describes the constructor queue IID/signature and its public
+Rust implementation trait path. COM owns the shared path-validation policy. `create_widget`
+receives `WidgetEventBinding`; the plugin must query its exact typed queue before
+allocating the widget. Mismatched queues fail before publication.
 The shared `neocogi-ui-design` crate contains only this metadata and property
 codec, so plugin implementations do not link the document runtime or designer.
 `register_catalog` validates all kinds transactionally before publishing any.
@@ -202,7 +226,7 @@ impose stricter domain bounds in `create`.
 required handler methods using the owned IDL interface and message metadata
 read through the registry. The generated field uses the concrete COM projection;
 the generated handler receives the declared message enum or struct. The custom
-receiver is supplied during construction and forwards to the application queue;
+receiver is a projection of the generated application queue, supplied during construction;
 subsequent form binding only checks and retains the concrete widget fields.
 The plain `rust_bindings()` helper and the command-line example use an empty
 registry and therefore handle built-in documents only. The designer's Rust

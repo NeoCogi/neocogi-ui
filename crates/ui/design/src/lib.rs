@@ -53,9 +53,9 @@ impl CustomValue {
 /// Maximum encoded bytes accepted for one plugin-provided widget description.
 pub const MAX_DESIGN_DESCRIPTOR_BYTES: usize = 64 * 1024;
 /// Current authoring descriptor schema revision.
-/// Revision 6 describes the constructor receiver separately from the product
-/// interface chain: widgets no longer expose a mutable event-stream projection.
-pub const DESIGN_DESCRIPTOR_VERSION: u32 = 7;
+/// Revision 8 adds the checked Rust implementation trait for shared application
+/// queues. The receiver remains separate from the product interface chain.
+pub const DESIGN_DESCRIPTOR_VERSION: u32 = 8;
 
 /// Owned structural field expression copied through the COM design catalog.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -205,6 +205,9 @@ impl From<&neocogi_com::design::IdlType> for DesignType {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DesignEventQueue {
+    /// Checked Rust implementation trait used when exporting a shared application queue.
+    /// Its spelling cannot change the nominal identity or wire signature.
+    pub rust_trait: String,
     /// Closed generic IEventQueue<Object, Event> identity.
     pub iid: [u8; 16],
     /// Receiver ABI signature, including the complete event layout.
@@ -267,6 +270,7 @@ impl DesignWidgetManifest {
             .as_ref()
             .map(|output| -> Result<DesignEventQueue, String> {
                 Ok(DesignEventQueue {
+                    rust_trait: output.rust_trait.to_owned(),
                     iid: output.abi.interface_id.to_uuid_bytes(),
                     // SAFETY: IDL owns this immutable static descriptor.
                     signature: unsafe { output.abi.abi_signature.as_bytes() }
@@ -310,6 +314,7 @@ impl DesignWidgetManifest {
             return Err("Invalid design widget property defaults".into());
         }
         if let Some(output) = &self.interface.event_queue {
+            neocogi_com::validate_rust_path(&output.rust_trait).map_err(|error| format!("Invalid event queue Rust trait: {error}"))?;
             if output.iid == [0; 16] || !qualified_name(&output.message) {
                 return Err("Invalid design widget output metadata".into());
             }
@@ -487,6 +492,7 @@ mod tests {
                 rust_abi: "example_contracts::CounterAbi".into(),
                 values: vec![],
                 event_queue: Some(DesignEventQueue {
+                    rust_trait: "example::CounterEventQueue".into(),
                     iid: [2; 16],
                     signature: [3; 32],
                     message: "example.CounterEvent".into(),
@@ -503,6 +509,21 @@ mod tests {
             }]),
         });
         manifest
+    }
+
+    /// Queue implementation paths obey exactly the COM binding grammar used by
+    /// interface and value paths, including raw identifiers and keyword rejection.
+    #[test]
+    fn queue_traits_use_the_shared_com_path_validator() {
+        let mut manifest = counter_manifest();
+        for path in ["example::type::Queue", "example::async", "crate::Queue", "example::Queue<u32>"] {
+            manifest.interface.event_queue.as_mut().unwrap().rust_trait = path.into();
+            assert!(manifest.validate().is_err(), "accepted {path}");
+        }
+        for path in ["example::r#type::Queue", "::example::Queue"] {
+            manifest.interface.event_queue.as_mut().unwrap().rust_trait = path.into();
+            manifest.validate().unwrap();
+        }
     }
 
     /// A copied catalog description retains typed metadata and checks defaults.

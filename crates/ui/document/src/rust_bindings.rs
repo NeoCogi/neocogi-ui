@@ -2,6 +2,8 @@
 use crate::{CustomWidgetRegistry, Document, Node, WidgetSpec, MAX_BYTES};
 use std::fmt::Write;
 
+mod queues;
+
 /// Builds a valid, collision-free symbol with a role prefix and declaration ordinal.
 /// Public endpoint names remain exact in string literals, even when punctuation normalizes alike.
 fn symbol(prefix: &str, name: &str, index: usize) -> String {
@@ -116,12 +118,12 @@ impl Document {
             )
             .unwrap();
         }
-        source.push_str("}\n/// A captured event belongs to exactly one component reload attempt.\npub struct Message {\n    /// Reject stale messages with ReloadSlot::accepts before dispatch.\n    pub generation: neocogi_ui_document::Generation,\n    /// Complete typed widget event.\n    pub event: Event,\n}\n");
+        source.push_str("}\n/// A captured event belongs to exactly one component reload attempt.\npub struct Message {\n    /// Reject stale messages with ReloadSlot::accepts before dispatch.\n    pub generation: neocogi_ui_document::Generation,\n    /// Complete typed widget event.\n    pub event: QueuedEvent,\n}\n");
         source.push_str("/// Application-owned behavior; every emitting widget requires an implementation.\npub trait Handlers {\n");
         for (index, node, payload) in &events {
             writeln!(source, "    /// Handles the event from widget {:?} after traversal releases widget borrows.\n    fn {}(&mut self, event: {}) -> Result<(), neocogi_com::NcStatus>;", node.key, symbol("on", &node.key, *index), payload).unwrap();
         }
-        source.push_str("}\nimpl Event {\n    /// Dispatch only after checking the enclosing message generation.\n    pub fn dispatch(self, handlers: &mut impl Handlers) -> Result<(), neocogi_com::NcStatus> {\n        match self {\n");
+        source.push_str("}\nimpl Event {\n    /// Dispatch only after checking the enclosing message generation.\n    pub fn dispatch(self, handlers: &mut impl Handlers) -> Result<(), neocogi_com::NcStatus> {\n        let _ = &handlers;\n        match self {\n");
         for (index, node, _) in &events {
             writeln!(
                 source,
@@ -153,13 +155,8 @@ impl Document {
             .unwrap();
         }
         source.push_str("    };\n");
-        source.push_str("    Ok(form)\n}\n/// Prepares application receivers before Loader or ReloadSlot creates widgets.\npub fn events(\n    generation: neocogi_ui_document::Generation,\n    send: std::sync::mpsc::Sender<Message>,\n) -> Result<neocogi_ui_document::EventBindings, neocogi_com::NcStatus> {\n    let mut bindings = neocogi_ui_document::EventBindings::new();\n");
-        for (index, node, payload) in &events {
-            writeln!(source,
-                "    bindings.insert::<{}, _>({:?}, send.clone(), move |event: {}| Message {{ generation, event: Event::Widget{index}(event) }})?;",
-                node.widget.rust_interface(custom)?, node.key, payload).unwrap();
-        }
-        source.push_str("    Ok(bindings)\n}\n");
+        source.push_str("    Ok(form)\n}\n");
+        queues::emit(&mut source, &events, custom)?;
         if source.len() > MAX_BYTES {
             return Err("Generated bindings exceed the byte limit".into());
         }

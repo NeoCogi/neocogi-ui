@@ -11,7 +11,7 @@ pub struct Message {
     /// Reject stale messages with ReloadSlot::accepts before dispatch.
     pub generation: neocogi_ui_document::Generation,
     /// Complete typed widget event.
-    pub event: Event,
+    pub event: QueuedEvent,
 }
 /// Application-owned behavior; every emitting widget requires an implementation.
 pub trait Handlers {
@@ -23,6 +23,7 @@ pub trait Handlers {
 impl Event {
     /// Dispatch only after checking the enclosing message generation.
     pub fn dispatch(self, handlers: &mut impl Handlers) -> Result<(), neocogi_com::NcStatus> {
+        let _ = &handlers;
         match self {
             Self::Widget2(event) => handlers.on_save_2(event),
             Self::Widget3(event) => handlers.on_extension_3(event),
@@ -53,13 +54,80 @@ pub fn bind(
     };
     Ok(form)
 }
-/// Prepares application receivers before Loader or ReloadSlot creates widgets.
-pub fn events(
+/// Captured facts retain weak origins; resolve against current fields before dispatch.
+pub enum QueuedEvent {
+    /// Complete stream for instances of neocogi_ui::ButtonAbi.
+    Source0 {
+        /// Does not retain a removed widget.
+        origin: neocogi_com::WeakComPtr<neocogi_ui::ButtonAbi>,
+        /// Owned snapshot acquired before post returned.
+        event: neocogi_ui::button::Event,
+    },
+    /// Complete stream for instances of neocogi_demo_contracts::CounterAbi.
+    Source1 {
+        /// Does not retain a removed widget.
+        origin: neocogi_com::WeakComPtr<neocogi_demo_contracts::CounterAbi>,
+        /// Owned snapshot acquired before post returned.
+        event: neocogi_demo_contracts::CounterEvent,
+    },
+}
+impl QueuedEvent {
+    /// Resolve only after generation validation; expired or foreign origins return None.
+    /// Inspect the captured payload directly when its origin lifetime is irrelevant.
+    pub fn resolve(self, form: &Form) -> Result<Option<Event>, neocogi_com::NcStatus> {
+        let _ = &form;
+        match self {
+            Self::Source0 { origin, event } => {
+                let origin = match origin.upgrade()? { Some(origin) => origin, None => return Ok(None) };
+                Ok(match origin.as_com_ref() {
+                    origin if origin.same_object(form.widget_save_2.as_interface()) => Some(Event::Widget2(event)),
+                    _ => None,
+                })
+            }
+            Self::Source1 { origin, event } => {
+                let origin = match origin.upgrade()? { Some(origin) => origin, None => return Ok(None) };
+                Ok(match origin.as_com_ref() {
+                    origin if origin.same_object(form.widget_extension_3.as_interface()) => Some(Event::Widget3(event)),
+                    _ => None,
+                })
+            }
+        }
+    }
+}
+#[neocogi_com::com_object(interfaces(neocogi_ui::nodes::IEventQueueInstance0517d9243d615b7d80421e7a13f2acac, neocogi_demo_contracts::IEventQueueInstanceb6f1f3546ad05f7e9f15e20b10fde6ef))]
+/// One application queue allocation serves every widget in this construction attempt.
+struct FormQueue {
+    /// Fixed reload identity, independent of widget lifetime.
     generation: neocogi_ui_document::Generation,
+    /// Retains the channel, never the form, model or widgets.
     send: std::sync::mpsc::Sender<Message>,
-) -> Result<neocogi_ui_document::EventBindings, neocogi_com::NcStatus> {
+}
+impl neocogi_ui::nodes::IEventQueueInstance0517d9243d615b7d80421e7a13f2acac for FormQueue {
+    /// Acquires the snapshot and weak origin, then enqueues without running handlers.
+    fn post(&mut self, origin: neocogi_com::ComRef<'_, neocogi_ui::ButtonAbi>, event: neocogi_com::NcValueRef<'_, neocogi_ui::button::Event>) -> Result<(), neocogi_com::NcStatus> {
+        let event = event.to_owned()?;
+        neocogi_ui::button::validate(&event)?;
+        let event = QueuedEvent::Source0 { origin: origin.downgrade()?, event };
+        let _ = self.send.send(Message { generation: self.generation, event });
+        Ok(())
+    }
+}
+impl neocogi_demo_contracts::IEventQueueInstanceb6f1f3546ad05f7e9f15e20b10fde6ef for FormQueue {
+    /// Acquires the snapshot and weak origin, then enqueues without running handlers.
+    fn post(&mut self, origin: neocogi_com::ComRef<'_, neocogi_demo_contracts::CounterAbi>, event: neocogi_com::NcValueRef<'_, neocogi_demo_contracts::CounterEvent>) -> Result<(), neocogi_com::NcStatus> {
+        let event = event.to_owned()?;
+        let event = QueuedEvent::Source1 { origin: origin.downgrade()?, event };
+        let _ = self.send.send(Message { generation: self.generation, event });
+        Ok(())
+    }
+}
+/// Supplies shared queue projections before Loader or ReloadSlot creates widgets.
+pub fn events(generation: neocogi_ui_document::Generation, send: std::sync::mpsc::Sender<Message>) -> Result<neocogi_ui_document::EventBindings, neocogi_com::NcStatus> {
     let mut bindings = neocogi_ui_document::EventBindings::new();
-    bindings.insert::<neocogi_ui::ButtonAbi, _>("save", send.clone(), move |event: neocogi_ui::button::Event| Message { generation, event: Event::Widget2(event) })?;
-    bindings.insert::<neocogi_demo_contracts::CounterAbi, _>("extension", send.clone(), move |event: neocogi_demo_contracts::CounterEvent| Message { generation, event: Event::Widget3(event) })?;
+    let queue = FormQueue::from_value(FormQueue { generation, send });
+    let queue_0 = queue.query::<neocogi_com::events::QueueOf<neocogi_ui::ButtonAbi>>()?;
+    bindings.insert_queue::<neocogi_ui::ButtonAbi>("save", queue_0.as_com_ref())?;
+    let queue_1 = queue.query::<neocogi_com::events::QueueOf<neocogi_demo_contracts::CounterAbi>>()?;
+    bindings.insert_queue::<neocogi_demo_contracts::CounterAbi>("extension", queue_1.as_com_ref())?;
     Ok(bindings)
 }

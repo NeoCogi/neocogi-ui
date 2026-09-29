@@ -14,18 +14,32 @@ mod empty;
 #[path = "fixtures/custom_bindings.rs"]
 mod custom;
 
+/// Refresh fixtures only when explicitly requested; normal runs compare the
+/// freshly generated source with the source compiled into this test binary.
+fn fixture(actual: String, filename: &str, compiled: &str) {
+    if std::env::var_os("NC_UPDATE_BINDINGS_FIXTURES").is_some() {
+        std::fs::write(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures").join(filename), actual).unwrap();
+    } else {
+        assert_eq!(actual, compiled);
+    }
+}
+
 /// Exact fixture equality keeps the compiled artifact synchronized with the generator's output.
 #[test]
 fn generated_bindings_compile_for_every_public_contract_and_escaped_name() {
     let document = Document::from_json(include_bytes!("fixtures/bindings.ui.json")).unwrap();
-    assert_eq!(document.rust_bindings().unwrap(), include_str!("fixtures/full_bindings.rs"));
+    fixture(document.rust_bindings().unwrap(), "full_bindings.rs", include_str!("fixtures/full_bindings.rs"));
 }
 
 /// Empty public contracts still produce a valid exhaustive dispatcher and a callable binding function.
 #[test]
 fn empty_public_contract_generates_a_valid_module() {
     let document = Document::from_json(include_bytes!("fixtures/empty.ui.json")).unwrap();
-    assert_eq!(document.rust_bindings().unwrap(), include_str!("fixtures/empty_bindings.rs"));
+    fixture(
+        document.rust_bindings().unwrap(),
+        "empty_bindings.rs",
+        include_str!("fixtures/empty_bindings.rs"),
+    );
 }
 
 /// Generated custom fields and handlers read their event contract from the COM interface.
@@ -69,7 +83,11 @@ fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
         edge: Edge::Linear { main: Track::Content, cross: None },
         node: Node::new("extension", registry.default_spec("example.button").unwrap()),
     });
-    assert_eq!(document.rust_bindings_with(&registry).unwrap(), include_str!("fixtures/custom_bindings.rs"));
+    fixture(
+        document.rust_bindings_with(&registry).unwrap(),
+        "custom_bindings.rs",
+        include_str!("fixtures/custom_bindings.rs"),
+    );
     assert_eq!(Document::from_json(&document.to_json().unwrap()).unwrap(), document);
     assert_eq!(Document::from_binary(&document.to_binary().unwrap()).unwrap(), document);
     let metadata = &neocogi_demo_contracts::CounterEvent::IDL_TYPE;
@@ -100,6 +118,7 @@ fn custom_factory_cannot_omit_its_constructor_event_graph() {
         chain: &neocogi_demo_contracts::CounterAbi::INTERFACE_CHAIN,
         rust_abi: "neocogi_demo_contracts::CounterAbi",
         event_queue: Some(neocogi_com::design::IdlEventQueue {
+            rust_trait: "neocogi_demo_contracts::CounterEventQueue",
             abi: &neocogi_demo_contracts::CounterEventQueueAbi::INTERFACE_DESCRIPTOR,
             message: &neocogi_demo_contracts::CounterEvent::IDL_TYPE,
         }),
@@ -123,4 +142,100 @@ fn custom_factory_cannot_omit_its_constructor_event_graph() {
             .unwrap_err()
             .contains("absent from")
     );
+}
+
+#[rustfmt::skip]
+#[allow(dead_code)]
+#[path = "fixtures/shared_bindings.rs"]
+mod shared;
+#[rustfmt::skip]
+#[allow(dead_code)]
+#[path = "fixtures/eventless_bindings.rs"]
+mod eventless;
+
+/// Two buttons share one concrete receiver implementation; no widget needs a mapper.
+#[test]
+fn same_class_instances_share_one_queue_and_preserve_required_handlers() {
+    let document = Document::from_json(include_bytes!("fixtures/shared.ui.json")).unwrap();
+    let source = document.rust_bindings().unwrap();
+    assert_eq!(source.matches("FormQueue::from_value").count(), 1);
+    assert_eq!(source.matches("impl neocogi_ui::nodes::IEventQueue").count(), 2);
+    assert!(!source.contains("bindings.insert::<"));
+    assert!(source.contains("on_first_1"));
+    assert!(source.contains("on_second_2"));
+    fixture(source, "shared_bindings.rs", include_str!("fixtures/shared_bindings.rs"));
+}
+
+/// A form with no emitting widgets needs neither a dummy queue nor mapper allocation.
+#[test]
+fn eventless_form_compiles_without_a_queue_object() {
+    let mut document = Document::new("eventless");
+    document.root = neocogi_ui_document::Node::new(
+        "label",
+        neocogi_ui_document::WidgetSpec::TextBlock {
+            text: "read only".into(),
+            wrapping: neocogi_ui_document::Wrapping::None,
+        },
+    );
+    document.outputs.clear();
+    let source = document.rust_bindings().unwrap();
+    assert!(!source.contains("struct FormQueue"));
+    fixture(source, "eventless_bindings.rs", include_str!("fixtures/eventless_bindings.rs"));
+}
+
+#[rustfmt::skip]
+#[allow(dead_code)]
+#[path = "fixtures/alias_bindings.rs"]
+mod alias;
+
+/// COM identity groups valid Rust reexports; conflicting ABI revisions cannot
+/// share the same application receiver even if each catalog is valid on its own.
+#[test]
+fn shared_queues_allow_rust_aliases_but_reject_conflicting_revisions() {
+    use neocogi_ui_document::{CustomWidgetFactory, CustomWidgetRegistry, Node, WidgetSpec};
+    use neocogi_ui_document::design::DesignWidgetManifest;
+    use std::rc::Rc;
+
+    /// Pure metadata fixture; no widget is constructed during source generation.
+    struct Catalog(DesignWidgetManifest);
+    impl CustomWidgetFactory for Catalog {
+        /// Returns one checked descriptor with alternate public reexport paths.
+        fn manifest(&self) -> Result<DesignWidgetManifest, String> {
+            Ok(self.0.clone())
+        }
+        /// Construction is deliberately unavailable in this generator-only test.
+        fn create(
+            &self,
+            _: &neocogi_ui::Ui,
+            _: &[neocogi_ui_document::CustomProperty],
+            _: Option<neocogi_com::ComPtr<neocogi_com::IUnknown>>,
+        ) -> Result<neocogi_ui::Widget<neocogi_ui::IWidgetAbi>, neocogi_com::NcStatus> {
+            Err(neocogi_com::NC_E_INVALID_ARG)
+        }
+    }
+    let mut metadata = DesignWidgetManifest::from_idl("alias.button", vec![], &neocogi_ui::ButtonAbi::IDL_INTERFACE).unwrap();
+    metadata.interface.rust_abi = "neocogi_ui::nodes::ButtonAbi".into();
+    let queue = metadata.interface.event_queue.as_mut().unwrap();
+    queue.rust_trait = queue.rust_trait.replace("neocogi_ui_nodes_contracts::", "neocogi_ui::nodes::");
+    for value in &mut metadata.interface.values {
+        value.rust_type = value.rust_type.replace("neocogi_ui_nodes_contracts::", "neocogi_ui::nodes::");
+    }
+    let mut registry = CustomWidgetRegistry::new();
+    registry.register(Rc::new(Catalog(metadata.clone()))).unwrap();
+    let mut document = Document::from_json(include_bytes!("fixtures/shared.ui.json")).unwrap();
+    document.root.children[1].node = Node::new(
+        "alias",
+        WidgetSpec::Custom {
+            kind: "alias.button".into(),
+            properties: vec![],
+        },
+    );
+    let source = document.rust_bindings_with(&registry).unwrap();
+    assert_eq!(source.matches("impl neocogi_ui::nodes::IEventQueue").count(), 2);
+    fixture(source, "alias_bindings.rs", include_str!("fixtures/alias_bindings.rs"));
+
+    metadata.interface.event_queue.as_mut().unwrap().signature[0] ^= 1;
+    let mut incompatible = CustomWidgetRegistry::new();
+    incompatible.register(Rc::new(Catalog(metadata))).unwrap();
+    assert!(document.rust_bindings_with(&incompatible).unwrap_err().contains("conflicting ABI revisions"));
 }

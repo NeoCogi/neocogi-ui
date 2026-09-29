@@ -7,7 +7,7 @@ means no work was available. A handler error consumes the attempted message and
 leaves its successors queued. The COM mutable borrow gate protects the same
 allocation used for widget editing and rendering.
 
-Ordinary controls forward their constructor-mapped events to their behavioral
+Ordinary controls forward their constructor-queued events to their behavioral
 parent. They do not acquire private queues merely by implementing this method.
 The built-in `HostedWidget` helper and application `LeafContent` helper provide
 no-op defaults. Independent COM implementations return `Ok(false)` when they
@@ -21,7 +21,7 @@ let its active call return before running terminal cleanup.
 
 Closure remains the widget's existing descendant-first, idempotent operation.
 Eventful composites additionally disconnect their private receiver, discard its
-remaining messages, and release their constructor-selected output mapping.
+remaining messages, and release their constructor-selected output queue and weak origin.
 Messages already posted to the application's inbox belong to the application.
 
 
