@@ -58,14 +58,21 @@ fn checked_title(title: NcCopyFromBufferOffset<'_, u8>) -> Result<String, NcStat
     Ok(text(title)?.to_owned())
 }
 
-/// Concrete creation policy; the parent capability is authenticated before this value is built.
-enum Placement {
-    /// Independent window in an application-selectable fixed layer.
-    Root(Option<ComPtr<IWindowEventQueueAbi>>),
+/// Ordinary window placement is data so all three policies share one COM initializer.
+/// The enclosing transaction authenticates any parent before mounting content.
+enum WindowPlacement {
+    /// Independent visible window in an application-selectable fixed layer.
+    Root,
     /// Visible structural child of an ordinary window.
-    Child(WindowHandle, Option<ComPtr<IWindowEventQueueAbi>>),
-    /// Hidden modal dialog owned by an ordinary window.
-    Dialog(WindowHandle, Option<ComPtr<IWindowEventQueueAbi>>),
+    Child(WindowHandle),
+    /// Initially hidden modal dialog owned by an ordinary window.
+    Dialog(WindowHandle),
+}
+
+/// Construction distinguishes window and popup contracts without erasing their queues.
+enum Placement {
+    /// Ordinary placement and the one constructor-selected window receiver.
+    Window(WindowPlacement, Option<ComPtr<IWindowEventQueueAbi>>),
     /// Hidden auto-sized popup owned by a live ordinary window or dialog.
     Popup(WindowHandle, Option<ComPtr<IPopupEventQueueAbi>>),
 }
@@ -105,8 +112,8 @@ impl RuntimeStorage {
         let mut context = self.context()?;
         self.prune_mounts(&context.window_manager);
         match &placement {
-            Placement::Root(_) => {}
-            Placement::Child(parent, _) | Placement::Dialog(parent, _) => {
+            Placement::Window(WindowPlacement::Root, _) => {}
+            Placement::Window(WindowPlacement::Child(parent) | WindowPlacement::Dialog(parent), _) => {
                 if context.window_manager.window_layer(parent).map_err(status)? == LayerBinding::Modal {
                     return Err(UI_E_POLICY);
                 }
@@ -119,19 +126,9 @@ impl RuntimeStorage {
         let node = self.factory.mount_node(root, None)?;
         let manager = &mut context.window_manager;
         let (identity, surface) = match placement {
-            Placement::Root(queue) => LogicalWindow::create(Rc::downgrade(self), queue, |events| {
-                manager.create_window(Window::new(title, local_rect(rect), node), events)
-            })?,
-            Placement::Child(parent, queue) => LogicalWindow::create(Rc::downgrade(self), queue, |events| {
-                manager
-                    .create_child_window(&parent, Window::new(title, local_rect(rect), node), events)
-                    .expect("authenticated ordinary parent cannot change during an exclusive transaction")
-            })?,
-            Placement::Dialog(parent, queue) => LogicalWindow::create(Rc::downgrade(self), queue, |events| {
-                manager
-                    .create_dialog(&parent, Window::new(title, local_rect(rect), node), events)
-                    .expect("authenticated ordinary owner cannot change during an exclusive transaction")
-            })?,
+            Placement::Window(placement, queue) => {
+                LogicalWindow::create(Rc::downgrade(self), manager, placement, Window::new(title, local_rect(rect), node), queue)?
+            }
             Placement::Popup(parent, queue) => LogicalPopup::create(Rc::downgrade(self), queue, |events| {
                 manager
                     .create_popup(&parent, &title, node, events)
@@ -154,7 +151,7 @@ impl IWindowManager for Runtime {
         events: neocogi_com::NcValueRef<'_, IWindowEventBinding>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.storage
-            .create(Placement::Root(events.to_owned()?.into_queue()), title, rect, root)?
+            .create(Placement::Window(WindowPlacement::Root, events.to_owned()?.into_queue()), title, rect, root)?
             .query()
     }
     /// Authenticates the parent's COM identity before validating ordinary-child policy.
@@ -168,7 +165,7 @@ impl IWindowManager for Runtime {
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.storage
             .create(
-                Placement::Child(self.storage.parent(parent)?, events.to_owned()?.into_queue()),
+                Placement::Window(WindowPlacement::Child(self.storage.parent(parent)?), events.to_owned()?.into_queue()),
                 title,
                 rect,
                 root,
@@ -186,7 +183,7 @@ impl IWindowManager for Runtime {
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.storage
             .create(
-                Placement::Dialog(self.storage.parent(parent)?, events.to_owned()?.into_queue()),
+                Placement::Window(WindowPlacement::Dialog(self.storage.parent(parent)?), events.to_owned()?.into_queue()),
                 title,
                 rect,
                 root,
@@ -246,13 +243,30 @@ impl LogicalWindow {
     /// after the caller has validated parent, content and placement policy.
     fn create(
         runtime: Weak<RuntimeStorage>,
+        manager: &mut WindowManager,
+        placement: WindowPlacement,
+        window: Window,
         queue: Option<ComPtr<IWindowEventQueueAbi>>,
-        register: impl FnOnce(Option<IWindowEventPort>) -> WindowHandle,
     ) -> Result<(ComPtr<IUnknown>, NativeSurface), NcStatus> {
-        let local = Self::into_local_cyclic::<IWindowAbi>(|origin| Self {
-            runtime,
-            window: register(Some(neocogi_com::events::EventPort::with_queue(queue, origin))),
-            closed: Cell::new(false),
+        // A single cyclic initializer keeps weak setup, allocation and publication
+        // common. Supplying a different FnOnce per placement had duplicated this
+        // machinery in the min-size binary despite an identical ownership contract.
+        let local = Self::into_local_cyclic::<IWindowAbi>(|origin| {
+            let events = Some(neocogi_com::events::EventPort::with_queue(queue, origin));
+            let window = match placement {
+                WindowPlacement::Root => manager.create_window(window, events),
+                WindowPlacement::Child(parent) => manager
+                    .create_child_window(&parent, window, events)
+                    .expect("authenticated ordinary parent cannot change during an exclusive transaction"),
+                WindowPlacement::Dialog(parent) => manager
+                    .create_dialog(&parent, window, events)
+                    .expect("authenticated ordinary owner cannot change during an exclusive transaction"),
+            };
+            Self {
+                runtime,
+                window,
+                closed: Cell::new(false),
+            }
         })?;
         let surface = NativeSurface::Window(local.try_borrow()?.window.clone());
         Ok((local.query()?, surface))
@@ -555,5 +569,85 @@ mod tests {
         // ownership for either the popup definition or its window.
         popup.close().unwrap();
         owner.close().unwrap();
+    }
+}
+
+#[cfg(test)]
+mod placement_tests {
+    use neocogi_com::WeakComPtr;
+    use neocogi_ui::{IWindowAbi, Rect, Visibility, WindowEvent};
+
+    /// The shared initializer preserves each placement's visibility, public event
+    /// origin and complete subtree closure through actual COM calls.
+    #[test]
+    fn window_placements_share_one_queue_without_sharing_origins() {
+        let runtime = crate::test_support::create_runtime(crate::test_support::test_atlas());
+        let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
+        let (send, events) = std::sync::mpsc::channel();
+        let queue = neocogi_ui::test_event_queue!(window, (WeakComPtr<IWindowAbi>, WindowEvent), send, |_queue, origin, event| (
+            origin.downgrade()?,
+            event
+        ))
+        .unwrap();
+        let weak_queue = queue.downgrade().unwrap();
+        let rect = Rect { x: 20, y: 20, width: 320, height: 240 };
+        let root = ui
+            .window_with_queue("root", rect, &ui.widgets().button_unobserved("root").unwrap(), Some(queue.as_com_ref()))
+            .unwrap();
+        let child = ui
+            .child_window_with_queue(
+                root.as_com_ref(),
+                "child",
+                rect,
+                &ui.widgets().button_unobserved("child").unwrap(),
+                Some(queue.as_com_ref()),
+            )
+            .unwrap();
+        let dialog = ui
+            .dialog_with_queue(
+                root.as_com_ref(),
+                "dialog",
+                rect,
+                &ui.widgets().button_unobserved("dialog").unwrap(),
+                Some(queue.as_com_ref()),
+            )
+            .unwrap();
+        // All three retain the exact same application receiver. They must publish
+        // their own window projection as origin, regardless of placement policy.
+        drop(queue);
+        assert_eq!(root.snapshot().unwrap().visibility, Visibility::Visible);
+        assert_eq!(child.snapshot().unwrap().visibility, Visibility::Visible);
+        assert_eq!(dialog.snapshot().unwrap().visibility, Visibility::Hidden);
+        let origins = [&root, &child, &dialog].map(|window| window.downgrade().unwrap());
+        // Geometry setters are intentionally silent. Visibility transitions are
+        // lifecycle events; exercise each placement's receiver using a real hide.
+        for (index, window) in [&root, &child, &dialog].into_iter().enumerate() {
+            window.set_visibility(Visibility::Visible).unwrap();
+            window.set_visibility(Visibility::Hidden).unwrap();
+            let found = events
+                .try_iter()
+                .any(|(origin, event)| origin.same_object(&origins[index]) && matches!(event, WindowEvent::Hidden));
+            assert!(found, "placement {index} must identify its own visibility event");
+            window.set_visibility(Visibility::Visible).unwrap();
+        }
+        root.close().unwrap();
+        let closed: Vec<_> = events
+            .try_iter()
+            .filter_map(|(origin, event)| match event {
+                WindowEvent::Destroyed => Some(origin),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(closed.len(), 3);
+        assert!(closed.iter().any(|origin| origin.same_object(&origins[0])));
+        assert!(closed.iter().any(|origin| origin.same_object(&origins[1])));
+        assert!(closed.iter().any(|origin| origin.same_object(&origins[2])));
+        assert!(weak_queue.upgrade().unwrap().is_none(), "closure releases all three receiver references");
+        assert!(
+            origins.iter().all(|origin| origin.upgrade().unwrap().is_some()),
+            "caller handles retain closed values"
+        );
+        drop((root, child, dialog));
+        assert!(origins.iter().all(|origin| origin.upgrade().unwrap().is_none()));
     }
 }
