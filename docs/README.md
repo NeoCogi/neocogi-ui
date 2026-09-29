@@ -22,7 +22,7 @@ guides cover architecture, authoring tools, integration, and repository workflow
 - [COM interface storage](COM_INTERFACE_STORAGE.md) — object/table handles, the explicit storage tradeoff, ownership, and linked-size evidence.
 - [Recursive value contract](RECURSIVE_VALUE_CONTRACT.md) — scalar and aggregate wire rules, explicit recursion, budgets, buffers, and COM inspection graphs.
 - [IDL source maps](IDL_SOURCE_MAPS.md) — generated Rust provenance, readable annotations, sidecar format and source lookup.
-- [Local COM implementation](../crates/com/README.md) and [ABI specification](../crates/com/docs/abi-v11.md).
+- [Local COM implementation](../crates/com/README.md) and [ABI specification](../crates/com/docs/abi-v12.md).
 - [Accepted design](COM_DESIGN.md), [feature ownership](FEATURES.md), and [unreleased changes](CHANGELOG.md).
 
 ## UI implementation notes

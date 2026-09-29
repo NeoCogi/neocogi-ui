@@ -2,6 +2,12 @@
 
 ## 0.0.0 (unreleased)
 
+- Share COM lifetime operations through one allocation control header. Remove
+  per-class weak operation tables and generated counting forwarders. Weak handles
+  are one pointer, strong handles remain two; typed destruction and deallocation
+  stay in the allocating provider. Core ABI 12 specifies publication, promotion,
+  final destruction and constructor rollback without exposing private Arc layout.
+
 - Complete the concrete `IEventQueue<Object, Event>` migration across applications,
   composites, designer previews and test fixtures. Remove generated callback
   receiver classes, `mapped_queue`, per-event queue builders and sender/mapper

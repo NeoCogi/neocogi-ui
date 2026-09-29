@@ -293,16 +293,16 @@ impl neocogi_ui_nodes_contracts::Checkbox for Checkbox {
 #[cfg(all(test, target_pointer_width = "64"))]
 #[test]
 fn com_object_control_is_independent_of_interface_count() {
-    // The call gate occupies one word in the payload. Arc owns its private
-    // strong/weak header outside this storage; this is not total allocation size.
+    // The common control header occupies three words and the call gate one.
+    // Box owns exactly this storage; there is no hidden Arc header to add.
     // No per-interface fields remain; handles carry their selected tables.
     // The constructor receiver is not an interface implemented by the widget.
     assert_eq!(Checkbox::COM_INTERFACE_COUNT, 4);
     println!(
-        "Checkbox: state={}, payload={}",
+        "Checkbox: state={}, allocation={}",
         core::mem::size_of::<Checkbox>(),
         core::mem::size_of::<CheckboxComObject>()
     );
-    assert_eq!(core::mem::offset_of!(CheckboxComObject, value), 8);
-    assert_eq!(core::mem::size_of::<CheckboxComObject>(), core::mem::size_of::<Checkbox>() + 8);
+    assert_eq!(core::mem::offset_of!(CheckboxComObject, value), 32);
+    assert_eq!(core::mem::size_of::<CheckboxComObject>(), core::mem::size_of::<Checkbox>() + 32);
 }

@@ -102,11 +102,11 @@ flowchart LR
 The weak edge retains lifetime bookkeeping, not the widget value. Last strong
 release destroys the value and all its resources immediately. `upgrade()` then
 returns `Ok(None)` permanently, even if another allocation later reuses memory.
-Generated objects use one private Arc allocation; its empty inline storage and
-strong/weak header remain allocated until the last weak token leaves. Both
-`ComPtr` and `WeakComPtr` occupy two words. Weak origins are not free storage, but
+Generated objects use one allocation with the common COM control header; its
+empty inline storage remains allocated until the last weak token leaves.
+`ComPtr` occupies two words; `WeakComPtr` and its optional form occupy one word. Weak origins are not free storage, but
 they avoid retaining the widget's resources and descendants through queued work.
-See [core ABI v11](../crates/com/docs/abi-v11.md) for the C lifetime protocol,
+See [core ABI v12](../crates/com/docs/abi-v12.md) for the C lifetime protocol,
 threading permissions, atomic promotion and foreign provider obligations.
 
 Logical `IWidget::close` is separate from final destruction. Closing retires
