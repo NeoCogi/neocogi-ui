@@ -95,6 +95,7 @@ operations must not be confused with a generic widget close state.
 
 Implementation status: COM exclusive owner construction, cached weak dispatch,
 concurrent execution protection, and ownership rejection are implemented first.
-Factory/IDL transfers and the UI container/form migration remain subsequent work
+IDL factory/container transfers and their generated-call regressions are now
+implemented. The UI container/form migration remains subsequent work
 on this branch. The historical review finding is not marked resolved until that
 migration and its tests are complete.
