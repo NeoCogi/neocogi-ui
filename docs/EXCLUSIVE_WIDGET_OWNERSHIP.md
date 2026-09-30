@@ -43,6 +43,16 @@ owner. Successful interface selection must borrow or move an existing owner,
 never duplicate it. Shared services may continue to use `ComPtr`; exclusive
 widgets must reject their retaining protocol, including through ABI arguments.
 
+An `OwnedWidget<I>` facade stores only its `ComBox<I>` (two machine words).
+Its editing methods call that same checked client directly. `handle()` explicitly
+creates a weak `Widget<I>` for application fields; creating, configuring, and
+inserting an otherwise unobserved owner allocates no redundant weak token.
+`as_interface()` borrows the actual stored handle, so taking a persistent
+observer from an owner requires `downgrade()` or `handle()` explicitly.
+`ComBox::query_weak` selects a different observer interface without moving the
+owner or allocating a temporary weak token. Facade flag/style queries use this
+same checked projection path.
+
 ## Ownership is a concrete class policy
 
 Use `#[com_class(Button, ownership = exclusive)]` (or the same option on

@@ -117,7 +117,9 @@ Declare cross-COM facts as concrete structs/enums and pass one
 `EventBinding<Object, Event>` into the factory. Multiple event kinds are cases of that
 enum. The behavioral parent creates its typed queue before construction; the
 factory retains the optional typed queue and weak origin as ordinary widget fields.
-`#[com_class(Contract)]` does not generate event installation methods. There is
+Widgets select `#[com_class(Contract, ownership = exclusive)]` and construct with
+`into_box` or `into_box_cyclic`; shared services retain the default shared policy.
+The macro does not generate event installation methods. There is
 no later binding operation. See [the complete contract](CLASS_EVENT_STREAMS.md)
 and [IDL syntax](IDL_MODULES.md#concrete-messages-and-streams).
 

@@ -47,9 +47,13 @@ are rejected during IDL resolution.
 `#[com_interface]` generates every callable projection, including the factory
 marker. `ComInterface` owns the IID, signature, vtable, and minimum threading
 promise. There is no second object identity, version constant, or description
-trait. `#[com_object(Interface)]` supplies private storage; use `from_value` with
-an explicitly initialized Rust value. Ordinary unit objects have no generated
-`create()` shortcut.
+trait. `#[com_object(Interface)]` supplies shared private storage; use `from_value`
+with an explicitly initialized Rust value. `ownership = exclusive` selects unique
+storage and `into_box` instead. The same option applies to `com_class`; a concrete
+provider emits only its chosen constructor family. Ordinary unit objects have no
+generated `create()` shortcut. Shared calls use the borrow gate alone; exclusive
+calls additionally protect admitted execution against concurrent owner removal.
+This choice affects provider-local Rust helpers, not the C interface layout.
 
 `#[com_factory(Factory)]` additionally proves `ComFactoryInterface` and associates
 the implementation with its exact interface. Unit factories receive a default

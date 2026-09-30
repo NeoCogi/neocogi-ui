@@ -12,7 +12,13 @@ pub type ScrollAreaWidget = Widget<ScrollAreaAbi>;
 /// Static client for the node-owned two-pane layout and interactive divider.
 pub type SplitViewWidget = Widget<SplitViewAbi>;
 
-impl Widget<SplitViewAbi> {
+impl<P> Widget<SplitViewAbi, P>
+
+where
+
+    P: WidgetStorage<SplitViewAbi> + core::ops::DerefMut<Target = <SplitViewAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+
+{
     /// Observes pane identities without exposing the container's topology writer.
     pub fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
         self.interface.children()
@@ -51,7 +57,13 @@ impl Widget<SplitViewAbi> {
 /// Static convenience wrapper around the dynamically constructed Disclosure class projection.
 pub type DisclosureWidget = Widget<DisclosureAbi>;
 
-impl Widget<DisclosureAbi> {
+impl<P> Widget<DisclosureAbi, P>
+
+where
+
+    P: WidgetStorage<DisclosureAbi> + core::ops::DerefMut<Target = <DisclosureAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+
+{
     /// Reads expansion shared by the containing layout and its interactive header.
     pub fn expanded(&self) -> Result<bool, NcStatus> {
         self.interface.expanded()
@@ -73,7 +85,10 @@ impl Widget<DisclosureAbi> {
 /// Forwards scrolling without creating a local model or exposing content replacement on fixed editors.
 macro_rules! scrolling_proxy {
     ($interface:ty) => {
-        impl Widget<$interface> {
+        impl<P> Widget<$interface, P>
+        where
+            P: WidgetStorage<$interface> + core::ops::DerefMut<Target = <$interface as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+        {
             /// Reads actual offset requests and the latest committed viewport/range summary.
             pub fn info(&self) -> Result<ScrollInfo, NcStatus> {
                 self.interface.info()
@@ -99,26 +114,32 @@ macro_rules! scrolling_proxy {
 }
 scrolling_proxy!(IScrollingAbi);
 
-impl Widget<ScrollAreaAbi> {
+impl<P> Widget<ScrollAreaAbi, P>
+
+where
+
+    P: WidgetStorage<ScrollAreaAbi> + core::ops::DerefMut<Target = <ScrollAreaAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+
+{
     /// Reads actual offset requests through this class's shared scrolling protocol.
     pub fn info(&self) -> Result<ScrollInfo, NcStatus> {
-        self.interface.query::<IScrollingAbi>()?.info()
+        self.interface.observe::<IScrollingAbi>()?.info()
     }
     /// Requests offsets through this class's shared scrolling protocol.
     pub fn set_offset(&mut self, offset: Point) -> Result<(), NcStatus> {
-        self.interface.query::<IScrollingAbi>()?.set_offset(offset)
+        self.interface.observe::<IScrollingAbi>()?.set_offset(offset)
     }
     /// Enables or disables scrolling and both actual scrollbar children.
     pub fn set_enabled(&mut self, enabled: bool) -> Result<(), NcStatus> {
-        self.interface.query::<IScrollingAbi>()?.set_enabled(enabled)
+        self.interface.observe::<IScrollingAbi>()?.set_enabled(enabled)
     }
     /// Requests the next measured vertical end without losing the horizontal request.
     pub fn scroll_to_end(&mut self) -> Result<(), NcStatus> {
-        self.interface.query::<IScrollingAbi>()?.scroll_to_end()
+        self.interface.observe::<IScrollingAbi>()?.scroll_to_end()
     }
     /// Requests the nearest offsets revealing the given content-local rectangle.
     pub fn reveal(&mut self, rect: Rect) -> Result<(), NcStatus> {
-        self.interface.query::<IScrollingAbi>()?.reveal(rect)
+        self.interface.observe::<IScrollingAbi>()?.reveal(rect)
     }
     /// Returns the actual content capability without exposing edit authority over structural roles.
     pub fn content(&self) -> Result<Widget<IWidgetAbi>, NcStatus> {
@@ -133,7 +154,10 @@ impl Widget<ScrollAreaAbi> {
 /// Common concrete proxy methods forward edits without hiding whether topology committed.
 macro_rules! container_proxy {
     ($interface:ty, $edge:ty) => {
-        impl Widget<$interface> {
+        impl<P> Widget<$interface, P>
+        where
+            P: WidgetStorage<$interface> + core::ops::DerefMut<Target = <$interface as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+        {
             /// Returns the read-only topology capability, which cannot be queried for a private editor.
             pub fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
                 self.interface.children()
@@ -169,7 +193,13 @@ macro_rules! container_proxy {
 container_proxy!(LinearAbi, LinearEdge);
 container_proxy!(GridAbi, GridExtent);
 
-impl Widget<LinearAbi> {
+impl<P> Widget<LinearAbi, P>
+
+where
+
+    P: WidgetStorage<LinearAbi> + core::ops::DerefMut<Target = <LinearAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+
+{
     /// Returns the complete axis and leading-edge choice.
     pub fn direction(&self) -> Result<FlowDirection, NcStatus> {
         self.interface.direction()
@@ -195,14 +225,14 @@ enum Axis {
 }
 impl Axis {
     /// Executes the selected concrete copied-policy read.
-    fn copy(&self, grid: &WeakComBox<GridAbi>, output: NcCopyToBufferOffset<'_, LayoutTrack>) -> Result<u32, NcStatus> {
+    fn copy(&self, grid: &neocogi_ui_nodes_contracts::GridClient<neocogi_com::ThreadLocal>, output: NcCopyToBufferOffset<'_, LayoutTrack>) -> Result<u32, NcStatus> {
         match self {
             Self::Columns => grid.columns(output),
             Self::Rows => grid.rows(output),
         }
     }
     /// Allocates an ordinary application snapshot without retaining plugin state.
-    fn read(&self, grid: &WeakComBox<GridAbi>) -> Result<Vec<LayoutTrack>, NcStatus> {
+    fn read(&self, grid: &neocogi_ui_nodes_contracts::GridClient<neocogi_com::ThreadLocal>) -> Result<Vec<LayoutTrack>, NcStatus> {
         let count = self.copy(grid, NcCopyToBufferOffset::new(0, &mut []))?;
         let mut values = vec![LayoutTrack::Content; count as usize];
         if self.copy(grid, NcCopyToBufferOffset::new(0, &mut values))? != count {
@@ -211,7 +241,10 @@ impl Axis {
         Ok(values)
     }
 }
-impl Widget<GridAbi> {
+impl<P> Widget<GridAbi, P>
+where
+    P: WidgetStorage<GridAbi> + core::ops::DerefMut<Target = <GridAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+{
     /// Copies the current column policies into application-owned typed values.
     pub fn columns(&self) -> Result<Vec<LayoutTrack>, NcStatus> {
         Axis::Columns.read(&self.interface)
@@ -267,7 +300,10 @@ impl WidgetFactory {
 
 /// Typed client for runtime-owned fixed-coordinate child geometry.
 pub type FormWidget = Widget<FormAbi>;
-impl Widget<FormAbi> {
+impl<P> Widget<FormAbi, P>
+where
+    P: WidgetStorage<FormAbi> + core::ops::DerefMut<Target = <FormAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+{
     /// Reads the topology without exposing its writer.
     pub fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
         self.interface.children()

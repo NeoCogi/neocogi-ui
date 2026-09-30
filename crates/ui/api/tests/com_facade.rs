@@ -170,6 +170,38 @@ mod tests {
         Ok(())
     }
 
+    /// Construction uses one owner-sized facade; an explicitly requested field
+    /// observes the same edits and expires when the transferred owner is dropped.
+    #[test]
+    fn owned_facade_has_one_handle_and_explicit_observers() -> Result<(), NcStatus> {
+        use core::mem::size_of;
+        assert_eq!(size_of::<OwnedWidget<ButtonAbi>>(), size_of::<ComBox<ButtonAbi>>());
+        assert_eq!(size_of::<OwnedWidget<ButtonAbi>>(), 2 * size_of::<usize>());
+        assert_eq!(size_of::<ButtonWidget>(), 2 * size_of::<usize>());
+        let object = TestButton::into_box(TestButton {
+            label: String::from("initial"),
+            requested_flags: WidgetOptions::NONE,
+            changed: false,
+        }).query::<ButtonAbi>()?;
+        let mut owner = OwnedWidget::from_interface(object);
+        owner.set_label("before insertion")?;
+        let mut field = owner.handle();
+        assert_eq!(field.label()?, "before insertion");
+        owner.set_flags(WidgetOptions::NO_INTERACT)?;
+        assert_eq!(field.node_interface()?.properties()?.options, WidgetOptions::NO_INTERACT);
+        field.set_label("through field")?;
+        assert_eq!(owner.label()?, "through field");
+        // Attachment moves only the original owner; the field has no retaining
+        // conversion and cannot keep the payload alive when that owner expires.
+        let mounted = owner.mount_widget()?;
+        assert!(mounted.downgrade().same_object(field.as_interface()));
+        assert_eq!(field.label()?, "through field");
+        drop(mounted);
+        assert_eq!(field.label(), Err(neocogi_com::NC_E_CLOSED));
+        assert_eq!(field.set_label("too late"), Err(neocogi_com::NC_E_CLOSED));
+        Ok(())
+    }
+
     /// Wrong projections fail through QueryInterface and invalid inputs are transactional.
     #[test]
     fn concrete_proxy_rejects_wrong_capabilities_and_invalid_text() {

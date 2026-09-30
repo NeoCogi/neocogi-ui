@@ -100,14 +100,14 @@ fn constructor_queues_reject_invalid_payloads_before_recording() {
     let mut sink = neocogi_ui::test_event_queue!(textbox, neocogi_ui::textbox::Event, sender, |_queue, _origin, event| event).unwrap();
     let invalid = neocogi_ui::textbox::Event::Changed(TextChanged { text: "é".into(), cursor: 1 });
     assert_eq!(
-        sink.post(origin.as_interface().borrow().unwrap().as_com_ref(), neocogi_com::NcValueRef::new(&invalid).unwrap()),
+        sink.post(origin.as_interface().as_com_ref(), neocogi_com::NcValueRef::new(&invalid).unwrap()),
         Err(NC_E_INVALID_ARG)
     );
     assert!(receiver.try_recv().is_err());
     let valid = neocogi_ui::textbox::Event::Changed(TextChanged { text: "é".into(), cursor: 2 });
-    sink.post(origin.as_interface().borrow().unwrap().as_com_ref(), neocogi_com::NcValueRef::new(&valid).unwrap()).unwrap();
+    sink.post(origin.as_interface().as_com_ref(), neocogi_com::NcValueRef::new(&valid).unwrap()).unwrap();
     sink.post(
-        origin.as_interface().borrow().unwrap().as_com_ref(),
+        origin.as_interface().as_com_ref(),
         neocogi_com::NcValueRef::new(&neocogi_ui::textbox::Event::Submitted(TextSubmitted { text: "é".into() })).unwrap(),
     )
     .unwrap();
@@ -125,7 +125,7 @@ fn constructor_queues_reject_invalid_payloads_before_recording() {
     let mut sink = neocogi_ui::test_event_queue!(number, (), sender, |_queue, _origin, _| ()).unwrap();
     assert_eq!(
         sink.post(
-            origin.as_interface().borrow().unwrap().as_com_ref(),
+            origin.as_interface().as_com_ref(),
             neocogi_com::NcValueRef::new(&neocogi_ui::number::Event::Changed(NumericChanged { value: f32::INFINITY })).unwrap()
         ),
         Err(NC_E_INVALID_ARG)
@@ -187,8 +187,8 @@ fn one_application_queue_handles_two_widget_types_without_retaining_origins() {
     assert_eq!(buttons.as_raw().object, texts.as_raw().object);
     let button = ui.widgets().button_with_queue("captured", Some(buttons.as_com_ref())).unwrap();
     let textbox = ui.widgets().textbox_with_queue("", Some(texts.as_com_ref())).unwrap();
-    let button_origin = button.as_interface().clone();
-    let text_origin = textbox.as_interface().clone();
+    let button_origin = button.as_interface().downgrade();
+    let text_origin = textbox.as_interface().downgrade();
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     column.insert(0, button, LinearEdge::new(LayoutTrack::Content)).unwrap();
     column.insert(1, textbox, LinearEdge::new(LayoutTrack::Content)).unwrap();
@@ -250,7 +250,7 @@ fn composite_queues_report_outer_origins_without_retaining_their_children() {
         .widgets()
         .text_area_with_queue("", TextWrapping::Word, true, Some(queue.as_com_ref()))
         .unwrap();
-    let origin = area.as_interface().clone();
+    let origin = area.as_interface().downgrade();
     let window = ui.window("area origin", RECT, area).unwrap();
     key_for_origin_test(&ui, KeyCode::Tab);
     ui.input(UiInput::Text, "outer text").unwrap();
@@ -282,7 +282,7 @@ fn composite_queues_report_outer_origins_without_retaining_their_children() {
             Some(queue.as_com_ref()),
         )
         .unwrap();
-    let origin = combo.as_interface().clone();
+    let origin = combo.as_interface().downgrade();
     root.insert(0, combo, LinearEdge::new(LayoutTrack::Content)).unwrap();
     for key in [KeyCode::Tab, KeyCode::Enter, KeyCode::ArrowDown, KeyCode::Enter] {
         key_for_origin_test(&ui, key);

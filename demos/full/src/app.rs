@@ -89,7 +89,8 @@ pub(super) fn row(ui: &Ui) -> Result<OwnedWidget<LinearAbi>, NcStatus> {
     ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Content)
 }
 /// Appends through the authoritative child count; no second local list or builder closure is retained.
-pub(super) fn append<I: ComInterface>(parent: &mut LinearWidget, child: OwnedWidget<I>, track: LayoutTrack) -> Result<(), NcStatus> {
+pub(super) fn append<I: ComInterface, P>(parent: &mut Widget<LinearAbi, P>, child: OwnedWidget<I>, track: LayoutTrack) -> Result<(), NcStatus>
+where P: WidgetStorage<LinearAbi> + core::ops::DerefMut<Target = nodes::LinearClient<neocogi_com::ThreadLocal>> {
     parent.insert(parent.children()?.child_count()?, child, LinearEdge::new(track))
 }
 /// Static display text remains a real plugin-owned TextBlock with no application callback.
@@ -131,7 +132,7 @@ pub(super) fn slider(ui: &Ui, value: f32, high: f32, queue: &mut Inputs, target:
         },
         Some(queue.queue.query::<SliderEventQueueAbi>()?.as_com_ref()),
     )?;
-    queue.sliders.push((control.as_interface().clone(), target));
+    queue.sliders.push((control.as_interface().downgrade(), target));
     control.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
     Ok(control)
 }
@@ -139,12 +140,13 @@ pub(super) fn slider(ui: &Ui, value: f32, high: f32, queue: &mut Inputs, target:
 fn button(ui: &Ui, events_tx: &mut Inputs, text: &str, action: Action) -> Result<OwnedWidget<ButtonAbi>, NcStatus> {
     let queue = events_tx.queue.query::<ButtonEventQueueAbi>()?;
     let mut control = ui.widgets().button_with_queue(text, Some(queue.as_com_ref()))?;
-    events_tx.buttons.push((control.as_interface().clone(), action));
+    events_tx.buttons.push((control.as_interface().downgrade(), action));
     control.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
     Ok(control)
 }
 /// A disclosure body is its actual editable Linear COM object, with no placeholder replacement tree.
-fn section(ui: &Ui, parent: &mut LinearWidget, text: &str, style: DisclosureStyle, expanded: bool) -> Result<LinearWidget, NcStatus> {
+fn section<P>(ui: &Ui, parent: &mut Widget<LinearAbi, P>, text: &str, style: DisclosureStyle, expanded: bool) -> Result<LinearWidget, NcStatus>
+where P: WidgetStorage<LinearAbi> + core::ops::DerefMut<Target = nodes::LinearClient<neocogi_com::ThreadLocal>> {
     let section = ui.widgets().disclosure(text, style, expanded)?;
     let body = section.body()?;
     append(parent, section, LayoutTrack::Content)?;

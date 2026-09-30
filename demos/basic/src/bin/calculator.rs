@@ -433,7 +433,7 @@ fn run() -> Result<(), HostError> {
     .enumerate()
     {
         let mut button = host.ui.widgets().button_with_queue(label, Some(queue.as_com_ref()))?;
-        state.keys.push((button.as_interface().clone(), action));
+        state.keys.push((button.as_interface().downgrade(), action));
         button.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
         grid.insert(index as u32, button, GridExtent { columns: 1, rows: 1 })?;
     }

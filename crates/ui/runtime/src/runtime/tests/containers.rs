@@ -649,7 +649,7 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
     assert_eq!(area.text().unwrap(), "a☃\nb\n");
     let root = area.node_interface().unwrap();
     let identity = root.query::<IUnknown>().unwrap();
-    let concrete = area.as_interface().clone();
+    let concrete = area.as_interface().downgrade();
     assert_eq!(concrete.query::<IUnknown>().unwrap().as_raw().object, identity.as_raw().object);
     assert_eq!(root.query::<ITextEditorAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     assert_eq!(root.query::<ScrollAreaAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);

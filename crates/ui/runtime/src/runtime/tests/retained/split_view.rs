@@ -233,7 +233,7 @@ fn split_position_setter_preserves_policy_and_checks_the_real_com_boundary() {
         let before = split.settings().unwrap();
         // Invoke the raw generated projection as well as the facade: validation
         // belongs to the widget implementation, never just its Rust convenience API.
-        let mut abi = split.as_interface().clone();
+        let mut abi = split.as_interface().downgrade();
         for invalid in [-1, i32::MIN] {
             assert_eq!(abi.set_position(invalid), Err(neocogi_com::NC_E_INVALID_ARG));
             assert_eq!(split.settings().unwrap(), before);

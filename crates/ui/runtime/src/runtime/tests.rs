@@ -993,7 +993,7 @@ fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validati
     textbox.set_cursor(4).unwrap();
     assert_eq!(textbox.cursor().unwrap(), 2);
     let mut common = textbox.node_interface().unwrap();
-    let concrete = textbox.as_interface().clone();
+    let concrete = textbox.as_interface().downgrade();
     assert_eq!(
         concrete.query::<IUnknown>().unwrap().as_raw().object,
         common.query::<IUnknown>().unwrap().as_raw().object
@@ -1004,7 +1004,7 @@ fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validati
     textbox.set_text("é\n☃").unwrap();
     assert_eq!(textbox.cursor().unwrap(), 5);
     assert_eq!(common.take_change().unwrap(), GeometryChange::NoChange);
-    assert_eq!(textbox.as_interface().clone().set_text(NcCopyFromBufferOffset::new(0, &[0xff])), Err(NC_E_INVALID_ARG));
+    assert_eq!(textbox.as_interface().downgrade().set_text(NcCopyFromBufferOffset::new(0, &[0xff])), Err(NC_E_INVALID_ARG));
     assert_eq!(textbox.text().unwrap(), "é☃");
     textbox.clear().unwrap();
     assert_eq!(textbox.cursor().unwrap(), 0);

@@ -70,6 +70,6 @@ fn button(ui: &Ui, text: &str, queue: Option<ComRef<'_, ButtonEventQueueAbi>>) -
     Ok(button)
 }
 /// Appends one explicit relationship using authoritative topology, with no parallel child-state model.
-fn append<I: ComInterface>(parent: &mut LinearWidget, child: OwnedWidget<I>, track: LayoutTrack) -> Result<(), NcStatus> {
+fn append<I: ComInterface>(parent: &mut OwnedWidget<LinearAbi>, child: OwnedWidget<I>, track: LayoutTrack) -> Result<(), NcStatus> {
     parent.insert(parent.children()?.child_count()?, child, LinearEdge::new(track))
 }

@@ -116,7 +116,8 @@ use their captured data after the producer has died.
 
 ## Construction and composites
 
-Widget implementations use `into_box_cyclic` / `into_local_box_cyclic`. Their
+Widget implementations declare `ownership = exclusive` on `com_class` or
+`com_object`, then use `into_box_cyclic` / `into_local_box_cyclic`. Their
 builder receives a weak origin before publication. Calls during construction
 fail; an initialization panic cannot publish the value. A fixed optional typed
 queue is an ordinary field. It cannot be installed or replaced after publication,

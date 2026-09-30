@@ -264,7 +264,7 @@ fn column(nodes: &Rc<DialogNodes>, directory: &Path, paths: Vec<PathBuf>, folder
             NcCopyFromBufferOffset::new(0, display.as_bytes()),
             Some(queue),
         )?);
-        actions.push((item.as_interface().clone(), action));
+        actions.push((item.as_interface().downgrade(), action));
         item.set_icon_role(if folder { ContentIcon::ClosedFolder } else { ContentIcon::File })?;
         children.push((item.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Content));
     }
@@ -338,11 +338,11 @@ impl FileDialog {
         let folders_handle = folders.handle();
         let files_handle = files.handle();
         let buttons = vec![
-            (up.as_interface().clone(), Command::Up),
-            (home.as_interface().clone(), Command::Home),
-            (go.as_interface().clone(), Command::Go),
-            (accept.as_interface().clone(), Command::Accept),
-            (cancel.as_interface().clone(), Command::Cancel),
+            (up.as_interface().downgrade(), Command::Up),
+            (home.as_interface().downgrade(), Command::Home),
+            (go.as_interface().downgrade(), Command::Go),
+            (accept.as_interface().downgrade(), Command::Accept),
+            (cancel.as_interface().downgrade(), Command::Cancel),
         ];
         let toolbar = line(
             &nodes,

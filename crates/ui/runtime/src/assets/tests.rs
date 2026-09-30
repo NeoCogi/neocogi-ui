@@ -302,7 +302,7 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
         .unwrap();
     let probe = Rc::new(Probe {
         runtime,
-        button: button.as_interface().clone(),
+        button: button.as_interface().downgrade(),
         current: RefCell::new(source.image().unwrap()),
         fail: Cell::new(true),
         uploads: Cell::new(0),
@@ -371,7 +371,7 @@ fn runtime_install_is_atomic_and_updates_shared_widget_measurement() {
     let runtime = crate::test_support::runtime_from_assets(source.as_com_ref()).unwrap();
     let mut ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let button = ui.widgets().button_unobserved("resources").unwrap();
-    let button_interface = button.as_interface().clone();
+    let button_interface = button.as_interface().downgrade();
     let probe = Rc::new(Probe {
         runtime: runtime.clone(),
         button: button_interface.clone(),

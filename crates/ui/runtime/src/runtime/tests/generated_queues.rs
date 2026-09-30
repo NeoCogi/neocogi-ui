@@ -127,12 +127,12 @@ fn generated_shared_queue_resolves_origins_and_rejects_replaced_forms() {
     // An unrelated live widget with the right interface cannot select a handler.
     let outsider = ui.widgets().button_unobserved("outsider").unwrap();
     let unrelated = generated::QueuedEvent::Source0 {
-        origin: outsider.as_interface().clone(),
+        origin: outsider.as_interface().downgrade(),
         event: neocogi_ui::button::Event::Activated(Activation { label: "outside".into() }),
     };
     assert!(unrelated.resolve(&replacement).unwrap().is_none());
     let expired = generated::QueuedEvent::Source0 {
-        origin: outsider.as_interface().clone(),
+        origin: outsider.as_interface().downgrade(),
         event: neocogi_ui::button::Event::Activated(Activation { label: "expired".into() }),
     };
     drop(outsider);

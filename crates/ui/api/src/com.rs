@@ -44,94 +44,120 @@ pub use mount::Mountable;
 /// Reusable state composed into concrete Rust widget implementations.
 pub mod widget;
 
-/// Generic static proxy for one concrete widget editing capability.
-pub struct Widget<I: ComInterface> {
-    /// Cached non-owning access; only the owning container retains the widget value.
-    interface: WeakComBox<I>,
+/// Restricts facade storage to the two COM handles with widget lifetime semantics.
+mod storage {
+    use super::*;
+    /// Prevents arbitrary third-party storage from inventing widget ownership.
+    pub trait Sealed {}
+    impl<I: ComInterface> Sealed for ComBox<I> {}
+    impl<I: ComInterface> Sealed for WeakComBox<I> {}
+}
+
+/// Compile-time storage policy for a widget facade; never a runtime trait object.
+/// Owners and observers use the same generated client methods. Only observation
+/// differs: a query must return a weak handle without consuming the owner.
+pub trait WidgetStorage<I: ComInterface>: storage::Sealed {
+    /// Selects a validated non-owning projection while preserving current storage.
+    fn observe<U: ComInterface>(&self) -> Result<WeakComBox<U>, NcStatus>;
+}
+impl<I: ComInterface> WidgetStorage<I> for ComBox<I> {
+    /// Retains only the returned observer; it cannot create another widget owner.
+    fn observe<U: ComInterface>(&self) -> Result<WeakComBox<U>, NcStatus> {
+        self.query_weak()
+    }
+}
+impl<I: ComInterface> WidgetStorage<I> for WeakComBox<I> {
+    /// Reuses cached object identity and the provider's immutable projection set.
+    fn observe<U: ComInterface>(&self) -> Result<WeakComBox<U>, NcStatus> {
+        self.query()
+    }
+}
+
+/// Typed editing facade containing exactly one owner or observer handle.
+/// The default is a weak form field; `OwnedWidget` selects exclusive storage.
+/// Method forwarding is statically resolved and stores no duplicate weak facade.
+pub struct Widget<I: ComInterface, P = WeakComBox<I>> {
+    /// Sole COM handle: ownership and destruction follow P's ordinary semantics.
+    interface: P,
+    /// Associates generic storage with its exact contract without runtime data.
+    contract: core::marker::PhantomData<fn() -> I>,
 }
 
 impl<I: ComInterface> Clone for Widget<I> {
     /// Clones weak access without retaining widget resources or duplicating ownership.
     fn clone(&self) -> Self {
-        Self { interface: self.interface.clone() }
+        Self::from_interface(self.interface.clone())
     }
 }
 
-impl<I: ComInterface> Widget<I> {
-    /// Adopts a validated weak projection returned by a container or owner.
-    pub fn from_interface(interface: WeakComBox<I>) -> Self {
-        Self { interface }
+impl<I: ComInterface, P: WidgetStorage<I>> Widget<I, P> {
+    /// Adopts one validated owner or observer without creating any other handle.
+    pub fn from_interface(interface: P) -> Self {
+        Self { interface, contract: core::marker::PhantomData }
     }
 
-    /// Borrows the exact typed editing interface without changing ownership.
-    pub fn as_interface(&self) -> &WeakComBox<I> {
+    /// Borrows the exact stored handle without changing its ownership policy.
+    pub fn as_interface(&self) -> &P {
         &self.interface
     }
 
-    /// Borrows the cached concrete editing interface for custom mutable commands.
-    /// This avoids cloning a weak token just to call a setter; the provider still
-    /// checks owner liveness and its allocation-wide mutable call gate.
-    pub fn as_interface_mut(&mut self) -> &mut WeakComBox<I> {
+    /// Borrows the stored handle for custom mutable commands without cloning.
+    /// Provider calls still check liveness and the allocation-wide borrow gate.
+    pub fn as_interface_mut(&mut self) -> &mut P {
         &mut self.interface
     }
 
-    /// Replaces all requested widget flags, clearing every omitted bit.
-    /// The widget validates and records changes through its own mutation authority.
+    /// Replaces all requested flags, clearing every omitted bit through the provider.
     pub fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
         self.node_interface()?.replace_flags(flags)
     }
 
-    /// Sets selected requested bits while preserving unrelated live application settings.
+    /// Sets selected requested bits while preserving unrelated application settings.
     pub fn set_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
         self.node_interface()?.set_flags(flags)
     }
 
-    /// Clears selected requested bits without writing effective input policy into settings.
+    /// Clears selected bits without writing effective input policy into settings.
     pub fn clear_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
         self.node_interface()?.clear_flags(flags)
     }
 
     /// Obtains weak common-widget access; attachment requires transferring an owner.
     pub fn node_interface(&self) -> Result<WeakComBox<IWidgetAbi>, NcStatus> {
-        // Querying preserves object identity and validates the full projected ABI.
-        self.interface.query()
+        self.interface.observe()
     }
 }
 
-/// One unmounted widget owner plus convenient non-owning typed method access.
-/// Insertion consumes this value. Call `handle` before insertion when the form
-/// needs a field for later edits; that field never keeps a removed control alive.
-pub struct OwnedWidget<I: ComInterface> {
-    /// The sole resource owner, transferred into the tree by Mountable.
-    owner: ComBox<I>,
-    /// Cached facade access shares method implementations with mounted controls.
-    view: Widget<I>,
-}
+/// One unmounted widget owner with the same typed editing methods as a weak field.
+/// Insertion consumes it. Explicitly call `handle` if later application edits need
+/// an observer; constructing and moving an owner alone creates no weak reference.
+///
+/// ```compile_fail
+/// fn duplicate(owner: neocogi_ui::OwnedWidget<neocogi_ui::ButtonAbi>) {
+///     let second_owner = owner.clone(); // exclusive ownership cannot be cloned
+/// }
+/// ```
+pub type OwnedWidget<I> = Widget<I, ComBox<I>>;
+
 impl<I: ComInterface> OwnedWidget<I> {
-    /// Adopts one factory result and caches weak editing access without querying.
-    pub fn from_interface(owner: ComBox<I>) -> Self {
-        let view = Widget::from_interface(owner.downgrade());
-        Self { owner, view }
+    /// Creates a non-owning form field before transferring the owner to a container.
+    pub fn handle(&self) -> Widget<I> {
+        Widget::from_interface(self.interface.downgrade())
     }
-    /// Copies a non-owning form field before transferring the widget to a container.
-    pub fn handle(&self) -> Widget<I> { self.view.clone() }
-    /// Transfers the exclusive interface into a lower-level constructor or container.
-    pub fn into_interface(self) -> ComBox<I> { self.owner }
-}
-impl<I: ComInterface> core::ops::Deref for OwnedWidget<I> {
-    type Target = Widget<I>;
-    /// Uses the same typed editing facade before and after attachment.
-    fn deref(&self) -> &Self::Target { &self.view }
-}
-impl<I: ComInterface> core::ops::DerefMut for OwnedWidget<I> {
-    /// Mutable method lookup retains the provider's ordinary COM borrow checks.
-    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.view }
+    /// Transfers the sole interface owner into a lower-level constructor or container.
+    pub fn into_interface(self) -> ComBox<I> { self.interface }
 }
 
 /// Static convenience wrapper around the dynamically constructed Button class projection.
 pub type ButtonWidget = Widget<ButtonAbi>;
 
-impl Widget<ButtonAbi> {
+impl<P> Widget<ButtonAbi, P>
+
+where
+
+    P: WidgetStorage<ButtonAbi> + core::ops::DerefMut<Target = <ButtonAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+
+{
     /// Replaces the label with a synchronous UTF-8 copy owned by the plugin.
     pub fn set_label(&mut self, label: &str) -> Result<(), NcStatus> {
         self.interface.set_label(NcCopyFromBufferOffset::new(0, label.as_bytes()))
@@ -167,7 +193,10 @@ pub type ScrollbarWidget = Widget<ScrollbarAbi>;
 /// Shares inherited text convenience calls while keeping every proxy concrete.
 macro_rules! text_proxy {
     ($interface:ty) => {
-        impl Widget<$interface> {
+        impl<P> Widget<$interface, P>
+        where
+            P: WidgetStorage<$interface> + core::ops::DerefMut<Target = <$interface as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+        {
             /// Copies the current immutable text snapshot into application storage.
             pub fn text(&self) -> Result<String, NcStatus> {
                 self.interface.text()?.to_string()
@@ -192,7 +221,13 @@ text_proxy!(ColorSwatchAbi);
 text_proxy!(ListItemAbi);
 text_proxy!(ListBoxAbi);
 
-impl Widget<CheckboxAbi> {
+impl<P> Widget<CheckboxAbi, P>
+
+where
+
+    P: WidgetStorage<CheckboxAbi> + core::ops::DerefMut<Target = <CheckboxAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+
+{
     /// Reads the current checked value.
     pub fn checked(&self) -> Result<bool, NcStatus> {
         self.interface.checked()
@@ -221,7 +256,10 @@ impl Widget<CheckboxAbi> {
 /// Shares byte-cursor editing conveniences across concrete single-line and multiline capabilities.
 macro_rules! editor_proxy {
     ($interface:ty) => {
-        impl Widget<$interface> {
+        impl<P> Widget<$interface, P>
+        where
+            P: WidgetStorage<$interface> + core::ops::DerefMut<Target = <$interface as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+        {
             /// Returns the Unicode scalar-boundary byte cursor.
             pub fn cursor(&self) -> Result<u64, NcStatus> {
                 self.interface.cursor()
@@ -239,7 +277,10 @@ editor_proxy!(IMultilineEditorAbi);
 /// Shares explicit wrapping calls without inferring policy from the resulting geometry.
 macro_rules! wrapping_proxy {
     ($interface:ty) => {
-        impl Widget<$interface> {
+        impl<P> Widget<$interface, P>
+        where
+            P: WidgetStorage<$interface> + core::ops::DerefMut<Target = <$interface as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+        {
             /// Returns the current explicit wrapping policy.
             pub fn wrapping(&self) -> Result<TextWrapping, NcStatus> {
                 self.interface.wrapping()
@@ -254,16 +295,22 @@ macro_rules! wrapping_proxy {
 wrapping_proxy!(TextBlockAbi);
 wrapping_proxy!(TextAreaAbi);
 wrapping_proxy!(IMultilineEditorAbi);
-impl Widget<TextAreaAbi> {
+impl<P> Widget<TextAreaAbi, P>
+where
+    P: WidgetStorage<TextAreaAbi> + core::ops::DerefMut<Target = <TextAreaAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+{
     /// Queries scrolling on this same root identity; it cannot replace the fixed editor content.
     pub fn scrolling(&self) -> Result<Widget<IScrollingAbi>, NcStatus> {
-        Ok(Widget::from_interface(self.interface.query()?))
+        Ok(Widget::from_interface(self.interface.observe()?))
     }
 }
 /// Shares numeric convenience methods while each plugin retains its arithmetic rules.
 macro_rules! numeric_proxy {
     ($interface:ty) => {
-        impl Widget<$interface> {
+        impl<P> Widget<$interface, P>
+        where
+            P: WidgetStorage<$interface> + core::ops::DerefMut<Target = <$interface as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+        {
             /// Reads the current finite numeric value.
             pub fn value(&self) -> Result<f32, NcStatus> {
                 self.interface.value()
@@ -281,7 +328,10 @@ macro_rules! numeric_proxy {
 }
 numeric_proxy!(SliderAbi);
 numeric_proxy!(NumberAbi);
-impl Widget<ColorSwatchAbi> {
+impl<P> Widget<ColorSwatchAbi, P>
+where
+    P: WidgetStorage<ColorSwatchAbi> + core::ops::DerefMut<Target = <ColorSwatchAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+{
     /// Reads the packed RGBA paint color.
     pub fn fill(&self) -> Result<u32, NcStatus> {
         self.interface.fill()
@@ -291,7 +341,10 @@ impl Widget<ColorSwatchAbi> {
         self.interface.set_fill(rgba)
     }
 }
-impl Widget<ScrollbarAbi> {
+impl<P> Widget<ScrollbarAbi, P>
+where
+    P: WidgetStorage<ScrollbarAbi> + core::ops::DerefMut<Target = <ScrollbarAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+{
     /// Reads a coherent range and offset snapshot.
     pub fn range(&self) -> Result<ScrollRange, NcStatus> {
         self.interface.range()
@@ -705,7 +758,10 @@ impl Ui {
 /// Static typography conveniences exist only on text-bearing proxy types.
 macro_rules! font_proxy {
     (direct $interface:ty) => {
-        impl Widget<$interface> {
+        impl<P> Widget<$interface, P>
+        where
+            P: WidgetStorage<$interface> + core::ops::DerefMut<Target = <$interface as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+        {
             /// Selects typography directly through the concrete class contract.
             pub fn set_font_role(&mut self, role: FontRole) -> Result<(), NcStatus> {
                 self.interface.set_font_role(role)
@@ -717,15 +773,18 @@ macro_rules! font_proxy {
         }
     };
     ($interface:ty) => {
-        impl Widget<$interface> {
+        impl<P> Widget<$interface, P>
+        where
+            P: WidgetStorage<$interface> + core::ops::DerefMut<Target = <$interface as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+        {
             /// Selects typography through this same widget object's optional capability.
             pub fn set_font_role(&mut self, role: FontRole) -> Result<(), NcStatus> {
-                self.interface.query::<IFontStyleAbi>()?.set_font_role(role)
+                self.interface.observe::<IFontStyleAbi>()?.set_font_role(role)
             }
             /// Resolves a named font once in this widget's resource bundle.
             pub fn set_named_font(&mut self, name: &str) -> Result<(), NcStatus> {
                 self.interface
-                    .query::<IFontStyleAbi>()?
+                    .observe::<IFontStyleAbi>()?
                     .set_named_font(NcCopyFromBufferOffset::new(0, name.as_bytes()))
             }
         }
@@ -741,7 +800,13 @@ font_proxy!(direct ColorSwatchAbi);
 font_proxy!(direct ListBoxAbi);
 font_proxy!(direct ListItemAbi);
 
-impl Widget<ListItemAbi> {
+impl<P> Widget<ListItemAbi, P>
+
+where
+
+    P: WidgetStorage<ListItemAbi> + core::ops::DerefMut<Target = <ListItemAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+
+{
     /// Selects an icon role directly through the concrete ListItem class contract.
     pub fn set_icon_role(&mut self, icon: ContentIcon) -> Result<(), NcStatus> {
         self.interface.set_icon_role(icon)
@@ -751,7 +816,10 @@ impl Widget<ListItemAbi> {
         self.interface.set_named_icon(NcCopyFromBufferOffset::new(0, name.as_bytes()))
     }
 }
-impl Widget<ButtonAbi> {
+impl<P> Widget<ButtonAbi, P>
+where
+    P: WidgetStorage<ButtonAbi> + core::ops::DerefMut<Target = <ButtonAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+{
     /// Selects typography directly through the Button class contract.
     pub fn set_font_role(&mut self, role: FontRole) -> Result<(), NcStatus> {
         self.interface.set_font_role(role)
@@ -788,7 +856,10 @@ impl Widget<ButtonAbi> {
 
 /// Typed static wrapper for the concrete Combo class and its inherited widget state.
 pub type ComboWidget = Widget<ComboAbi>;
-impl Widget<ComboAbi> {
+impl<P> Widget<ComboAbi, P>
+where
+    P: WidgetStorage<ComboAbi> + core::ops::DerefMut<Target = <ComboAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+{
     /// Returns the NCIDL-defined selection value without a parallel facade record.
     pub fn selection(&self) -> Result<ChoiceSelection, NcStatus> {
         self.interface.selection()
@@ -865,7 +936,13 @@ fn combo_label_range(text: &mut Vec<u8>, label: &str) -> Result<MenuTextRange, N
     Ok(MenuTextRange { first, count })
 }
 
-impl ListBoxWidget {
+impl<P> Widget<ListBoxAbi, P>
+
+where
+
+    P: WidgetStorage<ListBoxAbi> + core::ops::DerefMut<Target = <ListBoxAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
+
+{
     /// Installs this renderer-owned image directly through the concrete class contract.
     pub fn set_image(&mut self, image: ComRef<'_, ITextureAbi>, fit_width: bool) -> Result<(), NcStatus> {
         self.interface.set_image(image, fit_width)

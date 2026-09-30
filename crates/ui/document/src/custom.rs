@@ -105,7 +105,7 @@ impl CustomWidgetRegistry {
         let widget = entry.factory.create(ui, properties, sink)?;
         let interface = &entry.manifest.interface;
         let iid = NcGuid::from_uuid_bytes(interface.iid);
-        widget.as_interface().supports_interface_bytes(iid, &interface.signature)?;
+        widget.as_interface().downgrade().supports_interface_bytes(iid, &interface.signature)?;
         Ok(widget)
     }
 }

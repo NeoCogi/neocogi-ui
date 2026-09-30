@@ -58,7 +58,7 @@ fn image_controls_keep_owned_pixels_and_forward_ordered_semantic_paint_after_err
     button.replace_flags(WidgetOptions::NONE).unwrap();
     button.set_fill_states(FillStates::NONE).unwrap();
     let mut common = button.node_interface().unwrap();
-    let target = Rc::new(RefCell::new(Some(button.as_interface().clone())));
+    let target = Rc::new(RefCell::new(Some(button.as_interface().downgrade())));
     let image_probe = Rc::new(ImageProbe {
         target: Rc::downgrade(&target),
         ..ImageProbe::default()

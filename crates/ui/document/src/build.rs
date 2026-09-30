@@ -163,8 +163,8 @@ impl Construction<'_> {
             match (&node.widget, &relationship.edge) {
                 (WidgetSpec::Linear { .. } | WidgetSpec::Disclosure { .. }, Edge::Linear { main, cross }) => {
                     let mut parent = match node.widget {
-                        WidgetSpec::Disclosure { .. } => widget.as_interface().query::<DisclosureAbi>()?.body()?,
-                        _ => widget.as_interface().query::<LinearAbi>()?,
+                        WidgetSpec::Disclosure { .. } => widget.as_interface().observe::<DisclosureAbi>()?.body()?,
+                        _ => widget.as_interface().observe::<LinearAbi>()?,
                     };
                     let edge = LinearEdge {
                         main: main.layout().into(),
@@ -178,11 +178,11 @@ impl Construction<'_> {
                 }
                 (WidgetSpec::Grid { .. }, Edge::Grid { columns, rows }) => widget
                     .as_interface()
-                    .query::<GridAbi>()?
+                    .observe::<GridAbi>()?
                     .insert(index, child.into_interface(), GridExtent { columns: *columns, rows: *rows })?,
                 (WidgetSpec::Form { .. }, Edge::Position { x, y, width, height }) => widget
                     .as_interface()
-                    .query::<FormAbi>()?
+                    .observe::<FormAbi>()?
                     .insert(
                         index,
                         child.into_interface(),
@@ -195,7 +195,7 @@ impl Construction<'_> {
                     )?,
                 (WidgetSpec::Split { .. }, Edge::Pane) => widget
                     .as_interface()
-                    .query::<SplitViewAbi>()?
+                    .observe::<SplitViewAbi>()?
                     .insert(index, child.into_interface())?,
                 (WidgetSpec::Scroll { .. }, Edge::Pane) => {} // The constructor already adopted its sole child.
                 _ => return Err(NC_E_INVALID_ARG),
@@ -208,8 +208,8 @@ impl Construction<'_> {
 }
 
 /// Applies logical resources through the concrete class that owns each property.
-fn apply_style(widget: &Widget<IWidgetAbi>, node: &Node, resources: &Resources) -> Result<(), NcStatus> {
-    let source = widget.as_interface();
+fn apply_style(widget: &OwnedWidget<IWidgetAbi>, node: &Node, resources: &Resources) -> Result<(), NcStatus> {
+    let source = widget.as_interface().downgrade();
     if let Some(font) = &node.style.font {
         let bytes = NcCopyFromBufferOffset::new(0, font.as_bytes());
         macro_rules! font {
