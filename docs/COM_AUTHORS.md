@@ -1024,3 +1024,12 @@ failed ABI call, provided those candidates cannot own an active receiver. There
 is no implicit tuple-to-status conversion that would hide that decision. See
 [ABI v15](../crates/com/docs/abi-v15.md) for wire slots, forwarding, multiple inputs
 and the requirement to return valid output after accepting ownership.
+
+For construction code that deliberately abandons failed candidates, convert to
+`ComBox<IWidgetAbi>` before the shared insertion/window-building body. Borrow the
+parent's existing generated client view for both owning and weak facade storage.
+The full demo and shared layout samples use `neocogi_ui_samples::append` this way.
+There is no reason to query a rejected owner back to Button, Linear, or another
+concrete interface merely to destroy it. Keep the typed facade operation when the
+caller needs the original typed owner for retry, and keep ownership-bearing errors
+through every forwarding provider.

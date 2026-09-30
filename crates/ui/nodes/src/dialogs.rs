@@ -220,7 +220,10 @@ fn line(
 ) -> Result<OwnedWidget<neocogi_ui::LinearAbi>, NcStatus> {
     let mut line = OwnedWidget::from_interface(crate::Linear::create_com(nodes.host.clone(), nodes.resources.clone(), direction, cross.into())?);
     for (index, (child, track)) in children.into_iter().enumerate() {
-        line.insert(index as u32, child, LinearEdge::new(track)).map_err(|(status, _unpublished)| status)?;
+        // The heterogeneous list already contains IWidget owners. Use the
+        // generated client directly; a discarded rejection needs no projection.
+        line.as_interface_mut().insert(index as u32, child, LinearEdge::new(track))
+            .map_err(|(status, _unpublished)| status)?;
     }
     Ok(line)
 }
@@ -472,8 +475,13 @@ impl Model {
     fn install(&mut self, directory: PathBuf, listing: Listing, reset_scroll: bool) -> Result<(), NcStatus> {
         // These are private built-in roles: their composite validates the live
         // modal before replacement and no caller can substitute a foreign child.
-        self.folders.replace_content(listing.folders.root).map_err(|(status, _unpublished)| status)?;
-        self.files.replace_content(listing.files.root).map_err(|(status, _unpublished)| status)?;
+        // Fresh candidates are abandoned on failure after the receiving call
+        // returns. Preserve IWidget through the operation instead of restoring a
+        // Linear interface immediately before destroying a rejected candidate.
+        let folders = listing.folders.root.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?;
+        self.folders.as_interface_mut().replace_content(folders).map_err(|(status, _unpublished)| status)?;
+        let files = listing.files.root.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?;
+        self.files.as_interface_mut().replace_content(files).map_err(|(status, _unpublished)| status)?;
         self.rows = listing.folders.actions.into_iter().chain(listing.files.actions).collect();
         self.directory = directory;
         self.selected = None;

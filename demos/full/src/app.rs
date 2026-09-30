@@ -61,7 +61,7 @@ use super::{
 use neocogi_ui::{events::*, *};
 use neocogi_demo_assets::themes::Theme;
 use neocogi_demo_host::{AppState, Host, HostError};
-use neocogi_com::{ComInterface, ComPtr, ComRef, NC_E_INVALID_ARG, NcCopyFromBufferOffset, NcStatus};
+use neocogi_com::{ComBox, ComInterface, ComPtr, ComRef, NC_E_INVALID_ARG, NcCopyFromBufferOffset, NcStatus};
 use std::{cell::RefCell, rc::Rc};
 mod queue;
 pub(super) use queue::Inputs;
@@ -142,15 +142,24 @@ fn button(ui: &Ui, events_tx: &mut Inputs, text: &str, action: Action) -> Result
     Ok(control)
 }
 /// A disclosure body is its actual editable Linear COM object, with no placeholder replacement tree.
-fn section<P>(ui: &Ui, parent: &mut Widget<LinearAbi, P>, text: &str, style: DisclosureStyle, expanded: bool) -> Result<LinearWidget, NcStatus>
-where P: WidgetStorage<LinearAbi> + core::ops::DerefMut<Target = nodes::LinearClient<neocogi_com::ThreadLocal>> {
+#[inline(never)]
+fn section(ui: &Ui, parent: &mut nodes::LinearClient<neocogi_com::ThreadLocal>, text: &str, style: DisclosureStyle, expanded: bool) -> Result<LinearWidget, NcStatus> {
     let section = ui.widgets().disclosure(text, style, expanded)?;
     let body = section.body()?;
-    append(parent, section, LayoutTrack::Content)?;
+    neocogi_ui_samples::append_widget(parent, into_widget(section)?, LayoutTrack::Content)?;
     Ok(body)
 }
-/// Mounts one fully expanding child directly under a structural floating window.
-fn floating<I: ComInterface>(ui: &Ui, desktop: ComRef<'_, IWindowAbi>, title: &str, area: Rect, content: OwnedWidget<I>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+/// Selects the construction interface once before type-independent mount work.
+/// This application abandons fresh candidates on failure; a caller planning a
+/// retry should keep the ownership-bearing error from the ordinary facade.
+#[inline]
+pub(super) fn into_widget<I: ComInterface>(widget: OwnedWidget<I>) -> Result<ComBox<IWidgetAbi>, NcStatus> {
+    widget.into_interface().query::<IWidgetAbi>().map_err(|(status, _candidate)| status)
+}
+
+/// Mounts a common widget owner without specializing window setup by child type.
+#[inline(never)]
+fn floating(ui: &Ui, desktop: ComRef<'_, IWindowAbi>, title: &str, area: Rect, content: ComBox<IWidgetAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
     let window = ui.child_window(desktop, title, area, content).map_err(|(status, _candidate)| status)?;
     window.set_options(WindowOptions::FRAME)?;
     Ok(window)
@@ -565,13 +574,13 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
     let mut events_tx = Inputs::new(sender);
     let grid = Rc::new(RefCell::new(GridState::default()));
     let grid_widget = ui.widgets().leaf(GridViewWidget::new(grid.clone()), WidgetOptions::NONE)?;
-    let desktop = ui.window("X-Y Grid Surface", rect(0, 0, 1200, 800), grid_widget).map_err(|(status, _candidate)| status)?;
+    let desktop = ui.window("X-Y Grid Surface", rect(0, 0, 1200, 800), into_widget(grid_widget)?).map_err(|(status, _candidate)| status)?;
     desktop.set_layer(0)?;
     desktop.set_child_clip(ChildClip::Content)?;
     desktop.set_options(WindowOptions::NO_TITLE | WindowOptions::NO_CLOSE | WindowOptions::NO_RESIZE | WindowOptions::NO_PADDING)?;
     let main_body = column(ui)?;
     let main_body_handle = main_body.handle();
-    let main_scroll = ui.widgets().scroll_area(main_body, true).map_err(|(status, _candidate)| status)?;
+    let main_scroll = ui.widgets().scroll_area(into_widget(main_body)?, true).map_err(|(status, _candidate)| status)?;
     let mut main_body = main_body_handle;
     let main_scroll_handle = main_scroll.handle();
     let lifecycle = events_tx.queue.query::<IWindowEventQueueAbi>()?;
@@ -579,7 +588,7 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
         desktop.as_com_ref(),
         "Demo Window",
         rect(40, 40, 300, 450),
-        main_scroll,
+        into_widget(main_scroll)?,
         Some(lifecycle.as_com_ref()),
     ).map_err(|(status, _candidate)| status)?;
     demo.set_options(WindowOptions::FRAME | WindowOptions::MINIMIZE_BUTTON | WindowOptions::MAXIMIZE_BUTTON)?;
@@ -633,12 +642,12 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
     let mut log = label(ui, "Welcome to neocogi-ui.")?;
     log.set_font_role(FontRole::Mono)?;
     let log_handle = log.handle();
-    let log_scroll = ui.widgets().scroll_area(log, true).map_err(|(status, _candidate)| status)?;
+    let log_scroll = ui.widgets().scroll_area(into_widget(log)?, true).map_err(|(status, _candidate)| status)?;
     let entry_sink = events_tx.queue.query::<TextboxEventQueueAbi>()?;
     let mut entry = ui.widgets().textbox_with_queue("", Some(entry_sink.as_com_ref()))?;
     entry.set_font_role(FontRole::Mono)?;
     let (style, style_root) = StyleEditor::new(ui, &mut events_tx)?;
-    floating(ui, desktop.as_com_ref(), "Flat Palette / Skin Metrics", rect(350, 250, 300, 240), style_root)?;
+    floating(ui, desktop.as_com_ref(), "Flat Palette / Skin Metrics", rect(350, 250, 300, 240), into_widget(style_root)?)?;
     let background = ui.widgets().color_swatch(grid.borrow().background, "#5A5F64")?;
     #[cfg(not(target_arch = "wasm32"))]
     let file_dialog = Some(ui.file_dialog_with_queue(demo.as_com_ref(), Some(events_tx.queue.query::<IFileDialogEventQueueAbi>()?.as_com_ref()))?);
@@ -687,14 +696,14 @@ pub(super) fn run() -> Result<(), HostError> {
 fn build_controls(host: &Host, state: &mut State, content: &mut LinearWidget, info_owners: [OwnedWidget<TextBlockAbi>; 3], combo_owner: OwnedWidget<ComboAbi>, background_owner: OwnedWidget<ColorSwatchAbi>) -> Result<(), HostError> {
     let events_tx = &mut state.inputs;
     let ui = &state.ui;
-    let mut info = section(ui, content, "Window Info", DisclosureStyle::Header, false)?;
+    let mut info = section(ui, content.as_interface_mut(), "Window Info", DisclosureStyle::Header, false)?;
     for (name, value) in ["Position", "Size", "FPS"].into_iter().zip(info_owners) {
         let mut line = row(ui)?;
         append(&mut line, label(ui, name)?, LayoutTrack::Fixed { extent: 54 })?;
         append(&mut line, value, FLEX)?;
         append(&mut info, line, LayoutTrack::Content)?;
     }
-    let mut tests = section(ui, content, "Test Buttons", DisclosureStyle::Header, true)?;
+    let mut tests = section(ui, content.as_interface_mut(), "Test Buttons", DisclosureStyle::Header, true)?;
     for (name, a, b, action) in [
         ("Buttons", "Button 1", "Button 2", Action::Log),
         ("More", "Button 3", "Popup", Action::Popup),
@@ -710,20 +719,20 @@ fn build_controls(host: &Host, state: &mut State, content: &mut LinearWidget, in
         append(&mut line, right, FLEX)?;
         append(&mut tests, line, LayoutTrack::Content)?;
     }
-    let mut combo = section(ui, content, "Combo Box", DisclosureStyle::Header, true)?;
+    let mut combo = section(ui, content.as_interface_mut(), "Combo Box", DisclosureStyle::Header, true)?;
     append(&mut combo, combo_owner, LayoutTrack::Content)?;
-    let mut trees = section(ui, content, "Tree and Text", DisclosureStyle::Header, true)?;
+    let mut trees = section(ui, content.as_interface_mut(), "Tree and Text", DisclosureStyle::Header, true)?;
     let mut line = row(ui)?;
     let mut left = column(ui)?;
-    let mut test = section(ui, &mut left, "Test 1", DisclosureStyle::Tree, false)?;
-    let mut nested = section(ui, &mut test, "Test 1a", DisclosureStyle::Tree, false)?;
+    let mut test = section(ui, left.as_interface_mut(), "Test 1", DisclosureStyle::Tree, false)?;
+    let mut nested = section(ui, test.as_interface_mut(), "Test 1a", DisclosureStyle::Tree, false)?;
     append(&mut nested, label(ui, "Hello")?, LayoutTrack::Content)?;
     append(&mut nested, label(ui, "World")?, LayoutTrack::Content)?;
-    let mut nested = section(ui, &mut test, "Test 1b", DisclosureStyle::Tree, false)?;
+    let mut nested = section(ui, test.as_interface_mut(), "Test 1b", DisclosureStyle::Tree, false)?;
     for text in ["Button 1", "Button 2"] {
         append(&mut nested, button(ui, events_tx, text, Action::Log)?, LayoutTrack::Content)?;
     }
-    let mut test = section(ui, &mut left, "Test 2", DisclosureStyle::Tree, false)?;
+    let mut test = section(ui, left.as_interface_mut(), "Test 2", DisclosureStyle::Tree, false)?;
     for pair in [["Button 3", "Button 4"], ["Button 5", "Button 6"]] {
         let mut line = row(ui)?;
         for text in pair {
@@ -731,21 +740,21 @@ fn build_controls(host: &Host, state: &mut State, content: &mut LinearWidget, in
         }
         append(&mut test, line, LayoutTrack::Content)?;
     }
-    let mut test = section(ui, &mut left, "Test 3", DisclosureStyle::Tree, false)?;
+    let mut test = section(ui, left.as_interface_mut(), "Test 3", DisclosureStyle::Tree, false)?;
     for text in ["Checkbox 1", "Checkbox 2", "Checkbox 3"] {
         append(&mut test, ui.widgets().checkbox_unobserved(text, false)?, LayoutTrack::Content)?;
     }
     append(&mut line, left, LayoutTrack::Fixed { extent: 140 })?;
     append(&mut line, ui.widgets().text_block("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Maecenas lacinia, sem eu lacinia molestie, mi risus faucibus ipsum, eu varius magna felis a nulla.", TextWrapping::Word)?, FLEX)?;
     append(&mut trees, line, LayoutTrack::Content)?;
-    let mut text = section(ui, content, "TextArea", DisclosureStyle::Header, true)?;
+    let mut text = section(ui, content.as_interface_mut(), "TextArea", DisclosureStyle::Header, true)?;
     let editor = ui.widgets().text_area_unobserved(
         "This is a multi-line TextArea.\nYou can type, scroll, and resize the window.\n\nTry adding more lines to see the scrollbars.",
         TextWrapping::Word,
         true,
     )?;
     append(&mut text, editor, LayoutTrack::Fixed { extent: 120 })?;
-    let mut background = section(ui, content, "Background Color", DisclosureStyle::Header, true)?;
+    let mut background = section(ui, content.as_interface_mut(), "Background Color", DisclosureStyle::Header, true)?;
     let mut line = row(ui)?;
     let mut controls = column(ui)?;
     for (name, shift) in [("Red", 0), ("Green", 8), ("Blue", 16)] {
@@ -764,7 +773,7 @@ fn build_controls(host: &Host, state: &mut State, content: &mut LinearWidget, in
     append(&mut line, controls, FLEX)?;
     append(&mut line, background_owner, LayoutTrack::Fixed { extent: 77 })?;
     append(&mut background, line, LayoutTrack::Content)?;
-    let mut textures = section(ui, content, "Textures", DisclosureStyle::Header, true)?;
+    let mut textures = section(ui, content.as_interface_mut(), "Textures", DisclosureStyle::Header, true)?;
     let factory = host.renderer.query::<ITextureFactoryAbi>()?;
     for (name, size, color) in [
         ("Texture 1 - Red", Size { width: 64, height: 64 }, [255, 0, 0, 255]),
@@ -808,7 +817,7 @@ fn build_examples(host: &Host, state: &mut State, log_owner: OwnedWidget<ScrollA
     append(&mut line, entry_owner, FLEX)?;
     append(&mut line, button(ui, events_tx, "Submit", Action::Submit)?, LayoutTrack::Fixed { extent: 69 })?;
     append(&mut log, line, LayoutTrack::Content)?;
-    floating(ui, desktop, "Log Window", rect(350, 40, 300, 200), log)?;
+    floating(ui, desktop, "Log Window", rect(350, 40, 300, 200), into_widget(log)?)?;
     let mut typography = column(ui)?;
     let mut heading = label(ui, "NORMAL.ttf at 18px")?;
     heading.set_font_role(FontRole::Heading)?;
@@ -822,34 +831,34 @@ fn build_examples(host: &Host, state: &mut State, log_owner: OwnedWidget<ScrollA
         LayoutTrack::Content,
     )?;
     append(&mut typography, button(ui, events_tx, "Control Preview", Action::Log)?, LayoutTrack::Content)?;
-    floating(ui, desktop, "Typography Demo", rect(40, 500, 300, 170), typography)?;
+    floating(ui, desktop, "Typography Demo", rect(40, 500, 300, 170), into_widget(typography)?)?;
     floating(
         ui,
         desktop,
         "Triangle Window",
         rect(200, 100, 200, 200),
-        ui.widgets().leaf(Triangle::default(), WidgetOptions::NO_INTERACT)?,
+        into_widget(ui.widgets().leaf(Triangle::default(), WidgetOptions::NO_INTERACT)?)?,
     )?;
     floating(
         ui,
         desktop,
         "Painter Window",
         rect(820, 40, 280, 240),
-        ui.widgets().leaf(PainterDemo::default(), WidgetOptions::NONE)?,
+        into_widget(ui.widgets().leaf(PainterDemo::default(), WidgetOptions::NONE)?)?,
     )?;
     floating(
         ui,
         desktop,
         "Brush Falloff",
         rect(820, 300, 320, 260),
-        ui.widgets().leaf(FalloffEditor::default(), WidgetOptions::NONE)?,
+        into_widget(ui.widgets().leaf(FalloffEditor::default(), WidgetOptions::NONE)?)?,
     )?;
     floating(
         ui,
         desktop,
         "Suzanne Window",
         rect(220, 220, 300, 300),
-        ui.widgets().leaf(Suzanne::new(host.renderer.as_com_ref())?, WidgetOptions::NONE)?,
+        into_widget(ui.widgets().leaf(Suzanne::new(host.renderer.as_com_ref())?, WidgetOptions::NONE)?)?,
     )?;
     // All sample buttons share this parent destination; each widget retains it at creation.
     let sample_sink = events_tx.queue.query::<ButtonEventQueueAbi>()?;
@@ -868,7 +877,7 @@ fn build_examples(host: &Host, state: &mut State, log_owner: OwnedWidget<ScrollA
         for button in &sample.buttons {
             events_tx.buttons.push((button.as_interface().clone(), Action::Log));
         }
-        floating(ui, desktop, title, area, sample.content)?;
+        floating(ui, desktop, title, area, into_widget(sample.content)?)?;
     }
     Ok(())
 }

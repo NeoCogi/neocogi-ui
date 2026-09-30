@@ -51,7 +51,7 @@
 // IN THE SOFTWARE.
 //
 //! Concrete palette/metric controls compile immutable style revisions only after an edit.
-use super::app::{append, column, label, row, slider, rgba, NumericTarget};
+use super::app::{append, column, into_widget, label, row, slider, rgba, NumericTarget};
 use neocogi_ui::*;
 use neocogi_demo_assets::themes::Theme;
 use neocogi_com::{ComPtr, ComRef, NcStatus};
@@ -232,7 +232,7 @@ impl StyleEditor {
             append(&mut content, line, LayoutTrack::Content)?;
             values.push((metric, handle));
         }
-        let root = ui.widgets().scroll_area(content, true).map_err(|(status, _candidate)| status)?;
+        let root = ui.widgets().scroll_area(into_widget(content)?, true).map_err(|(status, _candidate)| status)?;
         Ok((
             Self {
                 base,

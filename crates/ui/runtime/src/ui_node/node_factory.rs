@@ -48,8 +48,11 @@ impl NodeFactory {
             }
             // Only NOINTERFACE means an absent capability. ABI mismatches and other
             // query failures must remain errors, never select a different layout path.
-            let leaf = widget.downgrade_box()?.query::<ILeafLayoutAbi>();
-            let branch = widget.downgrade_box()?.query::<IContainerLayoutAbi>();
+            // Mount already owns the allocation. Each successful capability
+            // lookup retains only its final observer; absent capabilities need
+            // no temporary weak token or matching release.
+            let leaf = mount.query_weak::<ILeafLayoutAbi>();
+            let branch = mount.query_weak::<IContainerLayoutAbi>();
             let layout = match (leaf, branch) {
                 (Ok(leaf), Err(neocogi_com::NC_E_NOINTERFACE)) => NodeLayoutKind::Leaf(leaf),
                 (Err(neocogi_com::NC_E_NOINTERFACE), Ok(policy)) => {

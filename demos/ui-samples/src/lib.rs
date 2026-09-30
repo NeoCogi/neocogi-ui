@@ -74,8 +74,9 @@ fn button(ui: &Ui, text: &str, queue: Option<ComRef<'_, ButtonEventQueueAbi>>) -
 /// Appends a fresh construction candidate, abandoning it if construction fails.
 ///
 /// This builder intentionally returns only the status. Applications that need to
-/// retry a rejected typed owner use `Widget::insert` instead. Call it outside the
-/// candidate's active methods: it may destroy the candidate on any failure.
+/// retry a rejected typed owner use `Widget::insert` instead. The candidate and
+/// its descendants must have no active methods enclosing this call: a failure
+/// may destroy that entire candidate subtree.
 /// The generic boundary selects IWidget once; all parent storage and child types
 /// then share the same insertion body without converting a rejected owner back.
 #[inline]
@@ -85,10 +86,13 @@ where P: WidgetStorage<LinearAbi> + core::ops::DerefMut<Target = nodes::LinearCl
     append_widget(parent.as_interface_mut(), child, track)
 }
 
-/// One construction implementation for every child interface and parent storage.
-/// Keep this out of generic callers so their failure handling is not duplicated.
+/// Appends an already-selected IWidget construction candidate through one client.
+/// Like `append`, this abandons rejected candidates after the receiving call and
+/// must run outside active methods of the candidate or its descendants. Larger
+/// builders can use this entry without generic child or parent storage.
+/// Keep it out of generic callers so failure handling is not duplicated.
 #[inline(never)]
-fn append_widget(parent: &mut nodes::LinearClient<ThreadLocal>, child: ComBox<IWidgetAbi>, track: LayoutTrack) -> Result<(), NcStatus> {
+pub fn append_widget(parent: &mut nodes::LinearClient<ThreadLocal>, child: ComBox<IWidgetAbi>, track: LayoutTrack) -> Result<(), NcStatus> {
     // The client returns any rejected owner after the provider call has ended.
     // This builder then drops it through IWidget; no reverse interface query is
     // needed to destroy an object through its provider's common lifetime header.
