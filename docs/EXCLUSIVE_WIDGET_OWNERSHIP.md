@@ -66,7 +66,8 @@ Shared calls borrow their already retained value through the ordinary call gate.
 Exclusive calls first acquire an execution token, then the same borrow gate.
 Their Rust lease stores that token directly; shared leases store no token. This
 avoids charging every renderer, queue, factory, and other shared service for
-widget retirement. The common C control header, interface tables, and cross-plugin
+widget retirement. `BoxCall` always contains a non-null admitted exclusive call;
+the old null shared-call sentinel and its cleanup branch are removed. The common C control header, interface tables, and cross-plugin
 calls retain their existing ABI; provider-local Rust guards never cross it.
 
 ## Cached weak calls and threading
