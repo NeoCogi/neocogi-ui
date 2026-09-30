@@ -32,9 +32,9 @@ impl events::EventModel for Model {
     /// Handles the independent plugin's concrete public event protocol.
     fn handle(&mut self, message: Message) -> Result<(), NcStatus> {
         let Message::Counter(origin, event) = message;
-        let Ok(_call) = origin.borrow() else {
+        if !origin.is_alive() {
             return Ok(());
-        };
+        }
         if !origin.same_object(&self.counter) {
             return Ok(());
         }

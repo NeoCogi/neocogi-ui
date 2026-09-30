@@ -8,16 +8,17 @@ use std::{
     rc::Rc,
 };
 use super::{
-    child_store::{ChildStore, ChildTransaction},
+    child_store::ChildStore,
     SharedAssets,
 };
 use crate::Dimensioni;
 use crate::ui_node::LayoutTraversal;
 
-/// One invocation owns the actual child sequence while layout policy calls out.
+/// One invocation retains collection identity; it never moves children out of their owner.
 struct Frame {
-    /// Checked-out authoritative topology, returned to its store on every exit path.
-    children: ChildTransaction,
+    /// The editor remains the owner. Each service operation takes a short
+    /// transaction, returning children before calling parent policy again.
+    children: Rc<ChildStore>,
     /// Placement-only recursion; None restricts this scope to measurement.
     placement: Option<LayoutTraversal>,
 }
@@ -90,13 +91,14 @@ impl ILayoutService for Layout {
     /// Reads cardinality from this invocation's actual child sequence.
     fn child_count(&self, scope: LayoutScope) -> Result<u32, NcStatus> {
         let mut access = self.storage.take(scope)?;
-        Ok(access.frame().children.len() as u32)
+        Ok(access.frame().children.take()?.len() as u32)
     }
     /// Measures through the same node cache used by ordinary runtime traversal.
     fn measure_child(&self, scope: LayoutScope, index: u32, limits: LayoutLimits) -> Result<Size, NcStatus> {
         let mut access = self.storage.take(scope)?;
         let constraints = constraints(limits)?;
-        let node = access.frame().children.get_mut(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
+        let mut children = access.frame().children.take()?;
+        let node = children.get_mut(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
         let resources = self.storage.resources.borrow();
         let size = node.measure(resources.bundle().skin(), resources.bundle().atlas(), constraints)?;
         self.storage.size(size)
@@ -108,7 +110,8 @@ impl ILayoutService for Layout {
             return Err(NC_E_INVALID_ARG);
         }
         let frame = access.placement()?;
-        let node = frame.children.get_mut(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
+        let mut children = frame.children.take()?;
+        let node = children.get_mut(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
         let resources = self.storage.resources.borrow();
         let size = frame.placement.as_mut().expect("placement was checked").layout_node_ref(
             node,
@@ -121,7 +124,8 @@ impl ILayoutService for Layout {
     /// Exposes only a copied extent, never the child's runtime layout cache.
     fn child_content_size(&self, scope: LayoutScope, index: u32) -> Result<Size, NcStatus> {
         let mut access = self.storage.take(scope)?;
-        let node = access.placement()?.children.get(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
+        let children = access.placement()?.children.take()?;
+        let node = children.get(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
         self.storage.size(node.state.layout.content_size)
     }
     /// Publishes responsive participation only during placement of the direct parent.
@@ -133,14 +137,16 @@ impl ILayoutService for Layout {
             LayoutParticipation::Hidden => crate::ChildParticipation::Hidden,
             _ => return Err(NC_E_INVALID_ARG),
         };
-        let node = access.placement()?.children.get_mut(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
+        let mut children = access.placement()?.children.take()?;
+        let node = children.get_mut(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
         node.state.participation = participation;
         Ok(())
     }
     /// Records a changed shared placement dependency without exposing invalidation internals.
     fn child_placement_changed(&self, scope: LayoutScope, index: u32) -> Result<(), NcStatus> {
         let mut access = self.storage.take(scope)?;
-        let node = access.placement()?.children.get_mut(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
+        let mut children = access.placement()?.children.take()?;
+        let node = children.get_mut(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
         node.state.invalidate_layout();
         Ok(())
     }
@@ -173,7 +179,8 @@ impl LayoutService {
     /// Installs an owned nested scope; the previous token/frame is restored even on errors.
     fn begin(&self, children: &Rc<ChildStore>, placement: Option<LayoutTraversal>) -> Result<Invocation<'_>, NcStatus> {
         let token = self.storage.next.get().checked_add(1).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
-        let frame = Frame { children: children.take()?, placement };
+        children.open()?;
+        let frame = Frame { children: children.clone(), placement };
         let previous = self.storage.frame.borrow_mut().replace(frame);
         let previous_token = self.storage.active.replace(token);
         self.storage.next.set(token);
@@ -229,11 +236,11 @@ struct Invocation<'a> {
     scope: LayoutScope,
 }
 impl Drop for Invocation<'_> {
-    /// Expires current authority before releasing its child transaction or restoring its parent.
+    /// Expires current authority before releasing collection identity or restoring its parent.
     fn drop(&mut self) {
         self.storage.active.set(self.previous_token);
         let current = std::mem::replace(&mut *self.storage.frame.borrow_mut(), self.previous.take());
-        // Releasing a final child writer can close foreign objects here; no RefCell guard survives.
+        // Frames own no child widgets; releasing scope metadata cannot defer their destruction.
         drop(current);
     }
 }

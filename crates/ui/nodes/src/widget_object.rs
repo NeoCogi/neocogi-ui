@@ -516,7 +516,7 @@ impl<Q: neocogi_com::events::EventQueueInterface> WidgetEvents<Q> {
     pub(crate) fn post(&mut self, event: &Q::Event) -> Result<(), neocogi_com::NcStatus> {
         match &self.receiver {
             None => Ok(()),
-            Some((queue, origin)) => Q::post(queue.as_com_ref(), origin.borrow()?.as_com_ref(), event),
+            Some((queue, origin)) => Q::post(queue.as_com_ref(), origin.as_com_ref(), event),
         }
     }
 }

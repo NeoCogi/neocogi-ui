@@ -522,6 +522,7 @@ impl ChoiceMenuManager {
 /// Converts generic surface policy failures at this private composition boundary.
 fn surface_status(error: SurfaceMutationError) -> NcStatus {
     match error {
+        SurfaceMutationError::Busy => neocogi_ui_core_contracts::UI_E_BUSY,
         SurfaceMutationError::UnknownWindow | SurfaceMutationError::UnknownPopup => neocogi_ui_core_contracts::UI_E_CLOSED,
         SurfaceMutationError::InvalidLayer(_) => NC_E_INVALID_ARG,
         SurfaceMutationError::InvalidDialogOwner

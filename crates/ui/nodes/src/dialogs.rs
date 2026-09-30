@@ -320,13 +320,13 @@ impl FileDialog {
         let folders = OwnedWidget::from_interface(crate::ScrollArea::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
-            folder_content.root.into_interface().query::<IWidgetAbi>()?,
+            folder_content.root.into_interface().query::<IWidgetAbi>()?.into(),
             true,
         )?);
         let files = OwnedWidget::from_interface(crate::ScrollArea::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
-            file_content.root.into_interface().query::<IWidgetAbi>()?,
+            file_content.root.into_interface().query::<IWidgetAbi>()?.into(),
             true,
         )?);
         let error = label(&nodes, "")?;
@@ -401,7 +401,7 @@ impl FileDialog {
         .into_iter()
         .enumerate()
         {
-            neocogi_ui_nodes_contracts::Linear::insert(&mut shell, index as u32, child, LinearEdge::new(track))?;
+            neocogi_ui_nodes_contracts::Linear::insert(&mut shell, index as u32, child.into(), LinearEdge::new(track))?;
         }
         let request = Request {
             phase: RequestPhase::Idle,
@@ -442,8 +442,7 @@ impl FileDialog {
         )?;
         let connected = (|| {
             window.set_options(WindowOptions::FRAME)?;
-            let mut local = observer.try_borrow_mut()?;
-            local.model.window = Some(window.clone());
+            observer.with_mut(|local| local.model.window = Some(window.clone()))?;
             Ok::<(), NcStatus>(())
         })();
         if let Err(error) = connected {
@@ -534,7 +533,7 @@ impl Model {
         let message = match message {
             Message::Button(origin, event) => {
                 drop(event);
-                if origin.borrow().is_err() {
+                if !origin.is_alive() {
                     return Ok(());
                 }
                 let action = self
@@ -549,7 +548,7 @@ impl Model {
             }
             Message::Row(origin, event) => {
                 drop(event);
-                if origin.borrow().is_err() {
+                if !origin.is_alive() {
                     return Ok(());
                 }
                 let action = self
@@ -563,7 +562,7 @@ impl Model {
                 }
             }
             Message::Text(origin, event) => {
-                if origin.borrow().is_err() {
+                if !origin.is_alive() {
                     return Ok(());
                 };
                 match (

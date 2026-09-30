@@ -697,7 +697,7 @@ impl ScrollArea {
     pub(crate) fn create_com(
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
-        content: neocogi_com::ComBox<IWidgetAbi>,
+        content: neocogi_com::ComBoxInput<'_, IWidgetAbi>,
         enabled: bool,
     ) -> Result<neocogi_com::ComBox<ScrollAreaAbi>, NcStatus> {
         let value = Self::build(host, content, enabled, Some(&resources))?;
@@ -707,7 +707,7 @@ impl ScrollArea {
     /// Builds the fixed scroll composition with either direct or runtime-shared resources.
     fn build(
         host: ComPtr<IWidgetHostAbi>,
-        content: neocogi_com::ComBox<IWidgetAbi>,
+        content: neocogi_com::ComBoxInput<'_, IWidgetAbi>,
         enabled: bool,
         resources: Option<&crate::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
@@ -726,7 +726,7 @@ impl neocogi_ui_nodes_contracts::ScrollArea for ScrollArea {
     }
 
     /// Replaces only application content while preserving every fixed structural role.
-    fn replace_content(&mut self, content: neocogi_com::ComBox<IWidgetAbi>) -> Result<(), NcStatus> {
+    fn replace_content(&mut self, content: neocogi_com::ComBoxInput<'_, IWidgetAbi>) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
         self.content.replace(0, content)
     }

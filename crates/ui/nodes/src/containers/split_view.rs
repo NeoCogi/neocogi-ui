@@ -219,7 +219,7 @@ impl neocogi_ui_nodes_contracts::SplitView for SplitView {
         self.editor.view()
     }
     /// Checks the two-pane capacity before the new child consumes its attachment claim.
-    fn insert(&mut self, index: u32, child: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>) -> Result<(), NcStatus> {
+    fn insert(&mut self, index: u32, child: neocogi_com::ComBoxInput<'_, neocogi_ui_core_contracts::IWidgetAbi>) -> Result<(), NcStatus> {
         self.runtime.state.writable()?;
         if self.count >= 2 {
             return Err(NC_E_OUT_OF_RANGE);
@@ -230,7 +230,7 @@ impl neocogi_ui_nodes_contracts::SplitView for SplitView {
         Ok(())
     }
     /// Publishes invalidation after the editor commits replacement and drops the old owner.
-    fn replace(&mut self, index: u32, child: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>) -> Result<(), NcStatus> {
+    fn replace(&mut self, index: u32, child: neocogi_com::ComBoxInput<'_, neocogi_ui_core_contracts::IWidgetAbi>) -> Result<(), NcStatus> {
         self.runtime.state.writable()?;
         self.editor.replace(index, child)?;
         self.invalidate();

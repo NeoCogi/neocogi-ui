@@ -53,6 +53,8 @@ use super::root_chrome::{
 /// [`SurfaceCreationError`] so the uniquely owned [`Window`] or [`Node`] is not lost.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum SurfaceMutationError {
+    /// Removal would destroy a currently executing widget or checked-out child collection.
+    Busy,
     /// The supplied [`WindowHandle`] is stale or belongs to another Context.
     UnknownWindow,
     /// The supplied [`PopupHandle`] no longer identifies a window-owned popup definition.
@@ -75,6 +77,7 @@ impl fmt::Display for SurfaceMutationError {
         // Keep every public variant independently meaningful so this reason can be displayed both
         // on its own and as the source of an owner-preserving creation error.
         match self {
+            Self::Busy => f.write_str("a widget in the removed subtree is executing"),
             Self::UnknownWindow => f.write_str("the window handle is stale or belongs to another Context"),
             Self::UnknownPopup => f.write_str("the popup handle is stale or belongs to another Context"),
             Self::InvalidDialogOwner => f.write_str("the selected window cannot own or show this dialog"),
@@ -885,6 +888,18 @@ pub(super) struct SurfaceForest {
 }
 
 impl SurfaceForest {
+    /// Preflights exactly the requested surface family using the existing index.
+    /// The UI is thread-local, so no other thread can enter between validation
+    /// and removal; no foreign callbacks occur during this recursive inspection.
+    fn ensure_subtree_idle(&self, key: SurfaceKey) -> Result<(), SurfaceMutationError> {
+        let entry = &self.index[&key];
+        if let SurfaceBody::Widgets { root, .. } = &self.nodes[entry.position].surface.body {
+            root.data.ensure_idle().map_err(|_| SurfaceMutationError::Busy)?;
+        }
+        for &child in &entry.children { self.ensure_subtree_idle(child)?; }
+        Ok(())
+    }
+
     /// Creates an empty concrete forest with reusable visible-order workspaces.
     pub(super) fn new() -> Self {
         Self {
@@ -1274,10 +1289,20 @@ impl SurfaceForest {
 }
 
 impl WindowManager {
-    /// Captures each actual widget for dispatch after retained
-    /// traversal and before callback delivery. The forest's parent edges always
-    /// point to earlier nodes, so reverse order visits child surfaces first;
-    /// each widget tree contributes its own handles in descendant-first order.
+    /// Validates complete runtime shutdown before changing any lifetime state.
+    pub(crate) fn ensure_widgets_idle(&self) -> Result<(), neocogi_com::NcStatus> {
+        for surface in &self.surfaces.nodes {
+            if let SurfaceBody::Widgets { root, .. } = &surface.surface.body {
+                root.data.ensure_idle()?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Captures each actual widget for dispatch after retained traversal and
+    /// before callback delivery. Parent edges point to earlier forest nodes, so
+    /// reverse order visits child surfaces first; each widget tree contributes
+    /// its own handles in descendant-first order.
     pub(crate) fn collect_dispatch_widgets(
         &self,
         drivers: &mut Vec<neocogi_com::WeakComBox<neocogi_ui_core_contracts::IWidgetAbi>>,
@@ -2043,6 +2068,7 @@ impl WindowManager {
     /// Destroys one window together with every child window, dialog, and popup below it.
     pub fn destroy_window(&mut self, window: &WindowHandle) -> Result<(), SurfaceMutationError> {
         let root = self.window_id(window)?;
+        self.surfaces.ensure_subtree_idle(SurfaceKey::Root(root))?;
         // Materialize the root subtree before mutating storage so popup dismissal and active-window
         // cleanup can use one stable membership set.
         let removed = self.owned_root_ids(root);
@@ -3774,6 +3800,7 @@ impl WindowManager {
     /// Permanently removes one application popup and its descendant popup definitions.
     pub(crate) fn destroy_popup(&mut self, popup: &PopupHandle) -> Result<(), SurfaceMutationError> {
         let id = self.popup_id(popup)?;
+        self.surfaces.ensure_subtree_idle(SurfaceKey::Popup(id))?;
         self.hide_popup(popup)?;
         let mut removed = vec![SurfaceKey::Popup(id)];
         let mut index = 0;

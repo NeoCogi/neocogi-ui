@@ -101,8 +101,7 @@ flowchart LR
 ```
 
 Widgets use `ComBox` ownership and cached two-word `WeakComBox` observers.
-Dropping the sole owner rejects new calls immediately; admitted calls finish
-before destruction. Weak observers have no owning `upgrade`. `borrow()` protects
+Dropping the sole owner rejects new calls immediately; Drop waits for admitted calls and completes destruction before returning. Weak observers have no owning `upgrade`. `borrow()` protects
 an ABI argument for one lexical call, and each generated method independently
 checks admission. Empty allocation storage survives until the last weak token.
 See [exclusive ownership](EXCLUSIVE_WIDGET_OWNERSHIP.md) and

@@ -22,7 +22,7 @@ struct ContainerProbe {
     fail_place: Cell<bool>,
     /// Demonstrates responsive parent-controlled subtree participation.
     hidden: Cell<bool>,
-    /// Releases the private writer during placement to exercise deferred subtree destruction.
+    /// Releases the private writer during placement to verify synchronous subtree destruction.
     abandon: Cell<bool>,
     /// Optional reentrant edit attempted inside mount validation's foreign call.
     mount_edit: RefCell<Option<WeakComBox<IChildrenEditorAbi>>>,
@@ -129,7 +129,7 @@ impl IContainerLayout for TestContainer {
         assert_eq!(self.editor()?.view()?.child_count()?, count);
         let mut size = Size::default();
         for index in 0..count {
-            assert_eq!(self.editor()?.view()?.child(index).unwrap_err(), UI_E_BUSY);
+            assert!(self.editor()?.view()?.child(index).is_ok());
             let child = layout.measure_child(scope, index, bounds)?;
             // A nested container's newer token must restore this parent token on return.
             assert_eq!(layout.child_count(scope)?, count);
@@ -164,8 +164,12 @@ impl IContainerLayout for TestContainer {
             assert!(layout.child_content_size(scope, index)?.height >= 0);
         }
         if self.probe.abandon.get() {
+            let view = self.editor()?.view()?;
+            let child = view.child(0)?;
             let editor = self.editor.take();
             drop(editor);
+            assert_eq!(view.child_count(), Err(UI_E_CLOSED));
+            assert_eq!(child.properties(), Err(UI_E_CLOSED));
         }
         if self.probe.fail_place.get() {
             return Err(NC_E_INVALID_ARG);

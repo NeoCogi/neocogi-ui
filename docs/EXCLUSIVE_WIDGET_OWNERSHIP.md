@@ -62,21 +62,20 @@ an interface does not determine ownership. A class cannot expose both constructo
 families. `com_factory` rejects exclusive ownership because factory handles are
 shared services.
 
-Shared calls borrow their already retained value through the ordinary call gate.
-Exclusive calls first acquire an execution token, then the same borrow gate.
-Their Rust lease stores that token directly; shared leases store no token. This
-avoids charging every renderer, queue, factory, and other shared service for
-widget retirement. `BoxCall` always contains a non-null admitted exclusive call;
-the old null shared-call sentinel and its cleanup branch are removed. The common C control header, interface tables, and cross-plugin
-calls retain their existing ABI; provider-local Rust guards never cross it.
+Shared classes use their existing strong count and borrow gate. Exclusive classes
+use one atomic header word for owner presence and reader/writer access, followed
+by the weak count and class descriptor pointer. Their generated allocation is one
+common header plus `UnsafeCell<MaybeUninit<T>>`; there is no separate call gate or
+execution pin. Both kinds of provider-local lease occupy two words. Only C-shaped
+records cross plugin boundaries; see [core ABI v14](../crates/com/docs/abi-v14.md).
 
 ## Cached weak calls and threading
 
 A weak box stores the canonical control pointer and a validated interface table.
 Ordinary calls use that cached table: no interface search, temporary shared
 owner, or strong-count increment is required. Generated provider entry points
-acquire execution protection before constructing a reference to the value and
-use the existing shared-reader/exclusive-writer call gate. Conflicts report
+atomically check owner presence and acquire shared/exclusive access before
+constructing a reference to the value. Conflicts report
 `NC_E_BUSY`; methods do not implicitly wait on a lock.
 
 `ThreadLocal` handles cannot cross threads. `ThreadSafe` requires the provider to
@@ -85,22 +84,27 @@ initial common implementation uses atomic lifetime bookkeeping for both modes;
 thread affinity alone is not evidence that every alias to the allocation is
 local, since shared capabilities can be deliberately weakened.
 
-Owner removal atomically rejects new calls. Already admitted calls finish before
-concrete destruction, without blocking the removing thread. The last active call
-may execute destruction. This execution protection is not an independently
-clonable owner. An exclusive method's Rust reference and borrow gate must expire
-before its lifetime protection is released.
+Owner Drop atomically rejects new calls and waits for already admitted calls to
+finish. The dropping thread then destroys the value and its owned children before
+returning. Borrow release never runs a destructor. The implicit weak storage
+reference protects allocation bookkeeping until value destruction finishes.
 
 ```mermaid
 stateDiagram-v2
     [*] --> Constructing
     Constructing --> Owned: initialize and publish
     Constructing --> StorageOnly: construction fails
-    Owned --> Draining: owner dropped with active calls
-    Owned --> StorageOnly: owner dropped while idle / destroy value
-    Draining --> StorageOnly: last admitted call returns / destroy value
+    Owned --> Dropping: owner Drop starts / reject new calls
+    Dropping --> StorageOnly: wait for borrows / destroy owned value before Drop returns
     StorageOnly --> [*]: last weak reference released
 ```
+
+A method must not destroy its own owner or an ancestor while executing. The UI
+checks the actual subtree's borrow state before committing removal and reports
+`UI_E_BUSY` on reentry; it does not mark a parent closed first. A widget requests
+self-removal with `IWindow::request_close`, which the runtime commits after the
+method returns. Cross-thread Drop may wait; it must not hold a resource that the
+executing method needs. Completion depends on admitted calls terminating.
 
 Weak references keep control storage and provider code available, not widget
 resources. Calls after owner removal report `NC_E_CLOSED`, meaning an expired
@@ -117,7 +121,9 @@ useful. A queue must not retain an owning back-reference to its widget subtree.
 `LocalBox<T>` is created only by the generated concrete constructor. It permits
 initialization through `try_borrow_mut(&mut self)` and transfers its owner through
 `into_interface`. `WeakLocalBox<T>` keeps that same compile-time implementation
-proof after transfer and uses the ordinary ABI lifetime/borrow gate. Neither is a
+proof after transfer and exposes only scoped `with`/`with_mut` closures. These
+closures cannot return borrowed implementation references or guards. They must
+not remove their own owner while executing. Neither is a
 foreign downcast API. Composites can initialize their private controls without a
 second owner or a `RefCell` around every widget.
 
@@ -135,18 +141,24 @@ removed too. Child edits return `Result<()>`. Failure leaves the parent's topolo
 unchanged but destroys the consumed candidate; success publishes the new topology
 and drops any removed owner. There is no recoverable destructor status.
 
-The container also exclusively owns its `IChildrenEditor`. A retained editor
-observer cannot preserve a removed subtree, and retained read views expire when
-that editor is destroyed. An active traversal temporarily owns the child sequence
-and drops it when that traversal unwinds if the editor has disappeared.
+The container exclusively owns its `IChildrenEditor`. A retained editor observer
+cannot preserve a removed subtree. Layout scopes retain collection identity,
+not the owned children; each layout-service operation takes and returns its own
+short child transaction. Dropping the editor between service operations therefore
+destroys children immediately, even before the parent layout callback returns.
+Removal refuses a checked-out collection instead of keeping deferred cleanup.
 
-Rust field destruction releases the idle subtree. There is no universal promise
-that the parent's destructor waits for an already admitted child call: that would
-block or deadlock a child handler removing its own parent. The parent can be
-destroyed first while the child finishes its admitted call. No new call may enter
-the removed child. Store cleanup that requires live children in the owning
-implementation's ordinary `Drop`, before those child fields are dropped; do not
-reintroduce a generic fallible close protocol.
+Rust field destruction releases the complete subtree before parent Drop returns.
+An implementation needing live children in its destructor does that work in its
+ordinary `Drop`, before Rust drops its child fields. No generic fallible close
+protocol is required.
+
+Consuming COM inputs remain in the original caller's transfer slot until validation
+succeeds. Providers receive `ComBoxInput`, inspect `as_com_ref`, forward the same
+slot, and call `take` at the ownership commit. This matters for rejected cycles:
+the offered ancestor is destroyed only after the descendant's method returns.
+A rejected input is still destroyed before the client call returns; it is never
+stored in a pending-destruction queue.
 
 Window dismissal and file-dialog cancellation remain business operations. An
 explicit dialog cancellation posts its result while the dialog owner still
@@ -200,7 +212,7 @@ even when field validation captured weak handles.
 COM integration tests exercise unique transfer, expired cached calls, shared-owner
 rejection, provider destruction, borrowed access and concurrent call/removal races.
 UI tests exercise rejected attachment, retained child editors, replacement,
-self-removal during dispatch, active local guards, queue release, dialogs, and
+self-removal requests, scoped local borrows, queue release, dialogs, and
 compiled/reloaded forms. UI interfaces remain thread-local; the concurrent guarantee
 belongs to explicitly thread-safe COM contracts. Independently built providers
 must implement the same ABI version and keep their code loaded through the last

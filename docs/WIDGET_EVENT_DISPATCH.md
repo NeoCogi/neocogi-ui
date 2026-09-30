@@ -20,8 +20,8 @@ borrow. A request to remove its own subtree must stop subsequent dispatch and
 let its active call return before running terminal cleanup.
 
 The sole `ComBox` owner replaces a widget close phase. Dropping it rejects new
-calls; an admitted handler finishes before its value and private inbox are
-destroyed. Child fields own their descendants. Already posted application facts
+calls and destroys its value, private inbox and owned descendants before returning.
+A self-removal request runs only after the current handler has returned. Already posted application facts
 remain in the application inbox. See [exclusive ownership](EXCLUSIVE_WIDGET_OWNERSHIP.md).
 
 ## Ownership and publication
@@ -57,11 +57,13 @@ registration table, per-widget delivery ticket or readiness-notification system.
 Binary size and frame-time improvements are not claimed without measurement.
 
 Runtime dispatch snapshots contain weak handles and cannot retain removed values.
-An admitted `LocalBox`/`WeakLocalBox` guard may delay its own value's destruction,
-but removal does not wait, retry, or return busy because of that guard. New calls
-are rejected immediately. Parents need not wait for an already executing child:
-that child can safely remove its own subtree and return. UI remains thread-local;
-thread-safe COM objects use the same nonblocking admission/removal contract.
+Owner Drop rejects new calls and destroys the complete owned value before returning.
+Thread-local removal preflights the existing subtree borrow state and returns Busy
+if it would recursively destroy an executing method. A widget uses
+`IWindow::request_close` to request removal after its callback returns, before the
+next message; handler error does not discard the request. Weak local construction
+access uses scoped closures instead of escaping guards. ThreadSafe COM Drop waits
+for concurrent admitted calls, then destroys on the dropping thread.
 
 See the [event guide](../crates/ui/runtime/docs/EVENTS.md) for error semantics,
 work budgets, compiled-form lifetime, and application examples, and

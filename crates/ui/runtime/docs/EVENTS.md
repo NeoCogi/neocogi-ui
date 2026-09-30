@@ -236,13 +236,20 @@ This simple protocol polls ordinary widgets' no-op methods too. It avoids an
 additional discovery/registration contract, but is not a ready-inbox notification
 system. No frame-time or binary-size improvement is claimed without measurement.
 
-Removal drops the subtree's exclusive owner and immediately rejects new calls.
-Admitted calls finish under COM execution protection; the last such call destroys
-the value. Private inboxes and output queues are ordinary fields. No descendant
-close callback, retry queue or terminal widget state exists. A child removing
-its parent may outlive that parent's destructor until its own call returns.
-Application-held local guards obey the same rule. Removing a tree never waits on
-them or retries cleanup on a later update.
+Owner Drop rejects new calls and destroys the value and owned descendants before
+returning. Concurrent admitted COM calls finish first; their borrow guards only
+release access and never destroy the value. Private inboxes and output queues
+are ordinary owned fields. Weak references retain empty storage, not widgets.
+
+Thread-local UI removal checks the subtree's actual borrow state before changing
+ownership. An active parent or descendant returns `UI_E_BUSY` and leaves the tree
+intact. A handler requests its own window's removal with `IWindow::request_close`;
+runtime processes the request after the handler returns, even on handler error,
+before dispatching another message. The request stores only a window identity.
+There is no descendant close callback or deferred-destructor queue. Scoped weak
+local access follows the same rule: its closure must not destroy its own owner.
+Explicitly thread-safe COM owner Drop waits for concurrent admitted calls; the
+dropping thread must not hold a resource those calls need to finish.
 
 Explicit file-dialog cancellation posts a result before removal. Destruction
 alone disconnects it without posting a new result. Already queued application

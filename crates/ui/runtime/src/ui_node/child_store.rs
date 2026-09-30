@@ -31,6 +31,16 @@ pub(crate) struct ChildStore {
 }
 
 impl ChildStore {
+    /// Checks the actual owned descendants without entering any COM method.
+    /// A checked-out traversal is busy: it must return ownership before removal.
+    pub(super) fn ensure_idle(&self) -> Result<(), NcStatus> {
+        if self.closed.get() { return Ok(()); }
+        let storage = self.nodes.try_borrow().map_err(|_| UI_E_BUSY)?;
+        let nodes = storage.as_ref().ok_or(UI_E_BUSY)?;
+        for node in nodes.iter() { node.data.ensure_idle()?; }
+        Ok(())
+    }
+
     /// Validates one unclaimed container collection before any widget or topology ownership commits.
     pub(super) fn validate_attachment(self: &Rc<Self>, parent: Option<&Rc<Self>>) -> Result<(), NcStatus> {
         self.open()?;
@@ -74,18 +84,13 @@ impl ChildStore {
         let nodes = self.nodes.try_borrow_mut().map_err(|_| UI_E_BUSY)?.take().ok_or(UI_E_BUSY)?;
         Ok(ChildTransaction { store: self.clone(), nodes: Some(nodes) })
     }
-    /// Final writer release closes immediately, deferring owned-node clearing to an active transaction's Drop when necessary.
+    /// Final writer release destroys the complete idle collection synchronously.
     fn abandon(&self) {
         self.closed.set(true);
         self.dirty.set(false);
-        let nodes = self.nodes.borrow_mut().take();
-        if let Some(nodes) = nodes {
-            // Idle storage can release its owners immediately. An active owned
-            // transaction instead sees closed on return and drops its children.
-            drop(nodes);
-            self.count.set(0);
-            *self.nodes.borrow_mut() = Some(Children::new());
-        }
+        let nodes = self.nodes.borrow_mut().take().expect("removal requires an idle child collection");
+        drop(nodes);
+        self.count.set(0);
     }
 }
 
@@ -112,11 +117,8 @@ impl DerefMut for ChildTransaction {
 impl Drop for ChildTransaction {
     /// Returns ownership and the coherent copied count before a later call can enter.
     fn drop(&mut self) {
-        let mut nodes = self.nodes.take().expect("active transaction owns its nodes until drop");
-        if self.store.closed.get() {
-            drop(nodes);
-            nodes = Children::new();
-        }
+        let nodes = self.nodes.take().expect("active transaction owns its nodes until drop");
+        debug_assert!(!self.store.closed.get(), "an active collection cannot be destroyed");
         self.store
             .count
             .set(u32::try_from(nodes.len()).expect("insertion enforces the ABI child-count limit"));
@@ -188,7 +190,7 @@ impl IChildrenEditor for ChildEditor {
         Ok(self.view.clone())
     }
     /// Validates the slot and candidate before consuming the child's mount-once claim.
-    fn insert(&self, index: u32, widget: neocogi_com::ComBox<IWidgetAbi>) -> Result<(), NcStatus> {
+    fn insert(&self, index: u32, widget: neocogi_com::ComBoxInput<'_, IWidgetAbi>) -> Result<(), NcStatus> {
         self.store.factory.host.check_mutation()?;
         self.store.factory.check_edit()?;
         let mut nodes = self.store.take()?;
@@ -203,13 +205,14 @@ impl IChildrenEditor for ChildEditor {
         Ok(())
     }
     /// Validates the entire replacement before committing removal of the old subtree.
-    fn replace(&self, index: u32, widget: neocogi_com::ComBox<IWidgetAbi>) -> Result<(), NcStatus> {
+    fn replace(&self, index: u32, widget: neocogi_com::ComBoxInput<'_, IWidgetAbi>) -> Result<(), NcStatus> {
         self.store.factory.host.check_mutation()?;
         self.store.factory.check_edit()?;
         let mut nodes = self.store.take()?;
         if index as usize >= nodes.len() {
             return Err(neocogi_com::NC_E_OUT_OF_RANGE);
         }
+        nodes.get(index as usize).expect("validated index").data.ensure_idle()?;
         let node = self.store.factory.mount_node(widget, Some(&self.store))?;
         let previous = std::mem::replace(nodes.get_mut(index as usize).expect("validated index"), node);
         self.store.dirty.set(true);
@@ -224,6 +227,7 @@ impl IChildrenEditor for ChildEditor {
         if index as usize >= nodes.len() {
             return Err(neocogi_com::NC_E_OUT_OF_RANGE);
         }
+        nodes.get(index as usize).expect("validated index").data.ensure_idle()?;
         if !nodes.remove_drop(index as usize) {
             return Err(neocogi_com::NC_E_OUT_OF_RANGE);
         }
@@ -235,6 +239,9 @@ impl IChildrenEditor for ChildEditor {
         self.store.factory.host.check_mutation()?;
         self.store.factory.check_edit()?;
         let mut nodes = self.store.take()?;
+        // Validate every child before dropping any, preserving the collection
+        // unchanged if one descendant is executing a recursive removal attempt.
+        for node in nodes.iter() { node.data.ensure_idle()?; }
         if !nodes.is_empty() {
             self.store.dirty.set(true);
             nodes.clear();

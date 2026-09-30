@@ -78,14 +78,14 @@ impl QueuedEvent {
         let _ = &form;
         match self {
             Self::Source0 { origin, event } => {
-                match origin.borrow() { Ok(_) => {}, Err(neocogi_com::NC_E_CLOSED) => return Ok(None), Err(error) => return Err(error) };
+                if !origin.is_alive() { return Ok(None); }
                 Ok(match origin {
                     origin if origin.same_object(form.widget_save_2.as_interface()) => Some(Event::Widget2(event)),
                     _ => None,
                 })
             }
             Self::Source1 { origin, event } => {
-                match origin.borrow() { Ok(_) => {}, Err(neocogi_com::NC_E_CLOSED) => return Ok(None), Err(error) => return Err(error) };
+                if !origin.is_alive() { return Ok(None); }
                 Ok(match origin {
                     origin if origin.same_object(form.widget_extension_3.as_interface()) => Some(Event::Widget3(event)),
                     _ => None,

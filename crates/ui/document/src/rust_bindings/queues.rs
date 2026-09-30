@@ -89,7 +89,7 @@ pub(super) fn emit(source: &mut String, events: &[(usize, &Node, String)], custo
     }
     source.push_str("}\nimpl QueuedEvent {\n    /// Resolve only after generation validation; expired or foreign origins return None.\n    /// Inspect the captured payload directly when its origin lifetime is irrelevant.\n    pub fn resolve(self, form: &Form) -> Result<Option<Event>, neocogi_com::NcStatus> {\n        let _ = &form;\n        match self {\n");
     for (index, queue) in queues.iter().enumerate() {
-        writeln!(source, "            Self::Source{index} {{ origin, event }} => {{\n                match origin.borrow() {{ Ok(_) => {{}}, Err(neocogi_com::NC_E_CLOSED) => return Ok(None), Err(error) => return Err(error) }};\n                Ok(match origin {{").unwrap();
+        writeln!(source, "            Self::Source{index} {{ origin, event }} => {{\n                if !origin.is_alive() {{ return Ok(None); }}\n                Ok(match origin {{").unwrap();
         for member in &queue.members {
             let (ordinal, node, _) = &events[*member];
             writeln!(

@@ -57,7 +57,7 @@ impl QueuedEvent {
         let _ = &form;
         match self {
             Self::Source0 { origin, event } => {
-                match origin.borrow() { Ok(_) => {}, Err(neocogi_com::NC_E_CLOSED) => return Ok(None), Err(error) => return Err(error) };
+                if !origin.is_alive() { return Ok(None); }
                 Ok(match origin {
                     origin if origin.same_object(form.widget_root_0.as_interface()) => Some(Event::Widget0(event)),
                     _ => None,

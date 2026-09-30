@@ -153,49 +153,49 @@ impl QueuedEvent {
         let _ = &form;
         match self {
             Self::Source0 { origin, event } => {
-                match origin.borrow() { Ok(_) => {}, Err(neocogi_com::NC_E_CLOSED) => return Ok(None), Err(error) => return Err(error) };
+                if !origin.is_alive() { return Ok(None); }
                 Ok(match origin {
                     origin if origin.same_object(form.widget_button_1.as_interface()) => Some(Event::Widget1(event)),
                     _ => None,
                 })
             }
             Self::Source1 { origin, event } => {
-                match origin.borrow() { Ok(_) => {}, Err(neocogi_com::NC_E_CLOSED) => return Ok(None), Err(error) => return Err(error) };
+                if !origin.is_alive() { return Ok(None); }
                 Ok(match origin {
                     origin if origin.same_object(form.widget_check_2.as_interface()) => Some(Event::Widget2(event)),
                     _ => None,
                 })
             }
             Self::Source2 { origin, event } => {
-                match origin.borrow() { Ok(_) => {}, Err(neocogi_com::NC_E_CLOSED) => return Ok(None), Err(error) => return Err(error) };
+                if !origin.is_alive() { return Ok(None); }
                 Ok(match origin {
                     origin if origin.same_object(form.widget_text_3.as_interface()) => Some(Event::Widget3(event)),
                     _ => None,
                 })
             }
             Self::Source3 { origin, event } => {
-                match origin.borrow() { Ok(_) => {}, Err(neocogi_com::NC_E_CLOSED) => return Ok(None), Err(error) => return Err(error) };
+                if !origin.is_alive() { return Ok(None); }
                 Ok(match origin {
                     origin if origin.same_object(form.widget_slider_4.as_interface()) => Some(Event::Widget4(event)),
                     _ => None,
                 })
             }
             Self::Source4 { origin, event } => {
-                match origin.borrow() { Ok(_) => {}, Err(neocogi_com::NC_E_CLOSED) => return Ok(None), Err(error) => return Err(error) };
+                if !origin.is_alive() { return Ok(None); }
                 Ok(match origin {
                     origin if origin.same_object(form.widget_scroll_5.as_interface()) => Some(Event::Widget5(event)),
                     _ => None,
                 })
             }
             Self::Source5 { origin, event } => {
-                match origin.borrow() { Ok(_) => {}, Err(neocogi_com::NC_E_CLOSED) => return Ok(None), Err(error) => return Err(error) };
+                if !origin.is_alive() { return Ok(None); }
                 Ok(match origin {
                     origin if origin.same_object(form.widget_split_6.as_interface()) => Some(Event::Widget6(event)),
                     _ => None,
                 })
             }
             Self::Source6 { origin, event } => {
-                match origin.borrow() { Ok(_) => {}, Err(neocogi_com::NC_E_CLOSED) => return Ok(None), Err(error) => return Err(error) };
+                if !origin.is_alive() { return Ok(None); }
                 Ok(match origin {
                     origin if origin.same_object(form.widget_combo_7.as_interface()) => Some(Event::Widget7(event)),
                     _ => None,

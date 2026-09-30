@@ -206,12 +206,11 @@ impl Drop for RuntimeStorage {
     /// Final release closes retained handles even without an explicit application close.
     fn drop(&mut self) {
         self.factory.state.closed.set(true);
-        // Removing the forest drops root owners. Admitted widget calls protect
-        // only their own values until return; weak snapshots own no resources.
+        // Runtime release must occur outside its widgets' active calls. Dropping
+        // the forest synchronously destroys root owners and their complete trees.
         drop(self.context.get_mut().take());
         self.dispatch_widgets.get_mut().clear();
-        // No retry list survives final runtime destruction. A local admitted
-        // guard releases its value on return without a host/widget owner cycle.
+        // Weak snapshots and requested window identities own no widget values.
     }
 }
 
@@ -352,6 +351,7 @@ impl UiRuntime for Runtime {
             return Ok(());
         }
         let mut context = storage.context()?;
+        context.window_manager.ensure_widgets_idle()?;
         let surfaces: Vec<_> = storage.mounts.borrow().iter().map(|m| m.surface.clone()).collect();
         storage.factory.state.closed.set(true);
         let clipboard = storage.factory.state.clipboard.take();

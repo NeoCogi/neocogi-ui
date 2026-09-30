@@ -379,9 +379,9 @@ impl neocogi_ui_core_contracts::IChoiceMenuEventQueue for ComboEventForwarder {
         event: neocogi_com::NcValueRef<'_, neocogi_ui_core_contracts::IChoiceMenuEvent>,
     ) -> Result<(), NcStatus> {
         let origin = match &self.origin {
-            Some(origin) => origin.borrow()?,
+            Some(origin) => origin.as_com_ref(),
             None => return Err(neocogi_com::NC_E_BUSY),
         };
-        self.queue.post(origin.as_com_ref(), event)
+        self.queue.post(origin, event)
     }
 }

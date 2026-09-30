@@ -47,7 +47,7 @@ fn removed_widget_finalizes_after_handler_return_even_on_error() {
         let mut local = local_owner.downgrade();
         let component = neocogi_ui::OwnedWidget::from_interface(local_owner.into_interface::<IWidgetAbi>().unwrap());
         let window = ui.window("owned behavior", RECT, component).unwrap();
-        local.try_borrow_mut().unwrap().model.window = Some(window.clone());
+        local.with_mut(|local| local.model.window = Some(window.clone())).unwrap();
         send.send(()).unwrap();
         send.send(()).unwrap();
         assert_eq!(ui.update(SIZE), if fail { Err(NC_E_INVALID_ARG) } else { Ok(()) });
@@ -97,42 +97,26 @@ fn empty_application_dispatcher_adds_no_per_update_allocations() {
     assert_eq!(owned, plain, "the application dispatcher must not allocate a per-frame adapter");
 }
 
-/// Removing an owner rejects new calls while an admitted local guard safely finishes.
+/// Refuse recursive removal before committing state, then synchronously destroy
+/// the same owner once the scoped implementation borrow has ended.
 #[test]
-fn owner_removal_rejects_delivery_while_an_admitted_call_finishes() {
+fn owner_removal_rejects_active_borrows_then_destroys_before_returning() {
     for close_runtime in [false, true] {
         let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
         let trace = Rc::new(RefCell::new(Vec::new()));
         let (send, messages) = std::sync::mpsc::channel();
-        let (local, _) = Composite::build(
-            &ui,
-            Removal {
-                window: None,
-                trace: trace.clone(),
-                fail: false,
-            },
-            messages,
-        );
-        let local_owner = local;
-        let mut local = local_owner.downgrade();
-        let component = neocogi_ui::OwnedWidget::from_interface(local_owner.into_interface::<IWidgetAbi>().unwrap());
-        let window = ui.window("guarded local", RECT, component).unwrap();
-        let held = local.try_borrow_mut().unwrap();
-        match close_runtime {
-            true => assert_eq!(ui.close(), Ok(())),
-            false => {
-                window.close().unwrap();
-                assert_eq!(ui.update(SIZE), Ok(()));
-            }
-        }
-        assert!(trace.borrow().is_empty());
-        drop(held);
-        match close_runtime {
-            true => ui.close().unwrap(),
-            false => ui.update(SIZE).unwrap(),
-        }
+        let (local, _) = Composite::build(&ui, Removal { window: None, trace: trace.clone(), fail: false }, messages);
+        let mut observed = local.downgrade();
+        let window = ui.window("scoped local", RECT, local.into_interface::<IWidgetAbi>().unwrap()).unwrap();
+        observed.with_mut(|_| {
+            let result = match close_runtime { true => ui.close(), false => window.close() };
+            assert_eq!(result, Err(UI_E_BUSY));
+            assert!(trace.borrow().is_empty());
+        }).unwrap();
+        match close_runtime { true => ui.close().unwrap(), false => window.close().unwrap() }
         assert_eq!(&*trace.borrow(), &["closed"]);
         assert!(send.send(()).is_err());
+        assert_eq!(observed.with(|_| ()), Err(UI_E_CLOSED));
     }
 }
 
@@ -236,9 +220,9 @@ fn descendant_removal_request_drops_the_complete_tree_after_handler_return() {
     }
 }
 
-/// A local execution guard delays only its own value; ancestor destruction never waits.
+/// An active descendant prevents partial ancestor removal; idle removal destroys both.
 #[test]
-fn admitted_descendant_finishes_after_its_parent_is_destroyed() {
+fn active_descendant_rejects_partial_removal_then_the_whole_tree_drops() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let trace = Rc::new(RefCell::new(Vec::new()));
     let (_parent_send, parent_inbox) = std::sync::mpsc::channel();
@@ -268,12 +252,12 @@ fn admitted_descendant_finishes_after_its_parent_is_destroyed() {
     let parent_owner = parent;
     let parent_view = neocogi_ui::OwnedWidget::from_interface(parent_owner.into_interface::<IWidgetAbi>().unwrap());
     let _window = ui.window("blocked descendant", RECT, parent_view).unwrap();
-    let held = child.try_borrow_mut().unwrap();
-    assert_eq!(ui.close(), Ok(()));
-    assert_eq!(&*trace.borrow(), &["parent"], "removal never waits for an admitted child call");
-    drop(held);
+    child.with_mut(|_| {
+        assert_eq!(ui.close(), Err(UI_E_BUSY));
+        assert!(trace.borrow().is_empty(), "a refusal must preserve the parent too");
+    }).unwrap();
     ui.close().unwrap();
-    assert_eq!(&*trace.borrow(), &["parent", "child"]);
+    assert_eq!(&*trace.borrow(), &["child", "parent"]);
 }
 
 /// Passive leaf behavior deliberately edits topology without claiming to consume a message.
@@ -366,9 +350,9 @@ fn final_runtime_release_does_not_leak_a_borrowed_widget_or_its_private_inbox() 
         let value = Rc::new(());
         let weak = Rc::downgrade(&value);
         send.send(value).unwrap();
-        let held = local.try_borrow_mut().unwrap();
+        local.with_mut(|_| ()).unwrap();
         drop(ui);
-        drop(held);
+        assert!(weak.upgrade().is_none(), "runtime Drop must destroy queued values before returning");
         let mut widget = view.node_interface().unwrap();
         assert_eq!(widget.dispatch_next(), Err(UI_E_CLOSED));
         if explicit_close {

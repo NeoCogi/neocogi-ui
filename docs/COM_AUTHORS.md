@@ -13,7 +13,7 @@ Native applications always link the Rust facade. A dynamic assembly links one sh
 Shared services use `ComPtr`; widgets use one non-clonable `ComBox`. Containers
 consume child owners. Application fields retain cached `WeakComBox` observers,
 which cannot prolong a removed value. Dropping the owner rejects new calls;
-admitted calls finish before provider destruction. Final destruction releases
+Drop waits for admitted calls and completes provider destruction before returning. Final destruction releases
 ordinary fields without a generic widget close callback or recoverable teardown
 result. It must not submit GPU work or invoke application behavior. See
 [exclusive ownership](EXCLUSIVE_WIDGET_OWNERSHIP.md).

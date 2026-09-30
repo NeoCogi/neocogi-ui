@@ -43,6 +43,7 @@ pub(super) fn status(error: SurfaceMutationError) -> NcStatus {
     match error {
         SurfaceMutationError::UnknownWindow | SurfaceMutationError::UnknownPopup => UI_E_CLOSED,
         SurfaceMutationError::InvalidLayer(_) => NC_E_INVALID_ARG,
+        SurfaceMutationError::Busy => UI_E_BUSY,
         _ => UI_E_POLICY,
     }
 }
@@ -102,7 +103,7 @@ impl RuntimeStorage {
         placement: Placement,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
+        root: neocogi_com::ComBoxInput<'_, neocogi_ui_core_contracts::IWidgetAbi>,
     ) -> Result<ComPtr<IUnknown>, NcStatus> {
         self.factory.host.check_mutation()?;
         if rect.width < 0 || rect.height < 0 {
@@ -147,7 +148,7 @@ impl IWindowManager for Runtime {
         &self,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
+        root: neocogi_com::ComBoxInput<'_, neocogi_ui_core_contracts::IWidgetAbi>,
         events: neocogi_com::NcValueRef<'_, IWindowEventBinding>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.storage
@@ -160,7 +161,7 @@ impl IWindowManager for Runtime {
         parent: ComRef<'_, IWindowAbi>,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
+        root: neocogi_com::ComBoxInput<'_, neocogi_ui_core_contracts::IWidgetAbi>,
         events: neocogi_com::NcValueRef<'_, IWindowEventBinding>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.storage
@@ -178,7 +179,7 @@ impl IWindowManager for Runtime {
         parent: ComRef<'_, IWindowAbi>,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
+        root: neocogi_com::ComBoxInput<'_, neocogi_ui_core_contracts::IWidgetAbi>,
         events: neocogi_com::NcValueRef<'_, IWindowEventBinding>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.storage
@@ -195,7 +196,7 @@ impl IWindowManager for Runtime {
         &self,
         parent: ComRef<'_, IWindowAbi>,
         title: NcCopyFromBufferOffset<'_, u8>,
-        root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
+        root: neocogi_com::ComBoxInput<'_, neocogi_ui_core_contracts::IWidgetAbi>,
         events: neocogi_com::NcValueRef<'_, IPopupEventBinding>,
     ) -> Result<ComPtr<IPopupAbi>, NcStatus> {
         self.storage

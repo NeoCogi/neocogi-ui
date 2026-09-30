@@ -87,7 +87,7 @@ impl Fixture {
     }
     /// Returns the actual current dynamic file root to verify transactional replacement and handle preservation.
     fn file_root(&self) -> WeakComBox<IWidgetAbi> {
-        self.widget.try_borrow().unwrap().model.files.content().unwrap().node_interface().unwrap()
+        self.widget.with(|dialog| dialog.model.files.content().unwrap().node_interface().unwrap()).unwrap()
     }
 }
 /// Connects the real picker completion protocol to a consumer-owned inbox.
@@ -109,8 +109,8 @@ fn save_request_preserves_suggested_filename_and_rejects_directory_components() 
     assert!(!fixture.handle.active().unwrap());
     request.filename = "new theme.json".into();
     fixture.handle.open(&request).unwrap();
-    assert_eq!(fixture.widget.try_borrow().unwrap().model.accept.label().unwrap(), "Save");
-    assert_eq!(fixture.widget.try_borrow().unwrap().model.filename.text().unwrap(), "new theme.json");
+    assert_eq!(fixture.widget.with(|dialog| dialog.model.accept.label().unwrap()).unwrap(), "Save");
+    assert_eq!(fixture.widget.with(|dialog| dialog.model.filename.text().unwrap()).unwrap(), "new theme.json");
     // Traverse the real modal and submit its suggested filename, without requiring
     // an existing file or manufacturing a completion in the test.
     fixture.tabs(6);
@@ -122,9 +122,9 @@ fn save_request_preserves_suggested_filename_and_rejects_directory_components() 
     );
     assert!(!fixture.handle.active().unwrap());
     fixture.open(directory.path());
-    assert_eq!(fixture.widget.try_borrow().unwrap().model.accept.label().unwrap(), "Open");
-    assert_eq!(fixture.widget.try_borrow().unwrap().model.filename.text().unwrap(), "");
-    assert!(fixture.widget.try_borrow().unwrap().model.selected.is_none());
+    assert_eq!(fixture.widget.with(|dialog| dialog.model.accept.label().unwrap()).unwrap(), "Open");
+    assert_eq!(fixture.widget.with(|dialog| dialog.model.filename.text().unwrap()).unwrap(), "");
+    assert!(fixture.widget.with(|dialog| dialog.model.selected.is_none()).unwrap());
 }
 
 /// Failed initial reads and overlapping requests leave activity, native directory and actual dynamic roots unchanged.
@@ -146,7 +146,7 @@ fn failed_open_and_overlapping_requests_preserve_previous_state_and_expose_nativ
     assert_eq!(fixture.handle.open(&neocogi_ui::FileDialogRequest::new(&missing)), Err(UI_E_BUSY));
     assert_eq!(fixture.file_root().as_raw().object, live.as_raw().object);
     assert!(fixture.handle.diagnostic().unwrap().is_empty());
-    assert_eq!(fixture.widget.try_borrow().unwrap().model.directory, directory.path());
+    assert_eq!(fixture.widget.with(|dialog| dialog.model.directory.clone()).unwrap(), directory.path());
     fixture.handle.close().unwrap();
     assert_eq!(fixture.handle.active(), Err(UI_E_CLOSED));
 }
@@ -235,7 +235,7 @@ fn typed_filename_acceptance_uses_real_controls_and_completes_before_update_retu
     assert_eq!(&*app.state(), &[Some(directory.path().join(" file name "))]);
     assert_eq!(fixture.handle.active(), Ok(false));
     assert_eq!(fixture.handle.window().unwrap().snapshot().unwrap().visibility, Visibility::Hidden);
-    assert_eq!(fixture.widget.try_borrow().unwrap().model.filename.text().unwrap(), " file name ");
+    assert_eq!(fixture.widget.with(|dialog| dialog.model.filename.text().unwrap()).unwrap(), " file name ");
     assert_eq!(fixture.handle.cancel(), Ok(false));
     fixture.handle.close().unwrap();
 }
@@ -262,7 +262,7 @@ fn selected_non_utf8_file_preserves_exact_native_identity_across_display_collisi
     fixture.tabs(6);
     fixture.key(KeyCode::Space, 0);
     app.update(&fixture.ui, SIZE).unwrap();
-    assert_eq!(fixture.widget.try_borrow().unwrap().model.selected.as_ref(), Some(&first));
+    assert_eq!(fixture.widget.with(|dialog| dialog.model.selected.clone()).unwrap().as_ref(), Some(&first));
     // Second file, filename, Cancel, Open.
     fixture.tabs(4);
     fixture.key(KeyCode::Space, 0);
@@ -284,19 +284,19 @@ fn unreadable_navigation_preserves_selection_directory_and_dynamic_widget_identi
     fixture.tabs(7); // Four toolbar stops, parent folder, child folder, file.
     fixture.key(KeyCode::Space, 0);
     fixture.ui.update(SIZE).unwrap();
-    assert_eq!(fixture.widget.try_borrow().unwrap().model.selected.as_ref(), Some(&file));
+    assert_eq!(fixture.widget.with(|dialog| dialog.model.selected.clone()).unwrap().as_ref(), Some(&file));
     let root = fixture.file_root();
     std::fs::remove_dir(&folder).unwrap();
     fixture.key(KeyCode::Tab, 4); // Shift+Tab returns to the now-unreadable retained folder row.
     fixture.key(KeyCode::Space, 0);
     fixture.ui.update(SIZE).unwrap();
     assert_eq!(fixture.file_root().as_raw().object, root.as_raw().object);
-    let held = fixture.widget.try_borrow().unwrap();
-    let model = &held.model;
+    fixture.widget.with(|dialog| {
+    let model = &dialog.model;
     assert_eq!(model.selected.as_ref(), Some(&file));
     assert_eq!(model.directory, directory.path());
     assert!(model.error.text().unwrap().contains("Cannot read"));
-    drop(held);
+    }).unwrap();
     fixture.handle.close().unwrap();
 }
 
@@ -364,8 +364,8 @@ fn successful_navigation_reuses_fixed_controls_and_replaces_the_complete_dynamic
     }
     fixture.open(directory.path());
     let old_root = fixture.file_root();
-    let path = fixture.widget.try_borrow().unwrap().model.path.clone();
-    let mut scroll = fixture.widget.try_borrow().unwrap().model.files.clone();
+    let path = fixture.widget.with(|dialog| dialog.model.path.clone()).unwrap();
+    let mut scroll = fixture.widget.with(|dialog| dialog.model.files.clone()).unwrap();
     scroll.set_offset(Point { x: 0, y: i32::MAX }).unwrap();
     fixture.ui.update(SIZE).unwrap();
     assert!(scroll.info().unwrap().requested.y > 0);
@@ -373,10 +373,10 @@ fn successful_navigation_reuses_fixed_controls_and_replaces_the_complete_dynamic
     fixture.key(KeyCode::Space, 0);
     fixture.ui.update(SIZE).unwrap();
     assert_ne!(fixture.file_root().as_raw().object, old_root.as_raw().object);
-    assert_eq!(fixture.widget.try_borrow().unwrap().model.directory, child);
+    assert_eq!(fixture.widget.with(|dialog| dialog.model.directory.clone()).unwrap(), child);
     assert_eq!(path.text().unwrap(), child.to_string_lossy());
     assert_eq!(scroll.info().unwrap().requested.y, 0);
-    assert!(fixture.widget.try_borrow().unwrap().model.selected.is_none());
+    assert!(fixture.widget.with(|dialog| dialog.model.selected.is_none()).unwrap());
     fixture.handle.close().unwrap();
 }
 
@@ -520,8 +520,7 @@ fn shared_child_queue_discards_events_from_replaced_directory_rows() {
     let replacement = tempfile::tempdir().unwrap();
     std::fs::write(directory.path().join("old.txt"), b"old").unwrap();
     fixture.open(directory.path());
-    let (mut queue, old) = {
-        let dialog = fixture.widget.try_borrow().unwrap();
+    let (mut queue, old) = fixture.widget.with(|dialog| {
         let queue = dialog.model.nodes.queue.query::<neocogi_ui::ListItemEventQueueAbi>().unwrap();
         let buttons = dialog.model.nodes.queue.query::<neocogi_ui::ButtonEventQueueAbi>().unwrap();
         let text = dialog.model.nodes.queue.query::<neocogi_ui::TextboxEventQueueAbi>().unwrap();
@@ -536,18 +535,17 @@ fn shared_child_queue_discards_events_from_replaced_directory_rows() {
             .0
             .clone();
         (queue, old)
-    };
+    }).unwrap();
     // Post through the real generated ABI before replacing the row's membership.
     let event = neocogi_ui::list_item::Event::Activated(Activation { label: "old.txt".into() });
-    queue.post(old.borrow().unwrap().as_com_ref(), NcValueRef::new(&event).unwrap()).unwrap();
-    {
-        let mut dialog = fixture.widget.try_borrow_mut().unwrap();
+    queue.post(old.as_com_ref(), NcValueRef::new(&event).unwrap()).unwrap();
+    fixture.widget.with_mut(|dialog| {
         let listing = dialog.model.candidate(replacement.path()).unwrap();
         dialog.model.install(replacement.path().to_owned(), listing, true).unwrap();
         while IWidget::dispatch_next(&mut *dialog).unwrap() {}
         assert!(dialog.model.selected.is_none());
         assert_eq!(dialog.model.filename.text().unwrap(), "");
-    }
+    }).unwrap();
     // The old row has been destroyed; queued facts retain only its weak identity.
     assert!(!old.is_alive());
 }
@@ -605,7 +603,7 @@ fn refuse_first_removal(fixture: &Fixture) -> std::sync::Arc<std::sync::atomic::
     let attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let window = fixture.handle.window().unwrap();
     let proxy = RefusingRemoval::from_value(RefusingRemoval { window, attempts: attempts.clone() }).query().unwrap();
-    fixture.widget.clone().try_borrow_mut().unwrap().model.window = Some(proxy);
+    fixture.widget.clone().with_mut(|dialog| dialog.model.window = Some(proxy)).unwrap();
     attempts
 }
 

@@ -48,6 +48,17 @@ pub(crate) struct ComNode {
 }
 
 impl ComNode {
+    /// Rejects recursive destruction before a thread-local topology edit commits.
+    /// This inspects the existing borrow word and authoritative child collection;
+    /// no second lifetime flag, ownership graph, or provider callback is needed.
+    pub(crate) fn ensure_idle(&self) -> Result<(), NcStatus> {
+        if !self.widget.is_idle() { return Err(UI_E_BUSY); }
+        match &self.layout {
+            NodeLayoutKind::Leaf(_) => Ok(()),
+            NodeLayoutKind::Branch { children, .. } => children.ensure_idle(),
+        }
+    }
+
     /// Resolves validated COM policy into the private retained router's concrete values.
     pub(crate) fn policy(&self) -> (WidgetOption, KeyboardBehavior, crate::FrameRole) {
         let properties = self.properties;

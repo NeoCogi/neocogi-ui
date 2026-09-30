@@ -73,7 +73,9 @@ application state through a borrowed `IApplicationDispatcher`. Composite models
 and receivers belong to the concrete widget, whose `IWidget::dispatch_next`
 shares its normal borrow gate and lifecycle. The retained runtime schedules
 widgets descendant-first. Removing an exclusive `ComBox` owner rejects new calls;
-admitted calls finish before destruction. Dispatch snapshots use `WeakComBox`.
+Drop waits for admitted calls and destroys the value before returning. Widgets
+request self-removal for the runtime boundary after their callback returns.
+Dispatch snapshots use `WeakComBox`.
 The COM process runtime owns no event loop. `LocalBox` grants typed concrete
 access for exclusive widgets; `LocalCom` remains for shared services. Both use
 the same COM borrow gate. See [exclusive ownership](EXCLUSIVE_WIDGET_OWNERSHIP.md).

@@ -141,7 +141,7 @@ impl CounterObject {
     fn post(&mut self, event: &CounterEvent) -> Result<(), NcStatus> {
         match &mut self.event {
             None => Ok(()),
-            Some((queue, origin)) => queue.post(origin.borrow()?.as_com_ref(), neocogi_com::NcValueRef::new(event)?),
+            Some((queue, origin)) => queue.post(origin.as_com_ref(), neocogi_com::NcValueRef::new(event)?),
         }
     }
 }
@@ -215,7 +215,7 @@ impl IContainer for Inset {
 }
 impl IInset for Inset {
     /// Read cardinality from its authoritative sequence; no second has-child flag can become stale.
-    fn set_child(&mut self, child: ComBox<IWidgetAbi>) -> Result<(), NcStatus> {
+    fn set_child(&mut self, child: neocogi_com::ComBoxInput<'_, IWidgetAbi>) -> Result<(), NcStatus> {
         self.common.state.writable()?;
         if self.editor.view()?.child_count()? == 0 {
             self.editor.insert(0, child)

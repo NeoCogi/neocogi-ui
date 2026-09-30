@@ -826,7 +826,7 @@ impl TextArea {
         Self::into_box_cyclic::<TextAreaAbi>(move |origin| {
             // Only this constructor can access the private editor's local value;
             // all fallible tree construction finished before this publication step.
-            editor.try_borrow_mut().expect("unpublished editor is idle").events = crate::widget_object::WidgetEvents::with_queue(queue, origin);
+            editor.with_mut(|editor| editor.events = crate::widget_object::WidgetEvents::with_queue(queue, origin)).expect("unpublished editor is idle");
             value
         })?
         .query()
@@ -941,7 +941,7 @@ mod tests {
             let runtime = crate::widget_object::WidgetRuntime::for_resources(host, crate::WidgetOption::FRAME, None).unwrap();
             let value = TextArea::from_runtime(runtime, parts.editor, observer.query().unwrap(), observer.query().unwrap(), parts.model);
             let outer = TextArea::into_box_cyclic::<TextAreaAbi>(|origin| {
-                observer.try_borrow_mut().unwrap().events = crate::widget_object::WidgetEvents::with_queue(Some(queue), origin);
+                observer.with_mut(|editor| editor.events = crate::widget_object::WidgetEvents::with_queue(Some(queue), origin)).unwrap();
                 value
             })
             .unwrap()
@@ -1024,9 +1024,8 @@ mod tests {
         // payload order and the constructor uses this exact semantic initialization path.
         let text_area = TextEditor::new_editor(TextAreaParameters::new(""));
         let (mut text_area, mut dispatcher) = text_dispatcher(text_area);
-        let mut text_area = text_area.1.try_borrow_mut().unwrap();
-        update_text_area(
-            &mut text_area,
+        text_area.1.with_mut(|text_area| update_text_area(
+            text_area,
             vec![
                 UiInputEvent::Text { text: "line".into() },
                 UiInputEvent::Key {
@@ -1036,7 +1035,7 @@ mod tests {
                     event: KeyEvent::pressed(Key::Enter, Modifiers::CTRL),
                 },
             ],
-        );
+        )).unwrap();
         let mut events = Vec::new();
         assert!(dispatcher(&mut events));
         assert_eq!(
