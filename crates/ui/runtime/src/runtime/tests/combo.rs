@@ -22,10 +22,11 @@ fn press(ui: &neocogi_ui::Ui, key: KeyCode) {
 #[test]
 fn combo_owns_optional_selection_and_popup_state_end_to_end() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
-    let mut root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
-    let window = ui.window("combo", RECT, &root).unwrap();
+    let root_owner = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
+    let mut root = root_owner.handle();
+    let window = ui.window("combo", RECT, root_owner).unwrap();
     let (session_tx, session) = std::sync::mpsc::channel();
-    let mut combo = ui
+    let combo_owner = ui
         .combo_box_with_queue(
             window.as_com_ref(),
             &["first", "second"],
@@ -42,8 +43,9 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
             ),
         )
         .unwrap();
+    let mut combo = combo_owner.handle();
     combo.set_placeholder("Choose a value").unwrap();
-    root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
+    root.insert(0, combo_owner, LinearEdge::new(LayoutTrack::Content)).unwrap();
     let changes = Vec::new();
 
     let app = TestApp::new(changes, session, |state, message| {
@@ -96,7 +98,7 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
 fn combo_construction_is_atomic_for_invalid_selection() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let root = ui.widgets().text_block("owner", TextWrapping::None).unwrap();
-    let window = ui.window("combo owner", RECT, &root).unwrap();
+    let window = ui.window("combo owner", RECT, root).unwrap();
     let defaulted = ui.combo_box_unobserved(window.as_com_ref(), &["only"], ChoiceSelection::None).unwrap();
     assert_eq!(defaulted.placeholder().unwrap(), "Select…");
     assert_eq!(defaulted.display_text().unwrap(), "Select…");
@@ -109,8 +111,10 @@ fn combo_construction_is_atomic_for_invalid_selection() {
 #[test]
 fn combo_choice_menu_uses_shared_submenu_navigation() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
-    let mut root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
-    let window = ui.window("nested combo", RECT, &root).unwrap();
+    let root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
+    let root_owner = root;
+    let mut root = root_owner.handle();
+    let window = ui.window("nested combo", RECT, root_owner).unwrap();
     let menu_text = "FruitAppleBanana";
     let menu = [
         neocogi_ui::ChoiceMenuEntry::Submenu {
@@ -127,7 +131,7 @@ fn combo_choice_menu_uses_shared_submenu_navigation() {
         },
     ];
     let (session_tx, session) = std::sync::mpsc::channel();
-    let mut combo = ui
+    let combo = ui
         .combo_menu_with_queue(
             window.as_com_ref(),
             menu_text,
@@ -145,7 +149,9 @@ fn combo_choice_menu_uses_shared_submenu_navigation() {
             ),
         )
         .unwrap();
-    root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
+    let combo_owner = combo;
+    let mut combo = combo_owner.handle();
+    root.insert(0, combo_owner, LinearEdge::new(LayoutTrack::Content)).unwrap();
     let changes = Vec::new();
 
     let app = TestApp::new(changes, session, |state, message| {
@@ -178,4 +184,52 @@ fn combo_choice_menu_uses_shared_submenu_navigation() {
     ui.update_with_events(SIZE, app.as_interface()).unwrap();
     assert_eq!(combo.selection().unwrap(), ChoiceSelection::Selected(11));
     assert_eq!(*app.state(), [ChoiceSelection::Selected(11), ChoiceSelection::Selected(11)]);
+}
+
+#[com_object(neocogi_ui::nodes::ComboEventQueue)]
+/// Hostile queue removes the emitting header during synchronous menu forwarding.
+/// Application queues normally only enqueue; this probes the destructor boundary.
+struct RemoveComboDuringPost {
+    /// Weak parent access cannot preserve the emitted control after clear.
+    root: neocogi_ui::LinearWidget,
+    /// Independent observation proves one real submission crossed the ABI.
+    calls: Rc<Cell<u32>>,
+}
+impl neocogi_ui::nodes::ComboEventQueue for RemoveComboDuringPost {
+    /// Removal must not require a recursive call into the active menu state.
+    fn post(&mut self, _origin: ComRef<'_, neocogi_ui::ComboAbi>, event: neocogi_com::NcValueRef<'_, neocogi_ui::combo::Event>) -> Result<(), NcStatus> {
+        let _ = event.to_owned()?;
+        self.calls.set(self.calls.get() + 1);
+        self.root.clear()
+    }
+}
+
+/// Popup coordination cannot own a dead header's menu/queue or require Drop to
+/// reenter the menu while its submission call is still on the stack.
+#[test]
+fn combo_removal_during_forwarding_releases_menu_queue_without_close_callback() {
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let root_owner = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
+    let mut root = root_owner.handle();
+    let window = ui.window("reentrant combo destruction", RECT, root_owner).unwrap();
+    let calls = Rc::new(Cell::new(0));
+    let queue = RemoveComboDuringPost::from_value(RemoveComboDuringPost { root: root.clone(), calls: calls.clone() })
+        .query::<neocogi_ui::ComboEventQueueAbi>().unwrap();
+    let weak_queue = queue.downgrade().unwrap();
+    let combo_owner = ui.combo_box_with_queue(window.as_com_ref(), &["first", "second"], ChoiceSelection::Selected(0), Some(queue.as_com_ref())).unwrap();
+    let combo = combo_owner.handle();
+    root.insert(0, combo_owner, LinearEdge::new(LayoutTrack::Content)).unwrap();
+    drop(queue);
+    for key in [KeyCode::Tab, KeyCode::Enter, KeyCode::ArrowDown, KeyCode::Enter] {
+        press(&ui, key);
+    }
+    ui.update(SIZE).unwrap();
+    assert_eq!(calls.get(), 1);
+    assert_eq!(combo.selection(), Err(UI_E_CLOSED));
+    assert!(weak_queue.upgrade().unwrap().is_none(), "the popup coordinator must not retain the dead header's destination");
+    assert_eq!(root.children().unwrap().child_count(), Ok(0));
+    let (renderer, _) = renderer();
+    ui.render(SIZE, renderer.as_com_ref()).unwrap();
+    ui.update(SIZE).unwrap();
+    assert_eq!(calls.get(), 1);
 }

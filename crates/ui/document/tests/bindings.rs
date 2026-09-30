@@ -46,7 +46,7 @@ fn empty_public_contract_generates_a_valid_module() {
 #[test]
 fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
     use neocogi_com::{NcStatus, NC_E_INVALID_ARG};
-    use neocogi_ui::{IWidgetAbi, Ui, Widget};
+    use neocogi_ui::{IWidgetAbi, Ui, OwnedWidget};
     use neocogi_ui_document::{Child, CustomProperty, CustomValue, CustomWidgetFactory, CustomWidgetRegistry, Edge, Node, Track, WidgetSpec};
     use std::rc::Rc;
 
@@ -65,7 +65,7 @@ fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
             )
         }
         /// Binding generation never constructs a live widget.
-        fn create(&self, _: &Ui, _: &[CustomProperty], _: Option<neocogi_com::ComPtr<neocogi_com::IUnknown>>) -> Result<Widget<IWidgetAbi>, NcStatus> {
+        fn create(&self, _: &Ui, _: &[CustomProperty], _: Option<neocogi_com::ComPtr<neocogi_com::IUnknown>>) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
             Err(NC_E_INVALID_ARG)
         }
     }
@@ -108,7 +108,7 @@ fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
 #[test]
 fn custom_factory_cannot_omit_its_constructor_event_graph() {
     use neocogi_com::{NcStatus, NC_E_INVALID_ARG, design::IdlInterface};
-    use neocogi_ui::{IWidgetAbi, Ui, Widget};
+    use neocogi_ui::{IWidgetAbi, Ui, OwnedWidget};
     use neocogi_ui_document::{CustomProperty, CustomWidgetFactory, CustomWidgetRegistry};
     use std::rc::Rc;
 
@@ -132,7 +132,7 @@ fn custom_factory_cannot_omit_its_constructor_event_graph() {
             neocogi_ui_document::design::DesignWidgetManifest::from_idl("hidden.counter", vec![], &HIDDEN)
         }
         /// Registration rejects this provider before construction is possible.
-        fn create(&self, _: &Ui, _: &[CustomProperty], _: Option<neocogi_com::ComPtr<neocogi_com::IUnknown>>) -> Result<Widget<IWidgetAbi>, NcStatus> {
+        fn create(&self, _: &Ui, _: &[CustomProperty], _: Option<neocogi_com::ComPtr<neocogi_com::IUnknown>>) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
             Err(NC_E_INVALID_ARG)
         }
     }
@@ -209,7 +209,7 @@ fn shared_queues_allow_rust_aliases_but_reject_conflicting_revisions() {
             _: &neocogi_ui::Ui,
             _: &[neocogi_ui_document::CustomProperty],
             _: Option<neocogi_com::ComPtr<neocogi_com::IUnknown>>,
-        ) -> Result<neocogi_ui::Widget<neocogi_ui::IWidgetAbi>, neocogi_com::NcStatus> {
+        ) -> Result<neocogi_ui::OwnedWidget<neocogi_ui::IWidgetAbi>, neocogi_com::NcStatus> {
             Err(neocogi_com::NC_E_INVALID_ARG)
         }
     }

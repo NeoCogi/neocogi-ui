@@ -3,13 +3,11 @@ use super::*;
 use neocogi_ui_support::test_support::events::TestApp;
 
 /// Places leaves in a production Linear whose allocations are fixed and easy to target.
-fn column(ui: &Ui, children: &[Widget<IWidgetAbi>]) -> LinearWidget {
+fn column(ui: &Ui, children: impl IntoIterator<Item = OwnedWidget<IWidgetAbi>>) -> OwnedWidget<LinearAbi> {
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
-    for (index, child) in children.iter().enumerate() {
+    for (index, child) in children.into_iter().enumerate() {
         column
             .insert(index as u32, child, LinearEdge::new(LayoutTrack::Fixed { extent: 30 }))
-            .unwrap()
-            .finish()
             .unwrap();
     }
     column
@@ -27,8 +25,8 @@ fn sequential_focus_wraps_in_retained_order_and_skips_ineligible_nodes() {
     let (first, a) = probe::<2>(&fixture.ui, Size::default(), WidgetOptions::NONE);
     let (disabled, b) = probe::<2>(&fixture.ui, Size::default(), WidgetOptions::NO_INTERACT);
     let (last, c) = probe::<2>(&fixture.ui, Size::default(), WidgetOptions::NONE);
-    let column = column(&fixture.ui, &[first, disabled, last]);
-    let _window = window(&fixture.ui, "focus", Rect { x: 10, y: 10, width: 200, height: 140 }, &column);
+    let column = column(&fixture.ui, [first, disabled, last]);
+    let _window = window(&fixture.ui, "focus", Rect { x: 10, y: 10, width: 200, height: 140 }, column);
     for (modifiers, expected) in [(0, [true, false]), (0, [false, true]), (0, [true, false]), (4, [false, true])] {
         key(&fixture.ui, KeyCode::Tab, 0, modifiers);
         fixture.frame(VIEW).unwrap();
@@ -43,8 +41,8 @@ fn capture_is_exclusive_across_windows_and_release_preserves_keyboard_focus() {
     let mut fixture = Headless::standard();
     let (first, a) = probe::<1>(&fixture.ui, Size::default(), WidgetOptions::NONE);
     let (second, b) = probe::<1>(&fixture.ui, Size::default(), WidgetOptions::NONE);
-    let _first = window(&fixture.ui, "first", Rect { x: 10, y: 10, width: 120, height: 90 }, &first);
-    let _second = window(&fixture.ui, "second", Rect { x: 200, y: 10, width: 120, height: 90 }, &second);
+    let _first = window(&fixture.ui, "first", Rect { x: 10, y: 10, width: 120, height: 90 }, first);
+    let _second = window(&fixture.ui, "second", Rect { x: 200, y: 10, width: 120, height: 90 }, second);
     fixture.frame(VIEW).unwrap();
     pointer(&fixture.ui, Point { x: 30, y: 30 }, true);
     fixture.frame(VIEW).unwrap();
@@ -69,7 +67,7 @@ fn cancel_and_visibility_changes_revoke_pointer_capture() {
     for hide in [false, true] {
         let mut fixture = Headless::standard();
         let (leaf, observed) = probe::<1>(&fixture.ui, Size::default(), WidgetOptions::NONE);
-        let owner = window(&fixture.ui, "capture", Rect { x: 10, y: 10, width: 120, height: 90 }, &leaf);
+        let owner = window(&fixture.ui, "capture", Rect { x: 10, y: 10, width: 120, height: 90 }, leaf);
         pointer(&fixture.ui, Point { x: 30, y: 30 }, true);
         fixture.frame(VIEW).unwrap();
         assert!(update(&observed).active);
@@ -91,16 +89,15 @@ fn cancel_and_visibility_changes_revoke_pointer_capture() {
 fn replacing_a_captured_child_closes_it_and_does_not_transfer_focus() {
     let mut fixture = Headless::standard();
     let (first, a) = probe::<1>(&fixture.ui, Size::default(), WidgetOptions::NONE);
-    let mut column = column(&fixture.ui, &[first]);
-    let _owner = window(&fixture.ui, "replace", Rect { x: 10, y: 10, width: 200, height: 100 }, &column);
+    let column_owner = column(&fixture.ui, [first]);
+    let mut column = column_owner.handle();
+    let _owner = window(&fixture.ui, "replace", Rect { x: 10, y: 10, width: 200, height: 100 }, column_owner);
     pointer(&fixture.ui, Point { x: 30, y: 20 }, true);
     fixture.frame(VIEW).unwrap();
     assert!(update(&a).active);
     let (replacement, b) = probe::<1>(&fixture.ui, Size::default(), WidgetOptions::NONE);
     column
-        .replace(0, &replacement, LinearEdge::new(LayoutTrack::Fixed { extent: 30 }))
-        .unwrap()
-        .finish()
+        .replace(0, replacement, LinearEdge::new(LayoutTrack::Fixed { extent: 30 }))
         .unwrap();
     assert!(a.borrow().closed);
     fixture.ui.input(UiInput::Pointer(Point { x: 70, y: 20 }), "").unwrap();
@@ -125,7 +122,7 @@ fn raising_changes_compositor_order_only_within_the_windows_layer() {
     for (index, color) in colors.into_iter().enumerate() {
         let (leaf, observed) = probe::<0>(&fixture.ui, Size::default(), WidgetOptions::NONE);
         observed.borrow_mut().color = Some(color);
-        let owner = window(&fixture.ui, "order", Rect { x: 10, y: 10, width: 100, height: 80 }, &leaf);
+        let owner = window(&fixture.ui, "order", Rect { x: 10, y: 10, width: 100, height: 80 }, leaf);
         owner.set_layer(if index == 2 { 3 } else { 2 }).unwrap();
         windows.push(owner);
     }
@@ -152,16 +149,16 @@ fn raising_changes_compositor_order_only_within_the_windows_layer() {
 fn managed_surface_layers_follow_family_policy_and_reject_independent_assignment() {
     let mut fixture = Headless::standard();
     let body = fixture.ui.widgets().button_unobserved("parent").unwrap();
-    let owner = window(&fixture.ui, "owner", Rect { x: 10, y: 10, width: 200, height: 150 }, &body);
+    let owner = window(&fixture.ui, "owner", Rect { x: 10, y: 10, width: 200, height: 150 }, body);
     let child_body = fixture.ui.widgets().button_unobserved("child").unwrap();
     let child = fixture
         .ui
-        .child_window(owner.as_com_ref(), "child", Rect { x: 20, y: 20, width: 100, height: 80 }, &child_body)
+        .child_window(owner.as_com_ref(), "child", Rect { x: 20, y: 20, width: 100, height: 80 }, child_body)
         .unwrap();
     let dialog_body = fixture.ui.widgets().button_unobserved("dialog").unwrap();
     let dialog = fixture
         .ui
-        .dialog(owner.as_com_ref(), "dialog", Rect { x: 30, y: 30, width: 100, height: 80 }, &dialog_body)
+        .dialog(owner.as_com_ref(), "dialog", Rect { x: 30, y: 30, width: 100, height: 80 }, dialog_body)
         .unwrap();
     owner.set_layer(2).unwrap();
     assert_eq!(child.snapshot().unwrap().layer.number, 2);
@@ -178,9 +175,9 @@ fn managed_surface_layers_follow_family_policy_and_reject_independent_assignment
 fn outside_popup_press_dismisses_then_routes_once_and_popup_reuses_its_content() {
     let mut fixture = Headless::standard();
     let (leaf, observed) = probe::<1>(&fixture.ui, Size::default(), WidgetOptions::NONE);
-    let owner = window(&fixture.ui, "owner", Rect { x: 10, y: 10, width: 250, height: 180 }, &leaf);
+    let owner = window(&fixture.ui, "owner", Rect { x: 10, y: 10, width: 250, height: 180 }, leaf);
     let (popup_leaf, popup_observed) = probe::<1>(&fixture.ui, Size::default(), WidgetOptions::NONE);
-    let mut popup = fixture.ui.popup(owner.as_com_ref(), "popup", &popup_leaf).unwrap();
+    let mut popup = fixture.ui.popup(owner.as_com_ref(), "popup", popup_leaf).unwrap();
     popup.set_options(PLAIN).unwrap();
     let anchor = Rect { x: 100, y: 60, width: 100, height: 80 };
     popup.show_at(anchor).unwrap();
@@ -213,11 +210,11 @@ fn outside_popup_press_dismisses_then_routes_once_and_popup_reuses_its_content()
 fn one_popup_branch_is_active_per_runtime_and_owner_visibility_controls_it() {
     let mut fixture = Headless::standard();
     let body = fixture.ui.widgets().button_unobserved("body").unwrap();
-    let owner = window(&fixture.ui, "owner", Rect { x: 10, y: 10, width: 250, height: 180 }, &body);
+    let owner = window(&fixture.ui, "owner", Rect { x: 10, y: 10, width: 250, height: 180 }, body);
     let first = fixture.ui.widgets().button_unobserved("first").unwrap();
     let second = fixture.ui.widgets().button_unobserved("second").unwrap();
-    let mut a = fixture.ui.popup(owner.as_com_ref(), "a", &first).unwrap();
-    let mut b = fixture.ui.popup(owner.as_com_ref(), "b", &second).unwrap();
+    let mut a = fixture.ui.popup(owner.as_com_ref(), "a", first).unwrap();
+    let mut b = fixture.ui.popup(owner.as_com_ref(), "b", second).unwrap();
     a.show_at(Rect { x: 40, y: 40, width: 100, height: 80 }).unwrap();
     b.show_at(Rect { x: 60, y: 60, width: 100, height: 80 }).unwrap();
     assert_eq!(a.visibility(), Ok(Visibility::Hidden));
@@ -235,12 +232,12 @@ fn child_clipping_accumulates_and_can_be_disabled_without_changing_child_geometr
     for clipping in [ChildClip::Content, ChildClip::None] {
         let mut fixture = Headless::standard();
         let body = fixture.ui.widgets().button_unobserved("body").unwrap();
-        let owner = window(&fixture.ui, "owner", Rect { x: 20, y: 20, width: 100, height: 100 }, &body);
+        let owner = window(&fixture.ui, "owner", Rect { x: 20, y: 20, width: 100, height: 100 }, body);
         owner.set_child_clip(clipping).unwrap();
         let (leaf, observed) = probe::<0>(&fixture.ui, Size::default(), WidgetOptions::NONE);
         let child = fixture
             .ui
-            .child_window(owner.as_com_ref(), "child", Rect { x: 100, y: 100, width: 80, height: 80 }, &leaf)
+            .child_window(owner.as_com_ref(), "child", Rect { x: 100, y: 100, width: 80, height: 80 }, leaf)
             .unwrap();
         child.set_options(PLAIN).unwrap();
         fixture.frame(VIEW).unwrap();
@@ -251,25 +248,29 @@ fn child_clipping_accumulates_and_can_be_disabled_without_changing_child_geometr
     }
 }
 
-/// Failed cross-runtime creation does not consume the content's only mount claim.
+/// Failed consuming attachment destroys its candidate; a fresh owner can be mounted.
 #[test]
-fn foreign_surface_owner_rejection_preserves_content_for_retry() {
+fn foreign_surface_owner_rejection_destroys_consumed_content() {
     let mut fixture = Headless::standard();
     let other = Headless::standard();
     let foreign_body = other.ui.widgets().button_unobserved("foreign").unwrap();
-    let foreign = window(&other.ui, "foreign", Rect { x: 0, y: 0, width: 100, height: 80 }, &foreign_body);
-    let candidate = fixture.ui.widgets().button_unobserved("candidate").unwrap();
+    let foreign = window(&other.ui, "foreign", Rect { x: 0, y: 0, width: 100, height: 80 }, foreign_body);
+    let candidate_owner = fixture.ui.widgets().button_unobserved("candidate").unwrap();
+    let candidate = candidate_owner.handle();
     assert_eq!(
         fixture
             .ui
-            .child_window(foreign.as_com_ref(), "bad", Rect { x: 0, y: 0, width: 100, height: 80 }, &candidate)
+            .child_window(foreign.as_com_ref(), "bad", Rect { x: 0, y: 0, width: 100, height: 80 }, candidate_owner)
             .unwrap_err(),
         UI_E_OWNER
     );
-    let owner = window(&fixture.ui, "retry", Rect { x: 10, y: 10, width: 100, height: 80 }, &candidate);
+    assert_eq!(candidate.label(), Err(UI_E_CLOSED));
+    let candidate = fixture.ui.widgets().button_unobserved("fresh candidate").unwrap();
+    let observed = candidate.handle();
+    let owner = window(&fixture.ui, "retry", Rect { x: 10, y: 10, width: 100, height: 80 }, candidate);
     fixture.frame(VIEW).unwrap();
     owner.close().unwrap();
-    assert_eq!(candidate.label(), Err(UI_E_CLOSED));
+    assert_eq!(observed.label(), Err(UI_E_CLOSED));
 }
 
 /// A deep family changes visibility and inherited layer consistently without exposing private roots.
@@ -277,13 +278,13 @@ fn foreign_surface_owner_rejection_preserves_content_for_retry() {
 fn deep_window_family_preserves_inherited_policy_through_mutation_and_teardown() {
     let mut fixture = Headless::standard();
     let body = fixture.ui.widgets().button_unobserved("root").unwrap();
-    let root = window(&fixture.ui, "root", Rect { x: 10, y: 10, width: 120, height: 100 }, &body);
+    let root = window(&fixture.ui, "root", Rect { x: 10, y: 10, width: 120, height: 100 }, body);
     let mut deepest = root.clone();
     for _ in 0..48 {
         let body = fixture.ui.widgets().button_unobserved("child").unwrap();
         deepest = fixture
             .ui
-            .child_window(deepest.as_com_ref(), "child", Rect { x: 10, y: 10, width: 100, height: 80 }, &body)
+            .child_window(deepest.as_com_ref(), "child", Rect { x: 10, y: 10, width: 100, height: 80 }, body)
             .unwrap();
     }
     root.set_layer(3).unwrap();
@@ -301,13 +302,14 @@ fn deep_window_family_preserves_inherited_policy_through_mutation_and_teardown()
 #[test]
 fn title_drag_and_close_deliver_window_events_through_the_production_session() {
     let mut fixture = Headless::standard();
-    let body = fixture.ui.widgets().button_unobserved("body").unwrap();
+    let body_owner = fixture.ui.widgets().button_unobserved("body").unwrap();
+    let body = body_owner.handle();
     let (events_tx, events) = std::sync::mpsc::channel();
     let observations = Vec::new();
     let queue = neocogi_ui::test_event_queue!(window, neocogi_ui::WindowEvent, events_tx.clone(), |_queue, _origin, event| event).unwrap();
     let owner = fixture
         .ui
-        .window_with_queue("chrome", Rect { x: 30, y: 30, width: 180, height: 120 }, &body, Some(queue.as_com_ref()))
+        .window_with_queue("chrome", Rect { x: 30, y: 30, width: 180, height: 120 }, body_owner, Some(queue.as_com_ref()))
         .unwrap();
     fixture.frame(VIEW).unwrap();
     pointer(&fixture.ui, Point { x: 70, y: 40 }, true);
@@ -357,7 +359,7 @@ fn chrome_resize_regions_preserve_unselected_axes() {
     ] {
         let mut fixture = Headless::standard();
         let (leaf, observed) = probe::<1>(&fixture.ui, Size::default(), WidgetOptions::NONE);
-        let owner = fixture.ui.window("resize", Rect { x: 30, y: 30, width: 180, height: 120 }, &leaf).unwrap();
+        let owner = fixture.ui.window("resize", Rect { x: 30, y: 30, width: 180, height: 120 }, leaf).unwrap();
         fixture.frame(VIEW).unwrap();
         pointer(&fixture.ui, position, true);
         fixture.ui.input(UiInput::Pointer(Point { x: position.x + 15, y: position.y + 9 }), "").unwrap();
@@ -380,12 +382,12 @@ fn chrome_resize_regions_preserve_unselected_axes() {
 fn modal_stack_suspends_underlying_pointer_routing_and_reveals_the_next_dialog() {
     let mut fixture = Headless::standard();
     let (body, background) = probe::<1>(&fixture.ui, Size::default(), WidgetOptions::NONE);
-    let owner = window(&fixture.ui, "owner", Rect { x: 10, y: 10, width: 250, height: 180 }, &body);
+    let owner = window(&fixture.ui, "owner", Rect { x: 10, y: 10, width: 250, height: 180 }, body);
     let (first, a) = probe::<1>(&fixture.ui, Size::default(), WidgetOptions::NONE);
     let (second, b) = probe::<1>(&fixture.ui, Size::default(), WidgetOptions::NONE);
     let rect = Rect { x: 100, y: 60, width: 100, height: 80 };
-    let first = fixture.ui.dialog(owner.as_com_ref(), "first", rect, &first).unwrap();
-    let second = fixture.ui.dialog(owner.as_com_ref(), "second", rect, &second).unwrap();
+    let first = fixture.ui.dialog(owner.as_com_ref(), "first", rect, first).unwrap();
+    let second = fixture.ui.dialog(owner.as_com_ref(), "second", rect, second).unwrap();
     for dialog in [&first, &second] {
         dialog.set_options(PLAIN).unwrap();
         dialog.set_visibility(Visibility::Visible).unwrap();
@@ -418,8 +420,8 @@ fn disabled_window_blocks_pointer_delivery_to_lower_layers() {
     let (low, low_state) = probe::<1>(&fixture.ui, Size::default(), WidgetOptions::NONE);
     let (high, high_state) = probe::<1>(&fixture.ui, Size::default(), WidgetOptions::NONE);
     let rect = Rect { x: 10, y: 10, width: 150, height: 100 };
-    let lower = window(&fixture.ui, "lower", rect, &low);
-    let upper = window(&fixture.ui, "upper", rect, &high);
+    let lower = window(&fixture.ui, "lower", rect, low);
+    let upper = window(&fixture.ui, "upper", rect, high);
     lower.set_layer(2).unwrap();
     upper.set_layer(3).unwrap();
     upper.set_options(PLAIN | WindowOptions::DISABLED).unwrap();
@@ -436,10 +438,10 @@ fn nested_measurement_cache_reuses_stable_constraints_and_commits_changed_prefer
     let mut fixture = Headless::standard();
     let (leaf, observed) = probe::<0>(&fixture.ui, Size { width: 40, height: 20 }, WidgetOptions::NONE);
     let mut inner = fixture.ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Content).unwrap();
-    inner.insert(0, &leaf, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
+    inner.insert(0, leaf, LinearEdge::new(LayoutTrack::Content)).unwrap();
     let mut outer = fixture.ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Content).unwrap();
-    outer.insert(0, &inner, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
-    let owner = window(&fixture.ui, "cache", Rect { x: 10, y: 10, width: 200, height: 100 }, &outer);
+    outer.insert(0, inner, LinearEdge::new(LayoutTrack::Content)).unwrap();
+    let owner = window(&fixture.ui, "cache", Rect { x: 10, y: 10, width: 200, height: 100 }, outer);
     owner.set_options(PLAIN | WindowOptions::AUTO_SIZE).unwrap();
     fixture.frame(VIEW).unwrap();
     let measured = observed.borrow().measures;
@@ -464,8 +466,8 @@ fn fresh_press_replaces_revoked_capture_across_window_layers() {
         let mut fixture = Headless::standard();
         let (low, a) = probe::<1>(&fixture.ui, Size::default(), WidgetOptions::NONE);
         let (high, b) = probe::<1>(&fixture.ui, Size::default(), WidgetOptions::NONE);
-        let lower = window(&fixture.ui, "lower", Rect { x: 10, y: 10, width: 120, height: 100 }, &low);
-        let upper = window(&fixture.ui, "upper", Rect { x: 200, y: 10, width: 120, height: 100 }, &high);
+        let lower = window(&fixture.ui, "lower", Rect { x: 10, y: 10, width: 120, height: 100 }, low);
+        let upper = window(&fixture.ui, "upper", Rect { x: 200, y: 10, width: 120, height: 100 }, high);
         lower.set_layer(2).unwrap();
         upper.set_layer(3).unwrap();
         pointer(&fixture.ui, Point { x: 230, y: 30 }, true);

@@ -123,7 +123,7 @@ impl Workload {
             for index in 0..1024 {
                 let mut button = factory.button_unobserved("MMMM")?;
                 button.replace_flags(WidgetOptions::NONE)?;
-                grid.insert(index, &button, GridExtent { columns: 1, rows: 1 })?.finish()?;
+                grid.insert(index, &button, GridExtent { columns: 1, rows: 1 })?;
                 buttons.push(button);
             }
             grid.node_interface()?
@@ -136,7 +136,7 @@ impl Workload {
                 for _ in 0..64 {
                     let mut parent = factory.linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
                     let child = Widget::from_interface(root);
-                    parent.insert(0, &child, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))?.finish()?;
+                    parent.insert(0, &child, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))?;
                     root = parent.node_interface()?;
                 }
             }

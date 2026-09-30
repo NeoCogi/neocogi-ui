@@ -199,7 +199,7 @@ class IFileDialog {
 /// Standard picker construction capability exposed by a nodes factory bound to window management.
 interface IFileDialogs {
     /// Creates one hidden reusable modal owned by the authenticated ordinary window.
-    fn create(&self, parent: &IWindow, events: &EventBinding<IFileDialog, IFileDialogEvent>) -> Result<ComPtr<IFileDialog>>;
+    fn create(&self, parent: &IWindow, events: &EventBinding<IFileDialog, IFileDialogEvent>) -> Result<WeakComBox<IFileDialog>>;
 }
 
 #[version(1)]

@@ -15,11 +15,11 @@ use super::{
 /// Exactly one cached geometry capability per mounted widget, with one authoritative child store for branches.
 pub(super) enum NodeLayoutKind {
     /// Leaves have no persistent children and return only their preferred size.
-    Leaf(ComPtr<ILeafLayoutAbi>),
+    Leaf(neocogi_com::WeakComBox<ILeafLayoutAbi>),
     /// Branch policy owns semantic edge metadata; this store owns the actual retained children.
     Branch {
         /// Cached external policy, queried and validated once before attachment.
-        policy: ComPtr<IContainerLayoutAbi>,
+        policy: neocogi_com::WeakComBox<IContainerLayoutAbi>,
         /// Keeps the authenticated read-only identity registered for the branch's full lifetime.
         _view: ComPtr<IChildrenAbi>,
         /// Exact storage behind view, never a copied tree or public runtime-node handle.
@@ -30,7 +30,7 @@ pub(super) enum NodeLayoutKind {
 /// Node-owned COM capabilities; geometry caches remain in the surrounding node.
 pub(crate) struct ComNode {
     /// Actual common widget capability, also retained by the application proxy.
-    pub(super) widget: ComPtr<IWidgetAbi>,
+    pub(super) widget: neocogi_com::ComBox<IWidgetAbi>,
     /// Runtime-returned changes persist until ancestor invalidation consumes them.
     pub(super) dirty: Cell<bool>,
     /// Cached leaf or branch policy with runtime-owned geometry access.
@@ -252,20 +252,9 @@ impl ComNode {
 }
 
 impl Drop for ComNode {
-    /// Tree removal closes the widget while application COM references may remain.
-    fn drop(&mut self) {
-        if let NodeLayoutKind::Branch { children, .. } = &self.layout {
-            // The retained view remains registered until descendants close, even
-            // when the external widget's own close implementation later fails.
-            if let Err(error) = children.close().and_then(ChildEditResult::finish) {
-                self.host.fail(error);
-            }
-        }
-        // An active widget call cannot be reentered through close. Preserve child-first
-        // order when a descendant is busy; the next callback boundary finishes this work.
-        self.host.close_widget(self.widget.clone());
-        self.host.dispatch_order_changed.set(true);
-    }
+    /// Removing the node releases its unique widget owner through normal field
+    /// destruction. Weak dispatch snapshots cannot prolong its resource lifetime.
+    fn drop(&mut self) { self.host.dispatch_order_changed.set(true); }
 }
 
 pub(crate) use neocogi_ui_support::frame::local_frame;

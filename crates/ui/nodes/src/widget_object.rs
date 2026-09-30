@@ -12,8 +12,7 @@ use crate::WidgetOption;
 
 /// Private semantic algorithms reused by each statically known built-in class.
 pub(crate) trait WidgetAlgorithm: crate::Widget {
-    /// Ends semantic event production on logical close; states without event sources need no work.
-    fn close_events(&mut self) {}
+
     /// Adds concrete state-dependent routing policy to the common caller-authored options.
     fn effective_options(&self, options: WidgetOption) -> WidgetOption {
         options
@@ -31,7 +30,7 @@ pub(crate) type SharedAssets = Rc<RefCell<crate::assets::ImportedAssets>>;
 /// owns only cross-cutting COM lifecycle and host-backed rendering resources. Concrete structs such
 /// as `Button` keep their label, font, interaction state, and event sources as ordinary fields.
 pub(crate) struct WidgetRuntime {
-    /// Shared logical lifetime, attachment state, options, and sticky geometry invalidation.
+    /// Attachment authority, options, and sticky geometry invalidation; ComBox owns lifetime.
     pub(crate) state: WidgetState,
     /// The one imported asset value used by this widget's semantic phases.
     resources: SharedAssets,
@@ -115,20 +114,6 @@ pub(crate) trait HostedWidget: WidgetAlgorithm {
         Ok(false)
     }
 
-    /// Retires descendants before the parent's mapping or terminal state changes.
-    /// An outer error means closure never acquired the child collection. A
-    /// successful outcome may report a diagnostic after removal committed;
-    /// local cleanup must still finish before that diagnostic is returned.
-    fn close_children(&mut self) -> Result<neocogi_ui_core_contracts::ChildEditResult, NcStatus> {
-        Ok(neocogi_ui_core_contracts::ChildEditResult { teardown: neocogi_com::NC_OK })
-    }
-
-    /// Releases local event delivery and transient resources without application callbacks.
-    /// Ordinary owned data may remain until final destruction. This terminal
-    /// operation cannot refuse after descendants have already retired.
-    fn close_contents(&mut self) {
-        self.close_events();
-    }
 }
 
 /// Commits one validated semantic font role on a concrete widget allocation.
@@ -189,14 +174,6 @@ pub(crate) fn local_wrap(wrap: TextWrapping) -> Result<crate::TextWrap, NcStatus
 /// algorithm object, erased payload, or secondary widget identity.
 macro_rules! direct_widget_phase_impl {
     ($name:ty) => {
-        impl Drop for $name {
-            /// Final allocation release also retires an unpublished widget.
-            fn drop(&mut self) {
-                // Explicit removal reports diagnostics. Destruction cannot
-                // return them; owned fields still release on every exit path.
-                let _ = <Self as neocogi_ui_core_contracts::IWidget>::close(self);
-            }
-        }
         impl neocogi_ui_core_contracts::IWidget for $name {
             /// Returns the runtime authority without retaining a tree or parent.
             fn host(&self) -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::IWidgetHostAbi>, neocogi_com::NcStatus> {
@@ -213,19 +190,6 @@ macro_rules! direct_widget_phase_impl {
             fn dispatch_next(&mut self) -> Result<bool, neocogi_com::NcStatus> {
                 <$name as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
                 <$name as crate::widget_object::HostedWidget>::dispatch_message(self)
-            }
-
-            /// Retires children, releases the mapping, then commits closure exactly once.
-            fn close(&mut self) -> Result<(), neocogi_com::NcStatus> {
-                if !<$name as crate::widget_object::HostedWidget>::runtime(self).state.check_close()? {
-                    return Ok(());
-                }
-                let outcome = <$name as crate::widget_object::HostedWidget>::close_children(self)?;
-                <$name as crate::widget_object::HostedWidget>::close_contents(self);
-                <$name as crate::widget_object::HostedWidget>::runtime_mut(self).state.complete_close();
-                // A cleanup diagnostic never leaves the parent open after the
-                // child collection has already committed permanent removal.
-                outcome.finish()
             }
 
             /// Copies routing and frame policy from the concrete widget and its common options.
@@ -527,4 +491,32 @@ pub(super) fn local_content_icon(icon: ContentIcon) -> Result<Option<crate::Icon
 pub(crate) trait ImageState {
     /// Receives only a validated owned image, with no caller buffer or native identifier.
     fn set_image(&mut self, image: Option<neocogi_ui::Image>, fit_width: bool) -> bool;
+}
+
+/// Private construction-selected delivery for an exclusively owned UI control.
+/// The widget's fields own this storage; destruction releases the destination.
+/// No attach method, close state, or second consumer exists here.
+pub(crate) struct WidgetEvents<Q: neocogi_com::events::EventQueueInterface> {
+    /// Absent means permanently unobserved; present owns one destination and a
+    /// cached weak origin that cannot keep the emitting widget alive.
+    receiver: Option<(neocogi_com::ComPtr<Q>, neocogi_com::WeakComBox<Q::Object, <Q::Object as neocogi_com::ComInterface>::Threading>)>,
+}
+impl<Q: neocogi_com::events::EventQueueInterface> Default for WidgetEvents<Q> {
+    /// Unobserved construction has no receiver or weak token to allocate/retain.
+    fn default() -> Self { Self { receiver: None } }
+}
+impl<Q: neocogi_com::events::EventQueueInterface> WidgetEvents<Q> {
+    /// Chooses delivery before publication; later receiver replacement is unsupported.
+    pub(crate) fn with_queue(queue: Option<neocogi_com::ComPtr<Q>>, origin: neocogi_com::WeakComBox<Q::Object, <Q::Object as neocogi_com::ComInterface>::Threading>) -> Self {
+        Self { receiver: queue.map(|queue| (queue, origin)) }
+    }
+    /// Skips snapshot allocation when the application requested no event delivery.
+    pub(crate) fn is_bound(&self) -> bool { self.receiver.is_some() }
+    /// Lends the protected origin during enqueueing, without shared ownership.
+    pub(crate) fn post(&mut self, event: &Q::Event) -> Result<(), neocogi_com::NcStatus> {
+        match &self.receiver {
+            None => Ok(()),
+            Some((queue, origin)) => Q::post(queue.as_com_ref(), origin.borrow()?.as_com_ref(), event),
+        }
+    }
 }

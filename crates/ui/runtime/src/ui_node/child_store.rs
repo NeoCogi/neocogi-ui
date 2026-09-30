@@ -1,5 +1,4 @@
 //! One authoritative owned child collection with separate read/edit COM capabilities.
-use super::HostState;
 use neocogi_ui_core_contracts::*;
 use neocogi_com::{ComPtr, IUnknown, NcStatus, com_object};
 use std::{
@@ -75,28 +74,15 @@ impl ChildStore {
         let nodes = self.nodes.try_borrow_mut().map_err(|_| UI_E_BUSY)?.take().ok_or(UI_E_BUSY)?;
         Ok(ChildTransaction { store: self.clone(), nodes: Some(nodes) })
     }
-    /// Permanently closes all descendants; active traversals reject before mutation.
-    pub(super) fn close(self: &Rc<Self>) -> Result<ChildEditResult, NcStatus> {
-        if self.closed.get() {
-            return Ok(ChildEditResult { teardown: neocogi_com::NC_OK });
-        }
-        let mut nodes = self.take_storage()?;
-        let errors = TeardownErrors::new(&self.factory.state);
-        self.closed.set(true);
-        self.dirty.set(false);
-        nodes.clear();
-        Ok(errors.result())
-    }
-
     /// Final writer release closes immediately, deferring owned-node clearing to an active transaction's Drop when necessary.
     fn abandon(&self) {
         self.closed.set(true);
         self.dirty.set(false);
         let nodes = self.nodes.borrow_mut().take();
         if let Some(nodes) = nodes {
-            // Logical closure is immediate; actual close waits for any outer
-            // observational phase, without a borrowed collection or live tree edge.
-            self.factory.state.retire(nodes);
+            // Idle storage can release its owners immediately. An active owned
+            // transaction instead sees closed on return and drops its children.
+            drop(nodes);
             self.count.set(0);
             *self.nodes.borrow_mut() = Some(Children::new());
         }
@@ -128,7 +114,7 @@ impl Drop for ChildTransaction {
     fn drop(&mut self) {
         let mut nodes = self.nodes.take().expect("active transaction owns its nodes until drop");
         if self.store.closed.get() {
-            self.store.factory.state.retire(nodes);
+            drop(nodes);
             nodes = Children::new();
         }
         self.store
@@ -151,10 +137,10 @@ impl IChildren for ChildView {
         Ok(self.store.count.get())
     }
     /// Returns one actual child projection; checked-out collections report BUSY.
-    fn child(&self, index: u32) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
+    fn child(&self, index: u32) -> Result<neocogi_com::WeakComBox<IWidgetAbi>, NcStatus> {
         let nodes = self.store.take()?;
         let node = nodes.get(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
-        Ok(node.data.widget.clone())
+        Ok(node.data.widget.downgrade())
     }
 }
 impl Drop for ChildView {
@@ -174,7 +160,7 @@ struct ChildEditor {
 }
 
 /// Creates both capabilities around one empty child sequence and registers only its view.
-pub(super) fn create(factory: Rc<NodeFactory>) -> ComPtr<IChildrenEditorAbi> {
+pub(super) fn create(factory: Rc<NodeFactory>) -> neocogi_com::ComBox<IChildrenEditorAbi> {
     let store = Rc::new(ChildStore {
         factory: factory.clone(),
         nodes: RefCell::new(Some(Children::new())),
@@ -190,7 +176,7 @@ pub(super) fn create(factory: Rc<NodeFactory>) -> ComPtr<IChildrenEditorAbi> {
     let identity = view.query::<IUnknown>().expect("every COM object has IUnknown").as_raw().object as usize;
     store.identity.set(identity);
     factory.children.borrow_mut().insert(identity, Rc::downgrade(&store));
-    ChildEditor::from_value(ChildEditor { store, view })
+    ChildEditor::into_box(ChildEditor { store, view })
         .query()
         .expect("editor declares IChildrenEditor")
 }
@@ -202,7 +188,7 @@ impl IChildrenEditor for ChildEditor {
         Ok(self.view.clone())
     }
     /// Validates the slot and candidate before consuming the child's mount-once claim.
-    fn insert(&self, index: u32, widget: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>) -> Result<ChildEditResult, NcStatus> {
+    fn insert(&self, index: u32, widget: neocogi_com::ComBox<IWidgetAbi>) -> Result<(), NcStatus> {
         self.store.factory.host.check_mutation()?;
         self.store.factory.check_edit()?;
         let mut nodes = self.store.take()?;
@@ -214,10 +200,10 @@ impl IChildrenEditor for ChildEditor {
             .insert(index as usize, node)
             .unwrap_or_else(|_| unreachable!("validated index cannot change during an owned transaction"));
         self.store.dirty.set(true);
-        Ok(ChildEditResult { teardown: neocogi_com::NC_OK })
+        Ok(())
     }
     /// Validates the entire replacement before committing removal of the old subtree.
-    fn replace(&self, index: u32, widget: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>) -> Result<ChildEditResult, NcStatus> {
+    fn replace(&self, index: u32, widget: neocogi_com::ComBox<IWidgetAbi>) -> Result<(), NcStatus> {
         self.store.factory.host.check_mutation()?;
         self.store.factory.check_edit()?;
         let mut nodes = self.store.take()?;
@@ -225,51 +211,37 @@ impl IChildrenEditor for ChildEditor {
             return Err(neocogi_com::NC_E_OUT_OF_RANGE);
         }
         let node = self.store.factory.mount_node(widget, Some(&self.store))?;
-        let errors = TeardownErrors::new(&self.store.factory.state);
         let previous = std::mem::replace(nodes.get_mut(index as usize).expect("validated index"), node);
         self.store.dirty.set(true);
         drop(previous);
-        Ok(errors.result())
+        Ok(())
     }
-    /// Commits removal before reporting a component's fallible close result.
-    fn remove(&self, index: u32) -> Result<ChildEditResult, NcStatus> {
+    /// Removes and destroys the indexed owner; no fallible close phase follows.
+    fn remove(&self, index: u32) -> Result<(), NcStatus> {
         self.store.factory.host.check_mutation()?;
         self.store.factory.check_edit()?;
         let mut nodes = self.store.take()?;
         if index as usize >= nodes.len() {
             return Err(neocogi_com::NC_E_OUT_OF_RANGE);
         }
-        let errors = TeardownErrors::new(&self.store.factory.state);
         if !nodes.remove_drop(index as usize) {
             return Err(neocogi_com::NC_E_OUT_OF_RANGE);
         }
         self.store.dirty.set(true);
-        Ok(errors.result())
+        Ok(())
     }
     /// Clears ordinary child ownership without closing the collection itself.
-    fn clear(&self) -> Result<ChildEditResult, NcStatus> {
+    fn clear(&self) -> Result<(), NcStatus> {
         self.store.factory.host.check_mutation()?;
         self.store.factory.check_edit()?;
         let mut nodes = self.store.take()?;
-        let errors = TeardownErrors::new(&self.store.factory.state);
         if !nodes.is_empty() {
             self.store.dirty.set(true);
             nodes.clear();
         }
-        Ok(errors.result())
+        Ok(())
     }
-    /// Explicit closure respects observation phases but permits runtime shutdown cleanup.
-    fn close(&self) -> Result<ChildEditResult, NcStatus> {
-        if self.store.closed.get() {
-            return self.store.close();
-        }
-        self.store.factory.check_edit()?;
-        match self.store.factory.host.check_mutation() {
-            Ok(()) | Err(UI_E_CLOSED) => {}
-            Err(error) => return Err(error),
-        }
-        self.store.close()
-    }
+
 }
 impl Drop for ChildEditor {
     /// Final writer release logically closes children without invoking application callbacks.
@@ -280,34 +252,3 @@ impl Drop for ChildEditor {
 
 /// Weak registry entries authenticate host-created views without retaining another tree.
 pub(crate) type ChildRegistry = std::collections::BTreeMap<usize, Weak<ChildStore>>;
-
-/// Isolates one committed edit's teardown errors while retaining an enclosing failure.
-struct TeardownErrors<'a> {
-    /// Shared first-error latch, never a borrowed tree or application state.
-    state: &'a HostState,
-    /// Earlier enclosing traversal failure restored when this local report is complete.
-    previous: Option<NcStatus>,
-}
-impl<'a> TeardownErrors<'a> {
-    /// Starts an independent report without losing an earlier enclosing error.
-    fn new(state: &'a HostState) -> Self {
-        Self {
-            state,
-            previous: state.error.replace(None),
-        }
-    }
-    /// Reports this edit's close result after topology has committed.
-    fn result(&self) -> ChildEditResult {
-        ChildEditResult {
-            teardown: self.state.error.get().unwrap_or(neocogi_com::NC_OK),
-        }
-    }
-}
-impl Drop for TeardownErrors<'_> {
-    /// Earlier failures retain first-error precedence in the outer transaction.
-    fn drop(&mut self) {
-        if let Some(error) = self.previous {
-            self.state.error.set(Some(error));
-        }
-    }
-}

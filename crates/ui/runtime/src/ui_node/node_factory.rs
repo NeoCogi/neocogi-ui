@@ -36,19 +36,19 @@ pub(crate) struct NodeFactory {
 
 impl NodeFactory {
     /// Validates every fallible capability query before claiming the sole attachment.
-    pub(crate) fn mount_node(&self, mount: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>, parent: Option<&Rc<ChildStore>>) -> Result<crate::Node, NcStatus> {
+    pub(crate) fn mount_node(&self, mount: neocogi_com::ComBox<IWidgetAbi>, parent: Option<&Rc<ChildStore>>) -> Result<crate::Node, NcStatus> {
         self.check_edit()?;
         self.attaching.set(true);
         let _attachment = Attachment(&self.attaching);
-        let mut widget = mount.add_ref();
+        let mut widget = mount;
         let owner: ComPtr<IUnknown> = widget.host()?.query()?;
         if owner.as_raw().object != self.host.query::<IUnknown>()?.as_raw().object {
             return Err(UI_E_OWNER);
         }
         // Only NOINTERFACE means an absent capability. ABI mismatches and other
         // query failures must remain errors, never select a different layout path.
-        let leaf = widget.query::<ILeafLayoutAbi>();
-        let branch = widget.query::<IContainerLayoutAbi>();
+        let leaf = widget.downgrade().query::<ILeafLayoutAbi>();
+        let branch = widget.downgrade().query::<IContainerLayoutAbi>();
         let layout = match (leaf, branch) {
             (Ok(leaf), Err(neocogi_com::NC_E_NOINTERFACE)) => NodeLayoutKind::Leaf(leaf),
             (Err(neocogi_com::NC_E_NOINTERFACE), Ok(policy)) => {

@@ -44,7 +44,7 @@ impl PrivateRecord {
         match std::mem::replace(&mut self.edit, Edit::None) {
             Edit::None => {}
             Edit::Close(window) => window.close()?,
-            Edit::Insert { mut parent, child } => parent.insert(0, &child, LinearEdge::new(LayoutTrack::Content))?.finish()?,
+            Edit::Insert { mut parent, child } => parent.insert(0, child, LinearEdge::new(LayoutTrack::Content))?,
         }
         Ok(())
     }
@@ -61,7 +61,7 @@ enum Edit {
         /// Existing parent accepts the new child through its ordinary COM editing interface.
         parent: neocogi_ui::LinearWidget,
         /// Child carries its own private inbox; the application never registers that inbox.
-        child: neocogi_ui::Widget<IWidgetAbi>,
+        child: neocogi_ui::OwnedWidget<IWidgetAbi>,
     },
 }
 
@@ -80,8 +80,6 @@ impl neocogi_ui::events::EventModel for Consumer {
     }
 }
 
-impl super::composite_fixture::Behavior for Consumer {}
-
 /// Builds one real eventful container, supplying defaults for ordinary forwarding.
 fn component(
     ui: &neocogi_ui::Ui,
@@ -90,7 +88,7 @@ fn component(
     source: &mut Emitter,
     forward: Option<std::sync::mpsc::Sender<Activation>>,
     edit: Edit,
-) -> (neocogi_ui::Widget<IWidgetAbi>, neocogi_ui::LinearWidget) {
+) -> (neocogi_ui::OwnedWidget<IWidgetAbi>, neocogi_ui::LinearWidget) {
     let messages = source.messages.take().expect("one consumer per fixture source");
     let (widget, shell) = super::composite_fixture::Composite::build(
         ui,
@@ -100,7 +98,7 @@ fn component(
         },
         messages,
     );
-    (neocogi_ui::Widget::from_interface(widget.query().unwrap()), shell)
+    (neocogi_ui::OwnedWidget::from_interface(widget.into_interface().unwrap()), shell)
 }
 
 /// Emits a captured fixture fact without entering any application callback.
@@ -120,9 +118,9 @@ fn nested_components_dispatch_child_first_and_promote_only_explicit_outputs() {
     let (parent, mut parent_shell) = component(&ui, &trace, "parent", &mut sources[1], Some(forward1), Edit::None);
     let forward2 = sources[3].source.clone();
     let (root, mut root_shell) = component(&ui, &trace, "root", &mut sources[2], Some(forward2), Edit::None);
-    parent_shell.insert(0, &child, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
-    root_shell.insert(0, &parent, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
-    let window = ui.window("nested", RECT, &root).unwrap();
+    parent_shell.insert(0, child, LinearEdge::new(LayoutTrack::Content)).unwrap();
+    root_shell.insert(0, parent, LinearEdge::new(LayoutTrack::Content)).unwrap();
+    let window = ui.window("nested", RECT, root).unwrap();
     let app = sources[3].messages.take().unwrap();
 
     emit(&sources[0]);
@@ -154,7 +152,7 @@ fn callback_mounted_descendant_is_discovered_without_application_registration() 
     emit(&child_source);
     let mut parent_source = Emitter::create();
     let (parent, shell) = component(&ui, &trace, "parent", &mut parent_source, None, Edit::None);
-    let window = ui.window("dynamic", RECT, &parent).unwrap();
+    let window = ui.window("dynamic", RECT, parent).unwrap();
     let mut trigger = Emitter::create();
     let app = trigger.messages.take().unwrap();
     let action = PrivateRecord {
@@ -176,13 +174,13 @@ fn descendant_removal_retires_ancestor_and_sibling_dispatch_snapshots() {
     let trace: Trace = Rc::new(RefCell::new(Vec::new()));
     let mut root_source = Emitter::create();
     let (root, mut shell) = component(&ui, &trace, "root", &mut root_source, None, Edit::None);
-    let window = ui.window("removed", RECT, &root).unwrap();
+    let window = ui.window("removed", RECT, root).unwrap();
     let mut source = Emitter::create();
     let (child, _) = component(&ui, &trace, "remover", &mut source, None, Edit::Close(window.clone()));
-    shell.insert(0, &child, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
+    shell.insert(0, child, LinearEdge::new(LayoutTrack::Content)).unwrap();
     let mut sibling_source = Emitter::create();
     let (sibling, _) = component(&ui, &trace, "sibling", &mut sibling_source, None, Edit::None);
-    shell.insert(1, &sibling, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
+    shell.insert(1, sibling, LinearEdge::new(LayoutTrack::Content)).unwrap();
     for source in [&source, &sibling_source, &root_source] {
         emit(source);
     }
@@ -198,10 +196,10 @@ fn mounted_component_events_dispatch_before_application_and_skip_removed_snapsho
     let trace: Trace = Rc::new(RefCell::new(Vec::new()));
     let mut older_source = Emitter::create();
     let (older, _) = component(&ui, &trace, "older", &mut older_source, None, Edit::None);
-    let older_window = ui.window("older", RECT, &older).unwrap();
+    let older_window = ui.window("older", RECT, older).unwrap();
     let mut newer_source = Emitter::create();
     let (newer, _) = component(&ui, &trace, "newer", &mut newer_source, None, Edit::Close(older_window.clone()));
-    let newer_window = ui.window("newer", RECT, &newer).unwrap();
+    let newer_window = ui.window("newer", RECT, newer).unwrap();
     let mut app_source = Emitter::create();
     let app = app_source.messages.take().unwrap();
     for source in [&older_source, &newer_source, &app_source] {
@@ -224,7 +222,7 @@ fn application_messages_interleave_with_automatic_private_settlement() {
     let trace: Trace = Rc::new(RefCell::new(Vec::new()));
     let mut source = Emitter::create();
     let (child, _) = component(&ui, &trace, "child", &mut source, None, Edit::None);
-    let window = ui.window("interleaving", RECT, &child).unwrap();
+    let window = ui.window("interleaving", RECT, child).unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
     events_tx.send("first").unwrap();
     events_tx.send("second").unwrap();
@@ -245,11 +243,12 @@ fn application_messages_interleave_with_automatic_private_settlement() {
 fn self_removal_stops_private_delivery_before_the_next_message() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let trace: Trace = Rc::new(RefCell::new(Vec::new()));
-    let mut parent = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
-    let window = ui.window("self removal", RECT, &parent).unwrap();
+    let parent_owner = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
+    let mut parent = parent_owner.handle();
+    let window = ui.window("self removal", RECT, parent_owner).unwrap();
     let mut source = Emitter::create();
     let (child, _) = component(&ui, &trace, "remover", &mut source, None, Edit::Close(window.clone()));
-    parent.insert(0, &child, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
+    parent.insert(0, child, LinearEdge::new(LayoutTrack::Content)).unwrap();
     emit(&source);
     emit(&source);
     ui.update(SIZE).unwrap();

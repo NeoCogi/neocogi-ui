@@ -218,12 +218,7 @@ impl Widget for Combo {
     }
 }
 
-impl crate::widget_object::WidgetAlgorithm for Combo {
-    /// Closes event delivery and retires the popup definition with the removed header.
-    fn close_events(&mut self) {
-        let _ = self.menu.close();
-    }
-}
+impl crate::widget_object::WidgetAlgorithm for Combo {}
 
 impl crate::widget_object::HostedWidget for Combo {
     /// Borrows common lifecycle and resource state without a second combo representation.
@@ -262,9 +257,9 @@ impl Combo {
         menu: ComPtr<IChoiceMenuAbi>,
         placeholder: String,
         forwarder: Option<neocogi_com::LocalCom<ComboEventForwarder>>,
-    ) -> Result<ComPtr<ComboAbi>, NcStatus> {
+    ) -> Result<neocogi_com::ComBox<ComboAbi>, NcStatus> {
         let value = Self::build(host, &resources, menu, placeholder)?;
-        Self::from_value_cyclic::<ComboAbi>(move |origin| {
+        Self::into_box_cyclic::<ComboAbi>(move |origin| {
             if let Some(forwarder) = forwarder {
                 forwarder.try_borrow_mut().expect("unpublished event forwarder is idle").origin = Some(origin);
             }
@@ -373,7 +368,7 @@ pub(crate) struct ComboEventForwarder {
     pub(crate) queue: ComPtr<neocogi_ui_nodes_contracts::ComboEventQueueAbi>,
     /// Filled exactly once by the enclosing Combo constructor, before publication.
     /// No public method can replace this origin or its queue.
-    pub(crate) origin: Option<neocogi_com::WeakComPtr<ComboAbi>>,
+    pub(crate) origin: Option<neocogi_com::WeakComBox<ComboAbi>>,
 }
 impl neocogi_ui_core_contracts::IChoiceMenuEventQueue for ComboEventForwarder {
     /// Forwards the borrowed snapshot with the public identity, without entering
@@ -384,7 +379,7 @@ impl neocogi_ui_core_contracts::IChoiceMenuEventQueue for ComboEventForwarder {
         event: neocogi_com::NcValueRef<'_, neocogi_ui_core_contracts::IChoiceMenuEvent>,
     ) -> Result<(), NcStatus> {
         let origin = match &self.origin {
-            Some(origin) => origin.upgrade()?.ok_or(neocogi_com::NC_E_CLOSED)?,
+            Some(origin) => origin.borrow()?,
             None => return Err(neocogi_com::NC_E_BUSY),
         };
         self.queue.post(origin.as_com_ref(), event)

@@ -1,45 +1,38 @@
-//! Typed composite fixture exercising the same IWidget gate for behavior and closure.
+//! Typed composite fixture exercising the same IWidget gate for behavior and bounded destruction.
 
 use super::*;
 use neocogi_ui::events::EventModel;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
-/// Test behavior adds observable close to an ordinary concrete message handler.
-pub(super) trait Behavior: EventModel {
-    /// Runs after descendants close and the private receiving endpoint is dropped.
-    fn close(&mut self) -> Result<(), NcStatus> {
-        Ok(())
-    }
-}
-
 #[com_object(interfaces(IWidget, IContainerLayout))]
 /// A private inbox and model belong to the mounted widget itself.
 /// The fixture delegates geometry to a real Linear; no dispatcher capability exists.
-pub(super) struct Composite<Model: Behavior> {
+pub(super) struct Composite<Model: EventModel> {
     /// Actual widget policy and child writer supplied by the production provider.
-    shell: neocogi_ui::LinearWidget,
+    shell: neocogi_ui::OwnedWidget<neocogi_ui::LinearAbi>,
     /// Cached layout projection of that same test geometry implementation.
-    layout: ComPtr<IContainerLayoutAbi>,
-    /// Concrete mutable test model; LocalCom assertions use the widget's own gate.
+    layout: WeakComBox<IContainerLayoutAbi>,
+    /// Owned receiver disconnects before the model's destructor reports finalization.
+    messages: Receiver<Model::Message>,
+    /// Concrete mutable model; fields above release child owners and the inbox first.
     pub(super) model: Model,
-    /// Closure disconnects this endpoint even while test handles retain the composite.
-    messages: Option<Receiver<Model::Message>>,
 }
-impl<Model: Behavior> Composite<Model> {
+impl<Model: EventModel> Composite<Model> {
     /// Builds an unmounted composite and exposes its ordinary child-editing capability.
-    pub(super) fn build(ui: &neocogi_ui::Ui, model: Model, messages: Receiver<Model::Message>) -> (neocogi_com::LocalCom<Self>, neocogi_ui::LinearWidget) {
+    pub(super) fn build(ui: &neocogi_ui::Ui, model: Model, messages: Receiver<Model::Message>) -> (neocogi_com::LocalBox<Self>, neocogi_ui::LinearWidget) {
         let shell = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
         let layout = shell.node_interface().unwrap().query().unwrap();
-        let local = Self::into_local(Self {
-            shell: shell.clone(),
+        let handle = shell.handle();
+        let local = Self::into_local_box(Self {
+            shell,
             layout,
             model,
-            messages: Some(messages),
+            messages,
         });
-        (local, shell)
+        (local, handle)
     }
 }
-impl<Model: Behavior> IWidget for Composite<Model> {
+impl<Model: EventModel> IWidget for Composite<Model> {
     /// Shares the actual runtime authority with its test geometry.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
         self.shell.node_interface()?.host()
@@ -48,21 +41,10 @@ impl<Model: Behavior> IWidget for Composite<Model> {
     fn mount(&mut self) -> Result<(), NcStatus> {
         self.shell.node_interface()?.mount()
     }
-    /// The runtime must enter this only after any active dispatch has returned.
-    fn close(&mut self) -> Result<(), NcStatus> {
-        match self.messages {
-            None => Ok(()),
-            Some(_) => {
-                self.shell.node_interface()?.close()?;
-                self.messages.take();
-                self.model.close()
-            }
-        }
-    }
-    /// Attempts one message with the same mutable COM gate used by close and editing.
+    /// Attempts one message with the same mutable COM gate used by editing.
     fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
         self.shell.node_interface()?.properties()?;
-        match self.messages.as_ref().ok_or(UI_E_CLOSED)?.try_recv() {
+        match self.messages.try_recv() {
             Ok(message) => {
                 self.model.handle(message)?;
                 Ok(true)
@@ -99,7 +81,7 @@ impl<Model: Behavior> IWidget for Composite<Model> {
         self.shell.node_interface()?.paint(scope, state, painter)
     }
 }
-impl<Model: Behavior> IContainerLayout for Composite<Model> {
+impl<Model: EventModel> IContainerLayout for Composite<Model> {
     /// Publishes the exact collection edited through the fixture's shell handle.
     fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
         self.layout.children()
@@ -115,11 +97,5 @@ impl<Model: Behavior> IContainerLayout for Composite<Model> {
     /// Retains ordinary filtering behavior for the real input traversal.
     fn accepts_event(&self, event: WidgetEvent, text: NcCopyFromBufferOffset<'_, u8>) -> Result<bool, NcStatus> {
         self.layout.accepts_event(event, text)
-    }
-}
-impl<Model: Behavior> Drop for Composite<Model> {
-    /// An unpublished test candidate follows the same idempotent close path.
-    fn drop(&mut self) {
-        let _ = IWidget::close(self);
     }
 }

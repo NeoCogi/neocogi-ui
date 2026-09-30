@@ -188,7 +188,7 @@ pub(super) struct StyleEditor {
 }
 impl StyleEditor {
     /// Builds the same 72 color sliders and five metrics inside one ordinary scrolling tree.
-    pub(super) fn new(ui: &Ui, events_tx: &mut super::app::Inputs) -> Result<(Self, ScrollAreaWidget), NcStatus> {
+    pub(super) fn new(ui: &Ui, events_tx: &mut super::app::Inputs) -> Result<(Self, OwnedWidget<ScrollAreaAbi>), NcStatus> {
         let base = ui.assets()?;
         // Activation belongs to this application; the UI runtime has no asset-provider dependency.
         let runtime = neocogi_com::Runtime::global();
@@ -202,7 +202,7 @@ impl StyleEditor {
         let mut colors = Vec::new();
         for role in ColorRole::ALL {
             let mut line = row(ui)?;
-            append(&mut line, &label(ui, role.label())?, LayoutTrack::Fixed { extent: 80 })?;
+            append(&mut line, label(ui, role.label())?, LayoutTrack::Fixed { extent: 80 })?;
             let color = role.value(&mut palette);
             let mut channel_slider = |channel: Channel, value: u8| slider(ui, value as f32, 255., events_tx, NumericTarget::Color(role, channel));
             let channels = [
@@ -211,25 +211,28 @@ impl StyleEditor {
                 channel_slider(Channel::Blue, color.b)?,
                 channel_slider(Channel::Alpha, color.a)?,
             ];
-            for control in &channels {
+            let channel_handles = channels.each_ref().map(|control| control.handle());
+            for control in channels {
                 append(&mut line, control, LayoutTrack::Flex { weight: 1. })?;
             }
             let swatch = ui.widgets().color_swatch(rgba(*color), "")?;
-            append(&mut line, &swatch, LayoutTrack::Flex { weight: 1. })?;
-            append(&mut content, &line, LayoutTrack::Content)?;
-            colors.push(ColorRow { role, channels, swatch });
+            let swatch_handle = swatch.handle();
+            append(&mut line, swatch, LayoutTrack::Flex { weight: 1. })?;
+            append(&mut content, line, LayoutTrack::Content)?;
+            colors.push(ColorRow { role, channels: channel_handles, swatch: swatch_handle });
         }
         let mut values = Vec::new();
         for metric in Metric::ALL {
             let (name, high) = metric.presentation();
             let mut line = row(ui)?;
             let control = slider(ui, *metric.value(&mut metrics) as f32, high, events_tx, NumericTarget::Metric(metric))?;
-            append(&mut line, &label(ui, name)?, LayoutTrack::Fixed { extent: 80 })?;
-            append(&mut line, &control, LayoutTrack::Flex { weight: 1. })?;
-            append(&mut content, &line, LayoutTrack::Content)?;
-            values.push((metric, control));
+            append(&mut line, label(ui, name)?, LayoutTrack::Fixed { extent: 80 })?;
+            let handle = control.handle();
+            append(&mut line, control, LayoutTrack::Flex { weight: 1. })?;
+            append(&mut content, line, LayoutTrack::Content)?;
+            values.push((metric, handle));
         }
-        let root = ui.widgets().scroll_area(&content, true)?;
+        let root = ui.widgets().scroll_area(content, true)?;
         Ok((
             Self {
                 base,

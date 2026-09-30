@@ -33,21 +33,18 @@ interface IPainter {
 }
 
 #[version(2)]
-/// Common retained widget capability shared by all concrete widget interfaces.
+/// Common widget capability; factories return one ComBox owner, containers consume it,
+/// and application observers use WeakComBox. Owner removal rejects new calls;
+/// admitted calls finish before provider destruction. There is no widget close method.
 interface IWidget {
     /// Returns the allocating runtime's identity service, which owns no tree.
     fn host(&self) -> Result<ComPtr<IWidgetHost>>;
     /// Claims the only tree attachment; a second call fails without changing state.
     fn mount(&mut self) -> Result<()>;
-    /// Permanently closes descendants before releasing this widget's event mapping.
-    /// Repeated closure is harmless; retained references cannot reactivate the object.
-    /// A preflight refusal leaves the parent open. A diagnostic after descendant
-    /// removal does not undo closure. Final object destruction also performs cleanup.
-    fn close(&mut self) -> Result<()>;
 
     /// Handles at most one private message outside input, layout and paint traversal.
     /// Widgets without an inbox return false. A handler error consumes only the
-    /// attempted message. Closure disconnects private delivery permanently.
+    /// attempted message. Owner destruction disconnects private delivery permanently.
     /// A handler may request its own removal; terminal cleanup must wait until
     /// this mutable call returns, and no successor may run after removal.
     fn dispatch_next(&mut self) -> Result<bool>;
@@ -82,8 +79,8 @@ interface IWidget {
 interface IChildren {
     /// Returns the current number of direct children.
     fn child_count(&self) -> Result<u32>;
-    /// Returns an owned reference to one direct child; topology ownership is a separate contract.
-    fn child(&self, index: u32) -> Result<ComPtr<IWidget>>;
+    /// Returns a cached weak observer to one direct child; it cannot transfer or retain ownership.
+    fn child(&self, index: u32) -> Result<WeakComBox<IWidget>>;
 }
 
 #[version(1)]
@@ -241,22 +238,22 @@ interface IWindowManager {
         parent: &IWindow,
         title: &[u8],
         rect: Rect,
-        root: &IWidget, events: &EventBinding<IWindow, WindowEvent>) -> Result<ComPtr<IWindow>>;
+        root: ComBox<IWidget>, events: &EventBinding<IWindow, WindowEvent>) -> Result<ComPtr<IWindow>>;
     /// Creates a hidden modal dialog owned by an ordinary window.
     fn create_dialog(
         &self,
         parent: &IWindow,
         title: &[u8],
         rect: Rect,
-        root: &IWidget, events: &EventBinding<IWindow, WindowEvent>) -> Result<ComPtr<IWindow>>;
+        root: ComBox<IWidget>, events: &EventBinding<IWindow, WindowEvent>) -> Result<ComPtr<IWindow>>;
     /// Creates a hidden auto-sized popup owned by a live window or dialog.
     fn create_popup(
         &self,
         parent: &IWindow,
         title: &[u8],
-        root: &IWidget, events: &EventBinding<IPopup, PopupDismissed>) -> Result<ComPtr<IPopup>>;
+        root: ComBox<IWidget>, events: &EventBinding<IPopup, PopupDismissed>) -> Result<ComPtr<IPopup>>;
     /// Mounts one previously unmounted root and creates its logical window.
-    fn create_window(&self, title: &[u8], rect: Rect, root: &IWidget, events: &EventBinding<IWindow, WindowEvent>) -> Result<ComPtr<IWindow>>;
+    fn create_window(&self, title: &[u8], rect: Rect, root: ComBox<IWidget>, events: &EventBinding<IWindow, WindowEvent>) -> Result<ComPtr<IWindow>>;
 }
 
 #[version(1)]
@@ -296,7 +293,7 @@ interface UiRuntime: IInputSink + IWindowManager + IMenus + IChoiceMenus {
     fn text_input_area(&self) -> Result<TextInputArea>;
     /// Paints only after update has synchronized geometry for this drawable size.
     fn render(&self, size: Size, renderer: &IRenderer) -> Result<()>;
-    /// Logically closes every mounted subtree; COM allocations may outlive closure.
+    /// Drops all mounted root owners and shuts down the runtime; admitted calls finish safely.
     fn close(&self) -> Result<()>;
 }
 
@@ -310,7 +307,7 @@ interface IWidgetHost {
     /// measure/paint after replacement; never retain UVs or glyph metrics across a different revision.
     fn assets(&self) -> Result<ComPtr<IAssetBundle>>;
     /// Creates an empty private child editor; containers expose only its read-only view.
-    fn create_children(&self) -> Result<ComPtr<IChildrenEditor>>;
+    fn create_children(&self) -> Result<ComBox<IChildrenEditor>>;
     /// Checks lifetime without forbidding observational reads during layout or painting.
     fn check_open(&self) -> Result<()>;
     /// Rejects closed runtimes and mutation during layout or painting.
@@ -330,6 +327,6 @@ interface IPopup {
     fn hide(&mut self) -> Result<()>;
     /// Changes popup framing, padding and preferred-size policy.
     fn set_options(&mut self, options: WindowOptions) -> Result<()>;
-    /// Permanently removes this popup subtree and closes its retained widgets.
+    /// Permanently removes this popup subtree and drops its widget owners.
     fn close(&mut self) -> Result<()>;
 }

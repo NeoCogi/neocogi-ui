@@ -26,11 +26,11 @@ pub(crate) struct Inputs {
     /// Shared concrete receiver; each factory requests its exact interface projection.
     pub(super) queue: neocogi_com::ComPtr<neocogi_com::IUnknown>,
     /// Weak identities keep action lookup independent of labels and address reuse.
-    pub(super) buttons: Vec<(WeakComPtr<ButtonAbi>, Action)>,
+    pub(super) buttons: Vec<(neocogi_com::WeakComBox<ButtonAbi>, Action)>,
     /// Menu entries retain only their explicit application command.
     pub(super) menus: Vec<(WeakComPtr<IMenuItemAbi>, Action)>,
     /// Color and metric targets are data rather than closure specializations.
-    pub(super) sliders: Vec<(WeakComPtr<SliderAbi>, NumericTarget)>,
+    pub(super) sliders: Vec<(neocogi_com::WeakComBox<SliderAbi>, NumericTarget)>,
 }
 impl Inputs {
     /// Constructs the sole queue before creating any eventful widgets.
@@ -48,7 +48,7 @@ impl ButtonEventQueue for Queue {
     fn post(&mut self, origin: ComRef<'_, ButtonAbi>, event: NcValueRef<'_, neocogi_ui::events::button::Event>) -> Result<(), NcStatus> {
         let event = event.to_owned()?;
         neocogi_ui::events::button::validate(&event)?;
-        let _ = self.sender.send(Message::Button(origin.downgrade()?, event));
+        let _ = self.sender.send(Message::Button(origin.downgrade_box()?, event));
         Ok(())
     }
 }
@@ -57,7 +57,7 @@ impl SliderEventQueue for Queue {
     fn post(&mut self, origin: ComRef<'_, SliderAbi>, event: NcValueRef<'_, neocogi_ui::events::slider::Event>) -> Result<(), NcStatus> {
         let event = event.to_owned()?;
         neocogi_ui::events::slider::validate(&event)?;
-        let _ = self.sender.send(Message::Slider(origin.downgrade()?, event));
+        let _ = self.sender.send(Message::Slider(origin.downgrade_box()?, event));
         Ok(())
     }
 }
@@ -75,7 +75,7 @@ impl TextboxEventQueue for Queue {
     fn post(&mut self, origin: ComRef<'_, TextboxAbi>, event: NcValueRef<'_, neocogi_ui::events::textbox::Event>) -> Result<(), NcStatus> {
         let event = event.to_owned()?;
         neocogi_ui::events::textbox::validate(&event)?;
-        let _ = self.sender.send(Message::Textbox(origin.downgrade()?, event));
+        let _ = self.sender.send(Message::Textbox(origin.downgrade_box()?, event));
         Ok(())
     }
 }
@@ -84,7 +84,7 @@ impl ComboEventQueue for Queue {
     fn post(&mut self, origin: ComRef<'_, ComboAbi>, event: NcValueRef<'_, neocogi_ui::events::combo::Event>) -> Result<(), NcStatus> {
         let event = event.to_owned()?;
         neocogi_ui::events::combo::validate(&event)?;
-        let _ = self.sender.send(Message::Combo(origin.downgrade()?, event));
+        let _ = self.sender.send(Message::Combo(origin.downgrade_box()?, event));
         Ok(())
     }
 }
@@ -93,7 +93,7 @@ impl IFileDialogEventQueue for Queue {
     fn post(&mut self, origin: ComRef<'_, IFileDialogAbi>, event: NcValueRef<'_, neocogi_ui::events::file_dialog::Event>) -> Result<(), NcStatus> {
         let event = event.to_owned()?;
         neocogi_ui::events::file_dialog::validate(&event)?;
-        let _ = self.sender.send(Message::FileDialog(origin.downgrade()?, event));
+        let _ = self.sender.send(Message::FileDialog(origin.downgrade_box()?, event));
         Ok(())
     }
 }

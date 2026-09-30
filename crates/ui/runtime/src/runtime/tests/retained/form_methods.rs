@@ -72,7 +72,7 @@ fn generated_form_fields_preserve_widget_validation_silence_and_reload_lifetime(
     // Valid foreign storage can still contain invalid UTF-8 or label ranges.
     // Exercise the widget ABI directly so validation cannot depend on document
     // command adapters or the Rust facade accepting only &str and valid slices.
-    let mut combo = form.widget_combo_7.as_interface().add_ref();
+    let mut combo = form.widget_combo_7.as_interface().clone();
     for (text, first, count) in [
         (&b"\xc3"[..], 0, 1),
         ("é".as_bytes(), 0, 1),

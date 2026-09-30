@@ -314,7 +314,7 @@ impl PaintService {
     }
 
     /// Moves the frame list into the scoped context, calls a component, then restores the list.
-    pub(super) fn paint(&mut self, widget: &ComPtr<IWidgetAbi>, ctx: &mut crate::WidgetPaintCtx<'_>) -> Result<(), NcStatus> {
+    pub(super) fn paint(&mut self, widget: &neocogi_com::ComBox<IWidgetAbi>, ctx: &mut crate::WidgetPaintCtx<'_>) -> Result<(), NcStatus> {
         let invocation = self.with_recorder_mut(|recorder| {
             recorder.begin(PaintContext {
                 display_list: ctx.take_display_list(),
@@ -332,7 +332,7 @@ impl PaintService {
             active: ctx.active(),
             window_active: ctx.window_active(),
         };
-        let mut widget = widget.clone();
+        let mut widget = widget.as_com_ref();
         let result = widget.paint(PaintScope { invocation, clip: state.clip }, state, self.painter.as_com_ref());
         let context = self.with_recorder_mut(|recorder| recorder.finish(invocation))??;
         ctx.restore_display_list(context.display_list);

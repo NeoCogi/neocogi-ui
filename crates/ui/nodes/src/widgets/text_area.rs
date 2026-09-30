@@ -124,7 +124,7 @@ pub struct TextEditor {
     /// Shared scalar scroll data supports caret reveal without retaining a parent widget or tree.
     scroll_area: Option<std::rc::Rc<crate::ScrollModel>>,
     /// Single event slot shared by edits and submissions; the parent supplies its receiver during construction.
-    events: neocogi_ui_nodes_contracts::TextAreaEventPort,
+    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::TextAreaEventQueueAbi>,
 }
 
 /// Concrete fixed scrolling text-area class with one actual editor child.
@@ -133,11 +133,11 @@ pub struct TextArea {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::widget_object::WidgetRuntime,
     /// Exactly three owned structural children: surface and both scrollbar objects.
-    pub(crate) editor: ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
+    pub(crate) editor: neocogi_com::ComBox<neocogi_ui_core_contracts::IChildrenEditorAbi>,
     /// Multiline editing capability of the sole content child.
-    pub(crate) text: ComPtr<neocogi_ui_core_contracts::IMultilineEditorAbi>,
+    pub(crate) text: neocogi_com::WeakComBox<neocogi_ui_core_contracts::IMultilineEditorAbi>,
     /// Font capability queried from that same content child.
-    pub(crate) font: ComPtr<neocogi_ui_core_contracts::IFontStyleAbi>,
+    pub(crate) font: neocogi_com::WeakComBox<neocogi_ui_core_contracts::IFontStyleAbi>,
     /// Scalar scrolling state shared with the surface, scrollbars, and editor caret requests.
     pub(crate) model: std::rc::Rc<crate::ScrollModel>,
 }
@@ -146,9 +146,9 @@ impl TextArea {
     /// Combines the completed fixed topology and its queried editor capabilities in one class value.
     pub(crate) fn from_runtime(
         runtime: crate::widget_object::WidgetRuntime,
-        editor: ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
-        text: ComPtr<neocogi_ui_core_contracts::IMultilineEditorAbi>,
-        font: ComPtr<neocogi_ui_core_contracts::IFontStyleAbi>,
+        editor: neocogi_com::ComBox<neocogi_ui_core_contracts::IChildrenEditorAbi>,
+        text: neocogi_com::WeakComBox<neocogi_ui_core_contracts::IMultilineEditorAbi>,
+        font: neocogi_com::WeakComBox<neocogi_ui_core_contracts::IFontStyleAbi>,
         model: std::rc::Rc<crate::ScrollModel>,
     ) -> Self {
         Self { runtime, editor, text, font, model }
@@ -202,10 +202,6 @@ impl crate::widget_object::HostedWidget for TextArea {
         &mut self.runtime
     }
 
-    /// Closes the surface, editor, and both scrollbar children through their fixed writer.
-    fn close_children(&mut self) -> Result<neocogi_ui_core_contracts::ChildEditResult, neocogi_com::NcStatus> {
-        self.editor.close()
-    }
 }
 
 /// Runtime-only cursor navigation state retained by the editable leaf.
@@ -681,18 +677,10 @@ impl TextEditor {
     }
 }
 impl crate::widget_object::WidgetAlgorithm for TextEditor {
-    /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
-    fn close_events(&mut self) {
-        self.events.close();
-    }
+
 }
 
 impl crate::widget_object::HostedWidget for TextEditor {
-    /// Releases queues, revokes outstanding clipboard receipts, and drops local history.
-    fn close_contents(&mut self) {
-        crate::widget_object::WidgetAlgorithm::close_events(self);
-        self.editing = super::editing::Editing::default();
-    }
 
     /// Borrows common phase state stored directly beside the editable text fields.
     fn runtime(&self) -> &crate::widget_object::WidgetRuntime {
@@ -739,11 +727,11 @@ impl TextEditor {
         wrap: crate::TextWrap,
         model: std::rc::Rc<crate::ScrollModel>,
         resources: Option<&crate::widget_object::SharedAssets>,
-    ) -> Result<neocogi_com::LocalCom<Self>, NcStatus> {
+    ) -> Result<neocogi_com::LocalBox<Self>, NcStatus> {
         let runtime = crate::widget_object::WidgetRuntime::for_resources(host, crate::WidgetOption::NONE, resources)?;
         // The private local handle exists only during construction. The outer class
         // fixes its own weak origin before publishing either part of the composite.
-        Ok(Self::into_local(Self::from_runtime(
+        Ok(Self::into_local_box(Self::from_runtime(
             runtime,
             text,
             wrap,
@@ -833,12 +821,12 @@ impl TextArea {
         wrapping: TextWrapping,
         scrolling: bool,
         queue: Option<ComPtr<neocogi_ui_nodes_contracts::TextAreaEventQueueAbi>>,
-    ) -> Result<ComPtr<TextAreaAbi>, NcStatus> {
-        let (value, editor) = Self::build(host, text, wrapping, scrolling, Some(&resources))?;
-        Self::from_value_cyclic::<TextAreaAbi>(move |origin| {
+    ) -> Result<neocogi_com::ComBox<TextAreaAbi>, NcStatus> {
+        let (value, mut editor) = Self::build(host, text, wrapping, scrolling, Some(&resources))?;
+        Self::into_box_cyclic::<TextAreaAbi>(move |origin| {
             // Only this constructor can access the private editor's local value;
             // all fallible tree construction finished before this publication step.
-            editor.try_borrow_mut().expect("unpublished editor is idle").events = neocogi_com::events::EventPort::with_queue(queue, origin);
+            editor.try_borrow_mut().expect("unpublished editor is idle").events = crate::widget_object::WidgetEvents::with_queue(queue, origin);
             value
         })?
         .query()
@@ -851,16 +839,17 @@ impl TextArea {
         wrapping: TextWrapping,
         scrolling: bool,
         resources: Option<&crate::widget_object::SharedAssets>,
-    ) -> Result<(Self, neocogi_com::LocalCom<TextEditor>), NcStatus> {
+    ) -> Result<(Self, neocogi_com::WeakLocalBox<TextEditor>), NcStatus> {
         let text_value = crate::boundary::text(input)?;
         let wrap = crate::widget_object::local_wrap(wrapping)?;
         let parts = crate::ScrollParts::prepare(host.clone(), scrolling, resources)?;
         let editor = TextEditor::create_com(host.clone(), text_value, wrap, parts.model.clone(), resources)?;
-        let text: ComPtr<IMultilineEditorAbi> = editor.query()?;
+        let text: neocogi_com::WeakComBox<IMultilineEditorAbi> = editor.query()?;
         let font = text.query()?;
-        parts.content.insert(0, text.query::<IWidgetAbi>()?.as_com_ref())?.finish()?;
+        let observer = editor.downgrade();
+        parts.content.insert(0, editor.into_interface::<IWidgetAbi>()?)?;
         let runtime = crate::widget_object::WidgetRuntime::for_resources(host, crate::WidgetOption::FRAME, resources)?;
-        Ok((Self::from_runtime(runtime, parts.editor, text, font, parts.model), editor))
+        Ok((Self::from_runtime(runtime, parts.editor, text, font, parts.model), observer))
     }
 }
 
@@ -930,7 +919,7 @@ mod tests {
     fn text_dispatcher(
         text_area: crate::test_support::algorithm::Algorithm<TextEditor>,
     ) -> (
-        crate::test_support::algorithm::Algorithm<(ComPtr<TextAreaAbi>, neocogi_com::LocalCom<TextEditor>)>,
+        crate::test_support::algorithm::Algorithm<(neocogi_com::ComBox<TextAreaAbi>, neocogi_com::WeakLocalBox<TextEditor>)>,
         impl FnMut(&mut Vec<RecordedEvent>) -> bool,
     ) {
         let (events_tx, events) = std::sync::mpsc::channel();
@@ -943,23 +932,22 @@ mod tests {
             let host = value.runtime.state.host().add_ref();
             let parts = crate::ScrollParts::prepare(host.clone(), false, None).unwrap();
             value.scroll_area = Some(parts.model.clone());
-            let editor = TextEditor::into_local(value);
+            let editor = TextEditor::into_local_box(value);
+            let mut observer = editor.downgrade();
             parts
                 .content
-                .insert(0, editor.query::<IWidgetAbi>().unwrap().as_com_ref())
-                .unwrap()
-                .finish()
+                .insert(0, editor.into_interface::<IWidgetAbi>().unwrap())
                 .unwrap();
             let runtime = crate::widget_object::WidgetRuntime::for_resources(host, crate::WidgetOption::FRAME, None).unwrap();
-            let value = TextArea::from_runtime(runtime, parts.editor, editor.query().unwrap(), editor.query().unwrap(), parts.model);
-            let outer = TextArea::from_value_cyclic::<TextAreaAbi>(|origin| {
-                editor.try_borrow_mut().unwrap().events = neocogi_com::events::EventPort::with_queue(Some(queue), origin);
+            let value = TextArea::from_runtime(runtime, parts.editor, observer.query().unwrap(), observer.query().unwrap(), parts.model);
+            let outer = TextArea::into_box_cyclic::<TextAreaAbi>(|origin| {
+                observer.try_borrow_mut().unwrap().events = crate::widget_object::WidgetEvents::with_queue(Some(queue), origin);
                 value
             })
             .unwrap()
             .query()
             .unwrap();
-            (outer, editor)
+            (outer, observer)
         });
         (text_area, move |values: &mut Vec<RecordedEvent>| {
             let before = values.len();
@@ -1035,7 +1023,7 @@ mod tests {
         // Directly exercise the inner leaf because scrolling composition is orthogonal to event
         // payload order and the constructor uses this exact semantic initialization path.
         let text_area = TextEditor::new_editor(TextAreaParameters::new(""));
-        let (text_area, mut dispatcher) = text_dispatcher(text_area);
+        let (mut text_area, mut dispatcher) = text_dispatcher(text_area);
         let mut text_area = text_area.1.try_borrow_mut().unwrap();
         update_text_area(
             &mut text_area,

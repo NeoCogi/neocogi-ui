@@ -78,9 +78,9 @@ interface Linear: IWidget + IContainerLayout {
     /// Returns the stable read-only topology view for this container's lifetime.
     fn children(&self) -> Result<ComPtr<IChildren>>;
     /// Removes one complete subtree and matching edge metadata.
-    fn remove(&mut self, index: u32) -> Result<ChildEditResult>;
+    fn remove(&mut self, index: u32) -> Result<()>;
     /// Removes all owned subtrees and matching metadata while retaining reusable capacity.
-    fn clear(&mut self) -> Result<ChildEditResult>;
+    fn clear(&mut self) -> Result<()>;
     /// Returns its complete axis and leading-edge policy.
     fn direction(&self) -> Result<FlowDirection>;
     /// Replaces the direction without reordering child ownership.
@@ -94,9 +94,9 @@ interface Linear: IWidget + IContainerLayout {
     /// Replaces sizing metadata without replacing the child's identity.
     fn set_edge(&mut self, index: u32, edge: LinearEdge) -> Result<()>;
     /// Validates child and relationship before committing insertion at index, including count.
-    fn insert(&mut self, index: u32, child: &IWidget, edge: LinearEdge) -> Result<ChildEditResult>;
+    fn insert(&mut self, index: u32, child: ComBox<IWidget>, edge: LinearEdge) -> Result<()>;
     /// Validates replacement before permanently closing the previous indexed subtree.
-    fn replace(&mut self, index: u32, child: &IWidget, edge: LinearEdge) -> Result<ChildEditResult>;
+    fn replace(&mut self, index: u32, child: ComBox<IWidget>, edge: LinearEdge) -> Result<()>;
 }
 
 #[version(2)]
@@ -105,9 +105,9 @@ interface Grid: IWidget + IContainerLayout {
     /// Returns the stable read-only topology view for this container's lifetime.
     fn children(&self) -> Result<ComPtr<IChildren>>;
     /// Removes one complete subtree and matching span metadata.
-    fn remove(&mut self, index: u32) -> Result<ChildEditResult>;
+    fn remove(&mut self, index: u32) -> Result<()>;
     /// Removes all owned subtrees and matching metadata while retaining reusable capacity.
-    fn clear(&mut self) -> Result<ChildEditResult>;
+    fn clear(&mut self) -> Result<()>;
     /// Copies a range of column policies; offset indexes tracks and the return value is total count.
     fn columns(&self, output: &mut [LayoutTrack]) -> Result<u32>;
     /// Replaces the complete column sequence after validating every track; input offset must be zero.
@@ -121,9 +121,9 @@ interface Grid: IWidget + IContainerLayout {
     /// Changes span without replacing the child's identity.
     fn set_edge(&mut self, index: u32, edge: GridExtent) -> Result<()>;
     /// Validates a positive span and unmounted child before committing insertion.
-    fn insert(&mut self, index: u32, child: &IWidget, edge: GridExtent) -> Result<ChildEditResult>;
+    fn insert(&mut self, index: u32, child: ComBox<IWidget>, edge: GridExtent) -> Result<()>;
     /// Validates replacement before permanently closing the previous indexed subtree.
-    fn replace(&mut self, index: u32, child: &IWidget, edge: GridExtent) -> Result<ChildEditResult>;
+    fn replace(&mut self, index: u32, child: ComBox<IWidget>, edge: GridExtent) -> Result<()>;
 }
 
 #[version(1)]
@@ -157,13 +157,13 @@ class SplitView: IWidget + IContainerLayout {
     /// Returns immutable topology; indices zero and one identify first and second panes.
     fn children(&self) -> Result<ComPtr<IChildren>>;
     /// Inserts one unmounted pane at index, rejecting a third child before attachment.
-    fn insert(&mut self, index: u32, child: &IWidget) -> Result<ChildEditResult>;
+    fn insert(&mut self, index: u32, child: ComBox<IWidget>) -> Result<()>;
     /// Replaces one pane after validation, permanently closing its previous subtree.
-    fn replace(&mut self, index: u32, child: &IWidget) -> Result<ChildEditResult>;
+    fn replace(&mut self, index: u32, child: ComBox<IWidget>) -> Result<()>;
     /// Closes one pane; the remaining pane fills the allocation.
-    fn remove(&mut self, index: u32) -> Result<ChildEditResult>;
+    fn remove(&mut self, index: u32) -> Result<()>;
     /// Closes both panes while keeping this container available for new content.
-    fn clear(&mut self) -> Result<ChildEditResult>;
+    fn clear(&mut self) -> Result<()>;
     /// Returns requested sizing, independent of temporary allocation clamping.
     fn settings(&self) -> Result<SplitOptions>;
     /// Validates all settings before mutation and ends any active divider gesture.
@@ -179,9 +179,9 @@ class SplitView: IWidget + IContainerLayout {
 /// Constructible scroll composite with one replaceable content root and private structural roles.
 interface ScrollArea: IWidget + IContainerLayout + IScrolling {
     /// Returns the actual application content widget, without its surrounding transform surface.
-    fn content(&self) -> Result<ComPtr<IWidget>>;
+    fn content(&self) -> Result<WeakComBox<IWidget>>;
     /// Validates replacement before closing old content; structural roles and model identity stay fixed.
-    fn replace_content(&mut self, content: &IWidget) -> Result<ChildEditResult>;
+    fn replace_content(&mut self, content: ComBox<IWidget>) -> Result<()>;
 }
 
 #[version(1)]
@@ -201,9 +201,9 @@ interface Disclosure: IWidget + IContainerLayout {
     /// Changes expansion and retains layout invalidation even while this subtree is hidden.
     fn set_expanded(&mut self, expanded: bool) -> Result<()>;
     /// Returns the real header's text capability, including its inherited widget options.
-    fn header(&self) -> Result<ComPtr<ITextContent>>;
+    fn header(&self) -> Result<WeakComBox<ITextContent>>;
     /// Returns the real body container; its child editor keeps topology and edge metadata consistent.
-    fn body(&self) -> Result<ComPtr<Linear>>;
+    fn body(&self) -> Result<WeakComBox<Linear>>;
 }
 
 #[version(2)]
@@ -212,10 +212,10 @@ interface Disclosure: IWidget + IContainerLayout {
 interface Form: IWidget + IContainerLayout {
     /// Returns read-only topology; edits cannot bypass rectangle validation.
     fn children(&self) -> Result<ComPtr<IChildren>>;
-    /// Removes and closes one subtree together with its rectangle.
-    fn remove(&mut self, index: u32) -> Result<ChildEditResult>;
+    /// Removes and destroys one subtree together with its rectangle.
+    fn remove(&mut self, index: u32) -> Result<()>;
     /// Closes all children and clears their rectangles.
-    fn clear(&mut self) -> Result<ChildEditResult>;
+    fn clear(&mut self) -> Result<()>;
     /// Returns the authored preferred content size, independent of allocation.
     fn size(&self) -> Result<Size>;
     /// Changes the preferred form size without scaling child rectangles.
@@ -225,9 +225,9 @@ interface Form: IWidget + IContainerLayout {
     /// Moves or resizes a child without replacing its identity.
     fn set_edge(&mut self, index: u32, edge: Rect) -> Result<()>;
     /// Validates a rectangle before attaching an unmounted child.
-    fn insert(&mut self, index: u32, child: &IWidget, edge: Rect) -> Result<ChildEditResult>;
-    /// Commits a new child and rectangle before reporting old-child teardown.
-    fn replace(&mut self, index: u32, child: &IWidget, edge: Rect) -> Result<ChildEditResult>;
+    fn insert(&mut self, index: u32, child: ComBox<IWidget>, edge: Rect) -> Result<()>;
+    /// Commits a new child and rectangle and destroys the old child owner.
+    fn replace(&mut self, index: u32, child: ComBox<IWidget>, edge: Rect) -> Result<()>;
 }
 
 #[version(1)]

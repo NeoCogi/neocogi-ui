@@ -167,7 +167,7 @@ pub struct Grid {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::widget_object::WidgetRuntime,
     /// Sole writer for children mounted through this container's COM contract.
-    pub(crate) editor: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
+    pub(crate) editor: neocogi_com::ComBox<neocogi_ui_core_contracts::IChildrenEditorAbi>,
     /// Grid-owned spans and their derived row-major placements.
     items: GridItems,
     /// Horizontal track policies used by measurement and placement.
@@ -182,7 +182,7 @@ impl Grid {
     /// Combines validated tracks with the runtime and authoritative COM child writer.
     pub(crate) fn from_runtime(
         runtime: crate::widget_object::WidgetRuntime,
-        editor: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
+        editor: neocogi_com::ComBox<neocogi_ui_core_contracts::IChildrenEditorAbi>,
         column_tracks: Vec<TrackSize>,
         row_tracks: Vec<TrackSize>,
     ) -> Self {
@@ -237,10 +237,6 @@ impl crate::widget_object::HostedWidget for Grid {
         &mut self.runtime
     }
 
-    /// Closes the authoritative COM child sequence when this Grid is retired.
-    fn close_children(&mut self) -> Result<neocogi_ui_core_contracts::ChildEditResult, neocogi_com::NcStatus> {
-        self.editor.close()
-    }
 }
 
 impl super::ContainerAlgorithm for Grid {
@@ -279,9 +275,9 @@ impl Grid {
         resources: crate::widget_object::SharedAssets,
         columns: NcCopyFromBufferOffset<'_, LayoutTrack>,
         rows: NcCopyFromBufferOffset<'_, LayoutTrack>,
-    ) -> Result<ComPtr<GridAbi>, NcStatus> {
+    ) -> Result<neocogi_com::ComBox<GridAbi>, NcStatus> {
         let value = Self::build(host, columns, rows, Some(&resources))?;
-        Ok(Self::from_value(value).query().expect("Grid declares its callable class contract"))
+        Ok(Self::into_box(value).query().expect("Grid declares its callable class contract"))
     }
 
     /// Builds one Grid with either directly imported or runtime-shared resources.

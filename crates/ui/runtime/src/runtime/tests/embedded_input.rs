@@ -50,9 +50,9 @@ fn embedded_scope_receives_tab_and_menu_keys_until_explicit_exit() {
     let scope = ui.widgets().leaf(Scope { events: send }, WidgetOptions::NONE).unwrap();
     let next = ui.widgets().button_unobserved("next").unwrap();
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
-    column.insert(0, &scope, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
-    column.insert(1, &next, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
-    ui.window("scope", RECT, &column).unwrap();
+    column.insert(0, scope, LinearEdge::new(LayoutTrack::Content)).unwrap();
+    column.insert(1, next, LinearEdge::new(LayoutTrack::Content)).unwrap();
+    ui.window("scope", RECT, column).unwrap();
     ui.update(SIZE).unwrap();
     ui.input(key(KeyCode::Tab, 0, 0, true), "").unwrap();
     ui.update(SIZE).unwrap();
@@ -88,16 +88,16 @@ fn window_cycle_can_resume_after_focus_moves_through_an_embedded_scope() {
     let scope = ui.widgets().leaf(Scope { events: send }, WidgetOptions::NONE).unwrap();
     let next = ui.widgets().button_unobserved("outside scope").unwrap();
     let mut body = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
-    body.insert(0, &scope, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
-    body.insert(1, &next, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
-    ui.window("scope", RECT, &body).unwrap();
+    body.insert(0, scope, LinearEdge::new(LayoutTrack::Content)).unwrap();
+    body.insert(1, next, LinearEdge::new(LayoutTrack::Content)).unwrap();
+    ui.window("scope", RECT, body).unwrap();
     ui.update(SIZE).unwrap();
     ui.input(key(KeyCode::Tab, 0, 0, true), "").unwrap();
     ui.update(SIZE).unwrap();
     assert!(events.try_iter().any(|(focused, _)| focused));
 
     let text = ui.widgets().textbox_unobserved("other window").unwrap();
-    let other = ui.window("other", Rect { x: 430, y: 20, width: 180, height: 110 }, &text).unwrap();
+    let other = ui.window("other", Rect { x: 430, y: 20, width: 180, height: 110 }, text).unwrap();
     other
         .set_options(WindowOptions::NO_TITLE | WindowOptions::NO_CLOSE | WindowOptions::NO_RESIZE)
         .unwrap();

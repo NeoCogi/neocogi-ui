@@ -273,9 +273,9 @@ impl TextBlock {
         resources: crate::widget_object::SharedAssets,
         text: NcCopyFromBufferOffset<'_, u8>,
         wrapping: TextWrapping,
-    ) -> Result<ComPtr<TextBlockAbi>, NcStatus> {
+    ) -> Result<neocogi_com::ComBox<TextBlockAbi>, NcStatus> {
         let value = Self::build(host, text, wrapping, Some(&resources))?;
-        Ok(Self::from_value(value).query().expect("TextBlock declares its callable class contract"))
+        Ok(Self::into_box(value).query().expect("TextBlock declares its callable class contract"))
     }
 
     /// Builds one text block with either directly imported or runtime-shared resources.

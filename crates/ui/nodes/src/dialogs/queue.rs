@@ -26,7 +26,7 @@ impl neocogi_ui::nodes::ButtonEventQueue for DialogQueue {
     fn post(&mut self, origin: ComRef<'_, neocogi_ui::ButtonAbi>, event: NcValueRef<'_, neocogi_ui::events::button::Event>) -> Result<(), NcStatus> {
         let event = event.to_owned()?;
         neocogi_ui::events::button::validate(&event)?;
-        let _ = self.sender.send(Message::Button(origin.downgrade()?, event));
+        let _ = self.sender.send(Message::Button(origin.downgrade_box()?, event));
         Ok(())
     }
 }
@@ -35,7 +35,7 @@ impl neocogi_ui::nodes::ListItemEventQueue for DialogQueue {
     fn post(&mut self, origin: ComRef<'_, neocogi_ui::ListItemAbi>, event: NcValueRef<'_, neocogi_ui::events::list_item::Event>) -> Result<(), NcStatus> {
         let event = event.to_owned()?;
         neocogi_ui::events::list_item::validate(&event)?;
-        let _ = self.sender.send(Message::Row(origin.downgrade()?, event));
+        let _ = self.sender.send(Message::Row(origin.downgrade_box()?, event));
         Ok(())
     }
 }
@@ -44,7 +44,7 @@ impl neocogi_ui::nodes::TextboxEventQueue for DialogQueue {
     fn post(&mut self, origin: ComRef<'_, neocogi_ui::TextboxAbi>, event: NcValueRef<'_, neocogi_ui::events::textbox::Event>) -> Result<(), NcStatus> {
         let event = event.to_owned()?;
         neocogi_ui::events::textbox::validate(&event)?;
-        let _ = self.sender.send(Message::Text(origin.downgrade()?, event));
+        let _ = self.sender.send(Message::Text(origin.downgrade_box()?, event));
         Ok(())
     }
 }

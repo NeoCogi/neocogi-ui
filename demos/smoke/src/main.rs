@@ -15,13 +15,13 @@ struct ClickModel {
     button: ButtonWidget,
 }
 impl events::EventModel for ClickModel {
-    type Message = (WeakComPtr<ButtonAbi>, events::Activation);
+    type Message = (neocogi_com::WeakComBox<ButtonAbi>, events::Activation);
     /// Uses the captured label and commits the next presentation before later input.
     fn handle(&mut self, (origin, event): Self::Message) -> Result<(), NcStatus> {
-        let Some(origin) = origin.upgrade()? else {
+        if !origin.is_alive() {
             return Ok(());
         };
-        if !origin.as_com_ref().same_object(self.button.as_interface()) {
+        if !origin.same_object(self.button.as_interface()) {
             return Ok(());
         }
         let label = event.label;
@@ -35,7 +35,7 @@ impl events::EventModel for ClickModel {
 /// One receiver owned by the smoke host's persistent click behavior.
 struct ClickQueue {
     /// Message payloads own their labels but never strongly retain their producer.
-    sender: std::sync::mpsc::Sender<(WeakComPtr<ButtonAbi>, events::Activation)>,
+    sender: std::sync::mpsc::Sender<(neocogi_com::WeakComBox<ButtonAbi>, events::Activation)>,
 }
 impl neocogi_ui::nodes::ButtonEventQueue for ClickQueue {
     /// Validates the generated payload and posts the button's one activation variant.
@@ -43,7 +43,7 @@ impl neocogi_ui::nodes::ButtonEventQueue for ClickQueue {
         let event = event.to_owned()?;
         neocogi_ui::button::validate(&event)?;
         let neocogi_ui::button::Event::Activated(event) = event;
-        let _ = self.sender.send((origin.downgrade()?, event));
+        let _ = self.sender.send((origin.downgrade_box()?, event));
         Ok(())
     }
 }
@@ -204,8 +204,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let (session_tx, session) = std::sync::mpsc::channel();
     let queue = ClickQueue::from_value(ClickQueue { sender: session_tx }).query::<ButtonEventQueueAbi>()?;
-    let mut button = ui.widgets().button_with_queue("Hello across COM", Some(queue.as_com_ref()))?;
-    let window = ui.window("Dynamic UI", Rect { x: 40, y: 40, width: 500, height: 200 }, &button)?;
+    let button = ui.widgets().button_with_queue("Hello across COM", Some(queue.as_com_ref()))?;
+    let button_handle = button.handle();
+    let window = ui.window("Dynamic UI", Rect { x: 40, y: 40, width: 500, height: 200 }, button)?;
+    let mut button = button_handle;
     let app = events::Controller::into_local(events::Controller::new(ClickModel { count: 0, button: button.clone() }, session));
     let owner = app.query::<IApplicationDispatcherAbi>()?;
     let size = native.size()?;
@@ -295,20 +297,25 @@ fn key(ui: &Ui, key: KeyCode) -> Result<(), NcStatus> {
 
 /// Exercises every migrated container through independently compiled factory and layout interfaces.
 fn smoke_containers(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
-    let mut section = ui.widgets().disclosure("Composed editor", DisclosureStyle::Tree, true)?;
-    let mut text = ui
+    let section = ui.widgets().disclosure("Composed editor", DisclosureStyle::Tree, true)?;
+    let text = ui
         .widgets()
         .text_area_unobserved(&"Editable native content\n".repeat(60), TextWrapping::Word, true)?;
+    let text_handle = text.handle();
     section
         .body()?
-        .insert(0, &text, LinearEdge::new(LayoutTrack::Fixed { extent: 100 }))?
-        .finish()?;
+        .insert(0, text, LinearEdge::new(LayoutTrack::Fixed { extent: 100 }))?;
+    let mut text = text_handle;
+    let section_handle = section.handle();
     let mut grid = ui.widgets().grid(&[LayoutTrack::Flex { weight: 1.0 }], &[])?;
-    grid.insert(0, &section, GridExtent { columns: 1, rows: 1 })?.finish()?;
+    grid.insert(0, section, GridExtent { columns: 1, rows: 1 })?;
+    let mut section = section_handle;
     let tail = ui.widgets().text_block(&"Outer scrolling content\n".repeat(60), TextWrapping::None)?;
-    grid.insert(1, &tail, GridExtent { columns: 1, rows: 1 })?.finish()?;
-    let mut scroll = ui.widgets().scroll_area(&grid, true)?;
-    let window = ui.window("Dynamic containers", Rect { x: 20, y: 20, width: 560, height: 320 }, &scroll)?;
+    grid.insert(1, tail, GridExtent { columns: 1, rows: 1 })?;
+    let scroll = ui.widgets().scroll_area(grid, true)?;
+    let scroll_handle = scroll.handle();
+    let window = ui.window("Dynamic containers", Rect { x: 20, y: 20, width: 560, height: 320 }, scroll)?;
+    let mut scroll = scroll_handle;
     ui.update(size)?;
     ui.render(size, renderer)?;
     text.set_cursor(u64::MAX)?;
@@ -365,7 +372,7 @@ enum ComponentMessage {
     /// Captured menu activation label.
     Menu(WeakComPtr<IMenuItemAbi>, events::Activation),
     /// Exact native file completion.
-    File(WeakComPtr<IFileDialogAbi>, FileDialogCompletion),
+    File(neocogi_com::WeakComBox<IFileDialogAbi>, FileDialogCompletion),
 }
 #[neocogi_com::com_object(interfaces(neocogi_ui::IMenuItemEventQueue, neocogi_ui::IFileDialogEventQueue))]
 /// Menus and file outcomes share one concrete queue across independently built plugins.
@@ -388,7 +395,7 @@ impl IFileDialogEventQueue for ComponentQueue {
         let event = event.to_owned()?;
         events::file_dialog::validate(&event)?;
         let IFileDialogEvent::Completed(event) = event;
-        let _ = self.sender.send(ComponentMessage::File(origin.downgrade()?, event));
+        let _ = self.sender.send(ComponentMessage::File(origin.downgrade_box()?, event));
         Ok(())
     }
 }
@@ -411,7 +418,7 @@ impl events::EventModel for ComponentModel {
                 assert_eq!(event.label, "Menu command");
             }
             ComponentMessage::File(origin, event) => {
-                if origin.upgrade()?.is_none() {
+                if !origin.is_alive() {
                     return Ok(());
                 }
                 assert_eq!(events::completed_file_path(&event)?.as_deref(), Some(self.expected_path.as_path()));
@@ -425,10 +432,14 @@ impl events::EventModel for ComponentModel {
 /// Exercises COM combo painting, compact menu input and the full native-path picker across separate libraries.
 fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), Box<dyn Error>> {
     let directory = SmokeDirectory::new()?;
-    let mut root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
-    let window = ui.window("Dynamic components", Rect { x: 10, y: 10, width: 610, height: 300 }, &root)?;
+    let root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
+    let root_handle = root.handle();
+    let window = ui.window("Dynamic components", Rect { x: 10, y: 10, width: 610, height: 300 }, root)?;
+    let mut root = root_handle;
     let combo = ui.combo_box_unobserved(window.as_com_ref(), &["First", "Selected across COM"], ChoiceSelection::Selected(1))?;
-    root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content))?.finish()?;
+    let combo_handle = combo.handle();
+    root.insert(0, combo, LinearEdge::new(LayoutTrack::Content))?;
+    let combo = combo_handle;
     let menus = ui.menus()?;
     let bar = menus.create("")?;
     let (events_tx, events) = std::sync::mpsc::channel();

@@ -104,7 +104,7 @@ pub struct Number {
     /// Text editing state for shift-click numeric entry.
     edit: NumberEditState,
     /// Single lifetime event slot; the constructor fixes the parent receiver before publishing the widget.
-    events: neocogi_ui_nodes_contracts::NumberEventPort,
+    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::NumberEventQueueAbi>,
 }
 
 impl Number {
@@ -144,9 +144,9 @@ impl Number {
 
     /// Test construction consumes the bare algorithm before fixing its real weak origin.
     #[cfg(test)]
-    pub(crate) fn into_observed(mut self, queue: ComPtr<neocogi_ui_nodes_contracts::NumberEventQueueAbi>) -> neocogi_com::LocalCom<Self> {
-        Self::into_local_cyclic::<NumberAbi>(move |origin| {
-            self.events = neocogi_com::events::EventPort::with_queue(Some(queue), origin);
+    pub(crate) fn into_observed(mut self, queue: ComPtr<neocogi_ui_nodes_contracts::NumberEventQueueAbi>) -> neocogi_com::LocalBox<Self> {
+        Self::into_local_box_cyclic::<NumberAbi>(move |origin| {
+            self.events = crate::widget_object::WidgetEvents::with_queue(Some(queue), origin);
             self
         })
         .unwrap()
@@ -251,18 +251,10 @@ impl From<NumberParameters> for crate::test_support::algorithm::Algorithm<Number
 }
 
 impl crate::widget_object::WidgetAlgorithm for Number {
-    /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
-    fn close_events(&mut self) {
-        self.events.close();
-    }
+
 }
 
 impl crate::widget_object::HostedWidget for Number {
-    /// Releases queues, revokes outstanding clipboard receipts, and drops local history.
-    fn close_contents(&mut self) {
-        crate::widget_object::WidgetAlgorithm::close_events(self);
-        self.edit = NumberEditState::default();
-    }
 
     /// Borrows common lifecycle and resource state without a second number representation.
     fn runtime(&self) -> &crate::widget_object::WidgetRuntime {
@@ -301,11 +293,11 @@ impl Number {
         resources: crate::widget_object::SharedAssets,
         options: NumberOptions,
         queue: Option<ComPtr<neocogi_ui_nodes_contracts::NumberEventQueueAbi>>,
-    ) -> Result<ComPtr<NumberAbi>, NcStatus> {
+    ) -> Result<neocogi_com::ComBox<NumberAbi>, NcStatus> {
         let mut value = Self::build(host, options, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
-        Self::from_value_cyclic::<NumberAbi>(move |origin| {
-            value.events = neocogi_com::events::EventPort::with_queue(queue, origin);
+        Self::into_box_cyclic::<NumberAbi>(move |origin| {
+            value.events = crate::widget_object::WidgetEvents::with_queue(queue, origin);
             value
         })?
         .query()

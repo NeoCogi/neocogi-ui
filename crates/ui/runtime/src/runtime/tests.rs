@@ -1,7 +1,7 @@
 //! Runtime boundary regressions use deliberately retaining and reentrant components.
 use super::*;
 use neocogi_ui_nodes_contracts::*;
-use neocogi_com::{INcStringComPtrExt, NC_E_BUSY, NcCopyToBufferOffset};
+use neocogi_com::{ComBox, WeakComBox, INcStringComPtrExt, NC_E_BUSY, NcCopyToBufferOffset};
 mod composite_fixture;
 mod containers;
 mod embedded_input;
@@ -18,7 +18,7 @@ fn runtime() -> ComPtr<UiRuntimeAbi> {
 }
 
 /// Creates a concrete button without bypassing its production factory.
-fn button(runtime: &ComPtr<UiRuntimeAbi>) -> ComPtr<ButtonAbi> {
+fn button(runtime: &ComPtr<UiRuntimeAbi>) -> ComBox<ButtonAbi> {
     nc_ui_nodes::UiFactory::bind(runtime.as_com_ref())
         .unwrap()
         .create_button(
@@ -31,31 +31,19 @@ fn button(runtime: &ComPtr<UiRuntimeAbi>) -> ComPtr<ButtonAbi> {
 
 /// Oversized chrome titles fail before a widget is mounted or title text is retained.
 #[test]
-fn oversized_window_title_rejects_creation_without_consuming_the_root() {
+fn oversized_window_title_rejects_creation_and_drops_the_transferred_root() {
     let runtime = runtime();
     let manager: ComPtr<IWindowManagerAbi> = runtime.query().unwrap();
-    let root_button = button(&runtime);
-    let widget = root_button.query::<IWidgetAbi>().unwrap();
+    let root = button(&runtime);
+    let observed = root.downgrade();
     let oversized = vec![b'x'; MAX_WINDOW_TITLE_BYTES + 1];
-    assert_eq!(
-        manager
-            .create_window(
-                NcCopyFromBufferOffset::new(0, &oversized),
-                RECT,
-                widget.as_com_ref(),
-                neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
-            )
-            .unwrap_err(),
-        neocogi_com::NC_E_OUT_OF_RANGE
+    let result = manager.create_window(
+        NcCopyFromBufferOffset::new(0, &oversized), RECT, root.query().unwrap(),
+        neocogi_com::NcValueRef::new(&IWindowEventBinding::Unobserved).unwrap(),
     );
-    manager
-        .create_window(
-            NcCopyFromBufferOffset::new(0, b"bounded title"),
-            RECT,
-            widget.as_com_ref(),
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
-        )
-        .unwrap();
+    assert_eq!(result.unwrap_err(), neocogi_com::NC_E_OUT_OF_RANGE);
+    assert_eq!(observed.label().unwrap_err(), UI_E_CLOSED);
+    mount(&runtime, button(&runtime).query().unwrap()).unwrap();
 }
 
 /// The facade cannot combine a node provider bound to one retained forest with another runtime.
@@ -234,7 +222,7 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
         .unwrap();
     let _disclosure = factory.create_disclosure(label, DisclosureStyle::Header, false).unwrap();
     let content = button.query::<IWidgetAbi>().unwrap();
-    let _scroll = factory.create_scroll_area(content.as_com_ref(), true).unwrap();
+    let _scroll = factory.create_scroll_area(content, true).unwrap();
     let area = factory
         .create_text_area(
             label,
@@ -244,17 +232,17 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
         )
         .unwrap();
     let root = area.query::<IWidgetAbi>().unwrap();
-    let _window = mount(&runtime, &root).unwrap();
+    let _window = mount(&runtime, root).unwrap();
     runtime.update(SIZE).unwrap();
     assert_eq!(calls.get(), 0, "factory products and update must reuse the provider's imported value");
 }
 
 /// Mounts the common capability through the production manager's transactional boundary.
-fn mount(runtime: &ComPtr<UiRuntimeAbi>, root: &ComPtr<IWidgetAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+fn mount(runtime: &ComPtr<UiRuntimeAbi>, root: ComBox<IWidgetAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
     runtime.query::<IWindowManagerAbi>()?.create_window(
         NcCopyFromBufferOffset::new(0, b"test"),
         RECT,
-        root.as_com_ref(),
+        root,
         neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
     )
 }
@@ -315,22 +303,24 @@ fn renderer() -> (ComPtr<IRendererAbi>, Rc<RenderProbe>) {
 
 /// Wrong owners and duplicate attachment fail without consuming the legitimate mount opportunity.
 #[test]
-fn mount_validation_is_transactional_and_closure_outlives_tree_storage() {
+fn mount_validation_destroys_rejected_owners_and_removal_expires_observers() {
     let first = runtime();
     let second = runtime();
-    let mut button = button(&first);
-    let node = button.query().unwrap();
-    assert_eq!(mount(&second, &node).unwrap_err(), UI_E_OWNER);
-    let window = mount(&first, &node).unwrap();
-    assert_eq!(mount(&first, &node).unwrap_err(), UI_E_OWNER);
-    assert_eq!(button.set_label(NcCopyFromBufferOffset::new(1, b"bad")), Err(NC_E_INVALID_ARG));
-    assert_eq!(button.set_label(NcCopyFromBufferOffset::new(0, &[0xff])), Err(NC_E_INVALID_ARG));
-    assert_eq!(button.label().unwrap().to_string().unwrap(), "");
+    let candidate = button(&first);
+    let rejected = candidate.downgrade();
+    assert_eq!(mount(&second, candidate.query().unwrap()).unwrap_err(), UI_E_OWNER);
+    assert_eq!(rejected.label().unwrap_err(), UI_E_CLOSED);
+    let owner = button(&first);
+    let mut observed = owner.downgrade();
+    let window = mount(&first, owner.query().unwrap()).unwrap();
+    assert_eq!(observed.set_label(NcCopyFromBufferOffset::new(1, b"bad")), Err(NC_E_INVALID_ARG));
+    assert_eq!(observed.set_label(NcCopyFromBufferOffset::new(0, &[0xff])), Err(NC_E_INVALID_ARG));
+    assert_eq!(observed.label().unwrap().to_string().unwrap(), "");
     window.close().unwrap();
-    assert_eq!(button.set_label(NcCopyFromBufferOffset::new(0, b"closed")), Err(UI_E_CLOSED));
-    let unmounted = self::button(&first);
+    assert_eq!(observed.set_label(NcCopyFromBufferOffset::new(0, b"expired")), Err(UI_E_CLOSED));
+    let detached = button(&first);
     drop(first);
-    assert_eq!(unmounted.label().unwrap_err(), UI_E_CLOSED);
+    assert_eq!(detached.label().unwrap_err(), UI_E_CLOSED);
     assert_eq!(window.set_rect(RECT), Err(UI_E_CLOSED));
     second.update(SIZE).unwrap();
 }
@@ -339,9 +329,10 @@ fn mount_validation_is_transactional_and_closure_outlives_tree_storage() {
 #[test]
 fn rendering_requires_synchronized_geometry_and_streams_expire_after_success_and_failure() {
     let runtime = runtime();
-    let mut button = button(&runtime);
-    let node = button.query().unwrap();
-    let _window = mount(&runtime, &node).unwrap();
+    let button_owner = button(&runtime);
+    let mut button = button_owner.downgrade();
+    let node = button_owner.query().unwrap();
+    let _window = mount(&runtime, node).unwrap();
     let (renderer, probe) = renderer();
     assert_eq!(runtime.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
     runtime.update(SIZE).unwrap();
@@ -372,9 +363,9 @@ struct WidgetProbe {
     /// Most recent copied update geometry, used to verify concrete container allocations.
     latest: Cell<Option<WidgetUpdate>>,
     /// One-shot attempt to close an actively editing parent during child mounting.
-    close_on_mount: RefCell<Option<ComPtr<IWidgetAbi>>>,
+    clear_on_mount: RefCell<Option<WeakComBox<IWidgetAbi>>>,
     /// Records the exact gate/preflight result without assuming which object is busy.
-    close_mount_result: Cell<Option<Result<(), NcStatus>>>,
+    clear_mount_result: Cell<Option<Result<(), NcStatus>>>,
     /// Active parent authority deliberately reentered from a leaf measurement.
     parent_layout: RefCell<Option<(ComPtr<ILayoutServiceAbi>, LayoutScope)>>,
     /// Every update, including eventless updates and routed text/key transactions.
@@ -389,10 +380,8 @@ struct WidgetProbe {
     texts: RefCell<Vec<String>>,
     /// Whether this custom widget currently accepts committed text.
     text_input: Cell<bool>,
-    /// Logical closure must follow node removal once, even with retained COM handles.
+    /// Provider destruction follows owner removal once, despite retained weak handles.
     closes: Cell<u32>,
-    /// Deliberate close failure verifies explicit teardown reports component errors.
-    fail_close: Cell<bool>,
     /// A transient geometry error must be retried without a second setter change.
     fail_measure: Cell<bool>,
     /// Paint calls retain these values beyond their valid invocation.
@@ -407,9 +396,8 @@ struct WidgetProbe {
 /// Independently implemented leaf delegates lifetime only to a factory-owned fixture object.
 struct RetainingWidget {
     /// Gives the custom implementation the same runtime ownership identity and mount-once rules.
-    lifetime: ComPtr<IWidgetAbi>,
     /// Actual concrete setter used to test observational mutation rejection.
-    button: ComPtr<ButtonAbi>,
+    button: ComBox<ButtonAbi>,
     /// Retained runtime deliberately tries to reenter during measurement and painting.
     runtime: ComPtr<UiRuntimeAbi>,
     /// Test state is owned and survives every COM call.
@@ -435,38 +423,34 @@ impl ILeafLayout for RetainingWidget {
         assert_eq!(self.button.set_flags(WidgetOptions::NONE), Err(UI_E_BUSY));
         assert_eq!(self.button.clear_flags(WidgetOptions::NONE), Err(UI_E_BUSY));
         assert_eq!(self.button.properties()?, before);
-        assert_eq!(self.lifetime.close(), Err(UI_E_BUSY));
         Ok(Size {
             width: self.probe.width.get().max(100),
             height: 30,
         })
     }
 }
+impl Drop for RetainingWidget {
+    /// Unique-owner destruction is the only terminal transition.
+    fn drop(&mut self) { self.probe.closes.set(self.probe.closes.get() + 1); }
+}
 impl IWidget for RetainingWidget {
     /// This widget forwards outputs and has no private inbox.
     fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
-        self.lifetime.dispatch_next()
+        self.button.dispatch_next()
     }
 
     /// Returns the shared owner without exposing runtime storage.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
-        self.lifetime.host()
+        self.button.host()
     }
     /// Delegates mount-once state to its independent lifetime fixture.
     fn mount(&mut self) -> Result<(), NcStatus> {
-        let parent = self.probe.close_on_mount.borrow_mut().take();
-        if let Some(mut parent) = parent {
-            self.probe.close_mount_result.set(Some(parent.close()));
+        let parent = self.probe.clear_on_mount.borrow_mut().take();
+        if let Some(parent) = parent {
+            self.probe.clear_mount_result.set(Some(parent.query::<neocogi_ui::LinearAbi>()?.clear()));
         }
-        self.lifetime.mount()
+        self.button.mount()
     }
-    /// Delegates logical closure to its lifetime fixture.
-    fn close(&mut self) -> Result<(), NcStatus> {
-        self.probe.closes.set(self.probe.closes.get() + 1);
-        self.lifetime.close()?;
-        if self.probe.fail_close.get() { Err(NC_E_INVALID_ARG) } else { Ok(()) }
-    }
-
     /// Reuses real common widget policy in this deliberately retaining implementation.
     fn properties(&self) -> Result<WidgetProperties, NcStatus> {
         let mut properties = self.button.properties()?;
@@ -591,13 +575,12 @@ fn external_widget_cannot_reenter_mutate_during_observation_or_reuse_a_paint_sco
     let runtime = runtime();
     let button = button(&runtime);
     let probe = Rc::new(WidgetProbe::default());
-    let widget = RetainingWidget::from_value(RetainingWidget {
-        lifetime: button.query().unwrap(),
+    let widget = RetainingWidget::into_box(RetainingWidget {
         button,
         runtime: runtime.clone(),
         probe: probe.clone(),
     });
-    let window = mount(&runtime, &widget.query().unwrap()).unwrap();
+    let window = mount(&runtime, widget.query().unwrap()).unwrap();
     let (renderer, backend) = renderer();
     runtime.update(SIZE).unwrap();
     let measured = probe.measures.get();
@@ -626,29 +609,32 @@ fn window_com_capabilities_preserve_hierarchy_layers_visibility_and_subtree_clos
     assert_eq!(runtime.query::<UiFactoryAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     let construction = runtime.construction_host().unwrap();
     assert_ne!(identity.as_raw().object, construction.query::<IUnknown>().unwrap().as_raw().object);
-    let root_button = button(&runtime);
+    let root_button_owner = button(&runtime);
+    let root_button = root_button_owner.downgrade();
     assert_eq!(
         construction.host().unwrap().query::<IUnknown>().unwrap().as_raw().object,
         root_button.host().unwrap().query::<IUnknown>().unwrap().as_raw().object
     );
-    let root = mount(&runtime, &root_button.query().unwrap()).unwrap();
-    let child_button = button(&runtime);
+    let root = mount(&runtime, root_button_owner.query().unwrap()).unwrap();
+    let child_button_owner = button(&runtime);
+    let child_button = child_button_owner.downgrade();
     let child = manager
         .create_child(
             root.as_com_ref(),
             NcCopyFromBufferOffset::new(0, b"child"),
             RECT,
-            child_button.query::<IWidgetAbi>().unwrap().as_com_ref(),
+            child_button_owner.query::<IWidgetAbi>().unwrap(),
             neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
         )
         .unwrap();
-    let dialog_button = button(&runtime);
+    let dialog_button_owner = button(&runtime);
+    let dialog_button = dialog_button_owner.downgrade();
     let dialog = manager
         .create_dialog(
             child.as_com_ref(),
             NcCopyFromBufferOffset::new(0, b"dialog"),
             RECT,
-            dialog_button.query::<IWidgetAbi>().unwrap().as_com_ref(),
+            dialog_button_owner.query::<IWidgetAbi>().unwrap(),
             neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
         )
         .unwrap();
@@ -698,28 +684,30 @@ fn child_creation_rejects_foreign_and_modal_parents_before_mounting() {
     let first = runtime();
     let second = runtime();
     let manager: ComPtr<IWindowManagerAbi> = first.query().unwrap();
-    let root = mount(&first, &button(&first).query().unwrap()).unwrap();
-    let foreign = mount(&second, &button(&second).query().unwrap()).unwrap();
+    let root = mount(&first, button(&first).query().unwrap()).unwrap();
+    let foreign = mount(&second, button(&second).query().unwrap()).unwrap();
     let content = button(&first);
-    let node: ComPtr<IWidgetAbi> = content.query().unwrap();
+    let rejected = content.downgrade();
+    let node = content.query::<IWidgetAbi>().unwrap();
     assert_eq!(
         manager
             .create_child(
                 foreign.as_com_ref(),
                 NcCopyFromBufferOffset::new(0, b"foreign"),
                 RECT,
-                node.as_com_ref(),
+                node,
                 neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
             )
             .unwrap_err(),
         UI_E_OWNER
     );
+    assert!(!rejected.is_alive());
     let dialog = manager
         .create_dialog(
             root.as_com_ref(),
             NcCopyFromBufferOffset::new(0, b"modal"),
             RECT,
-            button(&first).query::<IWidgetAbi>().unwrap().as_com_ref(),
+            button(&first).query::<IWidgetAbi>().unwrap(),
             neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
         )
         .unwrap();
@@ -729,7 +717,7 @@ fn child_creation_rejects_foreign_and_modal_parents_before_mounting() {
                 dialog.as_com_ref(),
                 NcCopyFromBufferOffset::new(0, b"invalid"),
                 RECT,
-                node.as_com_ref(),
+                button(&first).query().unwrap(),
                 neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
             )
             .unwrap_err(),
@@ -740,7 +728,7 @@ fn child_creation_rejects_foreign_and_modal_parents_before_mounting() {
             root.as_com_ref(),
             NcCopyFromBufferOffset::new(0, b"valid"),
             RECT,
-            node.as_com_ref(),
+            button(&first).query().unwrap(),
             neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
         )
         .unwrap();
@@ -754,13 +742,14 @@ fn child_creation_rejects_foreign_and_modal_parents_before_mounting() {
 fn popup_com_capability_enforces_active_owner_policy_and_permanent_removal() {
     let runtime = runtime();
     let manager: ComPtr<IWindowManagerAbi> = runtime.query().unwrap();
-    let root = mount(&runtime, &button(&runtime).query().unwrap()).unwrap();
-    let popup_button = button(&runtime);
+    let root = mount(&runtime, button(&runtime).query().unwrap()).unwrap();
+    let popup_button_owner = button(&runtime);
+    let popup_button = popup_button_owner.downgrade();
     let mut popup = manager
         .create_popup(
             root.as_com_ref(),
             NcCopyFromBufferOffset::new(0, b"popup"),
-            popup_button.query::<IWidgetAbi>().unwrap().as_com_ref(),
+            popup_button_owner.query::<IWidgetAbi>().unwrap(),
             neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IPopupEventBinding::Unobserved).unwrap(),
         )
         .unwrap();
@@ -776,7 +765,7 @@ fn popup_com_capability_enforces_active_owner_policy_and_permanent_removal() {
             root.as_com_ref(),
             NcCopyFromBufferOffset::new(0, b"modal"),
             RECT,
-            button(&runtime).query::<IWidgetAbi>().unwrap().as_com_ref(),
+            button(&runtime).query::<IWidgetAbi>().unwrap(),
             neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
         )
         .unwrap();
@@ -798,16 +787,17 @@ fn popup_com_capability_enforces_active_owner_policy_and_permanent_removal() {
 #[test]
 fn com_nodes_update_without_activation_and_collect_hidden_widget_changes() {
     let runtime = runtime();
-    let mut button = button(&runtime);
+    let button = button(&runtime);
     let probe = Rc::new(WidgetProbe::default());
     probe.text_input.set(true);
-    let object = RetainingWidget::from_value(RetainingWidget {
-        lifetime: button.query().unwrap(),
-        button: button.clone(),
+    let observed = button.downgrade();
+    let object = RetainingWidget::into_box(RetainingWidget {
+        button,
         runtime: runtime.clone(),
         probe: probe.clone(),
     });
-    let window = mount(&runtime, &object.query().unwrap()).unwrap();
+    let mut button = observed;
+    let window = mount(&runtime, object.query().unwrap()).unwrap();
     runtime.update(SIZE).unwrap();
     let measured = probe.measures.get();
     probe.requested_width.set(240);
@@ -859,13 +849,12 @@ fn input_validation_and_explicit_teardown_preserve_their_error_boundaries() {
     let runtime = runtime();
     let button = button(&runtime);
     let probe = Rc::new(WidgetProbe::default());
-    let object = RetainingWidget::from_value(RetainingWidget {
-        lifetime: button.query().unwrap(),
+    let object = RetainingWidget::into_box(RetainingWidget {
         button,
         runtime: runtime.clone(),
         probe: probe.clone(),
     });
-    let window = mount(&runtime, &object.query().unwrap()).unwrap();
+    let window = mount(&runtime, object.query().unwrap()).unwrap();
     runtime.update(SIZE).unwrap();
     let bad_key = UiInput::Key(KeyStroke {
         key: KeyCode::Character,
@@ -889,8 +878,7 @@ fn input_validation_and_explicit_teardown_preserve_their_error_boundaries() {
     );
     let (renderer, _) = renderer();
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
-    probe.fail_close.set(true);
-    assert_eq!(window.close(), Err(NC_E_INVALID_ARG));
+    window.close().unwrap();
     assert_eq!(probe.closes.get(), 1);
     window.close().unwrap();
     assert_eq!(probe.closes.get(), 1);
@@ -904,13 +892,12 @@ fn failed_com_measurement_retries_after_component_recovery() {
     let button = button(&runtime);
     let probe = Rc::new(WidgetProbe::default());
     probe.fail_measure.set(true);
-    let object = RetainingWidget::from_value(RetainingWidget {
-        lifetime: button.query().unwrap(),
+    let object = RetainingWidget::into_box(RetainingWidget {
         button,
         runtime: runtime.clone(),
         probe: probe.clone(),
     });
-    let window = mount(&runtime, &object.query().unwrap()).unwrap();
+    let window = mount(&runtime, object.query().unwrap()).unwrap();
     assert_eq!(runtime.update(SIZE), Err(NC_E_INVALID_ARG));
     let failed = probe.measures.get();
     assert!(failed > 0);
@@ -924,37 +911,30 @@ fn failed_com_measurement_retries_after_component_recovery() {
 
 /// Invalid edits leave mount claims intact; the public view cannot recover private edit authority.
 #[test]
-fn child_editor_validates_before_claiming_and_closes_retained_views() {
+fn child_editor_rejects_inputs_without_leaking_owners_and_expires_retained_views() {
     let runtime = runtime();
-    let other_runtime = self::runtime();
-    let first = button(&runtime);
-    let second = button(&runtime);
-    let foreign = button(&other_runtime);
-    let editor = first.host().unwrap().create_children().unwrap();
+    let other = self::runtime();
+    let editor = button(&runtime).host().unwrap().create_children().unwrap();
     let view = editor.view().unwrap();
     assert_eq!(view.query::<IChildrenEditorAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
-    assert_eq!(
-        editor.insert(1, first.query::<IWidgetAbi>().unwrap().as_com_ref()),
-        Err(neocogi_com::NC_E_OUT_OF_RANGE)
-    );
-    assert_eq!(editor.insert(0, foreign.query::<IWidgetAbi>().unwrap().as_com_ref()), Err(UI_E_OWNER));
-    editor.insert(0, first.query::<IWidgetAbi>().unwrap().as_com_ref()).unwrap().finish().unwrap();
-    assert_eq!(editor.insert(1, first.query::<IWidgetAbi>().unwrap().as_com_ref()), Err(UI_E_OWNER));
-    assert_eq!(
-        editor.replace(1, second.query::<IWidgetAbi>().unwrap().as_com_ref()),
-        Err(neocogi_com::NC_E_OUT_OF_RANGE)
-    );
-    assert_eq!(view.child_count().unwrap(), 1);
+    let invalid = button(&runtime);
+    let rejected = invalid.downgrade();
+    assert_eq!(editor.insert(1, invalid.query().unwrap()), Err(neocogi_com::NC_E_OUT_OF_RANGE));
+    assert!(!rejected.is_alive());
+    let foreign = button(&other);
+    let rejected = foreign.downgrade();
+    assert_eq!(editor.insert(0, foreign.query().unwrap()), Err(UI_E_OWNER));
+    assert!(!rejected.is_alive());
+    editor.insert(0, button(&runtime).query().unwrap()).unwrap();
     let held_child = view.child(0).unwrap();
-    editor.replace(0, second.query::<IWidgetAbi>().unwrap().as_com_ref()).unwrap().finish().unwrap();
+    let replacement = button(&runtime);
+    let observed = replacement.downgrade();
+    editor.replace(0, replacement.query().unwrap()).unwrap();
     assert_eq!(held_child.properties(), Err(UI_E_CLOSED));
     assert_eq!(view.child_count().unwrap(), 1);
     drop(editor);
     assert_eq!(view.child_count(), Err(UI_E_CLOSED));
-    assert_eq!(view.child(0).unwrap_err(), UI_E_CLOSED);
-    assert_eq!(second.label().unwrap_err(), UI_E_CLOSED);
-    // The wrong-owner attempt did not consume the legitimate foreign mount.
-    mount(&other_runtime, &foreign.query().unwrap()).unwrap().close().unwrap();
+    assert_eq!(observed.label().unwrap_err(), UI_E_CLOSED);
 }
 
 /// A failed old-child close reports a committed replacement, so matching metadata can still commit.
@@ -965,24 +945,23 @@ fn child_edit_reports_committed_topology_separately_from_teardown_failure() {
     let editor = button.host().unwrap().create_children().unwrap();
     let view = editor.view().unwrap();
     let probe = Rc::new(WidgetProbe::default());
-    probe.fail_close.set(true);
-    let object = RetainingWidget::from_value(RetainingWidget {
-        lifetime: button.query().unwrap(),
+    let object = RetainingWidget::into_box(RetainingWidget {
         button,
         runtime: runtime.clone(),
         probe: probe.clone(),
     });
-    editor.insert(0, object.query::<IWidgetAbi>().unwrap().as_com_ref()).unwrap().finish().unwrap();
+    editor.insert(0, object.query::<IWidgetAbi>().unwrap()).unwrap();
     let replacement = self::button(&runtime);
-    let outcome = editor.replace(0, replacement.query::<IWidgetAbi>().unwrap().as_com_ref()).unwrap();
-    assert_eq!(outcome.finish(), Err(NC_E_INVALID_ARG));
+    let observed = replacement.downgrade();
+    editor.replace(0, replacement.query::<IWidgetAbi>().unwrap()).unwrap();
+    let replacement = observed;
     assert_eq!(probe.closes.get(), 1);
     assert_eq!(view.child_count().unwrap(), 1);
     assert_eq!(
         view.child(0).unwrap().query::<IUnknown>().unwrap().as_raw().object,
         replacement.query::<IUnknown>().unwrap().as_raw().object
     );
-    editor.clear().unwrap().finish().unwrap();
+    editor.clear().unwrap();
     assert_eq!(view.child_count().unwrap(), 0);
     assert_eq!(replacement.label().unwrap_err(), UI_E_CLOSED);
 }
@@ -1014,7 +993,7 @@ fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validati
     textbox.set_cursor(4).unwrap();
     assert_eq!(textbox.cursor().unwrap(), 2);
     let mut common = textbox.node_interface().unwrap();
-    let concrete = textbox.as_interface().add_ref();
+    let concrete = textbox.as_interface().clone();
     assert_eq!(
         concrete.query::<IUnknown>().unwrap().as_raw().object,
         common.query::<IUnknown>().unwrap().as_raw().object
@@ -1025,7 +1004,7 @@ fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validati
     textbox.set_text("é\n☃").unwrap();
     assert_eq!(textbox.cursor().unwrap(), 5);
     assert_eq!(common.take_change().unwrap(), GeometryChange::NoChange);
-    assert_eq!(textbox.as_interface().set_text(NcCopyFromBufferOffset::new(0, &[0xff])), Err(NC_E_INVALID_ARG));
+    assert_eq!(textbox.as_interface().clone().set_text(NcCopyFromBufferOffset::new(0, &[0xff])), Err(NC_E_INVALID_ARG));
     assert_eq!(textbox.text().unwrap(), "é☃");
     textbox.clear().unwrap();
     assert_eq!(textbox.cursor().unwrap(), 0);
@@ -1125,8 +1104,9 @@ fn builtin_numeric_and_scrollbar_facades_reject_invalid_inputs_without_losing_st
 fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
     let runtime = runtime();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
-    let textbox = ui.widgets().textbox_unobserved("start").unwrap();
-    let window = ui.window("editor", RECT, &textbox).unwrap();
+    let textbox_owner = ui.widgets().textbox_unobserved("start").unwrap();
+    let textbox = textbox_owner.handle();
+    let window = ui.window("editor", RECT, textbox_owner).unwrap();
     ui.input(
         UiInput::Key(KeyStroke {
             key: KeyCode::Tab,
@@ -1146,8 +1126,9 @@ fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
     window.close().unwrap();
 
-    let checkbox = ui.widgets().checkbox_unobserved("toggle", false).unwrap();
-    let window = ui.window("checkbox", RECT, &checkbox).unwrap();
+    let checkbox_owner = ui.widgets().checkbox_unobserved("toggle", false).unwrap();
+    let checkbox = checkbox_owner.handle();
+    let window = ui.window("checkbox", RECT, checkbox_owner).unwrap();
     ui.input(UiInput::Cancel, "").unwrap();
     ui.input(
         UiInput::Key(KeyStroke {
@@ -1177,8 +1158,8 @@ fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
     window.close().unwrap();
 
     let roots = [
-        ui.widgets().button_unobserved("button").unwrap().node_interface().unwrap(),
-        ui.widgets().text_block("display\ntext", TextWrapping::Word).unwrap().node_interface().unwrap(),
+        ui.widgets().button_unobserved("button").unwrap().into_interface().query::<IWidgetAbi>().unwrap(),
+        ui.widgets().text_block("display\ntext", TextWrapping::Word).unwrap().into_interface().query::<IWidgetAbi>().unwrap(),
         ui.widgets()
             .slider_unobserved(SliderOptions {
                 value: 2.0,
@@ -1188,16 +1169,16 @@ fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
                 precision: 0,
             })
             .unwrap()
-            .node_interface()
+            .into_interface().query::<IWidgetAbi>()
             .unwrap(),
         ui.widgets()
             .number_unobserved(NumberOptions { value: 42.0, step: 1.0, precision: 0 })
             .unwrap()
-            .node_interface()
+            .into_interface().query::<IWidgetAbi>()
             .unwrap(),
-        ui.widgets().color_swatch(0xff00ffff, "swatch").unwrap().node_interface().unwrap(),
-        ui.widgets().list_item_unobserved("item").unwrap().node_interface().unwrap(),
-        ui.widgets().list_box_unobserved("list box").unwrap().node_interface().unwrap(),
+        ui.widgets().color_swatch(0xff00ffff, "swatch").unwrap().into_interface().query::<IWidgetAbi>().unwrap(),
+        ui.widgets().list_item_unobserved("item").unwrap().into_interface().query::<IWidgetAbi>().unwrap(),
+        ui.widgets().list_box_unobserved("list box").unwrap().into_interface().query::<IWidgetAbi>().unwrap(),
         ui.widgets()
             .scrollbar_unobserved(ScrollRange {
                 axis: ScrollAxis::Vertical,
@@ -1206,15 +1187,16 @@ fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
                 offset: 30,
             })
             .unwrap()
-            .node_interface()
+            .into_interface().query::<IWidgetAbi>()
             .unwrap(),
     ];
     for root in roots {
-        let window = mount(&runtime, &root).unwrap();
+        let observed = root.downgrade();
+        let window = mount(&runtime, root).unwrap();
         ui.update(SIZE).unwrap();
         ui.render(SIZE, renderer.as_com_ref()).unwrap();
         window.close().unwrap();
-        assert_eq!(root.properties(), Err(UI_E_CLOSED));
+        assert_eq!(observed.properties(), Err(UI_E_CLOSED));
     }
 }
 
@@ -1237,7 +1219,7 @@ struct BuiltinPaintProbe {
 /// A foreign-style painter that reenters a read-only editing method during copying.
 struct BuiltinPainter {
     /// The producer's editing projection, independent of its paint helper's storage.
-    button: ComPtr<ButtonAbi>,
+    button: WeakComBox<ButtonAbi>,
     /// Test-owned geometry and error observations.
     probe: Rc<BuiltinPaintProbe>,
 }
@@ -1373,7 +1355,9 @@ fn platform_input_projection_and_committed_text_area_share_runtime_state() {
     let identity: ComPtr<neocogi_com::IUnknown> = input.query().unwrap();
     assert_eq!(identity.as_raw().object, runtime.query::<neocogi_com::IUnknown>().unwrap().as_raw().object);
     let editor = ui.widgets().textbox_unobserved("start").unwrap();
-    let window = ui.window("IME", RECT, &editor).unwrap();
+    let editor_owner = editor;
+    let editor = editor_owner.handle();
+    let window = ui.window("IME", RECT, editor_owner).unwrap();
     assert_eq!(ui.text_input_area().unwrap(), TextInputArea::None);
     input
         .input(
@@ -1416,7 +1400,7 @@ fn platform_input_projection_and_committed_text_area_share_runtime_state() {
 /// Concrete external content observes ownership, geometry and lifecycle without retaining its COM self.
 struct LocalContent {
     /// Weak application slot permits reentry tests without a self-owning widget cycle.
-    target: std::rc::Weak<RefCell<Option<ComPtr<IWidgetAbi>>>>,
+    target: std::rc::Weak<RefCell<Option<WeakComBox<IWidgetAbi>>>>,
     /// Explicit model state remains independently observable during calls.
     probe: Rc<LocalContentProbe>,
 }
@@ -1480,15 +1464,12 @@ impl neocogi_ui::LeafContent for LocalContent {
             ColoredVertex { x: 8.0, y: 9.0, rgba: 0xff060504 },
         ])
     }
-    /// Closing content terminates activity while its retained allocation remains observable.
-    fn close(&mut self) -> Result<(), NcStatus> {
-        self.probe.closes.set(self.probe.closes.get() + 1);
-        Ok(())
-    }
+
 }
 impl Drop for LocalContent {
     /// The final inline value has one destructor, independent of the number of COM projections.
     fn drop(&mut self) {
+        self.probe.closes.set(self.probe.closes.get() + 1);
         self.probe.drops.set(self.probe.drops.get() + 1);
     }
 }
@@ -1518,7 +1499,9 @@ fn static_leaf_content_recovers_from_reentry_and_errors_with_one_owned_lifetime(
     assert_eq!(node.properties().unwrap().options, WidgetOptions::FRAME);
     node.replace_flags(WidgetOptions::NO_INTERACT).unwrap();
     *target.borrow_mut() = Some(node.clone());
-    let window = ui.window("Local leaf", RECT, &widget).unwrap();
+    let widget_owner = widget;
+    let widget = widget_owner.handle();
+    let window = ui.window("Local leaf", RECT, widget_owner).unwrap();
     probe.fail_measure.set(true);
     assert!(ui.update(SIZE).is_err());
     ui.update(SIZE).unwrap();
@@ -1542,9 +1525,8 @@ fn static_leaf_content_recovers_from_reentry_and_errors_with_one_owned_lifetime(
     assert_eq!(vertices.iter().filter(|vertex| vertex.rgba == 0xff060504).count(), 3);
     drop(vertices);
     window.close().unwrap();
-    node.close().unwrap();
     assert_eq!(probe.closes.get(), 1);
-    assert_eq!(probe.drops.get(), 0);
+    assert_eq!(probe.drops.get(), 1);
     assert_eq!(node.properties().err(), Some(UI_E_CLOSED));
     target.borrow_mut().take();
     drop(node);
@@ -1576,7 +1558,9 @@ fn update_failure_stops_later_roots_without_losing_retry_invalidation() {
             )
             .unwrap();
         *target.borrow_mut() = Some(widget.node_interface().unwrap());
-        let window = ui.window(title, RECT, &widget).unwrap();
+        let widget_owner = widget;
+        let widget = widget_owner.handle();
+        let window = ui.window(title, RECT, widget_owner).unwrap();
         retained.push((target, probe, widget, window));
     }
     ui.update(SIZE).unwrap();

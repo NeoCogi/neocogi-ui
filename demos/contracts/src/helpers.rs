@@ -10,7 +10,6 @@ impl Default for WidgetCalls {
             placements: 0,
             updates: 0,
             paints: 0,
-            closes: 0,
         }
     }
 }

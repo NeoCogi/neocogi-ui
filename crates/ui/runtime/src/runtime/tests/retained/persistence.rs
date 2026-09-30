@@ -3,7 +3,7 @@
 
 use super::*;
 use neocogi_com::{
-    binary, com_object, guid_from_qualified_name, ComDeserialize, ComSerialize, ComRef, INcBytesAbi, IUnknown, NcBytes, NcCopyFromBufferOffset, NcGuid,
+    ComBox, WeakComBox, binary, com_object, guid_from_qualified_name, ComDeserialize, ComSerialize, ComRef, INcBytesAbi, IUnknown, NcBytes, NcCopyFromBufferOffset, NcGuid,
     NC_E_ABI_VERSION, NC_E_INVALID_ARG, NC_E_OUT_OF_RANGE,
 };
 use neocogi_com::persistence::{snapshot, FactoryRegistry, ObjectRecord};
@@ -31,7 +31,7 @@ struct Settings {
 #[com_object(interfaces(neocogi_com::persistence::IPersistable, neocogi_idl_example_contracts::ICompositionRoot))]
 struct SettingsView {
     /// Mountable composition root.
-    root: LinearWidget,
+    root: Option<OwnedWidget<LinearAbi>>,
     /// Retained only by the implementation for snapshot export.
     button: ButtonWidget,
     /// Retained only by the implementation for reading edited state.
@@ -41,17 +41,17 @@ struct SettingsView {
 }
 impl ICompositionRoot for SettingsView {
     /// The host receives an opaque mountable widget, not the child handles.
-    fn root(&self) -> Result<ComPtr<IUnknown>, NcStatus> {
-        self.root.node_interface()?.query()
+    fn take_root(&mut self) -> Result<ComBox<IUnknown>, NcStatus> {
+        self.root.take().ok_or(UI_E_CLOSED)?.into_interface().query()
     }
     /// Resolves the actual authored child; event attachment uses its typed stream.
-    fn widget(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IUnknown>, NcStatus> {
+    fn widget(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<WeakComBox<IUnknown>, NcStatus> {
         if name.offset() != 0 {
             return Err(NC_E_INVALID_ARG);
         }
         match std::str::from_utf8(name.as_slice()).map_err(|_| NC_E_INVALID_ARG)? {
-            value if value == self.names.0 => self.button.as_interface().add_ref().query(),
-            value if value == self.names.1 => self.checkbox.as_interface().add_ref().query(),
+            value if value == self.names.0 => self.button.as_interface().clone().query(),
+            value if value == self.names.1 => self.checkbox.as_interface().clone().query(),
             _ => Err(neocogi_com::NC_E_NOT_FOUND),
         }
     }
@@ -139,35 +139,31 @@ impl neocogi_com::persistence::IPersistenceFactory for SettingsFactory {
             ),
         )?;
         let mut root = self.widgets.linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
+        let button_handle = button.handle();
+        let checkbox_handle = checkbox.handle();
         let result = (|| {
             root.insert(
                 0,
-                &button,
+                button,
                 LinearEdge {
                     main: LayoutTrack::Fixed { extent: 32 },
                     cross: ChildCrossSize::Stretch,
                 },
-            )?
-            .finish()?;
+            )?;
             root.insert(
                 1,
-                &checkbox,
+                checkbox,
                 LinearEdge {
                     main: LayoutTrack::Fixed { extent: 32 },
                     cross: ChildCrossSize::Stretch,
                 },
-            )?
-            .finish()
+            )
         })();
-        if let Err(error) = result {
-            // Retire any topology already committed before returning construction failure.
-            let _ = root.node_interface()?.close();
-            return Err(error);
-        }
+        result?;
         Ok(SettingsView::from_value(SettingsView {
-            root,
-            button,
-            checkbox,
+            root: Some(root),
+            button: button_handle,
+            checkbox: checkbox_handle,
             names: (state.save_output, state.checked_output),
         }))
     }
@@ -222,12 +218,12 @@ fn persisted_component_builds_real_ui_and_binds_without_child_handles() {
             .query::<CheckboxAbi>()
             .is_err()
     );
-    let mountable = component.query::<ICompositionRootAbi>().unwrap().root().unwrap().query::<IWidgetAbi>().unwrap();
+    let mountable = component.query::<ICompositionRootAbi>().unwrap().take_root().unwrap().query::<IWidgetAbi>().unwrap();
     let owner = window(
         &fixture.ui,
         "loaded",
         Rect { x: 10, y: 10, width: 240, height: 80 },
-        &Widget::from_interface(mountable),
+        OwnedWidget::from_interface(mountable),
     );
     fixture.frame(VIEW).unwrap();
     for point in [Point { x: 50, y: 26 }, Point { x: 50, y: 62 }] {
@@ -246,12 +242,12 @@ fn persisted_component_builds_real_ui_and_binds_without_child_handles() {
     drop(component);
     let restored = registry.restore(&saved).unwrap();
     assert_eq!(snapshot(restored.as_com_ref()).unwrap(), saved);
-    let mountable = restored.query::<ICompositionRootAbi>().unwrap().root().unwrap().query::<IWidgetAbi>().unwrap();
+    let mountable = restored.query::<ICompositionRootAbi>().unwrap().take_root().unwrap().query::<IWidgetAbi>().unwrap();
     let _owner = window(
         &fixture.ui,
         "reloaded",
         Rect { x: 10, y: 10, width: 240, height: 80 },
-        &Widget::from_interface(mountable),
+        OwnedWidget::from_interface(mountable),
     );
     fixture.frame(VIEW).unwrap();
     pointer(&fixture.ui, Point { x: 50, y: 26 }, true);

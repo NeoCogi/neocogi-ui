@@ -164,7 +164,7 @@ pub struct Linear {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::widget_object::WidgetRuntime,
     /// Sole writer for children mounted through this container's COM contract.
-    pub(crate) editor: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
+    pub(crate) editor: neocogi_com::ComBox<neocogi_ui_core_contracts::IChildrenEditorAbi>,
     /// One relationship specification per owned child, in the same order.
     specs: Vec<LinearItemSpec>,
     /// Main axis and placement order.
@@ -179,7 +179,7 @@ impl Linear {
     /// Combines validated layout policy with its runtime and authoritative COM child writer.
     pub(crate) fn from_runtime(
         runtime: crate::widget_object::WidgetRuntime,
-        editor: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
+        editor: neocogi_com::ComBox<neocogi_ui_core_contracts::IChildrenEditorAbi>,
         direction: LinearDirection,
         cross_size: LinearCrossSize,
     ) -> Self {
@@ -252,10 +252,6 @@ impl crate::widget_object::HostedWidget for Linear {
         &mut self.runtime
     }
 
-    /// Closes the authoritative COM child sequence when this Linear is retired.
-    fn close_children(&mut self) -> Result<neocogi_ui_core_contracts::ChildEditResult, neocogi_com::NcStatus> {
-        self.editor.close()
-    }
 }
 
 impl super::ContainerAlgorithm for Linear {
@@ -294,9 +290,9 @@ impl Linear {
         resources: crate::widget_object::SharedAssets,
         direction: FlowDirection,
         cross: CrossSize,
-    ) -> Result<ComPtr<LinearAbi>, NcStatus> {
+    ) -> Result<neocogi_com::ComBox<LinearAbi>, NcStatus> {
         let value = Self::build(host, direction, cross, Some(&resources))?;
-        Ok(Self::from_value(value).query().expect("Linear declares its callable class contract"))
+        Ok(Self::into_box(value).query().expect("Linear declares its callable class contract"))
     }
 
     /// Builds one linear container with either directly imported or runtime-shared resources.

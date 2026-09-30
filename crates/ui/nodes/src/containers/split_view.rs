@@ -8,7 +8,7 @@ use crate::{
 use crate::math::RectExt;
 use crate::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
 use neocogi_com::{ComPtr, NcStatus, NC_E_INVALID_ARG, NC_E_OUT_OF_RANGE};
-use neocogi_ui_core_contracts::{ChildEditResult, GeometryChange, IChildrenAbi, IChildrenEditorAbi, IWidgetHostAbi};
+use neocogi_ui_core_contracts::{ GeometryChange, IChildrenAbi, IChildrenEditorAbi, IWidgetHostAbi};
 use neocogi_ui_nodes_contracts::{SplitAxis, SplitChanged, SplitOptions, SplitViewAbi};
 
 /// Pointer offset within the divider prevents an initial jump when its edge is grabbed.
@@ -122,7 +122,7 @@ pub struct SplitView {
     /// Standard lifetime, resource access, options, and sticky geometry invalidation.
     runtime: WidgetRuntime,
     /// Exclusive topology authority; callers receive only its read-only view.
-    editor: ComPtr<IChildrenEditorAbi>,
+    editor: neocogi_com::ComBox<IChildrenEditorAbi>,
     /// Committed child count, updated only after successful topology edits.
     count: usize,
     /// Requested policy stays separate from allocation-dependent clamping.
@@ -134,7 +134,7 @@ pub struct SplitView {
     /// Last routed local pointer position distinguishes the handle from inert pane backgrounds.
     pointer: Option<Vec2i>,
     /// Optional typed destination for user-originated position changes.
-    events: neocogi_ui_nodes_contracts::SplitViewEventPort,
+    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::SplitViewEventQueueAbi>,
 }
 
 impl SplitView {
@@ -144,7 +144,7 @@ impl SplitView {
         resources: crate::widget_object::SharedAssets,
         settings: SplitOptions,
         queue: Option<ComPtr<neocogi_ui_nodes_contracts::SplitViewEventQueueAbi>>,
-    ) -> Result<ComPtr<SplitViewAbi>, NcStatus> {
+    ) -> Result<neocogi_com::ComBox<SplitViewAbi>, NcStatus> {
         validate(settings)?;
         let editor = host.create_children()?;
         let runtime = WidgetRuntime::for_resources(host, WidgetOption::NONE, Some(&resources))?;
@@ -158,8 +158,8 @@ impl SplitView {
             pointer: None,
             events: Default::default(),
         };
-        Self::from_value_cyclic::<SplitViewAbi>(move |origin| {
-            value.events = neocogi_com::events::EventPort::with_queue(queue, origin);
+        Self::into_box_cyclic::<SplitViewAbi>(move |origin| {
+            value.events = crate::widget_object::WidgetEvents::with_queue(queue, origin);
             value
         })?
         .query()
@@ -199,15 +199,7 @@ impl HostedWidget for SplitView {
     fn runtime_mut(&mut self) -> &mut WidgetRuntime {
         &mut self.runtime
     }
-    /// Retires event delivery and every owned pane when the container closes.
-    fn close_children(&mut self) -> Result<ChildEditResult, NcStatus> {
-        self.editor.close()
-    }
-    /// Releases the divider mapping only after its panes retire.
-    fn close_contents(&mut self) {
-        self.events.close();
-        self.drag = Drag::Idle;
-    }
+
 }
 
 impl crate::widget_object::WidgetAlgorithm for SplitView {
@@ -227,38 +219,38 @@ impl neocogi_ui_nodes_contracts::SplitView for SplitView {
         self.editor.view()
     }
     /// Checks the two-pane capacity before the new child consumes its attachment claim.
-    fn insert(&mut self, index: u32, child: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>) -> Result<ChildEditResult, NcStatus> {
+    fn insert(&mut self, index: u32, child: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>) -> Result<(), NcStatus> {
         self.runtime.state.writable()?;
         if self.count >= 2 {
             return Err(NC_E_OUT_OF_RANGE);
         }
-        let result = self.editor.insert(index, child)?;
+        self.editor.insert(index, child)?;
         self.count += 1;
         self.invalidate();
-        Ok(result)
+        Ok(())
     }
-    /// Publishes invalidation even if closing the replaced subtree reports a teardown error.
-    fn replace(&mut self, index: u32, child: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>) -> Result<ChildEditResult, NcStatus> {
+    /// Publishes invalidation after the editor commits replacement and drops the old owner.
+    fn replace(&mut self, index: u32, child: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>) -> Result<(), NcStatus> {
         self.runtime.state.writable()?;
-        let result = self.editor.replace(index, child)?;
+        self.editor.replace(index, child)?;
         self.invalidate();
-        Ok(result)
+        Ok(())
     }
-    /// Commits the smaller topology before exposing the removed subtree's teardown status.
-    fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus> {
+    /// Publishes the smaller topology after dropping the removed owner.
+    fn remove(&mut self, index: u32) -> Result<(), NcStatus> {
         self.runtime.state.writable()?;
-        let result = self.editor.remove(index)?;
+        self.editor.remove(index)?;
         self.count -= 1;
         self.invalidate();
-        Ok(result)
+        Ok(())
     }
     /// Clears the complete split while retaining the container's identity and settings.
-    fn clear(&mut self) -> Result<ChildEditResult, NcStatus> {
+    fn clear(&mut self) -> Result<(), NcStatus> {
         self.runtime.state.writable()?;
-        let result = self.editor.clear()?;
+        self.editor.clear()?;
         self.count = 0;
         self.invalidate();
-        Ok(result)
+        Ok(())
     }
     /// Returns requested policy rather than an allocation-dependent shadow value.
     fn settings(&self) -> Result<SplitOptions, NcStatus> {

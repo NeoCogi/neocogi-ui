@@ -3,12 +3,11 @@
 //! The two concrete objects share only lifecycle plumbing. The counter owns its scalar value and
 //! event producer; the inset owns its padding and the host's sole authoritative child editor.
 #![deny(missing_docs)]
-use neocogi_demo_contracts::CounterEventPort;
 use neocogi_ui::com::widget::WidgetState;
 use neocogi_ui_core_contracts::*;
 use neocogi_demo_contracts::*;
 use neocogi_ui::{Painter, events::Activation};
-use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG, com_factory, com_object};
+use neocogi_com::{ComBox, WeakComBox, ComPtr, ComRef, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG, com_factory, com_object};
 use neocogi_ui_design::{CustomProperty, DesignWidgetManifest};
 use neocogi_ui_document_contracts::IDesignWidgetCatalog;
 
@@ -32,12 +31,6 @@ impl Common {
 /// Common inherited methods are identical; concrete content methods below carry all policy/data.
 macro_rules! widget {
     ($name:ident, $keyboard:expr, $frame:expr) => {
-        impl Drop for $name {
-            /// Only final allocation release closes; dropping a cloned COM handle does not.
-            fn drop(&mut self) {
-                let _ = IWidget::close(self);
-            }
-        }
         impl IWidget for $name {
             /// This widget forwards outputs and has no private inbox.
             fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
@@ -52,16 +45,6 @@ macro_rules! widget {
             /// The shared state accepts exactly one attachment over the object's lifetime.
             fn mount(&mut self) -> Result<(), NcStatus> {
                 self.common.state.mount()
-            }
-            /// Descendant preflight may refuse closure; committed cleanup diagnostics do not reopen it.
-            fn close(&mut self) -> Result<(), NcStatus> {
-                if !self.common.state.check_close()? {
-                    return Ok(());
-                }
-                let outcome = self.close_content()?;
-                self.common.state.complete_close();
-                self.common.calls.closes += 1;
-                outcome.finish()
             }
             /// Policy observation reads only common state and remains available during shared calls.
             fn properties(&self) -> Result<WidgetProperties, NcStatus> {
@@ -122,16 +105,16 @@ struct CounterObject {
     /// The one semantic counter value; labels are short-lived snapshots of it.
     count: u32,
     /// Sole destination for the complete enum-valued event stream.
-    event: CounterEventPort,
+    event: Option<(ComPtr<CounterEventQueueAbi>, WeakComBox<CounterAbi>)>,
 }
 impl CounterObject {
     /// Validates runtime authority and publishes one fully initialized counter identity.
-    fn create(host: ComRef<'_, IWidgetHostAbi>, queue: Option<ComPtr<neocogi_demo_contracts::CounterEventQueueAbi>>) -> Result<ComPtr<CounterAbi>, NcStatus> {
+    fn create(host: ComRef<'_, IWidgetHostAbi>, queue: Option<ComPtr<neocogi_demo_contracts::CounterEventQueueAbi>>) -> Result<ComBox<CounterAbi>, NcStatus> {
         host.check_mutation()?;
-        Self::from_value_cyclic::<CounterAbi>(move |origin| Self {
+        Self::into_box_cyclic::<CounterAbi>(move |origin| Self {
             common: Common::new(host, WidgetOptions::FRAME),
             count: 0,
-            event: neocogi_com::events::EventPort::with_queue(queue, origin),
+            event: queue.map(|queue| (queue, origin)),
         })?
         .query()
     }
@@ -142,8 +125,8 @@ impl CounterObject {
             self.count = self.count.saturating_add(1);
             // A rejected foreign post cannot erase this already committed change.
             self.common.state.record_change(GeometryChange::Changed);
-            self.event.post(&CounterEvent::Activated(Activation { label: self.count.to_string() }))?;
-            self.event.post(&CounterEvent::Changed(CounterChanged { value: self.count }))?;
+            self.post(&CounterEvent::Activated(Activation { label: self.count.to_string() }))?;
+            self.post(&CounterEvent::Changed(CounterChanged { value: self.count }))?;
             Ok(GeometryChange::Changed)
         } else {
             Ok(GeometryChange::NoChange)
@@ -153,10 +136,13 @@ impl CounterObject {
     fn paint_content(&self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
         painter.text(state.rect, &self.count.to_string())
     }
-    /// Ordinary interaction work expires even if callers retain the closed control.
-    fn close_content(&mut self) -> Result<ChildEditResult, NcStatus> {
-        self.event.close();
-        Ok(ChildEditResult { teardown: neocogi_com::NC_OK })
+    /// Enqueues a typed snapshot while lending its live origin. Destruction drops
+    /// the receiver automatically; there is no separate port-close state.
+    fn post(&mut self, event: &CounterEvent) -> Result<(), NcStatus> {
+        match &mut self.event {
+            None => Ok(()),
+            Some((queue, origin)) => queue.post(origin.borrow()?.as_com_ref(), neocogi_com::NcValueRef::new(event)?),
+        }
     }
 }
 // Focus=1, Tab=2, Enter=4 and Space=8 are the canonical WidgetProperties keyboard bits.
@@ -196,7 +182,7 @@ struct Inset {
     /// Authored inset; child measurement and placement use this same scalar.
     padding: i32,
     /// Private writer; public children() returns its distinct read-only view.
-    editor: ComPtr<IChildrenEditorAbi>,
+    editor: neocogi_com::ComBox<IChildrenEditorAbi>,
 }
 impl Inset {
     /// This layout-only container has no input-dependent semantic state.
@@ -207,10 +193,7 @@ impl Inset {
     fn paint_content(&self, _state: WidgetPaint, _painter: &mut Painter<'_>) -> Result<(), NcStatus> {
         Ok(())
     }
-    /// Child teardown can fail after topology commits; preserve the ordinary committed result.
-    fn close_content(&mut self) -> Result<ChildEditResult, NcStatus> {
-        self.editor.close()
-    }
+
 }
 widget!(Inset, 0, WidgetFrame::Panel);
 impl IContainer for Inset {
@@ -220,19 +203,19 @@ impl IContainer for Inset {
         self.editor.view()
     }
     /// The underlying editor rejects invalid indices and closes only the removed subtree.
-    fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus> {
+    fn remove(&mut self, index: u32) -> Result<(), NcStatus> {
         self.common.state.writable()?;
         self.editor.remove(index)
     }
     /// Emptying preserves the container allocation and its authored padding for future attachment.
-    fn clear(&mut self) -> Result<ChildEditResult, NcStatus> {
+    fn clear(&mut self) -> Result<(), NcStatus> {
         self.common.state.writable()?;
         self.editor.clear()
     }
 }
 impl IInset for Inset {
     /// Read cardinality from its authoritative sequence; no second has-child flag can become stale.
-    fn set_child(&mut self, child: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>) -> Result<ChildEditResult, NcStatus> {
+    fn set_child(&mut self, child: ComBox<IWidgetAbi>) -> Result<(), NcStatus> {
         self.common.state.writable()?;
         if self.editor.view()?.child_count()? == 0 {
             self.editor.insert(0, child)
@@ -350,7 +333,7 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
         host: ComRef<'_, IWidgetHostAbi>,
         properties: NcCopyFromBufferOffset<'_, u8>,
         events: neocogi_com::NcValueRef<'_, neocogi_ui_document_contracts::WidgetEventBinding>,
-    ) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
+    ) -> Result<ComBox<IWidgetAbi>, NcStatus> {
         if index != 0 {
             return Err(NC_E_INVALID_ARG);
         }
@@ -377,15 +360,15 @@ impl ExtensionProvider for ExtensionProviderObject {
         &self,
         host: ComRef<'_, IWidgetHostAbi>,
         events: neocogi_com::NcValueRef<'_, neocogi_demo_contracts::CounterEventBinding>,
-    ) -> Result<ComPtr<CounterAbi>, NcStatus> {
+    ) -> Result<ComBox<CounterAbi>, NcStatus> {
         CounterObject::create(host, events.to_owned()?.into_queue())
     }
 
     /// One empty editor is the only topology allocation; no native child list is created in this plugin.
-    fn inset(&self, host: ComRef<'_, IWidgetHostAbi>) -> Result<ComPtr<IInsetAbi>, NcStatus> {
+    fn inset(&self, host: ComRef<'_, IWidgetHostAbi>) -> Result<ComBox<IInsetAbi>, NcStatus> {
         host.check_mutation()?;
         let editor = host.create_children()?;
-        Inset::from_value(Inset {
+        Inset::into_box(Inset {
             common: Common::new(host, WidgetOptions::NONE),
             padding: 4,
             editor,

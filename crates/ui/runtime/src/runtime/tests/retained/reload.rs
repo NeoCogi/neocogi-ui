@@ -11,12 +11,11 @@ fn receiver<C: neocogi_com::events::EventSource>(key: &str, queue: ComPtr<C::Que
 
 /// Mounts a document slot in an ordinary window using the production runtime.
 fn slot(ui: &Ui) -> ReloadSlot {
-    let mut root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
-    let owner = window(ui, "runtime documents", Rect { x: 10, y: 10, width: 400, height: 400 }, &root);
-    let slot = ReloadSlot::new(ui.clone(), owner).unwrap();
-    root.insert(0, slot.widget(), LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
-        .unwrap()
-        .finish()
+    let root_owner = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
+    let mut root = root_owner.handle();
+    let owner = window(ui, "runtime documents", Rect { x: 10, y: 10, width: 400, height: 400 }, root_owner);
+    let mut slot = ReloadSlot::new(ui.clone(), owner).unwrap();
+    root.insert(0, slot.take_widget().unwrap(), LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
         .unwrap();
     slot
 }
@@ -403,7 +402,7 @@ fn widget_flag_enablement_preserves_requested_flags_without_capturing_effective_
     slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     let component = slot.component().unwrap();
     let root = component.root().unwrap();
-    let mut common = root.as_interface().add_ref();
+    let mut common = root.as_interface().clone();
     assert_eq!(common.properties().unwrap().options, WidgetOptions::FRAME | WidgetOptions::GRAB_SCROLL);
     common.clear_flags(WidgetOptions::FRAME).unwrap();
     common.set_flags(WidgetOptions::ALIGN_RIGHT).unwrap();
@@ -689,7 +688,7 @@ fn application_owns_checkbox_actions_and_complete_event_consumption() {
     )
     .unwrap();
     fixture.frame(VIEW).unwrap();
-    let form = slot.component().unwrap().root().unwrap().as_interface().add_ref().query::<FormAbi>().unwrap();
+    let form = slot.component().unwrap().root().unwrap().as_interface().clone().query::<FormAbi>().unwrap();
     let children = form.children().unwrap();
     let mut target = Widget::from_interface(children.child(1).unwrap().query::<CheckboxAbi>().unwrap());
     let mut second = Widget::from_interface(children.child(2).unwrap().query::<CheckboxAbi>().unwrap());
@@ -747,7 +746,7 @@ fn textbox_enum_stream_drives_form_action_and_public_sink() {
     )
     .unwrap();
     fixture.frame(VIEW).unwrap();
-    let form = slot.component().unwrap().root().unwrap().as_interface().add_ref().query::<FormAbi>().unwrap();
+    let form = slot.component().unwrap().root().unwrap().as_interface().clone().query::<FormAbi>().unwrap();
     let children = form.children().unwrap();
     let mut preview = Widget::from_interface(children.child(1).unwrap().query::<TextBlockAbi>().unwrap());
     pointer(&fixture.ui, Point { x: 30, y: 30 }, true);
@@ -884,19 +883,18 @@ fn compiled_metadata_can_drop_before_the_actual_root_is_mounted() {
         let loader = Loader::new(fixture.ui.clone(), None, Resources::new()).unwrap();
         let (sender, messages) = std::sync::mpsc::channel::<()>();
         let events = receiver::<ButtonAbi>("save", neocogi_ui::test_event_queue!(button, (), sender, |_queue, _origin, _| ()).unwrap()).unwrap();
-        let compiled = match binary {
+        let mut compiled = match binary {
             true => loader.load_with_events(&document.to_binary().unwrap(), events).unwrap(),
             false => loader.compile_with_events(&document, events).unwrap(),
         };
-        let root = compiled.root().unwrap();
+        let root = compiled.take_root().unwrap();
         let button = compiled.widget::<ButtonAbi>("save").unwrap();
         drop(compiled);
         assert!(button.label().is_ok());
         let window = fixture
             .ui
-            .window("actual compiled root", Rect { x: 10, y: 10, width: 400, height: 300 }, &root)
+            .window("actual compiled root", Rect { x: 10, y: 10, width: 400, height: 300 }, root)
             .unwrap();
-        drop(root);
         assert!(button.label().is_ok(), "the runtime owns the mounted tree");
         assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
         window.close().unwrap();

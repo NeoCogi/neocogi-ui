@@ -2,13 +2,15 @@
 use crate::factory::NodeServices;
 use neocogi_ui_core_contracts::*;
 use neocogi_ui_nodes_contracts::{ContentIcon, CrossSize, FlowDirection, LayoutTrack, LinearEdge};
-use neocogi_ui::{LinearWidget, ListItemWidget, ScrollAreaWidget, TextBlockWidget, TextboxWidget};
-use neocogi_com::{ComPtr, ComRef, LocalCom, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_object};
+use neocogi_ui::{ScrollAreaWidget, TextBlockWidget, TextboxWidget};
+use neocogi_com::{ComBox, WeakComBox, ComPtr, ComRef, WeakLocalBox, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_object};
 use std::{
     path::{Path, PathBuf},
     rc::Rc,
 };
 use crate::boundary::text;
+use crate::widget_object::WidgetEvents;
+use neocogi_ui::OwnedWidget;
 mod queue;
 use queue::DialogQueue;
 use std::sync::mpsc::{Receiver, TryRecvError};
@@ -18,7 +20,7 @@ struct Request {
     /// One authoritative phase covers public calls, child delivery and retirement.
     phase: RequestPhase,
     /// Installed concrete completion receiver; consumers own their committed outcomes.
-    completed: IFileDialogEventPort,
+    completed: WidgetEvents<IFileDialogEventQueueAbi>,
 }
 
 /// Mutually exclusive picker-request lifecycle; no two booleans can disagree.
@@ -71,7 +73,7 @@ impl Request {
             RequestPhase::Active => self.completed.post(&IFileDialogEvent::Completed(FileDialogCompletion::Cancelled)),
             RequestPhase::Idle | RequestPhase::Closed => Ok(()),
         };
-        self.completed.close();
+        self.completed = Default::default();
         result
     }
 }
@@ -115,9 +117,9 @@ struct Model {
     /// Complete most recent directory-read diagnostic, also available through the component interface.
     diagnostic: String,
     /// Toolbar identities and commands remain plain exclusively owned model data.
-    buttons: Vec<(neocogi_com::WeakComPtr<neocogi_ui::ButtonAbi>, Command)>,
+    buttons: Vec<(neocogi_com::WeakComBox<neocogi_ui::ButtonAbi>, Command)>,
     /// Only installed directory rows may resolve commands, even if old rows remain retained.
-    rows: Vec<(neocogi_com::WeakComPtr<neocogi_ui::ListItemAbi>, Command)>,
+    rows: Vec<(neocogi_com::WeakComBox<neocogi_ui::ListItemAbi>, Command)>,
 }
 impl Model {
     /// Returns the modal after the one-time construction transaction has installed it.
@@ -177,11 +179,11 @@ impl Model {
 #[derive(Clone)]
 enum Message {
     /// Owned button event resolved after traversal against the current component controls.
-    Button(neocogi_com::WeakComPtr<neocogi_ui::ButtonAbi>, neocogi_ui::events::button::Event),
+    Button(neocogi_com::WeakComBox<neocogi_ui::ButtonAbi>, neocogi_ui::events::button::Event),
     /// Owned list_item event resolved after traversal against the current component controls.
-    Row(neocogi_com::WeakComPtr<neocogi_ui::ListItemAbi>, neocogi_ui::events::list_item::Event),
+    Row(neocogi_com::WeakComBox<neocogi_ui::ListItemAbi>, neocogi_ui::events::list_item::Event),
     /// Owned textbox event resolved after traversal against the current component controls.
-    Text(neocogi_com::WeakComPtr<neocogi_ui::TextboxAbi>, neocogi_ui::events::textbox::Event),
+    Text(neocogi_com::WeakComBox<neocogi_ui::TextboxAbi>, neocogi_ui::events::textbox::Event),
     /// Owned window event resolved after traversal against the current component controls.
     Window(neocogi_com::WeakComPtr<IWindowAbi>, neocogi_ui::events::window::Event),
 }
@@ -216,9 +218,9 @@ enum Command {
 /// One completely built column and its owned row commands, still unpublished to the modal.
 struct Column {
     /// Actual COM content root to install into the stable scroll controller.
-    root: LinearWidget,
+    root: OwnedWidget<neocogi_ui::LinearAbi>,
     /// Exact row identities and actions prepared with this content candidate.
-    actions: Vec<(neocogi_com::WeakComPtr<neocogi_ui::ListItemAbi>, Command)>,
+    actions: Vec<(neocogi_com::WeakComBox<neocogi_ui::ListItemAbi>, Command)>,
 }
 /// Complete directory candidate; neither column becomes live if any native read fails.
 struct Listing {
@@ -233,17 +235,17 @@ fn line(
     nodes: &Rc<DialogNodes>,
     direction: FlowDirection,
     cross: CrossSize,
-    children: Vec<(ComPtr<IWidgetAbi>, LayoutTrack)>,
-) -> Result<LinearWidget, NcStatus> {
-    let line = LinearWidget::from_interface(crate::Linear::create_com(nodes.host.clone(), nodes.resources.clone(), direction, cross.into())?);
+    children: Vec<(ComBox<IWidgetAbi>, LayoutTrack)>,
+) -> Result<OwnedWidget<neocogi_ui::LinearAbi>, NcStatus> {
+    let mut line = OwnedWidget::from_interface(crate::Linear::create_com(nodes.host.clone(), nodes.resources.clone(), direction, cross.into())?);
     for (index, (child, track)) in children.into_iter().enumerate() {
-        line.as_interface().insert(index as u32, child.as_com_ref(), LinearEdge::new(track))?.finish()?;
+        line.insert(index as u32, child, LinearEdge::new(track))?;
     }
     Ok(line)
 }
 /// Constructs a text display through the ordinary widget factory.
-fn label(nodes: &Rc<DialogNodes>, value: &str) -> Result<TextBlockWidget, NcStatus> {
-    Ok(TextBlockWidget::from_interface(crate::TextBlock::create_com(
+fn label(nodes: &Rc<DialogNodes>, value: &str) -> Result<OwnedWidget<neocogi_ui::TextBlockAbi>, NcStatus> {
+    Ok(OwnedWidget::from_interface(crate::TextBlock::create_com(
         nodes.host.clone(),
         nodes.resources.clone(),
         NcCopyFromBufferOffset::new(0, value.as_bytes()),
@@ -251,9 +253,9 @@ fn label(nodes: &Rc<DialogNodes>, value: &str) -> Result<TextBlockWidget, NcStat
     )?))
 }
 /// Constructs a complete command Button through the dynamically implemented factory shorthand.
-fn button(nodes: &Rc<DialogNodes>, value: &str) -> Result<neocogi_ui::ButtonWidget, NcStatus> {
+fn button(nodes: &Rc<DialogNodes>, value: &str) -> Result<OwnedWidget<neocogi_ui::ButtonAbi>, NcStatus> {
     let queue = nodes.queue.query::<neocogi_ui::ButtonEventQueueAbi>()?;
-    let button = neocogi_ui::ButtonWidget::from_interface(crate::Button::create_com(
+    let button = OwnedWidget::from_interface(crate::Button::create_com(
         nodes.host.clone(),
         nodes.resources.clone(),
         NcCopyFromBufferOffset::new(0, value.as_bytes()),
@@ -264,7 +266,7 @@ fn button(nodes: &Rc<DialogNodes>, value: &str) -> Result<neocogi_ui::ButtonWidg
 }
 /// Builds a complete column with exact path actions and fixed ordinary list-row measurements.
 fn column(nodes: &Rc<DialogNodes>, directory: &Path, paths: Vec<PathBuf>, folder: bool) -> Result<Column, NcStatus> {
-    let mut children = vec![(label(nodes, if folder { "Folders" } else { "Files" })?.node_interface()?, LayoutTrack::Content)];
+    let mut children = vec![(label(nodes, if folder { "Folders" } else { "Files" })?.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Content)];
     let empty = paths.is_empty();
     let mut actions = Vec::with_capacity(paths.len());
     for path in paths {
@@ -275,18 +277,18 @@ fn column(nodes: &Rc<DialogNodes>, directory: &Path, paths: Vec<PathBuf>, folder
         };
         let action = if folder { Command::Folder(path.clone()) } else { Command::File(path.clone()) };
         let queue = nodes.queue.query::<neocogi_ui::ListItemEventQueueAbi>()?;
-        let mut item = ListItemWidget::from_interface(crate::ListItem::create_com(
+        let mut item = OwnedWidget::from_interface(crate::ListItem::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
             NcCopyFromBufferOffset::new(0, display.as_bytes()),
             Some(queue),
         )?);
-        actions.push((item.as_interface().downgrade()?, action));
+        actions.push((item.as_interface().clone(), action));
         item.set_icon_role(if folder { ContentIcon::ClosedFolder } else { ContentIcon::File })?;
-        children.push((item.node_interface()?, LayoutTrack::Content));
+        children.push((item.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Content));
     }
     if empty {
-        children.push((label(nodes, "(empty)")?.node_interface()?, LayoutTrack::Content));
+        children.push((label(nodes, "(empty)")?.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Content));
     }
     Ok(Column {
         root: line(nodes, FlowDirection::TopToBottom, CrossSize::Stretch, children)?,
@@ -305,7 +307,7 @@ impl Listing {
 
 impl FileDialog {
     /// Constructs one hidden modal from actual COM controls; no native widget handle or generic application state enters its ABI.
-    fn new(services: Rc<NodeServices>, parent: ComRef<'_, IWindowAbi>, queue: Option<ComPtr<IFileDialogEventQueueAbi>>) -> Result<LocalCom<Self>, NcStatus> {
+    fn new(services: Rc<NodeServices>, parent: ComRef<'_, IWindowAbi>, queue: Option<ComPtr<IFileDialogEventQueueAbi>>) -> Result<WeakLocalBox<Self>, NcStatus> {
         services.host.check_mutation()?;
         let (events_tx, events) = std::sync::mpsc::channel();
         let nodes = Rc::new(DialogNodes {
@@ -315,13 +317,13 @@ impl FileDialog {
         });
         let path_sink = nodes.queue.query::<neocogi_ui::TextboxEventQueueAbi>()?;
         let filename_sink = path_sink.clone();
-        let path = TextboxWidget::from_interface(crate::Textbox::create_com(
+        let path = OwnedWidget::from_interface(crate::Textbox::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
             NcCopyFromBufferOffset::new(0, b""),
             Some(path_sink),
         )?);
-        let filename = TextboxWidget::from_interface(crate::Textbox::create_com(
+        let filename = OwnedWidget::from_interface(crate::Textbox::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
             NcCopyFromBufferOffset::new(0, b""),
@@ -334,28 +336,42 @@ impl FileDialog {
         let cancel = button(&nodes, "Cancel")?;
         let folder_content = column(&nodes, Path::new(""), Vec::new(), true)?;
         let file_content = column(&nodes, Path::new(""), Vec::new(), false)?;
-        let folders = ScrollAreaWidget::from_interface(crate::ScrollArea::create_com(
+        let folders = OwnedWidget::from_interface(crate::ScrollArea::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
-            folder_content.root.node_interface()?.as_com_ref(),
+            folder_content.root.into_interface().query::<IWidgetAbi>()?,
             true,
         )?);
-        let files = ScrollAreaWidget::from_interface(crate::ScrollArea::create_com(
+        let files = OwnedWidget::from_interface(crate::ScrollArea::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
-            file_content.root.node_interface()?.as_com_ref(),
+            file_content.root.into_interface().query::<IWidgetAbi>()?,
             true,
         )?);
         let error = label(&nodes, "")?;
+        // Capture observers before each unique owner moves into the layout tree.
+        let path_handle = path.handle();
+        let filename_handle = filename.handle();
+        let accept_handle = accept.handle();
+        let error_handle = error.handle();
+        let folders_handle = folders.handle();
+        let files_handle = files.handle();
+        let buttons = vec![
+            (up.as_interface().clone(), Command::Up),
+            (home.as_interface().clone(), Command::Home),
+            (go.as_interface().clone(), Command::Go),
+            (accept.as_interface().clone(), Command::Accept),
+            (cancel.as_interface().clone(), Command::Cancel),
+        ];
         let toolbar = line(
             &nodes,
             FlowDirection::LeftToRight,
             CrossSize::Content,
             vec![
-                (up.node_interface()?, LayoutTrack::Fixed { extent: 56 }),
-                (home.node_interface()?, LayoutTrack::Fixed { extent: 56 }),
-                (path.node_interface()?, LayoutTrack::Flex { weight: 1.0 }),
-                (go.node_interface()?, LayoutTrack::Fixed { extent: 56 }),
+                (up.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Fixed { extent: 56 }),
+                (home.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Fixed { extent: 56 }),
+                (path.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Flex { weight: 1.0 }),
+                (go.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Fixed { extent: 56 }),
             ],
         )?;
         let browser = line(
@@ -363,8 +379,8 @@ impl FileDialog {
             FlowDirection::LeftToRight,
             CrossSize::Stretch,
             vec![
-                (folders.node_interface()?, LayoutTrack::Flex { weight: 1.0 }),
-                (files.node_interface()?, LayoutTrack::Flex { weight: 2.0 }),
+                (folders.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Flex { weight: 1.0 }),
+                (files.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Flex { weight: 2.0 }),
             ],
         )?;
         let filename_line = line(
@@ -372,8 +388,8 @@ impl FileDialog {
             FlowDirection::LeftToRight,
             CrossSize::Content,
             vec![
-                (label(&nodes, "File name:")?.node_interface()?, LayoutTrack::Fixed { extent: 86 }),
-                (filename.node_interface()?, LayoutTrack::Flex { weight: 1.0 }),
+                (label(&nodes, "File name:")?.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Fixed { extent: 86 }),
+                (filename.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Flex { weight: 1.0 }),
             ],
         )?;
         let actions = line(
@@ -381,9 +397,9 @@ impl FileDialog {
             FlowDirection::LeftToRight,
             CrossSize::Content,
             vec![
-                (label(&nodes, "")?.node_interface()?, LayoutTrack::Flex { weight: 1.0 }),
-                (cancel.node_interface()?, LayoutTrack::Fixed { extent: 96 }),
-                (accept.node_interface()?, LayoutTrack::Fixed { extent: 96 }),
+                (label(&nodes, "")?.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Flex { weight: 1.0 }),
+                (cancel.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Fixed { extent: 96 }),
+                (accept.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Fixed { extent: 96 }),
             ],
         )?;
         // Embed the actual root layout value in FileDialog. It has no separate COM
@@ -395,16 +411,16 @@ impl FileDialog {
             Some(&nodes.resources),
         )?;
         for (index, (child, track)) in [
-            (toolbar.node_interface()?, LayoutTrack::Content),
-            (browser.node_interface()?, LayoutTrack::Flex { weight: 1.0 }),
-            (filename_line.node_interface()?, LayoutTrack::Content),
-            (error.node_interface()?, LayoutTrack::Content),
-            (actions.node_interface()?, LayoutTrack::Content),
+            (toolbar.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Content),
+            (browser.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Flex { weight: 1.0 }),
+            (filename_line.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Content),
+            (error.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Content),
+            (actions.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Content),
         ]
         .into_iter()
         .enumerate()
         {
-            neocogi_ui_nodes_contracts::Linear::insert(&mut shell, index as u32, child.as_com_ref(), LinearEdge::new(track))?.finish()?;
+            neocogi_ui_nodes_contracts::Linear::insert(&mut shell, index as u32, child, LinearEdge::new(track))?;
         }
         let request = Request {
             phase: RequestPhase::Idle,
@@ -417,50 +433,44 @@ impl FileDialog {
             directory: PathBuf::new(),
             path_dirty: false,
             selected: None,
-            path: path.clone(),
-            filename: filename.clone(),
-            accept: accept.clone(),
-            error,
-            folders,
-            files,
+            path: path_handle,
+            filename: filename_handle,
+            accept: accept_handle,
+            error: error_handle,
+            folders: folders_handle,
+            files: files_handle,
             diagnostic: String::new(),
             rows: Vec::new(),
-            buttons: vec![
-                (up.as_interface().downgrade()?, Command::Up),
-                (home.as_interface().downgrade()?, Command::Home),
-                (go.as_interface().downgrade()?, Command::Go),
-                (accept.as_interface().downgrade()?, Command::Accept),
-                (cancel.as_interface().downgrade()?, Command::Cancel),
-            ],
+            buttons,
         };
-        let dialog = Self::into_local_cyclic::<IFileDialogAbi>(move |origin| {
-            model.request.completed = neocogi_com::events::EventPort::with_queue(queue, origin);
+        let dialog = Self::into_local_box_cyclic::<IFileDialogAbi>(move |origin| {
+            model.request.completed = WidgetEvents::with_queue(queue, origin);
             Self { shell, model, messages: Some(events) }
         })?;
-        let root = dialog.query::<IWidgetAbi>()?;
         let windows = services.windows.clone();
         let window_sink = dialog.try_borrow()?.model.nodes.queue.query::<IWindowEventQueueAbi>()?;
         let window_binding = IWindowEventBinding::from_queue(Some(window_sink.as_com_ref()));
+        let mut observer = dialog.downgrade();
+        let root = dialog.into_interface::<IWidgetAbi>()?;
         let window = windows.create_dialog(
             parent,
             NcCopyFromBufferOffset::new(0, b"Open File"),
             FILE_DIALOG_RECT,
-            root.as_com_ref(),
+            root,
             neocogi_com::NcValueRef::new(&window_binding)?,
         )?;
         let connected = (|| {
             window.set_options(WindowOptions::FRAME)?;
-            let mut local = dialog.try_borrow_mut()?;
+            let mut local = observer.try_borrow_mut()?;
             local.model.window = Some(window.clone());
             Ok::<(), NcStatus>(())
         })();
         if let Err(error) = connected {
             // A failed construction must not leave an unreachable modal definition in the forest.
             let _ = window.close();
-            let _ = IWidget::close(&mut *dialog.try_borrow_mut()?);
             return Err(error);
         }
-        Ok(dialog)
+        Ok(observer)
     }
 }
 
@@ -482,8 +492,8 @@ impl Model {
     fn install(&mut self, directory: PathBuf, listing: Listing, reset_scroll: bool) -> Result<(), NcStatus> {
         // These are private built-in roles: their composite validates the live
         // modal before replacement and no caller can substitute a foreign child.
-        self.folders.replace_content(&listing.folders.root)?.finish()?;
-        self.files.replace_content(&listing.files.root)?.finish()?;
+        self.folders.replace_content(listing.folders.root)?;
+        self.files.replace_content(listing.files.root)?;
         self.rows = listing.folders.actions.into_iter().chain(listing.files.actions).collect();
         self.directory = directory;
         self.selected = None;
@@ -543,7 +553,7 @@ impl Model {
         let message = match message {
             Message::Button(origin, event) => {
                 drop(event);
-                if origin.upgrade()?.is_none() {
+                if origin.borrow().is_err() {
                     return Ok(());
                 }
                 let action = self
@@ -558,7 +568,7 @@ impl Model {
             }
             Message::Row(origin, event) => {
                 drop(event);
-                if origin.upgrade()?.is_none() {
+                if origin.borrow().is_err() {
                     return Ok(());
                 }
                 let action = self
@@ -572,12 +582,12 @@ impl Model {
                 }
             }
             Message::Text(origin, event) => {
-                let Some(origin) = origin.upgrade()? else {
+                if origin.borrow().is_err() {
                     return Ok(());
                 };
                 match (
-                    origin.as_com_ref().same_object(self.path.as_interface()),
-                    origin.as_com_ref().same_object(self.filename.as_interface()),
+                    origin.same_object(self.path.as_interface()),
+                    origin.same_object(self.filename.as_interface()),
                     event,
                 ) {
                     (true, _, neocogi_ui::textbox::Event::Changed(_)) => Command::PathEdited,
@@ -676,21 +686,6 @@ impl IWidget for FileDialog {
     fn mount(&mut self) -> Result<(), NcStatus> {
         IWidget::mount(&mut self.shell)
     }
-    /// Closes descendants before disconnecting private delivery and settling one outcome.
-    fn close(&mut self) -> Result<(), NcStatus> {
-        use crate::widget_object::HostedWidget;
-        if !self.shell.runtime().state.check_close()? {
-            return Ok(());
-        }
-        // Acquire and remove descendants before any local terminal transition.
-        // The outcome distinguishes a refused preflight from committed diagnostics.
-        let outcome = self.shell.close_children()?;
-        self.messages.take();
-        let completed = self.model.request.close();
-        self.shell.close_contents();
-        self.shell.runtime_mut().state.complete_close();
-        outcome.finish().and(completed)
-    }
     /// Receives one child fact with ordinary exclusive access to the model.
     fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
         IWidget::properties(&self.shell)?;
@@ -751,13 +746,6 @@ impl IContainerLayout for FileDialog {
         IContainerLayout::accepts_event(&self.shell, event, text)
     }
 }
-impl Drop for FileDialog {
-    /// Unpublished or otherwise finally released dialogs use the same idempotent cleanup.
-    fn drop(&mut self) {
-        let _ = IWidget::close(self);
-    }
-}
-
 impl IFileDialog for FileDialog {
     /// Returns the actual modal capability without exposing private structural roles.
     fn window(&self) -> Result<ComPtr<IWindowAbi>, NcStatus> {
@@ -802,10 +790,11 @@ impl IFileDialog for FileDialog {
         if self.model.request.closed() {
             return Ok(());
         }
-        self.model.window()?.close()?;
-        // Removal may have deferred this same widget's COM close. Direct local
-        // cleanup uses our existing mutable borrow; the later call is idempotent.
-        IWidget::close(self)
+        // Cancellation is a dialog operation performed while its owner is live.
+        // Removing the window then drops the owner; this admitted call holds the
+        // allocation until it returns, without publishing a closed widget state.
+        self.model.request.close()?;
+        self.model.window()?.close()
     }
     /// Diagnostics remain readable after the component's terminal closure.
     fn diagnostic(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
@@ -817,7 +806,7 @@ pub(crate) fn create(
     services: Rc<NodeServices>,
     parent: ComRef<'_, IWindowAbi>,
     queue: Option<ComPtr<IFileDialogEventQueueAbi>>,
-) -> Result<ComPtr<IFileDialogAbi>, NcStatus> {
+) -> Result<WeakComBox<IFileDialogAbi>, NcStatus> {
     FileDialog::new(services, parent, queue)?.query()
 }
 

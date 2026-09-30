@@ -19,7 +19,7 @@
 //!
 //! Decode exact native paths with `events::completed_file_path` when handling a completion.
 use crate::*;
-use neocogi_com::{ComPtr, ComRef, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
+use neocogi_com::{ComPtr, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
 use std::path::{Path, PathBuf};
 
 /// Complete application-owned request; path identity never passes through the title or display label.
@@ -54,16 +54,16 @@ impl FileDialogRequest {
 #[derive(Clone)]
 pub struct FileDialog {
     /// Producer-owned picker capability, independent of its window's logical lifetime.
-    interface: ComPtr<IFileDialogAbi>,
+    interface: neocogi_com::WeakComBox<IFileDialogAbi>,
 }
 impl FileDialog {
     /// Wraps an already checked picker capability without copying its request state.
-    pub fn from_interface(interface: ComPtr<IFileDialogAbi>) -> Self {
+    pub fn from_interface(interface: neocogi_com::WeakComBox<IFileDialogAbi>) -> Self {
         Self { interface }
     }
     /// Borrows the concrete component interface for custom static helpers; its single queue was attached by the constructor helper.
-    pub fn as_interface(&self) -> ComRef<'_, IFileDialogAbi> {
-        self.interface.as_com_ref()
+    pub fn as_interface(&self) -> &neocogi_com::WeakComBox<IFileDialogAbi> {
+        &self.interface
     }
     /// Returns the actual modal for ordinary window operations; it cannot be replaced by arbitrary popup content.
     pub fn window(&self) -> Result<ComPtr<IWindowAbi>, NcStatus> {
@@ -89,7 +89,7 @@ impl FileDialog {
     pub fn cancel(&mut self) -> Result<bool, NcStatus> {
         self.interface.cancel()
     }
-    /// Permanently destroys the component's modal and closes its actual widget subtree.
+    /// Cancels an active request, removes the modal, and drops its widget owner.
     pub fn close(&mut self) -> Result<(), NcStatus> {
         self.interface.close()
     }

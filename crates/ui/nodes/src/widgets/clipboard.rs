@@ -368,7 +368,7 @@ mod tests {
         let Request::Read(completion) = harness.requests.recv().unwrap() else {
             panic!("expected read")
         };
-        crate::widget_object::HostedWidget::close_contents(&mut textbox);
+        drop(textbox);
         assert!(completion.complete(0, NcCopyFromBufferOffset::new(0, b"late")).is_err());
     }
 }

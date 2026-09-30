@@ -112,8 +112,8 @@ pub struct Button {
     /// Base widget options.
     /// Initialization-only fill behavior.
     fill: WidgetFillOption,
-    /// Single event slot; receives its destination during construction and closes with the widget.
-    events: neocogi_ui_nodes_contracts::ButtonEventPort,
+    /// Single event slot; receives its destination during construction and is released when the widget is destroyed.
+    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::ButtonEventQueueAbi>,
 }
 
 impl Button {
@@ -238,10 +238,7 @@ impl Widget for Button {
 }
 
 impl crate::widget_object::WidgetAlgorithm for Button {
-    /// Logical COM closure cancels ordinary submissions while retained widget references remain safe.
-    fn close_events(&mut self) {
-        self.events.close();
-    }
+
 }
 
 impl crate::widget_object::HostedWidget for Button {
@@ -335,11 +332,11 @@ impl Button {
         label: NcCopyFromBufferOffset<'_, u8>,
         options: WidgetOptions,
         queue: Option<ComPtr<neocogi_ui_nodes_contracts::ButtonEventQueueAbi>>,
-    ) -> Result<ComPtr<ButtonAbi>, NcStatus> {
+    ) -> Result<neocogi_com::ComBox<ButtonAbi>, NcStatus> {
         let mut value = Self::build(host, label, options, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
-        Self::from_value_cyclic::<ButtonAbi>(move |origin| {
-            value.events = neocogi_com::events::EventPort::with_queue(queue, origin);
+        Self::into_box_cyclic::<ButtonAbi>(move |origin| {
+            value.events = crate::widget_object::WidgetEvents::with_queue(queue, origin);
             value
         })?
         .query()

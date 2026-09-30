@@ -102,7 +102,7 @@ impl RuntimeStorage {
         placement: Placement,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>,
+        root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
     ) -> Result<ComPtr<IUnknown>, NcStatus> {
         self.factory.host.check_mutation()?;
         if rect.width < 0 || rect.height < 0 {
@@ -147,7 +147,7 @@ impl IWindowManager for Runtime {
         &self,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>,
+        root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
         events: neocogi_com::NcValueRef<'_, IWindowEventBinding>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.storage
@@ -160,7 +160,7 @@ impl IWindowManager for Runtime {
         parent: ComRef<'_, IWindowAbi>,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>,
+        root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
         events: neocogi_com::NcValueRef<'_, IWindowEventBinding>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.storage
@@ -178,7 +178,7 @@ impl IWindowManager for Runtime {
         parent: ComRef<'_, IWindowAbi>,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>,
+        root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
         events: neocogi_com::NcValueRef<'_, IWindowEventBinding>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.storage
@@ -195,7 +195,7 @@ impl IWindowManager for Runtime {
         &self,
         parent: ComRef<'_, IWindowAbi>,
         title: NcCopyFromBufferOffset<'_, u8>,
-        root: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>,
+        root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
         events: neocogi_com::NcValueRef<'_, IPopupEventBinding>,
     ) -> Result<ComPtr<IPopupAbi>, NcStatus> {
         self.storage
@@ -356,7 +356,7 @@ impl IWindow for LogicalWindow {
         };
         self.edit(WindowEdit::ChildClip(clip))
     }
-    /// Removes the complete native subtree, then closes every removed COM widget capability.
+    /// Removes the complete native subtree and drops its exclusive widget owners.
     fn close(&self) -> Result<(), NcStatus> {
         if self.closed.get() {
             return Ok(());
@@ -488,7 +488,7 @@ impl IPopup for LogicalPopup {
             options: WindowOption::from_bits(u32::from(options.raw())).ok_or(NC_E_INVALID_ARG)?,
         })
     }
-    /// Removes the definition and closes retained widget handles after the native detach.
+    /// Removes the definition and expires weak widget observations after native detach.
     fn close(&mut self) -> Result<(), NcStatus> {
         if self.closed {
             return Ok(());
@@ -527,7 +527,7 @@ mod tests {
         let runtime = crate::test_support::create_runtime(crate::test_support::test_atlas());
         let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
         let body = ui.widgets().button_unobserved("body").unwrap();
-        let owner = ui.window("pointer popup owner", Rect { x: 20, y: 20, width: 400, height: 200 }, &body).unwrap();
+        let owner = ui.window("pointer popup owner", Rect { x: 20, y: 20, width: 400, height: 200 }, body).unwrap();
         let menus = ui.menus().unwrap();
         let builder = menus.create("Pointer actions").unwrap();
         let (events_tx, events) = std::sync::mpsc::channel();
@@ -592,14 +592,14 @@ mod placement_tests {
         let weak_queue = queue.downgrade().unwrap();
         let rect = Rect { x: 20, y: 20, width: 320, height: 240 };
         let root = ui
-            .window_with_queue("root", rect, &ui.widgets().button_unobserved("root").unwrap(), Some(queue.as_com_ref()))
+            .window_with_queue("root", rect, ui.widgets().button_unobserved("root").unwrap(), Some(queue.as_com_ref()))
             .unwrap();
         let child = ui
             .child_window_with_queue(
                 root.as_com_ref(),
                 "child",
                 rect,
-                &ui.widgets().button_unobserved("child").unwrap(),
+                ui.widgets().button_unobserved("child").unwrap(),
                 Some(queue.as_com_ref()),
             )
             .unwrap();
@@ -608,7 +608,7 @@ mod placement_tests {
                 root.as_com_ref(),
                 "dialog",
                 rect,
-                &ui.widgets().button_unobserved("dialog").unwrap(),
+                ui.widgets().button_unobserved("dialog").unwrap(),
                 Some(queue.as_com_ref()),
             )
             .unwrap();

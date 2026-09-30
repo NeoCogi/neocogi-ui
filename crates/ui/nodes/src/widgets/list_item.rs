@@ -89,8 +89,8 @@ pub struct ListItem {
     /// Base widget options.
     /// Mutable label displayed for the item.
     label: String,
-    /// Single event slot; receives its destination during construction and closes with the widget.
-    events: neocogi_ui_nodes_contracts::ListItemEventPort,
+    /// Single event slot; receives its destination during construction and is released when the widget is destroyed.
+    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::ListItemEventQueueAbi>,
 }
 
 impl ListItem {
@@ -201,10 +201,7 @@ impl From<ListItemParameters> for crate::test_support::algorithm::Algorithm<List
 }
 
 impl crate::widget_object::WidgetAlgorithm for ListItem {
-    /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
-    fn close_events(&mut self) {
-        self.events.close();
-    }
+
 }
 
 impl crate::widget_object::HostedWidget for ListItem {
@@ -296,11 +293,11 @@ impl ListItem {
         resources: crate::widget_object::SharedAssets,
         label: NcCopyFromBufferOffset<'_, u8>,
         queue: Option<ComPtr<neocogi_ui_nodes_contracts::ListItemEventQueueAbi>>,
-    ) -> Result<ComPtr<ListItemAbi>, NcStatus> {
+    ) -> Result<neocogi_com::ComBox<ListItemAbi>, NcStatus> {
         let mut value = Self::build(host, label, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
-        Self::from_value_cyclic::<ListItemAbi>(move |origin| {
-            value.events = neocogi_com::events::EventPort::with_queue(queue, origin);
+        Self::into_box_cyclic::<ListItemAbi>(move |origin| {
+            value.events = crate::widget_object::WidgetEvents::with_queue(queue, origin);
             value
         })?
         .query()

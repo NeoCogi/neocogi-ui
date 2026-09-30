@@ -85,11 +85,11 @@ pub(super) fn emit(source: &mut String, events: &[(usize, &Node, String)], custo
     let queues = contracts(events, custom)?;
     source.push_str("/// Captured facts retain weak origins; resolve against current fields before dispatch.\npub enum QueuedEvent {\n");
     for (index, queue) in queues.iter().enumerate() {
-        writeln!(source, "    /// Complete stream for instances of {}.\n    Source{index} {{\n        /// Does not retain a removed widget.\n        origin: neocogi_com::WeakComPtr<{}>,\n        /// Owned snapshot acquired before post returned.\n        event: {},\n    }},", queue.interface, queue.interface, queue.payload).unwrap();
+        writeln!(source, "    /// Complete stream for instances of {}.\n    Source{index} {{\n        /// Does not retain a removed widget.\n        origin: neocogi_com::WeakComBox<{}>,\n        /// Owned snapshot acquired before post returned.\n        event: {},\n    }},", queue.interface, queue.interface, queue.payload).unwrap();
     }
     source.push_str("}\nimpl QueuedEvent {\n    /// Resolve only after generation validation; expired or foreign origins return None.\n    /// Inspect the captured payload directly when its origin lifetime is irrelevant.\n    pub fn resolve(self, form: &Form) -> Result<Option<Event>, neocogi_com::NcStatus> {\n        let _ = &form;\n        match self {\n");
     for (index, queue) in queues.iter().enumerate() {
-        writeln!(source, "            Self::Source{index} {{ origin, event }} => {{\n                let origin = match origin.upgrade()? {{ Some(origin) => origin, None => return Ok(None) }};\n                Ok(match origin.as_com_ref() {{").unwrap();
+        writeln!(source, "            Self::Source{index} {{ origin, event }} => {{\n                match origin.borrow() {{ Ok(_) => {{}}, Err(neocogi_com::NC_E_CLOSED) => return Ok(None), Err(error) => return Err(error) }};\n                Ok(match origin {{").unwrap();
         for member in &queue.members {
             let (ordinal, node, _) = &events[*member];
             writeln!(
@@ -115,7 +115,7 @@ pub(super) fn emit(source: &mut String, events: &[(usize, &Node, String)], custo
             if let Some(validate) = &queue.validate {
                 writeln!(source, "        {validate}(&event)?;").unwrap();
             }
-            writeln!(source, "        let event = QueuedEvent::Source{index} {{ origin: origin.downgrade()?, event }};\n        let _ = self.send.send(Message {{ generation: self.generation, event }});\n        Ok(())\n    }}\n}}").unwrap();
+            writeln!(source, "        let event = QueuedEvent::Source{index} {{ origin: origin.downgrade_box()?, event }};\n        let _ = self.send.send(Message {{ generation: self.generation, event }});\n        Ok(())\n    }}\n}}").unwrap();
         }
     }
     source.push_str("/// Supplies shared queue projections before Loader or ReloadSlot creates widgets.\npub fn events(generation: neocogi_ui_document::Generation, send: std::sync::mpsc::Sender<Message>) -> Result<neocogi_ui_document::EventBindings, neocogi_com::NcStatus> {\n    let mut bindings = neocogi_ui_document::EventBindings::new();\n");

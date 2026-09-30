@@ -6,7 +6,7 @@ use super::*;
 fn widget_flag_edits_preserve_requested_state_and_sticky_invalidation() {
     let runtime = runtime();
     let button = button(&runtime);
-    let mut widget: ComPtr<IWidgetAbi> = button.query().unwrap();
+    let mut widget: WeakComBox<IWidgetAbi> = button.downgrade().query().unwrap();
     widget.take_change().unwrap();
 
     // Replacement clears omitted constructor bits, while selective edits preserve new ones.
@@ -42,7 +42,8 @@ fn widget_flag_edits_preserve_requested_state_and_sticky_invalidation() {
 #[test]
 fn widget_flag_edits_reject_unknown_masks_and_closed_objects() {
     let runtime = runtime();
-    let mut widget: ComPtr<IWidgetAbi> = button(&runtime).query().unwrap();
+    let owner = button(&runtime);
+    let mut widget: WeakComBox<IWidgetAbi> = owner.downgrade().query().unwrap();
     widget.take_change().unwrap();
     widget.set_flags(WidgetOptions::ALIGN_RIGHT).unwrap();
     let before = widget.properties().unwrap();
@@ -57,13 +58,13 @@ fn widget_flag_edits_reject_unknown_masks_and_closed_objects() {
     assert_eq!(widget.clear_flags(WidgetOptions::from_raw(8)), Err(neocogi_com::NC_E_INVALID_TAG));
     assert_eq!(widget.take_change().unwrap(), GeometryChange::NoChange);
 
-    widget.close().unwrap();
+    drop(owner);
     assert_eq!(widget.replace_flags(WidgetOptions::NONE), Err(UI_E_CLOSED));
     assert_eq!(widget.set_flags(WidgetOptions::FRAME), Err(UI_E_CLOSED));
     assert_eq!(widget.clear_flags(WidgetOptions::NONE), Err(UI_E_CLOSED));
 
     // Unmounted handles are also invalidated when their allocating runtime closes.
-    let mut detached: ComPtr<IWidgetAbi> = button(&runtime).query().unwrap();
+    let mut detached: ComBox<IWidgetAbi> = button(&runtime).query().unwrap();
     runtime.close().unwrap();
     assert_eq!(detached.replace_flags(WidgetOptions::NONE), Err(UI_E_CLOSED));
     assert_eq!(detached.set_flags(WidgetOptions::FRAME), Err(UI_E_CLOSED));

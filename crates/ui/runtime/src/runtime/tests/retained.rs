@@ -64,15 +64,16 @@ impl<const KEYBOARD: u16> LeafContent for Probe<KEYBOARD> {
         }
         Ok(())
     }
-    /// Logical close must occur when the production owner removes this widget's subtree.
-    fn close(&mut self) -> Result<(), NcStatus> {
-        self.observations.borrow_mut().closed = true;
-        Ok(())
-    }
+
+}
+
+impl<const KEYBOARD: u16> Drop for Probe<KEYBOARD> {
+    /// Resource removal follows the unique owner, independently of test handles.
+    fn drop(&mut self) { self.observations.borrow_mut().closed = true; }
 }
 
 /// Creates an ordinary COM leaf and a typed observation handle for assertions.
-fn probe<const KEYBOARD: u16>(ui: &Ui, size: Size, options: WidgetOptions) -> (Widget<IWidgetAbi>, Rc<RefCell<Observations>>) {
+fn probe<const KEYBOARD: u16>(ui: &Ui, size: Size, options: WidgetOptions) -> (OwnedWidget<IWidgetAbi>, Rc<RefCell<Observations>>) {
     let observations = Rc::new(RefCell::new(Observations {
         preferred: size,
         ..Observations::default()
@@ -113,7 +114,7 @@ fn pointer(ui: &Ui, position: Point, pressed: bool) {
 }
 
 /// Uses public window creation and presentation settings, preserving all normal mount validation.
-fn window<I: neocogi_com::ComInterface>(ui: &Ui, name: &str, rect: Rect, widget: &Widget<I>) -> ComPtr<IWindowAbi> {
+fn window<I: neocogi_com::ComInterface>(ui: &Ui, name: &str, rect: Rect, widget: OwnedWidget<I>) -> ComPtr<IWindowAbi> {
     let window = ui.window(name, rect, widget).unwrap();
     window.set_options(PLAIN).unwrap();
     window
@@ -124,7 +125,7 @@ fn window<I: neocogi_com::ComInterface>(ui: &Ui, name: &str, rect: Rect, widget:
 fn eventless_update_and_paint_have_separate_phase_counts() {
     let mut fixture = Headless::standard();
     let (widget, observed) = probe::<0>(&fixture.ui, Size { width: 40, height: 20 }, WidgetOptions::NONE);
-    let _window = window(&fixture.ui, "phases", Rect { x: 10, y: 10, width: 100, height: 80 }, &widget);
+    let _window = window(&fixture.ui, "phases", Rect { x: 10, y: 10, width: 100, height: 80 }, widget);
     fixture.frame(VIEW).unwrap();
     let measures = observed.borrow().measures;
     assert_eq!(observed.borrow().updates.len(), 1);
@@ -142,8 +143,9 @@ fn eventless_update_and_paint_have_separate_phase_counts() {
 #[test]
 fn invalid_update_dimensions_preserve_pending_input() {
     let mut fixture = Headless::standard();
-    let editor = fixture.ui.widgets().textbox_unobserved("").unwrap();
-    let _window = window(&fixture.ui, "input", Rect { x: 10, y: 10, width: 200, height: 100 }, &editor);
+    let editor_owner = fixture.ui.widgets().textbox_unobserved("").unwrap();
+    let editor = editor_owner.handle();
+    let _window = window(&fixture.ui, "input", Rect { x: 10, y: 10, width: 200, height: 100 }, editor_owner);
     key(&fixture.ui, KeyCode::Tab, 0, 0);
     fixture.ui.input(UiInput::Text, "kept").unwrap();
     for size in [Size { width: 0, height: 20 }, Size { width: 20, height: -1 }] {
@@ -158,8 +160,9 @@ fn invalid_update_dimensions_preserve_pending_input() {
 #[test]
 fn auto_width_consumes_typed_measurement_invalidation_before_intrinsic_measurement() {
     let mut fixture = Headless::standard();
-    let mut text = fixture.ui.widgets().text_block("a", TextWrapping::None).unwrap();
-    let window = window(&fixture.ui, "auto", Rect { x: 10, y: 10, width: 300, height: 50 }, &text);
+    let text_owner = fixture.ui.widgets().text_block("a", TextWrapping::None).unwrap();
+    let mut text = text_owner.handle();
+    let window = window(&fixture.ui, "auto", Rect { x: 10, y: 10, width: 300, height: 50 }, text_owner);
     window.set_options(PLAIN | WindowOptions::AUTO_WIDTH).unwrap();
     fixture.frame(VIEW).unwrap();
     let first = window.snapshot().unwrap().rect;
@@ -181,7 +184,7 @@ fn auto_size_uses_intrinsic_geometry_only_on_requested_axes() {
     ] {
         let mut fixture = Headless::standard();
         let (widget, _) = probe::<0>(&fixture.ui, Size { width: 40, height: 20 }, WidgetOptions::NONE);
-        let window = window(&fixture.ui, "auto", Rect { x: 10, y: 10, width: 160, height: 90 }, &widget);
+        let window = window(&fixture.ui, "auto", Rect { x: 10, y: 10, width: 160, height: 90 }, widget);
         window.set_options(PLAIN | options).unwrap();
         fixture.frame(VIEW).unwrap();
         let rect = window.snapshot().unwrap().rect;
@@ -194,11 +197,11 @@ fn auto_size_uses_intrinsic_geometry_only_on_requested_axes() {
 fn parent_visibility_and_destruction_cover_the_complete_child_family() {
     let mut fixture = Headless::standard();
     let (parent_leaf, parent_state) = probe::<0>(&fixture.ui, Size { width: 20, height: 20 }, WidgetOptions::NONE);
-    let parent = window(&fixture.ui, "parent", Rect { x: 10, y: 10, width: 200, height: 150 }, &parent_leaf);
+    let parent = window(&fixture.ui, "parent", Rect { x: 10, y: 10, width: 200, height: 150 }, parent_leaf);
     let (child_leaf, child_state) = probe::<0>(&fixture.ui, Size { width: 20, height: 20 }, WidgetOptions::NONE);
     let child = fixture
         .ui
-        .child_window(parent.as_com_ref(), "child", Rect { x: 20, y: 20, width: 100, height: 80 }, &child_leaf)
+        .child_window(parent.as_com_ref(), "child", Rect { x: 20, y: 20, width: 100, height: 80 }, child_leaf)
         .unwrap();
     child.set_options(PLAIN).unwrap();
     fixture.frame(VIEW).unwrap();
@@ -222,8 +225,9 @@ fn parent_visibility_and_destruction_cover_the_complete_child_family() {
 #[test]
 fn hidden_widget_mutation_is_laid_out_when_its_surface_is_shown() {
     let mut fixture = Headless::standard();
-    let mut text = fixture.ui.widgets().text_block("a", TextWrapping::None).unwrap();
-    let window = window(&fixture.ui, "hidden", Rect { x: 10, y: 10, width: 100, height: 60 }, &text);
+    let text_owner = fixture.ui.widgets().text_block("a", TextWrapping::None).unwrap();
+    let mut text = text_owner.handle();
+    let window = window(&fixture.ui, "hidden", Rect { x: 10, y: 10, width: 100, height: 60 }, text_owner);
     window.set_options(PLAIN | WindowOptions::AUTO_WIDTH).unwrap();
     fixture.frame(VIEW).unwrap();
     let width = window.snapshot().unwrap().rect.width;
@@ -239,15 +243,17 @@ fn hidden_widget_mutation_is_laid_out_when_its_surface_is_shown() {
 #[test]
 fn modal_activation_suspends_underlying_focus_and_restores_it_when_closed() {
     let mut fixture = Headless::standard();
-    let parent_text = fixture.ui.widgets().textbox_unobserved("").unwrap();
-    let parent = window(&fixture.ui, "parent", Rect { x: 10, y: 10, width: 200, height: 120 }, &parent_text);
+    let parent_text_owner = fixture.ui.widgets().textbox_unobserved("").unwrap();
+    let parent_text = parent_text_owner.handle();
+    let parent = window(&fixture.ui, "parent", Rect { x: 10, y: 10, width: 200, height: 120 }, parent_text_owner);
     key(&fixture.ui, KeyCode::Tab, 0, 0);
     fixture.ui.input(UiInput::Text, "before").unwrap();
     fixture.frame(VIEW).unwrap();
-    let dialog_text = fixture.ui.widgets().textbox_unobserved("").unwrap();
+    let dialog_text_owner = fixture.ui.widgets().textbox_unobserved("").unwrap();
+    let dialog_text = dialog_text_owner.handle();
     let dialog = fixture
         .ui
-        .dialog(parent.as_com_ref(), "dialog", Rect { x: 30, y: 30, width: 160, height: 90 }, &dialog_text)
+        .dialog(parent.as_com_ref(), "dialog", Rect { x: 30, y: 30, width: 160, height: 90 }, dialog_text_owner)
         .unwrap();
     dialog.set_options(PLAIN).unwrap();
     dialog.set_visibility(Visibility::Visible).unwrap();
@@ -267,9 +273,9 @@ fn modal_activation_suspends_underlying_focus_and_restores_it_when_closed() {
 fn raising_reorders_only_inside_a_fixed_layer() {
     let mut fixture = Headless::standard();
     let (low_leaf, low) = probe::<1>(&fixture.ui, Size { width: 20, height: 20 }, WidgetOptions::NONE);
-    let low_window = window(&fixture.ui, "low", Rect { x: 10, y: 10, width: 200, height: 120 }, &low_leaf);
+    let low_window = window(&fixture.ui, "low", Rect { x: 10, y: 10, width: 200, height: 120 }, low_leaf);
     let (high_leaf, high) = probe::<1>(&fixture.ui, Size { width: 20, height: 20 }, WidgetOptions::NONE);
-    let high_window = window(&fixture.ui, "high", Rect { x: 10, y: 10, width: 200, height: 120 }, &high_leaf);
+    let high_window = window(&fixture.ui, "high", Rect { x: 10, y: 10, width: 200, height: 120 }, high_leaf);
     low_window.set_layer(2).unwrap();
     high_window.set_layer(3).unwrap();
     low_window.raise().unwrap();
@@ -286,11 +292,11 @@ fn raising_reorders_only_inside_a_fixed_layer() {
 fn disabled_parent_disables_child_windows_but_not_its_modal_dialog() {
     let mut fixture = Headless::standard();
     let (root_leaf, root_state) = probe::<0>(&fixture.ui, Size { width: 20, height: 20 }, WidgetOptions::NONE);
-    let root = window(&fixture.ui, "disabled", Rect { x: 10, y: 10, width: 200, height: 140 }, &root_leaf);
+    let root = window(&fixture.ui, "disabled", Rect { x: 10, y: 10, width: 200, height: 140 }, root_leaf);
     let (child_leaf, child_state) = probe::<0>(&fixture.ui, Size { width: 20, height: 20 }, WidgetOptions::NONE);
     let child = fixture
         .ui
-        .child_window(root.as_com_ref(), "child", Rect { x: 20, y: 20, width: 100, height: 80 }, &child_leaf)
+        .child_window(root.as_com_ref(), "child", Rect { x: 20, y: 20, width: 100, height: 80 }, child_leaf)
         .unwrap();
     child.set_options(PLAIN).unwrap();
     root.set_options(PLAIN | WindowOptions::DISABLED).unwrap();
@@ -300,7 +306,7 @@ fn disabled_parent_disables_child_windows_but_not_its_modal_dialog() {
     let (dialog_leaf, dialog_state) = probe::<0>(&fixture.ui, Size { width: 20, height: 20 }, WidgetOptions::NONE);
     let dialog = fixture
         .ui
-        .dialog(root.as_com_ref(), "dialog", Rect { x: 240, y: 20, width: 100, height: 80 }, &dialog_leaf)
+        .dialog(root.as_com_ref(), "dialog", Rect { x: 240, y: 20, width: 100, height: 80 }, dialog_leaf)
         .unwrap();
     dialog.set_options(PLAIN).unwrap();
     dialog.set_visibility(Visibility::Visible).unwrap();

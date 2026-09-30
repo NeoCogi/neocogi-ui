@@ -19,7 +19,7 @@ fn split_drag_clamps_panes_and_preserves_requested_width_on_resize() {
     let (first, first_state) = probe::<0>(&fixture.ui, Size { width: 10, height: 10 }, WidgetOptions::NONE);
     let (second, second_state) = probe::<0>(&fixture.ui, Size { width: 10, height: 10 }, WidgetOptions::NONE);
     let (send, events) = std::sync::mpsc::channel();
-    let mut split = fixture
+    let split_owner = fixture
         .ui
         .widgets()
         .split_view_with_queue(
@@ -33,10 +33,11 @@ fn split_drag_clamps_panes_and_preserves_requested_width_on_resize() {
             ),
         )
         .unwrap();
-    split.insert(0, &first).unwrap().finish().unwrap();
-    split.insert(1, &second).unwrap().finish().unwrap();
+    let mut split = split_owner.handle();
+    split.insert(0, first).unwrap();
+    split.insert(1, second).unwrap();
 
-    let owner = window(&fixture.ui, "split", Rect { x: 10, y: 10, width: 400, height: 120 }, &split);
+    let owner = window(&fixture.ui, "split", Rect { x: 10, y: 10, width: 400, height: 120 }, split_owner);
     fixture.frame(VIEW).unwrap();
     assert_eq!(first_state.borrow().paints.last().unwrap().rect.width, 120);
     assert_eq!(second_state.borrow().paints.last().unwrap().rect.width, 272);
@@ -89,19 +90,18 @@ fn split_drag_clamps_panes_and_preserves_requested_width_on_resize() {
 fn split_keyboard_and_capture_loss_use_core_routing_on_both_axes() {
     for axis in [SplitAxis::Horizontal, SplitAxis::Vertical] {
         let mut fixture = Headless::standard();
-        let mut split = fixture.ui.widgets().split_view_unobserved(settings(axis)).unwrap();
+        let split_owner = fixture.ui.widgets().split_view_unobserved(settings(axis)).unwrap();
+        let mut split = split_owner.handle();
         for index in 0..2 {
             split
-                .insert(index, &fixture.ui.widgets().text_block("pane", TextWrapping::None).unwrap())
-                .unwrap()
-                .finish()
+                .insert(index, fixture.ui.widgets().text_block("pane", TextWrapping::None).unwrap())
                 .unwrap();
         }
         let rect = match axis {
             SplitAxis::Horizontal => Rect { x: 10, y: 10, width: 400, height: 120 },
             _ => Rect { x: 10, y: 10, width: 120, height: 350 },
         };
-        let _owner = window(&fixture.ui, "keyboard", rect, &split);
+        let _owner = window(&fixture.ui, "keyboard", rect, split_owner);
         fixture.frame(VIEW).unwrap();
         key(&fixture.ui, KeyCode::Tab, 0, 0);
         key(
@@ -164,22 +164,27 @@ fn split_topology_and_settings_are_validated_before_mutation() {
     let mut split = fixture.ui.widgets().split_view_unobserved(initial).unwrap();
     let (first, first_state) = probe::<0>(&fixture.ui, Size { width: 10, height: 10 }, WidgetOptions::NONE);
     let (second, second_state) = probe::<0>(&fixture.ui, Size { width: 10, height: 10 }, WidgetOptions::NONE);
-    let extra = fixture.ui.widgets().button_unobserved("unattached").unwrap();
-    split.insert(0, &first).unwrap().finish().unwrap();
-    split.insert(1, &second).unwrap().finish().unwrap();
-    assert!(matches!(split.insert(2, &extra), Err(neocogi_com::NC_E_OUT_OF_RANGE)));
+    let extra_owner = fixture.ui.widgets().button_unobserved("unattached").unwrap();
+    let extra = extra_owner.handle();
+    split.insert(0, first).unwrap();
+    split.insert(1, second).unwrap();
+    assert!(matches!(split.insert(2, extra_owner), Err(neocogi_com::NC_E_OUT_OF_RANGE)));
     assert_eq!(split.children().unwrap().child_count().unwrap(), 2);
     assert_eq!(
         split.set_settings(SplitOptions { handle_width: -1, ..initial }),
         Err(neocogi_com::NC_E_INVALID_ARG)
     );
     assert_eq!(split.settings().unwrap(), initial);
-    // Rejected insertion must leave the third node available to another owner.
+    // A rejected consuming insertion destroys that candidate. Build a fresh owner.
+    assert_eq!(extra.label(), Err(UI_E_CLOSED));
+    let extra = fixture.ui.widgets().button_unobserved("fresh").unwrap();
     let mut other = fixture.ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
-    other.insert(0, &extra, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
-    let owner = window(&fixture.ui, "topology", Rect { x: 10, y: 10, width: 400, height: 120 }, &split);
+    other.insert(0, extra, LinearEdge::new(LayoutTrack::Content)).unwrap();
+    let split_owner = split;
+    let mut split = split_owner.handle();
+    let owner = window(&fixture.ui, "topology", Rect { x: 10, y: 10, width: 400, height: 120 }, split_owner);
     fixture.frame(VIEW).unwrap();
-    split.remove(0).unwrap().finish().unwrap();
+    split.remove(0).unwrap();
     fixture.frame(VIEW).unwrap();
     assert!(first_state.borrow().closed);
     assert_eq!(second_state.borrow().paints.last().unwrap().rect.width, 400);
@@ -228,14 +233,16 @@ fn split_position_setter_preserves_policy_and_checks_the_real_com_boundary() {
         let before = split.settings().unwrap();
         // Invoke the raw generated projection as well as the facade: validation
         // belongs to the widget implementation, never just its Rust convenience API.
-        let mut abi = split.as_interface().add_ref();
+        let mut abi = split.as_interface().clone();
         for invalid in [-1, i32::MIN] {
             assert_eq!(abi.set_position(invalid), Err(neocogi_com::NC_E_INVALID_ARG));
             assert_eq!(split.settings().unwrap(), before);
             assert_eq!(common.take_change().unwrap(), GeometryChange::NoChange);
         }
         assert!(events.try_recv().is_err(), "programmatic setters must not publish divider events");
-        common.close().unwrap();
+        let handle = split.handle();
+        drop(split);
+        let mut split = handle;
         assert_eq!(split.set_position(100), Err(UI_E_CLOSED));
         assert_eq!(abi.set_position(-1), Err(UI_E_CLOSED));
         assert_eq!(events.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected));
@@ -247,7 +254,7 @@ fn split_position_setter_preserves_policy_and_checks_the_real_com_boundary() {
 fn split_position_setter_cancels_active_drag_and_relayouts_panes() {
     let mut fixture = Headless::standard();
     let (send, events) = std::sync::mpsc::channel();
-    let mut split = fixture
+    let split_owner = fixture
         .ui
         .widgets()
         .split_view_with_queue(
@@ -259,14 +266,13 @@ fn split_position_setter_cancels_active_drag_and_relayouts_panes() {
             ),
         )
         .unwrap();
+    let mut split = split_owner.handle();
     let (first, state) = probe::<0>(&fixture.ui, Size { width: 10, height: 10 }, WidgetOptions::NONE);
-    split.insert(0, &first).unwrap().finish().unwrap();
+    split.insert(0, first).unwrap();
     split
-        .insert(1, &fixture.ui.widgets().text_block("second", TextWrapping::None).unwrap())
-        .unwrap()
-        .finish()
+        .insert(1, fixture.ui.widgets().text_block("second", TextWrapping::None).unwrap())
         .unwrap();
-    let _owner = window(&fixture.ui, "setter during capture", Rect { x: 10, y: 10, width: 400, height: 120 }, &split);
+    let _owner = window(&fixture.ui, "setter during capture", Rect { x: 10, y: 10, width: 400, height: 120 }, split_owner);
     fixture.frame(VIEW).unwrap();
     pointer(&fixture.ui, Point { x: 134, y: 40 }, true);
     fixture.frame(VIEW).unwrap();

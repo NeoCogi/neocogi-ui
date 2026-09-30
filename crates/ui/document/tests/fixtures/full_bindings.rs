@@ -99,49 +99,49 @@ pub enum QueuedEvent {
     /// Complete stream for instances of neocogi_ui::ButtonAbi.
     Source0 {
         /// Does not retain a removed widget.
-        origin: neocogi_com::WeakComPtr<neocogi_ui::ButtonAbi>,
+        origin: neocogi_com::WeakComBox<neocogi_ui::ButtonAbi>,
         /// Owned snapshot acquired before post returned.
         event: neocogi_ui::button::Event,
     },
     /// Complete stream for instances of neocogi_ui::CheckboxAbi.
     Source1 {
         /// Does not retain a removed widget.
-        origin: neocogi_com::WeakComPtr<neocogi_ui::CheckboxAbi>,
+        origin: neocogi_com::WeakComBox<neocogi_ui::CheckboxAbi>,
         /// Owned snapshot acquired before post returned.
         event: neocogi_ui::checkbox::Event,
     },
     /// Complete stream for instances of neocogi_ui::TextboxAbi.
     Source2 {
         /// Does not retain a removed widget.
-        origin: neocogi_com::WeakComPtr<neocogi_ui::TextboxAbi>,
+        origin: neocogi_com::WeakComBox<neocogi_ui::TextboxAbi>,
         /// Owned snapshot acquired before post returned.
         event: neocogi_ui::textbox::Event,
     },
     /// Complete stream for instances of neocogi_ui::SliderAbi.
     Source3 {
         /// Does not retain a removed widget.
-        origin: neocogi_com::WeakComPtr<neocogi_ui::SliderAbi>,
+        origin: neocogi_com::WeakComBox<neocogi_ui::SliderAbi>,
         /// Owned snapshot acquired before post returned.
         event: neocogi_ui::slider::Event,
     },
     /// Complete stream for instances of neocogi_ui::ScrollbarAbi.
     Source4 {
         /// Does not retain a removed widget.
-        origin: neocogi_com::WeakComPtr<neocogi_ui::ScrollbarAbi>,
+        origin: neocogi_com::WeakComBox<neocogi_ui::ScrollbarAbi>,
         /// Owned snapshot acquired before post returned.
         event: neocogi_ui::scrollbar::Event,
     },
     /// Complete stream for instances of neocogi_ui::SplitViewAbi.
     Source5 {
         /// Does not retain a removed widget.
-        origin: neocogi_com::WeakComPtr<neocogi_ui::SplitViewAbi>,
+        origin: neocogi_com::WeakComBox<neocogi_ui::SplitViewAbi>,
         /// Owned snapshot acquired before post returned.
         event: neocogi_ui::split_view::Event,
     },
     /// Complete stream for instances of neocogi_ui::ComboAbi.
     Source6 {
         /// Does not retain a removed widget.
-        origin: neocogi_com::WeakComPtr<neocogi_ui::ComboAbi>,
+        origin: neocogi_com::WeakComBox<neocogi_ui::ComboAbi>,
         /// Owned snapshot acquired before post returned.
         event: neocogi_ui::combo::Event,
     },
@@ -153,50 +153,50 @@ impl QueuedEvent {
         let _ = &form;
         match self {
             Self::Source0 { origin, event } => {
-                let origin = match origin.upgrade()? { Some(origin) => origin, None => return Ok(None) };
-                Ok(match origin.as_com_ref() {
+                match origin.borrow() { Ok(_) => {}, Err(neocogi_com::NC_E_CLOSED) => return Ok(None), Err(error) => return Err(error) };
+                Ok(match origin {
                     origin if origin.same_object(form.widget_button_1.as_interface()) => Some(Event::Widget1(event)),
                     _ => None,
                 })
             }
             Self::Source1 { origin, event } => {
-                let origin = match origin.upgrade()? { Some(origin) => origin, None => return Ok(None) };
-                Ok(match origin.as_com_ref() {
+                match origin.borrow() { Ok(_) => {}, Err(neocogi_com::NC_E_CLOSED) => return Ok(None), Err(error) => return Err(error) };
+                Ok(match origin {
                     origin if origin.same_object(form.widget_check_2.as_interface()) => Some(Event::Widget2(event)),
                     _ => None,
                 })
             }
             Self::Source2 { origin, event } => {
-                let origin = match origin.upgrade()? { Some(origin) => origin, None => return Ok(None) };
-                Ok(match origin.as_com_ref() {
+                match origin.borrow() { Ok(_) => {}, Err(neocogi_com::NC_E_CLOSED) => return Ok(None), Err(error) => return Err(error) };
+                Ok(match origin {
                     origin if origin.same_object(form.widget_text_3.as_interface()) => Some(Event::Widget3(event)),
                     _ => None,
                 })
             }
             Self::Source3 { origin, event } => {
-                let origin = match origin.upgrade()? { Some(origin) => origin, None => return Ok(None) };
-                Ok(match origin.as_com_ref() {
+                match origin.borrow() { Ok(_) => {}, Err(neocogi_com::NC_E_CLOSED) => return Ok(None), Err(error) => return Err(error) };
+                Ok(match origin {
                     origin if origin.same_object(form.widget_slider_4.as_interface()) => Some(Event::Widget4(event)),
                     _ => None,
                 })
             }
             Self::Source4 { origin, event } => {
-                let origin = match origin.upgrade()? { Some(origin) => origin, None => return Ok(None) };
-                Ok(match origin.as_com_ref() {
+                match origin.borrow() { Ok(_) => {}, Err(neocogi_com::NC_E_CLOSED) => return Ok(None), Err(error) => return Err(error) };
+                Ok(match origin {
                     origin if origin.same_object(form.widget_scroll_5.as_interface()) => Some(Event::Widget5(event)),
                     _ => None,
                 })
             }
             Self::Source5 { origin, event } => {
-                let origin = match origin.upgrade()? { Some(origin) => origin, None => return Ok(None) };
-                Ok(match origin.as_com_ref() {
+                match origin.borrow() { Ok(_) => {}, Err(neocogi_com::NC_E_CLOSED) => return Ok(None), Err(error) => return Err(error) };
+                Ok(match origin {
                     origin if origin.same_object(form.widget_split_6.as_interface()) => Some(Event::Widget6(event)),
                     _ => None,
                 })
             }
             Self::Source6 { origin, event } => {
-                let origin = match origin.upgrade()? { Some(origin) => origin, None => return Ok(None) };
-                Ok(match origin.as_com_ref() {
+                match origin.borrow() { Ok(_) => {}, Err(neocogi_com::NC_E_CLOSED) => return Ok(None), Err(error) => return Err(error) };
+                Ok(match origin {
                     origin if origin.same_object(form.widget_combo_7.as_interface()) => Some(Event::Widget7(event)),
                     _ => None,
                 })
@@ -217,7 +217,7 @@ impl neocogi_ui::nodes::IEventQueueInstance0517d9243d615b7d80421e7a13f2acac for 
     fn post(&mut self, origin: neocogi_com::ComRef<'_, neocogi_ui::ButtonAbi>, event: neocogi_com::NcValueRef<'_, neocogi_ui::button::Event>) -> Result<(), neocogi_com::NcStatus> {
         let event = event.to_owned()?;
         neocogi_ui::button::validate(&event)?;
-        let event = QueuedEvent::Source0 { origin: origin.downgrade()?, event };
+        let event = QueuedEvent::Source0 { origin: origin.downgrade_box()?, event };
         let _ = self.send.send(Message { generation: self.generation, event });
         Ok(())
     }
@@ -227,7 +227,7 @@ impl neocogi_ui::nodes::IEventQueueInstance1bb30dd91a74581d939df2bf2c3ed308 for 
     fn post(&mut self, origin: neocogi_com::ComRef<'_, neocogi_ui::CheckboxAbi>, event: neocogi_com::NcValueRef<'_, neocogi_ui::checkbox::Event>) -> Result<(), neocogi_com::NcStatus> {
         let event = event.to_owned()?;
         neocogi_ui::checkbox::validate(&event)?;
-        let event = QueuedEvent::Source1 { origin: origin.downgrade()?, event };
+        let event = QueuedEvent::Source1 { origin: origin.downgrade_box()?, event };
         let _ = self.send.send(Message { generation: self.generation, event });
         Ok(())
     }
@@ -237,7 +237,7 @@ impl neocogi_ui::nodes::IEventQueueInstancec95e3d4dc4375ebf8d2dd2827a5a36d8 for 
     fn post(&mut self, origin: neocogi_com::ComRef<'_, neocogi_ui::TextboxAbi>, event: neocogi_com::NcValueRef<'_, neocogi_ui::textbox::Event>) -> Result<(), neocogi_com::NcStatus> {
         let event = event.to_owned()?;
         neocogi_ui::textbox::validate(&event)?;
-        let event = QueuedEvent::Source2 { origin: origin.downgrade()?, event };
+        let event = QueuedEvent::Source2 { origin: origin.downgrade_box()?, event };
         let _ = self.send.send(Message { generation: self.generation, event });
         Ok(())
     }
@@ -247,7 +247,7 @@ impl neocogi_ui::nodes::IEventQueueInstance7f7563cbeb7b5354b412a35d95c4f0c3 for 
     fn post(&mut self, origin: neocogi_com::ComRef<'_, neocogi_ui::SliderAbi>, event: neocogi_com::NcValueRef<'_, neocogi_ui::slider::Event>) -> Result<(), neocogi_com::NcStatus> {
         let event = event.to_owned()?;
         neocogi_ui::slider::validate(&event)?;
-        let event = QueuedEvent::Source3 { origin: origin.downgrade()?, event };
+        let event = QueuedEvent::Source3 { origin: origin.downgrade_box()?, event };
         let _ = self.send.send(Message { generation: self.generation, event });
         Ok(())
     }
@@ -257,7 +257,7 @@ impl neocogi_ui::nodes::IEventQueueInstanced998bacc3a98553fa30d0c4b9a180789 for 
     fn post(&mut self, origin: neocogi_com::ComRef<'_, neocogi_ui::ScrollbarAbi>, event: neocogi_com::NcValueRef<'_, neocogi_ui::scrollbar::Event>) -> Result<(), neocogi_com::NcStatus> {
         let event = event.to_owned()?;
         neocogi_ui::scrollbar::validate(&event)?;
-        let event = QueuedEvent::Source4 { origin: origin.downgrade()?, event };
+        let event = QueuedEvent::Source4 { origin: origin.downgrade_box()?, event };
         let _ = self.send.send(Message { generation: self.generation, event });
         Ok(())
     }
@@ -267,7 +267,7 @@ impl neocogi_ui::nodes::IEventQueueInstanceaf0d7b53ec305e8ea1ab44ef4721cdad for 
     fn post(&mut self, origin: neocogi_com::ComRef<'_, neocogi_ui::SplitViewAbi>, event: neocogi_com::NcValueRef<'_, neocogi_ui::split_view::Event>) -> Result<(), neocogi_com::NcStatus> {
         let event = event.to_owned()?;
         neocogi_ui::split_view::validate(&event)?;
-        let event = QueuedEvent::Source5 { origin: origin.downgrade()?, event };
+        let event = QueuedEvent::Source5 { origin: origin.downgrade_box()?, event };
         let _ = self.send.send(Message { generation: self.generation, event });
         Ok(())
     }
@@ -277,7 +277,7 @@ impl neocogi_ui::nodes::IEventQueueInstancec51448c5bc925b9db65195711c0433be for 
     fn post(&mut self, origin: neocogi_com::ComRef<'_, neocogi_ui::ComboAbi>, event: neocogi_com::NcValueRef<'_, neocogi_ui::combo::Event>) -> Result<(), neocogi_com::NcStatus> {
         let event = event.to_owned()?;
         neocogi_ui::combo::validate(&event)?;
-        let event = QueuedEvent::Source6 { origin: origin.downgrade()?, event };
+        let event = QueuedEvent::Source6 { origin: origin.downgrade_box()?, event };
         let _ = self.send.send(Message { generation: self.generation, event });
         Ok(())
     }

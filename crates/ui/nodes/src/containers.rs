@@ -65,8 +65,8 @@ macro_rules! container_methods {
             self.editor.view()
         }
 
-        /// Publishes matching metadata even when removed-child teardown reports an error.
-        fn remove(&mut self, index: u32) -> Result<neocogi_ui_core_contracts::ChildEditResult, neocogi_com::NcStatus> {
+        /// Publishes matching metadata after the editor drops the removed owner.
+        fn remove(&mut self, index: u32) -> Result<(), neocogi_com::NcStatus> {
             <Self as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
             let outcome = self.editor.remove(index)?;
             <Self as crate::containers::ContainerAlgorithm>::edit_edges(self, crate::containers::EdgeEdit::Remove { index: index as usize });
@@ -74,7 +74,7 @@ macro_rules! container_methods {
         }
 
         /// Clears topology and relationship metadata in the same guarded operation.
-        fn clear(&mut self) -> Result<neocogi_ui_core_contracts::ChildEditResult, neocogi_com::NcStatus> {
+        fn clear(&mut self) -> Result<(), neocogi_com::NcStatus> {
             <Self as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
             let outcome = self.editor.clear()?;
             <Self as crate::containers::ContainerAlgorithm>::edit_edges(self, crate::containers::EdgeEdit::Clear);
@@ -112,9 +112,9 @@ macro_rules! container_edges {
         fn insert(
             &mut self,
             index: u32,
-            child: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>,
+            child: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
             edge: $edge,
-        ) -> Result<neocogi_ui_core_contracts::ChildEditResult, neocogi_com::NcStatus> {
+        ) -> Result<(), neocogi_com::NcStatus> {
             <Self as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
             let edge = $decode(edge)?;
             let outcome = self.editor.insert(index, child)?;
@@ -122,13 +122,13 @@ macro_rules! container_edges {
             Ok(outcome)
         }
 
-        /// Commits replacement metadata before returning old-child teardown status.
+        /// Commits replacement metadata after the editor replaces and destroys the old owner.
         fn replace(
             &mut self,
             index: u32,
-            child: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetAbi>,
+            child: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
             edge: $edge,
-        ) -> Result<neocogi_ui_core_contracts::ChildEditResult, neocogi_com::NcStatus> {
+        ) -> Result<(), neocogi_com::NcStatus> {
             <Self as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
             let edge = $decode(edge)?;
             let outcome = self.editor.replace(index, child)?;

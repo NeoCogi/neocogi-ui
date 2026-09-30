@@ -11,7 +11,7 @@ struct ImageProbe {
     /// Final native-resource destruction occurs once after the last owning projection disappears.
     dropped: Cell<bool>,
     /// Weak test slot avoids an image-to-widget ownership cycle during reentry checks.
-    target: std::rc::Weak<RefCell<Option<ComPtr<ButtonAbi>>>>,
+    target: std::rc::Weak<RefCell<Option<WeakComBox<ButtonAbi>>>>,
 }
 #[com_object(interfaces(ITexture))]
 /// A texture deliberately reenters image editing while its immutable dimensions are validated.
@@ -58,7 +58,7 @@ fn image_controls_keep_owned_pixels_and_forward_ordered_semantic_paint_after_err
     button.replace_flags(WidgetOptions::NONE).unwrap();
     button.set_fill_states(FillStates::NONE).unwrap();
     let mut common = button.node_interface().unwrap();
-    let target = Rc::new(RefCell::new(Some(button.as_interface().add_ref())));
+    let target = Rc::new(RefCell::new(Some(button.as_interface().clone())));
     let image_probe = Rc::new(ImageProbe {
         target: Rc::downgrade(&target),
         ..ImageProbe::default()
@@ -155,18 +155,19 @@ impl IRenderer for ImageFrameRenderer {
 #[test]
 fn image_buttons_survive_both_builtin_and_runtime_clipping_in_a_complete_frame() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
-    let mut button = ui.widgets().button_unobserved("AB").unwrap();
+    let button_owner = ui.widgets().button_unobserved("AB").unwrap();
+    let mut button = button_owner.handle();
     button.replace_flags(WidgetOptions::NONE).unwrap();
     let image_probe = Rc::new(ImageProbe::default());
     let image: ComPtr<ITextureAbi> = ImageTexture::from_value(ImageTexture { probe: image_probe.clone() }).query().unwrap();
     button.set_image(image.as_com_ref(), false).unwrap();
     drop(image);
     let background = ui.widgets().text_block("", TextWrapping::None).unwrap();
-    let parent = ui.window("clip owner", Rect { x: 20, y: 20, width: 32, height: 40 }, &background).unwrap();
+    let parent = ui.window("clip owner", Rect { x: 20, y: 20, width: 32, height: 40 }, background).unwrap();
     parent.set_options(WindowOptions::NO_TITLE | WindowOptions::NO_PADDING).unwrap();
     parent.set_child_clip(ChildClip::Content).unwrap();
     let window = ui
-        .child_window(parent.as_com_ref(), "image", Rect { x: 20, y: 20, width: 100, height: 40 }, &button)
+        .child_window(parent.as_com_ref(), "image", Rect { x: 20, y: 20, width: 100, height: 40 }, button_owner)
         .unwrap();
     window.set_options(WindowOptions::NO_TITLE | WindowOptions::NO_PADDING).unwrap();
     let quads = Rc::new(RefCell::new(Vec::new()));

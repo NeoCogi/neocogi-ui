@@ -21,8 +21,9 @@ fn key(ui: &neocogi_ui::Ui, key: KeyCode, value: u32) {
 #[test]
 fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_forest() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
-    let editor = ui.widgets().textbox_unobserved("").unwrap();
-    let window = ui.window("menus", RECT, &editor).unwrap();
+    let editor_owner = ui.widgets().textbox_unobserved("").unwrap();
+    let editor = editor_owner.handle();
+    let window = ui.window("menus", RECT, editor_owner).unwrap();
     let menus = ui.menus().unwrap();
     let bar = menus.create("").unwrap();
     let file = bar.submenu("File").unwrap();
@@ -99,9 +100,9 @@ fn failed_menu_attachment_preserves_unique_declaration_and_scoped_builder_author
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let foreign = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let first = ui.widgets().button_unobserved("first").unwrap();
-    let window = ui.window("first", RECT, &first).unwrap();
+    let window = ui.window("first", RECT, first).unwrap();
     let second = foreign.widgets().button_unobserved("second").unwrap();
-    let foreign_window = foreign.window("second", RECT, &second).unwrap();
+    let foreign_window = foreign.window("second", RECT, second).unwrap();
     let menus = ui.menus().unwrap();
     let bar = menus.create("bar").unwrap();
     let child = bar.submenu("File").unwrap();
@@ -120,7 +121,7 @@ fn failed_menu_attachment_preserves_unique_declaration_and_scoped_builder_author
     let malformed = menus.create("not a bar").unwrap();
     let abandoned = malformed.item("wrong root row").unwrap();
     let other = ui.widgets().button_unobserved("other").unwrap();
-    let other_window = ui.window("other", RECT, &other).unwrap();
+    let other_window = ui.window("other", RECT, other).unwrap();
     assert_eq!(menus.attach_bar(other_window.as_com_ref(), &malformed), Err(NC_E_INVALID_ARG));
     assert_eq!(abandoned.label().unwrap(), "wrong root row");
     let scoped = malformed.submenu("abandoned child").unwrap();
@@ -137,7 +138,7 @@ fn failed_menu_attachment_preserves_unique_declaration_and_scoped_builder_author
 fn standalone_menu_popup_submits_then_hides_without_destroying_its_live_rows() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let body = ui.widgets().button_unobserved("body").unwrap();
-    let window = ui.window("popup menu", RECT, &body).unwrap();
+    let window = ui.window("popup menu", RECT, body).unwrap();
     let menus = ui.menus().unwrap();
     let builder = menus.create("Actions").unwrap();
     let (session_tx, session) = std::sync::mpsc::channel();

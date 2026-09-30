@@ -311,7 +311,7 @@ impl IChoiceMenuState for ChoiceMenuState {
         Ok(self.revision)
     }
 
-    /// Makes retirement idempotent for both logical widget closure and final unmounted release.
+    /// Makes explicit menu-service retirement idempotent. Header destruction needs no call.
     fn retire(&mut self) -> Result<(), NcStatus> {
         self.changed_event.close();
         self.popup = match self.popup {
@@ -405,8 +405,9 @@ pub(crate) fn choice_menu(state: &ComPtr<IChoiceMenuStateAbi>) -> Result<Menu, N
 
 /// Runtime-owned association between private choice menu state and one shared menu popup handle.
 struct ChoiceMenuController {
-    /// Typed semantic model shared by the header and composition coordinator.
-    state: ComPtr<IChoiceMenuStateAbi>,
+    /// The header owns the menu model. Coordination observes it weakly so header
+    /// destruction needs no fallible callback, including during menu submission.
+    state: neocogi_com::WeakComPtr<IChoiceMenuStateAbi>,
     /// Generic popup capability; no choice menu policy is embedded in its forest node.
     popup: PopupHandle,
     /// Last model revision copied into the compact relational menu hierarchy.
@@ -425,10 +426,20 @@ enum ControllerDisposition {
 impl ChoiceMenuController {
     /// Reconciles one semantic lifecycle against generic popup visibility and operations.
     fn reconcile(&mut self, manager: &mut WindowManager) -> Result<(ControllerDisposition, bool), NcStatus> {
+        // Temporary access protects this reconciliation only. If forwarding
+        // removes the header, this lease ends on return and the next pass removes
+        // the orphan popup. No destructor reenters the menu's mutable call gate.
+        let Some(mut state) = self.state.upgrade()? else {
+            match manager.destroy_popup(&self.popup) {
+                Ok(()) | Err(SurfaceMutationError::UnknownPopup) => {}
+                Err(error) => return Err(surface_status(error)),
+            }
+            return Ok((ControllerDisposition::Remove, true));
+        };
         let visible = match manager.popup_visible(&self.popup) {
             Ok(visible) => visible,
             Err(SurfaceMutationError::UnknownPopup) => {
-                self.state.retire()?;
+                state.retire()?;
                 return Ok((ControllerDisposition::Remove, false));
             }
             Err(error) => return Err(surface_status(error)),
@@ -436,21 +447,21 @@ impl ChoiceMenuController {
         // Menu routing only stages a stable leaf identity. Commit it here, after the root forest
         // released input borrows and before application event queues can observe the new value.
         if let Some(choice) = manager.take_choice_submission(&self.popup).map_err(surface_status)? {
-            self.state.submit(choice)?;
+            state.submit(choice)?;
         }
-        let revision = self.state.revision()?;
+        let revision = state.revision()?;
         let presentation_changed = revision != self.observed_revision;
         if presentation_changed {
-            let menu = choice_menu(&self.state)?;
-            let committed = decoded_selection(self.state.selection()?);
+            let menu = choice_menu(&state)?;
+            let committed = decoded_selection(state.selection()?);
             manager.replace_choice_popup(&self.popup, menu, committed).map_err(surface_status)?;
             self.observed_revision = revision;
         }
-        let action = self.state.reconcile_popup(visible)?;
+        let action = state.reconcile_popup(visible)?;
         match action {
             ChoicePopupAction::None => Ok((ControllerDisposition::Keep, presentation_changed)),
             ChoicePopupAction::Open => {
-                let anchor = crate::boundary::local_rect(self.state.popup_anchor()?);
+                let anchor = crate::boundary::local_rect(state.popup_anchor()?);
                 manager.show_choice_popup_at(&self.popup, anchor).map_err(surface_status)?;
                 Ok((ControllerDisposition::Keep, true))
             }
@@ -480,6 +491,8 @@ pub(crate) struct ChoiceMenuManager {
 impl ChoiceMenuManager {
     /// Registers one fully constructed controller after its generic menu popup exists.
     pub(crate) fn register(&mut self, state: ComPtr<IChoiceMenuStateAbi>, popup: PopupHandle, observed_revision: u64) {
+        // State is created by this provider and supports the common shared weak ABI.
+        let state = state.downgrade().expect("provider choice state supports weak observation");
         self.controllers.push(ChoiceMenuController { state, popup, observed_revision });
     }
 

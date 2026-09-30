@@ -30,7 +30,7 @@
 //! Calculator with concrete application state and typed COM button handlers.
 use neocogi_ui::*;
 use neocogi_demo_host::{AppState, Host, HostError, report_exit};
-use neocogi_com::{ComPtr, ComRef, NcStatus, NcValueRef, WeakComPtr};
+use neocogi_com::{ComPtr, ComRef, NcStatus, NcValueRef};
 
 /// Maximum typed display length; calculated results retain the existing decimal formatting policy.
 const DISPLAY_MAX_LEN: usize = 24;
@@ -331,13 +331,13 @@ impl Calculator {
 /// One concrete receiver for the entire keypad; action selection belongs to State.
 struct KeypadQueue {
     /// Only weak origins are needed for the button's sole activation variant.
-    send: std::sync::mpsc::Sender<WeakComPtr<ButtonAbi>>,
+    send: std::sync::mpsc::Sender<neocogi_com::WeakComBox<ButtonAbi>>,
 }
 impl neocogi_ui::nodes::ButtonEventQueue for KeypadQueue {
     /// Validate foreign payloads before queueing; presentation labels do not identify keys.
     fn post(&mut self, origin: ComRef<'_, ButtonAbi>, event: NcValueRef<'_, neocogi_ui::button::Event>) -> Result<(), NcStatus> {
         neocogi_ui::button::validate(&event.to_owned()?)?;
-        let _ = self.send.send(origin.downgrade()?);
+        let _ = self.send.send(origin.downgrade_box()?);
         Ok(())
     }
 }
@@ -351,14 +351,14 @@ struct State {
     /// Arithmetic and formatting are ordinary concrete Rust state, independent of any plugin.
     calculator: Calculator,
     /// Application-owned keypad associations; no widget retains this model.
-    keys: Vec<(WeakComPtr<ButtonAbi>, Action)>,
+    keys: Vec<(neocogi_com::WeakComBox<ButtonAbi>, Action)>,
 }
 impl AppState for State {
     /// All keypad controls post to one concrete queue and are resolved by identity.
-    type Message = WeakComPtr<ButtonAbi>;
+    type Message = neocogi_com::WeakComBox<ButtonAbi>;
     /// Consumes one command using exclusive access to the ordinary arithmetic model.
-    fn update(&mut self, origin: WeakComPtr<ButtonAbi>) -> Result<(), NcStatus> {
-        if origin.upgrade()?.is_none() {
+    fn update(&mut self, origin: neocogi_com::WeakComBox<ButtonAbi>) -> Result<(), NcStatus> {
+        if !origin.is_alive() {
             return Ok(());
         }
         let Some((_, action)) = self.keys.iter().find(|(key, _)| key.same_object(&origin)) else {
@@ -386,16 +386,18 @@ fn run() -> Result<(), HostError> {
     let mut display = host.ui.widgets().textbox_unobserved("0")?;
     display.set_named_font(DISPLAY_FONT)?;
     display.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_RIGHT | WidgetOptions::NO_INTERACT)?;
-    let mut grid = host.ui.widgets().grid(
+    let grid = host.ui.widgets().grid(
         &[LayoutTrack::Flex { weight: 1.0 }; 4],
         &[LayoutTrack::Flex { weight: KEYPAD_ROW_HEIGHT_WEIGHT }; 5],
     )?;
     let mut tree = host.ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
-    tree.insert(0, &display, LinearEdge::new(LayoutTrack::Flex { weight: DISPLAY_HEIGHT_FRACTION }))?
-        .finish()?;
-    tree.insert(1, &grid, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 - DISPLAY_HEIGHT_FRACTION }))?
-        .finish()?;
-    let window = host.ui.window("Calculator", Rect { x: 0, y: 0, width: 320, height: 420 }, &tree)?;
+    let display_handle = display.handle();
+    tree.insert(0, display, LinearEdge::new(LayoutTrack::Flex { weight: DISPLAY_HEIGHT_FRACTION }))?;
+    let grid_handle = grid.handle();
+    tree.insert(1, grid, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 - DISPLAY_HEIGHT_FRACTION }))?;
+    let mut grid = grid_handle;
+    let display = display_handle;
+    let window = host.ui.window("Calculator", Rect { x: 0, y: 0, width: 320, height: 420 }, tree)?;
     window.set_options(WindowOptions::FRAME | WindowOptions::NO_RESIZE | WindowOptions::NO_TITLE)?;
     let mut state = State {
         window,
@@ -431,9 +433,9 @@ fn run() -> Result<(), HostError> {
     .enumerate()
     {
         let mut button = host.ui.widgets().button_with_queue(label, Some(queue.as_com_ref()))?;
-        state.keys.push((button.as_interface().downgrade()?, action));
+        state.keys.push((button.as_interface().clone(), action));
         button.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
-        grid.insert(index as u32, &button, GridExtent { columns: 1, rows: 1 })?.finish()?;
+        grid.insert(index as u32, button, GridExtent { columns: 1, rows: 1 })?;
     }
     host.run(state, events)
 }

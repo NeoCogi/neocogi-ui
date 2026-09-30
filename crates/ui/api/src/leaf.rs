@@ -28,11 +28,7 @@ pub trait LeafContent: 'static {
     fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
         Ok(false)
     }
-    /// Releases logical component activity once, including closing any locally owned event producers.
-    /// The COM allocation and ordinary retained editing data may survive logical closure.
-    fn close(&mut self) -> Result<(), NcStatus> {
-        Ok(())
-    }
+
 }
 
 #[com_object(interfaces(IWidget, ILeafLayout))]
@@ -57,13 +53,7 @@ impl<Content: LeafContent> IWidget for LeafObject<Content> {
         self.state.writable()?;
         self.content.dispatch_next()
     }
-    /// Commits logical closure once and then lets the concrete content terminate its own activity.
-    fn close(&mut self) -> Result<(), NcStatus> {
-        if self.state.close()? {
-            self.content.close()?;
-        }
-        Ok(())
-    }
+
     /// Common observations read only lifecycle state and remain safe during shared content calls.
     fn properties(&self) -> Result<WidgetProperties, NcStatus> {
         Ok(WidgetProperties {
@@ -124,12 +114,12 @@ impl<Content: LeafContent> ILeafLayout for LeafObject<Content> {
 
 impl WidgetFactory {
     /// Creates one local COM leaf with statically dispatched inline content and normal runtime authority.
-    pub fn leaf<Content: LeafContent>(&self, content: Content, options: WidgetOptions) -> Result<Widget<IWidgetAbi>, NcStatus> {
+    pub fn leaf<Content: LeafContent>(&self, content: Content, options: WidgetOptions) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
         options.validate()?;
-        let object = LeafObject::from_value(LeafObject {
+        let object = LeafObject::into_box(LeafObject {
             state: WidgetState::new(self.host()?, options),
             content,
         });
-        Ok(Widget::from_interface(object.query()?))
+        Ok(OwnedWidget::from_interface(object.query()?))
     }
 }

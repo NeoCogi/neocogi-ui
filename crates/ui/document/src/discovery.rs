@@ -4,7 +4,7 @@ use crate::{
     design::{DesignWidgetManifest, MAX_DESIGN_DESCRIPTOR_BYTES},
 };
 use neocogi_com::{IUnknown, NcValueRef, ComPtr, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG};
-use neocogi_ui::{IWidgetAbi, Ui, Widget};
+use neocogi_ui::{IWidgetAbi, Ui};
 use neocogi_ui_document_contracts::IDesignWidgetCatalogAbi;
 use std::rc::Rc;
 
@@ -28,7 +28,7 @@ impl CustomWidgetFactory for CatalogWidgetFactory {
     }
 
     /// Calls the plugin's common COM constructor with typed, encoded properties.
-    fn create(&self, ui: &Ui, properties: &[CustomProperty], sink: Option<ComPtr<IUnknown>>) -> Result<Widget<IWidgetAbi>, NcStatus> {
+    fn create(&self, ui: &Ui, properties: &[CustomProperty], sink: Option<ComPtr<IUnknown>>) -> Result<neocogi_ui::OwnedWidget<IWidgetAbi>, NcStatus> {
         let encoded = serde_json::to_vec(properties).map_err(|_| NC_E_INVALID_ARG)?;
         if encoded.len() > MAX_DESIGN_DESCRIPTOR_BYTES {
             return Err(NC_E_INVALID_ARG);
@@ -44,7 +44,7 @@ impl CustomWidgetFactory for CatalogWidgetFactory {
             NcCopyFromBufferOffset::new(0, &encoded),
             NcValueRef::new(&binding)?,
         )?;
-        Ok(Widget::from_interface(widget))
+        Ok(neocogi_ui::OwnedWidget::from_interface(widget))
     }
 }
 

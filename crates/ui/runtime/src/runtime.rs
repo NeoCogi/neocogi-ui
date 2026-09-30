@@ -116,7 +116,7 @@ pub(crate) struct RuntimeStorage {
     menus: RefCell<Vec<(usize, std::rc::Weak<menus::Declaration>)>>,
     /// Reusable descendant-first widget snapshot within one update; no handles survive a frame.
     /// A callback may edit topology, so no RefCell borrow spans its COM call.
-    dispatch_widgets: RefCell<Vec<ComPtr<IWidgetAbi>>>,
+    dispatch_widgets: RefCell<Vec<neocogi_com::WeakComBox<IWidgetAbi>>>,
 }
 
 /// Temporary association between an actual COM widget and an existing retained root.
@@ -180,15 +180,12 @@ impl Drop for RuntimeStorage {
     /// Final release closes retained handles even without an explicit application close.
     fn drop(&mut self) {
         self.factory.state.closed.set(true);
-        // Remove the forest first, then finish deferred widget close without
-        // holding any traversal or RefCell borrow across a foreign call.
+        // Removing the forest drops root owners. Admitted widget calls protect
+        // only their own values until return; weak snapshots own no resources.
         drop(self.context.get_mut().take());
-        let _ = self.factory.state.finish_widget_closure();
         self.dispatch_widgets.get_mut().clear();
-        // No future runtime boundary exists after final destruction. A caller
-        // may still own a borrowed widget, but the closed host rejects its work.
-        // Do not retain that widget in a host -> widget -> host reference cycle.
-        self.factory.state.release_pending_closure();
+        // No retry list survives final runtime destruction. A local admitted
+        // guard releases its value on return without a host/widget owner cycle.
     }
 }
 
@@ -326,12 +323,7 @@ impl UiRuntime for Runtime {
     fn close(&self) -> Result<(), NcStatus> {
         let storage = &self.storage;
         if storage.factory.state.closed.get() {
-            // Closing again may finish a widget close previously blocked by a
-            // caller's local widget guard. Never reenter an active handler.
-            return match storage.updating.get() {
-                true => Ok(()),
-                false => storage.factory.state.finish_widget_closure(),
-            };
+            return Ok(());
         }
         let mut context = storage.context()?;
         let surfaces: Vec<_> = storage.mounts.borrow().iter().map(|m| m.surface.clone()).collect();
@@ -346,11 +338,7 @@ impl UiRuntime for Runtime {
         context.clear_choice_menus();
         drop(context);
         let views = storage.factory.state.error.take().map_or(Ok(()), Err);
-        let owners = match storage.updating.get() {
-            true => Ok(()), // The active event handler must return before its own cleanup.
-            false => storage.factory.state.finish_widget_closure(),
-        };
-        views.and(owners)
+        views
     }
 }
 
@@ -408,27 +396,14 @@ impl Runtime {
         }
         let _guard = UpdateGuard(&storage.updating);
         let result = self.run_update_cycle(size, dispatcher);
-        // Every recoverable exit finalizes already removed widgets, including
-        // input/layout failures before the next ordinary dispatch boundary.
-        let context_available = storage.context.borrow().is_some();
-        let retired = match context_available {
-            true => storage.factory.state.finish_widget_closure(),
-            false => Ok(()), // A rejected reentry must not run cleanup inside its caller's traversal.
-        };
-        // The body marks pending only after acquiring the context. A rejected
-        // reentrant call during paint must not invalidate its caller's commit.
-        if retired.is_err() {
-            storage.pending.set(true);
-        }
-        // Preserve scratch capacity, not widget ownership, between updates.
-        // Retaining this snapshot across frames would prolong a removed leaf's
-        // allocation after its final application handle is released.
+        // Dispatch snapshots hold weak access only. Discard expired observers
+        // between frames while preserving reusable vector capacity.
         storage.dispatch_widgets.borrow_mut().clear();
         storage.factory.state.dispatch_order_changed.set(true);
-        result.and(retired)
+        result
     }
 
-    /// Performs one guarded update; the outer operation always drains terminal cleanup.
+    /// Performs one guarded update; the outer operation releases weak dispatch snapshots.
     fn run_update_cycle(&self, size: Size, dispatcher: Option<ComRef<'_, IApplicationDispatcherAbi>>) -> Result<(), NcStatus> {
         let storage = &self.storage;
         let dimensions = Dimensioni::new(size.width, size.height);
@@ -483,7 +458,6 @@ impl Runtime {
                 return Err(UI_E_EVENT_LIMIT);
             }
             self.storage.layout_boundary(dimensions)?;
-            self.storage.factory.state.finish_widget_closure()?;
             let reconciled = {
                 let mut context = self.storage.context()?;
                 context.reconcile_choice_menus()?
@@ -502,9 +476,11 @@ impl Runtime {
                 // One message per visit lets removal take effect before this
                 // widget receives any successor from its private channel.
                 let handled = widget.dispatch_next();
-                let retired = self.storage.factory.state.finish_widget_closure();
-                let handled = handled?;
-                retired?;
+                let handled = match handled {
+                    Ok(value) => value,
+                    Err(neocogi_com::NC_E_CLOSED) => { index += 1; continue; }
+                    Err(error) => return Err(error),
+                };
                 if handled || self.storage.factory.state.dispatch_order_changed.get() {
                     progressed = true;
                     // Topology-changing callbacks must also count when they report no message.
@@ -527,9 +503,7 @@ impl Runtime {
                 Some(mut dispatcher) => dispatcher.dispatch_next(),
                 None => Ok(false),
             };
-            let retired = self.storage.factory.state.finish_widget_closure();
             let delivered = delivered?;
-            retired?;
             self.storage.open()?;
             self.storage.phase_result()?;
             match delivered {

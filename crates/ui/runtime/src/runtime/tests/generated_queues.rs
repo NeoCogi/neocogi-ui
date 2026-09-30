@@ -60,12 +60,11 @@ fn key(ui: &neocogi_ui::Ui, key: KeyCode) {
 #[test]
 fn generated_shared_queue_resolves_origins_and_rejects_replaced_forms() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
-    let mut root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
-    let window = ui.window("generated", RECT, &root).unwrap();
+    let root_owner = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
+    let mut root = root_owner.handle();
+    let window = ui.window("generated", RECT, root_owner).unwrap();
     let mut slot = ReloadSlot::new(ui.clone(), window.clone()).unwrap();
-    root.insert(0, slot.widget(), LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
-        .unwrap()
-        .finish()
+    root.insert(0, slot.take_widget().unwrap(), LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
         .unwrap();
     let document = Document::from_json(include_bytes!(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -120,25 +119,25 @@ fn generated_shared_queue_resolves_origins_and_rejects_replaced_forms() {
     .unwrap();
     let replacement = replacement.unwrap();
     assert!(!slot.accepts(old.generation));
-    let old_origin = app.form.widget_text_3.as_interface().downgrade().unwrap();
-    assert!(old_origin.upgrade().unwrap().is_some(), "old form deliberately retains a closed widget");
+    let old_origin = app.form.widget_text_3.as_interface().clone();
+    assert!(!old_origin.is_alive(), "old form fields are observers, never owners");
     assert!(old.event.resolve(&replacement).unwrap().is_none());
     assert_eq!(app.form.widget_text_3.text().unwrap_err(), UI_E_CLOSED);
 
     // An unrelated live widget with the right interface cannot select a handler.
     let outsider = ui.widgets().button_unobserved("outsider").unwrap();
     let unrelated = generated::QueuedEvent::Source0 {
-        origin: outsider.as_interface().downgrade().unwrap(),
+        origin: outsider.as_interface().clone(),
         event: neocogi_ui::button::Event::Activated(Activation { label: "outside".into() }),
     };
     assert!(unrelated.resolve(&replacement).unwrap().is_none());
     let expired = generated::QueuedEvent::Source0 {
-        origin: outsider.as_interface().downgrade().unwrap(),
+        origin: outsider.as_interface().clone(),
         event: neocogi_ui::button::Event::Activated(Activation { label: "expired".into() }),
     };
     drop(outsider);
     assert!(expired.resolve(&replacement).unwrap().is_none());
     drop(app);
-    assert!(old_origin.upgrade().unwrap().is_none());
+    assert!(!old_origin.is_alive());
     window.close().unwrap();
 }

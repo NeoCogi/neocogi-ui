@@ -19,7 +19,7 @@ struct Fixture {
     /// Public component client; request state never lives in this wrapper.
     handle: neocogi_ui::FileDialog,
     /// Same runtime-owned concrete widget, retained only for test observations of fixed roles.
-    widget: LocalCom<FileDialog>,
+    widget: WeakLocalBox<FileDialog>,
     /// Default completion inbox is owned by this fixture until a test consumes it.
     messages: Option<std::sync::mpsc::Receiver<FileDialogCompletion>>,
 }
@@ -46,7 +46,7 @@ impl Fixture {
         let runtime = nc_ui::create_runtime_from_assets(source.as_com_ref(), gfx.as_com_ref()).unwrap();
         let ui = crate::bind_builtin_nodes(runtime.clone()).unwrap();
         let body = ui.widgets().button_unobserved("background").unwrap();
-        let owner = ui.window("owner", OWNER_RECT, &body).unwrap();
+        let owner = ui.window("owner", OWNER_RECT, body).unwrap();
         let services = crate::factory::NodeServices::bind(runtime.as_com_ref()).unwrap();
         let widget = FileDialog::new(services, owner.as_com_ref(), Some(queue)).unwrap();
         let interface = widget.query().unwrap();
@@ -86,7 +86,7 @@ impl Fixture {
         self.handle.open(&neocogi_ui::FileDialogRequest::new(path)).unwrap();
     }
     /// Returns the actual current dynamic file root to verify transactional replacement and handle preservation.
-    fn file_root(&self) -> ComPtr<IWidgetAbi> {
+    fn file_root(&self) -> WeakComBox<IWidgetAbi> {
         self.widget.try_borrow().unwrap().model.files.content().unwrap().node_interface().unwrap()
     }
 }
@@ -324,15 +324,15 @@ fn lifecycle_cancellation_is_once_per_request_and_stale_hide_does_not_cancel_reo
     fixture.open(directory.path());
     fixture.owner.close().unwrap();
     app.update(&fixture.ui, SIZE).unwrap();
-    assert_eq!(app.state().len(), 3);
+    assert_eq!(app.state().len(), 2);
     assert_eq!(fixture.handle.active(), Err(UI_E_CLOSED));
     app.update(&fixture.ui, SIZE).unwrap();
-    assert_eq!(app.state().len(), 3);
+    assert_eq!(app.state().len(), 2);
 }
 
 /// Final runtime release queues cancellation without invoking application code or retaining the runtime through its internal handlers.
 #[test]
-fn runtime_release_preserves_active_request_terminal_cancellation_without_a_widget_cycle() {
+fn runtime_release_destroys_active_picker_without_posting_from_an_expired_origin() {
     let mut fixture = Fixture::new();
     let directory = tempfile::tempdir().unwrap();
     let events = session(&mut fixture);
@@ -347,7 +347,7 @@ fn runtime_release_preserves_active_request_terminal_cancellation_without_a_widg
     for message in events.try_iter() {
         outcomes.push(completed_file_path(&message).unwrap());
     }
-    assert_eq!(&outcomes, &[None]);
+    assert!(outcomes.is_empty(), "destruction does not synthesize a completion from an expired widget");
     assert!(events.try_recv().is_err());
 }
 
@@ -411,7 +411,7 @@ fn application_callback_opens_picker_and_later_input_reaches_its_new_modal_scope
             ),
         )
         .unwrap();
-    let activator = fixture.ui.window("activator", OWNER_RECT, &button).unwrap();
+    let activator = fixture.ui.window("activator", OWNER_RECT, button).unwrap();
     /// Both request activation and completion share the application's FIFO.
     enum AppMessage {
         /// Requests that the reusable dialog become visible.
@@ -505,8 +505,7 @@ fn mounted_dialog_outlives_client_handles_and_retires_with_its_view() {
     assert!(messages.try_recv().is_err());
     owner.close().unwrap();
     ui.update(SIZE).unwrap();
-    assert!(matches!(messages.try_recv().unwrap(), FileDialogCompletion::Cancelled));
-    assert!(messages.try_recv().is_err());
+    assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
     assert_eq!(window.snapshot(), Err(UI_E_CLOSED));
     drop(runtime);
 }
@@ -535,14 +534,12 @@ fn shared_child_queue_discards_events_from_replaced_directory_rows() {
             .find(|(_, action)| matches!(action, Command::File(_)))
             .unwrap()
             .0
-            .upgrade()
-            .unwrap()
-            .unwrap();
+            .clone();
         (queue, old)
     };
     // Post through the real generated ABI before replacing the row's membership.
     let event = neocogi_ui::list_item::Event::Activated(Activation { label: "old.txt".into() });
-    queue.post(old.as_com_ref(), NcValueRef::new(&event).unwrap()).unwrap();
+    queue.post(old.borrow().unwrap().as_com_ref(), NcValueRef::new(&event).unwrap()).unwrap();
     {
         let mut dialog = fixture.widget.try_borrow_mut().unwrap();
         let listing = dialog.model.candidate(replacement.path()).unwrap();
@@ -551,7 +548,6 @@ fn shared_child_queue_discards_events_from_replaced_directory_rows() {
         assert!(dialog.model.selected.is_none());
         assert_eq!(dialog.model.filename.text().unwrap(), "");
     }
-    // A retained old origin is still a live COM allocation, but is no longer a
-    // member of the installed listing and cannot select a stale native path.
-    assert!(old.downgrade().unwrap().upgrade().unwrap().is_some());
+    // The old row has been destroyed; queued facts retain only its weak identity.
+    assert!(!old.is_alive());
 }

@@ -22,7 +22,9 @@ fn constructor_queue_allocates_once_and_drops_with_logical_widget_closure() {
     assert_eq!(present, absent, "the factory only retains a present queue; absence needs no dummy object");
     drop(queue);
     assert!(matches!(receiver.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
-    observed.node_interface().unwrap().close().unwrap();
+    let handle = observed.handle();
+    drop(observed);
+    let observed = handle;
     assert!(matches!(receiver.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
     // The closed editing handle can outlive its queue without retaining its captures.
     assert_eq!(observed.text(), Err(UI_E_CLOSED));
@@ -62,7 +64,7 @@ fn consumer_preserves_emission_order_snapshot_values_and_bounded_progress() {
     let runtime = runtime();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let (session_tx, session) = std::sync::mpsc::channel();
-    let mut a = ui
+    let a_owner = ui
         .widgets()
         .button_with_queue(
             "a",
@@ -78,7 +80,8 @@ fn consumer_preserves_emission_order_snapshot_values_and_bounded_progress() {
             ),
         )
         .unwrap();
-    let mut b = ui
+    let mut a = a_owner.handle();
+    let b_owner = ui
         .widgets()
         .button_with_queue(
             "b",
@@ -94,10 +97,11 @@ fn consumer_preserves_emission_order_snapshot_values_and_bounded_progress() {
             ),
         )
         .unwrap();
+    let mut b = b_owner.handle();
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
-    column.insert(0, &a, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
-    column.insert(1, &b, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
-    let window = ui.window("order", RECT, &column).unwrap();
+    column.insert(0, a_owner, LinearEdge::new(LayoutTrack::Content)).unwrap();
+    column.insert(1, b_owner, LinearEdge::new(LayoutTrack::Content)).unwrap();
+    let window = ui.window("order", RECT, column).unwrap();
     let mut labels = Vec::new();
 
     key(&ui, KeyCode::Tab);
@@ -144,7 +148,7 @@ fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let (renderer, probe) = renderer();
     let (events_tx, events) = std::sync::mpsc::channel();
-    let button = ui
+    let button_owner = ui
         .widgets()
         .button_with_queue(
             "replace window",
@@ -160,9 +164,10 @@ fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
             ),
         )
         .unwrap();
+    let button = button_owner.handle();
 
     let queue = neocogi_ui::test_event_queue!(window, Mutation, events_tx.clone(), |_queue, _origin, event| Mutation::Window(event)).unwrap();
-    let previous = ui.window_with_queue("first", RECT, &button, Some(queue.as_com_ref())).unwrap();
+    let previous = ui.window_with_queue("first", RECT, button_owner, Some(queue.as_com_ref())).unwrap();
     // Move every callback dependency into the persistent model; retain separate
     // assertion capabilities only where the test also needs direct observations.
     let app = TestApp::new(
@@ -174,8 +179,9 @@ fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
                     assert_eq!(ui.update(SIZE), Err(UI_E_BUSY));
                     assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_BUSY));
                     previous.close()?;
-                    let replacement = ui.widgets().textbox_unobserved("")?;
-                    *next = Some(ui.window("replacement", RECT, &replacement)?);
+                    let replacement_owner = ui.widgets().textbox_unobserved("")?;
+                    let replacement = replacement_owner.handle();
+                    *next = Some(ui.window("replacement", RECT, replacement_owner)?);
                     *editor = Some(replacement);
                     observations.push("activated");
                 }
@@ -203,7 +209,7 @@ fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
 fn dropping_inbox_and_application_releases_runtime_without_a_source_sink_cycle() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
-    let button = ui
+    let button_owner = ui
         .widgets()
         .button_with_queue(
             "owned runtime",
@@ -219,7 +225,8 @@ fn dropping_inbox_and_application_releases_runtime_without_a_source_sink_cycle()
             ),
         )
         .unwrap();
-    let window = ui.window("owner", RECT, &button).unwrap();
+    let button = button_owner.handle();
+    let window = ui.window("owner", RECT, button_owner).unwrap();
 
     drop(events);
     assert!(button.label().is_ok());
@@ -235,7 +242,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
     let (session_tx, session) = std::sync::mpsc::channel();
     let labels = Vec::new();
 
-    let mut checkbox = ui
+    let checkbox_owner = ui
         .widgets()
         .checkbox_with_queue(
             "check",
@@ -252,7 +259,8 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
             ),
         )
         .unwrap();
-    let window = ui.window("checkbox", RECT, &checkbox).unwrap();
+    let mut checkbox = checkbox_owner.handle();
+    let window = ui.window("checkbox", RECT, checkbox_owner).unwrap();
 
     checkbox.set_checked(true).unwrap();
     let app = TestApp::new(labels, session, |state, message| {
@@ -267,7 +275,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
     assert_eq!(&*app.state(), &["checked:false"]);
     window.close().unwrap();
 
-    let mut slider = ui
+    let slider_owner = ui
         .widgets()
         .slider_with_queue(
             SliderOptions {
@@ -289,7 +297,8 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
             ),
         )
         .unwrap();
-    let window = ui.window("slider", RECT, &slider).unwrap();
+    let mut slider = slider_owner.handle();
+    let window = ui.window("slider", RECT, slider_owner).unwrap();
 
     slider.set_value(5.0).unwrap();
     ui.update_with_events(SIZE, app.as_interface()).unwrap();
@@ -316,7 +325,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
             ),
         )
         .unwrap();
-    let window = ui.window("number", RECT, &number).unwrap();
+    let window = ui.window("number", RECT, number).unwrap();
 
     key(&ui, KeyCode::Tab);
     // Numeric text controls use Up/Down; horizontal sliders use Left/Right.
@@ -359,9 +368,9 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
         )
         .unwrap();
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
-    column.insert(0, &item, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
-    column.insert(1, &list_box, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
-    let window = ui.window("lists", RECT, &column).unwrap();
+    column.insert(0, item, LinearEdge::new(LayoutTrack::Content)).unwrap();
+    column.insert(1, list_box, LinearEdge::new(LayoutTrack::Content)).unwrap();
+    let window = ui.window("lists", RECT, column).unwrap();
 
     for input in [KeyCode::Tab, KeyCode::Space, KeyCode::Tab, KeyCode::Space] {
         key(&ui, input);
@@ -370,7 +379,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
     assert!(app.state().ends_with(&["item".to_owned(), "box".to_owned()]));
     window.close().unwrap();
 
-    let mut bar = ui
+    let bar_owner = ui
         .widgets()
         .scrollbar_with_queue(
             ScrollRange {
@@ -391,7 +400,8 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
             ),
         )
         .unwrap();
-    let window = ui.window("bar", RECT, &bar).unwrap();
+    let mut bar = bar_owner.handle();
+    let window = ui.window("bar", RECT, bar_owner).unwrap();
 
     let previous = app.state().len();
     bar.set_offset(0).unwrap();
@@ -417,7 +427,7 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let (session_tx, session) = std::sync::mpsc::channel();
     let labels = Vec::new();
-    let mut textbox = ui
+    let textbox_owner = ui
         .widgets()
         .textbox_with_queue(
             "",
@@ -431,7 +441,8 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
             ),
         )
         .unwrap();
-    let window = ui.window("textbox", RECT, &textbox).unwrap();
+    let mut textbox = textbox_owner.handle();
+    let window = ui.window("textbox", RECT, textbox_owner).unwrap();
     textbox.set_text("a").unwrap();
     let app = TestApp::new(labels, session, |state, message| {
         state.push(message);
@@ -462,7 +473,7 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
             ),
         )
         .unwrap();
-    let window = ui.window("textarea", RECT, &area).unwrap();
+    let window = ui.window("textarea", RECT, area).unwrap();
     key(&ui, KeyCode::Tab);
     ui.input(UiInput::Text, "☃").unwrap();
     ui.input(
@@ -481,7 +492,7 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     let popup_content = ui.widgets().text_block("popup", TextWrapping::None).unwrap();
     let queue = neocogi_ui::test_event_queue!(popup, String, session_tx.clone(), |_queue, _origin, _| "dismissed".to_owned()).unwrap();
     let mut popup = ui
-        .popup_with_queue(window.as_com_ref(), "popup", &popup_content, Some(queue.as_com_ref()))
+        .popup_with_queue(window.as_com_ref(), "popup", popup_content, Some(queue.as_com_ref()))
         .unwrap();
     popup.show_at(Rect { x: 100, y: 100, width: 20, height: 20 }).unwrap();
     ui.update_with_events(SIZE, app.as_interface()).unwrap();
@@ -510,9 +521,11 @@ fn failed_consumer_recovers_on_next_update_and_preserves_remaining_native_input(
         .unwrap();
     let editor = ui.widgets().textbox_unobserved("").unwrap();
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
-    column.insert(0, &button, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
-    column.insert(1, &editor, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
-    let window = ui.window("recovery", RECT, &column).unwrap();
+    column.insert(0, button, LinearEdge::new(LayoutTrack::Content)).unwrap();
+    let editor_owner = editor;
+    let editor = editor_owner.handle();
+    column.insert(1, editor_owner, LinearEdge::new(LayoutTrack::Content)).unwrap();
+    let window = ui.window("recovery", RECT, column).unwrap();
 
     let app = TestApp::new(0, events, |attempts, ()| {
         *attempts += 1;
@@ -548,7 +561,7 @@ fn real_lifecycle_cascade_is_deferred_until_each_consumer_returns() {
     let button = ui.widgets().button_unobserved("cascade").unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
     let queue = neocogi_ui::test_event_queue!(window, neocogi_ui::WindowEvent, events_tx.clone(), |_queue, _origin, event| event).unwrap();
-    let window = ui.window_with_queue("cascade", RECT, &button, Some(queue.as_com_ref())).unwrap();
+    let window = ui.window_with_queue("cascade", RECT, button, Some(queue.as_com_ref())).unwrap();
     window.set_visibility(Visibility::Hidden).unwrap();
     let app = TestApp::new((0, window.clone()), events, |(observed, window), event| {
         if event == WindowEvent::Hidden {
@@ -582,7 +595,7 @@ fn runtime_preserves_uncommitted_frame_on_foreign_consumer_failure() {
     let runtime = runtime();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let button = ui.widgets().button_unobserved("count").unwrap();
-    let window = ui.window("count", RECT, &button).unwrap();
+    let window = ui.window("count", RECT, button).unwrap();
     let dispatcher: ComPtr<IApplicationDispatcherAbi> = FailingOwner::from_value(FailingOwner).query().unwrap();
     assert_eq!(runtime.update_with_events(SIZE, dispatcher.as_com_ref()), Err(NC_E_INVALID_ARG));
     let (renderer, _) = renderer();
@@ -648,7 +661,9 @@ fn failed_post_preserves_committed_widget_state_and_requires_a_new_frame() {
         .widgets()
         .number_with_queue(NumberOptions { value: 9.0, step: 1.0, precision: 0 }, Some(queue.as_com_ref()))
         .unwrap();
-    let window = ui.window("post failure", RECT, &number).unwrap();
+    let number_owner = number;
+    let number = number_owner.handle();
+    let window = ui.window("post failure", RECT, number_owner).unwrap();
     ui.update(SIZE).unwrap();
     key(&ui, KeyCode::Tab);
     key(&ui, KeyCode::ArrowUp);
@@ -681,7 +696,7 @@ fn failed_lifecycle_post_preserves_visibility_and_returns_its_receiver_error() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let button = ui.widgets().button_unobserved("lifecycle").unwrap();
     let queue = Reject::from_value(Reject).query::<IWindowEventQueueAbi>().unwrap();
-    let window = ui.window_with_queue("post failure", RECT, &button, Some(queue.as_com_ref())).unwrap();
+    let window = ui.window_with_queue("post failure", RECT, button, Some(queue.as_com_ref())).unwrap();
     assert_eq!(window.set_visibility(Visibility::Hidden), Err(NC_E_INVALID_ARG));
     assert_eq!(window.snapshot().unwrap().visibility, Visibility::Hidden);
 

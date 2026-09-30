@@ -105,8 +105,8 @@ pub struct Textbox {
     editing: super::editing::Editing,
     /// Initialization-only font.
     font: FontRef,
-    /// Single event slot; receives its destination during construction and closes with the widget.
-    events: neocogi_ui_nodes_contracts::TextboxEventPort,
+    /// Single event slot; receives its destination during construction and is released when the widget is destroyed.
+    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::TextboxEventQueueAbi>,
 }
 
 impl Textbox {
@@ -391,18 +391,10 @@ impl From<TextboxParameters> for crate::test_support::algorithm::Algorithm<Textb
 }
 
 impl crate::widget_object::WidgetAlgorithm for Textbox {
-    /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
-    fn close_events(&mut self) {
-        self.events.close();
-    }
+
 }
 
 impl crate::widget_object::HostedWidget for Textbox {
-    /// Releases queues, revokes outstanding clipboard receipts, and drops local history.
-    fn close_contents(&mut self) {
-        crate::widget_object::WidgetAlgorithm::close_events(self);
-        self.editing = super::editing::Editing::default();
-    }
 
     /// Borrows common lifecycle and resource state without a second textbox representation.
     fn runtime(&self) -> &crate::widget_object::WidgetRuntime {
@@ -441,7 +433,7 @@ mod tests {
     fn text_dispatcher(
         textbox: crate::test_support::algorithm::Algorithm<Textbox>,
     ) -> (
-        crate::test_support::algorithm::Algorithm<neocogi_com::LocalCom<Textbox>>,
+        crate::test_support::algorithm::Algorithm<neocogi_com::LocalBox<Textbox>>,
         impl FnMut(&mut Vec<RecordedEvent>) -> bool,
     ) {
         let (events_tx, events) = std::sync::mpsc::channel();
@@ -451,8 +443,8 @@ mod tests {
         })
         .unwrap();
         let textbox = textbox.map(|mut value| {
-            Textbox::into_local_cyclic::<TextboxAbi>(move |origin| {
-                value.events = neocogi_com::events::EventPort::with_queue(Some(queue), origin);
+            Textbox::into_local_box_cyclic::<TextboxAbi>(move |origin| {
+                value.events = crate::widget_object::WidgetEvents::with_queue(Some(queue), origin);
                 value
             })
             .unwrap()
@@ -551,7 +543,7 @@ mod tests {
     #[test]
     fn text_events_preserve_complete_snapshots_and_consumer_fifo() {
         let textbox = crate::test_support::algorithm::Algorithm::<Textbox>::from(TextboxParameters::new(""));
-        let (textbox, mut dispatcher) = text_dispatcher(textbox);
+        let (mut textbox, mut dispatcher) = text_dispatcher(textbox);
         let mut textbox = textbox.try_borrow_mut().unwrap();
 
         update_textbox(
@@ -584,7 +576,7 @@ mod tests {
     #[test]
     fn programmatic_text_and_cursor_setters_are_silent() {
         let textbox = crate::test_support::algorithm::Algorithm::<Textbox>::from(TextboxParameters::new("initial"));
-        let (textbox, mut dispatcher) = text_dispatcher(textbox);
+        let (mut textbox, mut dispatcher) = text_dispatcher(textbox);
         let mut textbox = textbox.try_borrow_mut().unwrap();
         textbox.set_text("replacement");
         textbox.set_cursor(3);
@@ -650,11 +642,11 @@ impl Textbox {
         resources: crate::widget_object::SharedAssets,
         text: NcCopyFromBufferOffset<'_, u8>,
         queue: Option<ComPtr<neocogi_ui_nodes_contracts::TextboxEventQueueAbi>>,
-    ) -> Result<ComPtr<TextboxAbi>, NcStatus> {
+    ) -> Result<neocogi_com::ComBox<TextboxAbi>, NcStatus> {
         let mut value = Self::build(host, text, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
-        Self::from_value_cyclic::<TextboxAbi>(move |origin| {
-            value.events = neocogi_com::events::EventPort::with_queue(queue, origin);
+        Self::into_box_cyclic::<TextboxAbi>(move |origin| {
+            value.events = crate::widget_object::WidgetEvents::with_queue(queue, origin);
             value
         })?
         .query()

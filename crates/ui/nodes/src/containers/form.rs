@@ -34,7 +34,7 @@ pub struct Form {
     /// Common lifecycle, resource access and layout invalidation.
     runtime: WidgetRuntime,
     /// Exclusive child topology writer; external callers receive its immutable view.
-    editor: ComPtr<IChildrenEditorAbi>,
+    editor: neocogi_com::ComBox<IChildrenEditorAbi>,
     /// Preferred content extent; allocation may be smaller and clip the form.
     size: Size,
     /// Validated content-relative rectangles in exact child ownership order.
@@ -42,11 +42,11 @@ pub struct Form {
 }
 impl Form {
     /// Creates a host-bound form after validating its preferred dimensions.
-    pub(crate) fn create_com(host: ComPtr<IWidgetHostAbi>, resources: crate::widget_object::SharedAssets, size: Size) -> Result<ComPtr<FormAbi>, NcStatus> {
+    pub(crate) fn create_com(host: ComPtr<IWidgetHostAbi>, resources: crate::widget_object::SharedAssets, size: Size) -> Result<neocogi_com::ComBox<FormAbi>, NcStatus> {
         let size = dimensions(size)?;
         let editor = host.create_children()?;
         let runtime = WidgetRuntime::for_resources(host, WidgetOption::NO_INTERACT, Some(&resources))?;
-        Ok(Self::from_value(Self { runtime, editor, size, edges: Vec::new() })
+        Ok(Self::into_box(Self { runtime, editor, size, edges: Vec::new() })
             .query()
             .expect("Form declares its class contract"))
     }
@@ -60,10 +60,7 @@ impl HostedWidget for Form {
     fn runtime_mut(&mut self) -> &mut WidgetRuntime {
         &mut self.runtime
     }
-    /// Permanently closes all owned children on form retirement.
-    fn close_children(&mut self) -> Result<neocogi_ui_core_contracts::ChildEditResult, neocogi_com::NcStatus> {
-        self.editor.close()
-    }
+
 }
 impl crate::widget_object::WidgetAlgorithm for Form {}
 impl super::ContainerAlgorithm for Form {

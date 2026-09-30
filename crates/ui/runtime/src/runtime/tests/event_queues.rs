@@ -100,14 +100,14 @@ fn constructor_queues_reject_invalid_payloads_before_recording() {
     let mut sink = neocogi_ui::test_event_queue!(textbox, neocogi_ui::textbox::Event, sender, |_queue, _origin, event| event).unwrap();
     let invalid = neocogi_ui::textbox::Event::Changed(TextChanged { text: "é".into(), cursor: 1 });
     assert_eq!(
-        sink.post(origin.as_interface(), neocogi_com::NcValueRef::new(&invalid).unwrap()),
+        sink.post(origin.as_interface().borrow().unwrap().as_com_ref(), neocogi_com::NcValueRef::new(&invalid).unwrap()),
         Err(NC_E_INVALID_ARG)
     );
     assert!(receiver.try_recv().is_err());
     let valid = neocogi_ui::textbox::Event::Changed(TextChanged { text: "é".into(), cursor: 2 });
-    sink.post(origin.as_interface(), neocogi_com::NcValueRef::new(&valid).unwrap()).unwrap();
+    sink.post(origin.as_interface().borrow().unwrap().as_com_ref(), neocogi_com::NcValueRef::new(&valid).unwrap()).unwrap();
     sink.post(
-        origin.as_interface(),
+        origin.as_interface().borrow().unwrap().as_com_ref(),
         neocogi_com::NcValueRef::new(&neocogi_ui::textbox::Event::Submitted(TextSubmitted { text: "é".into() })).unwrap(),
     )
     .unwrap();
@@ -125,7 +125,7 @@ fn constructor_queues_reject_invalid_payloads_before_recording() {
     let mut sink = neocogi_ui::test_event_queue!(number, (), sender, |_queue, _origin, _| ()).unwrap();
     assert_eq!(
         sink.post(
-            origin.as_interface(),
+            origin.as_interface().borrow().unwrap().as_com_ref(),
             neocogi_com::NcValueRef::new(&neocogi_ui::number::Event::Changed(NumericChanged { value: f32::INFINITY })).unwrap()
         ),
         Err(NC_E_INVALID_ARG)
@@ -136,9 +136,9 @@ fn constructor_queues_reject_invalid_payloads_before_recording() {
 /// Application-owned messages retain snapshots and weak producer identities only.
 enum AppMessage {
     /// Complete button stream; the origin does not keep a removed button alive.
-    Button(neocogi_com::WeakComPtr<ButtonAbi>, neocogi_ui_nodes_contracts::ButtonEvent),
+    Button(neocogi_com::WeakComBox<ButtonAbi>, neocogi_ui_nodes_contracts::ButtonEvent),
     /// Complete textbox stream, delivered through the same queue allocation.
-    Textbox(neocogi_com::WeakComPtr<TextboxAbi>, neocogi_ui_nodes_contracts::TextboxEvent),
+    Textbox(neocogi_com::WeakComBox<TextboxAbi>, neocogi_ui_nodes_contracts::TextboxEvent),
 }
 
 #[neocogi_com::com_object(interfaces(neocogi_ui_nodes_contracts::ButtonEventQueue, neocogi_ui_nodes_contracts::TextboxEventQueue))]
@@ -157,7 +157,7 @@ impl neocogi_ui_nodes_contracts::ButtonEventQueue for AppQueue {
         // Posting happens while the emitter owns its exclusive call gate. Even
         // observations must wait for dispatch; weak acquisition touches no state.
         assert_eq!(origin.label().err(), Some(neocogi_com::NC_E_BUSY));
-        let _ = self.sender.send(AppMessage::Button(origin.downgrade()?, event.to_owned()?));
+        let _ = self.sender.send(AppMessage::Button(origin.downgrade_box()?, event.to_owned()?));
         Ok(())
     }
 }
@@ -170,13 +170,13 @@ impl neocogi_ui_nodes_contracts::TextboxEventQueue for AppQueue {
     ) -> Result<(), NcStatus> {
         let event = event.to_owned()?;
         neocogi_ui::textbox::validate(&event)?;
-        let _ = self.sender.send(AppMessage::Textbox(origin.downgrade()?, event));
+        let _ = self.sender.send(AppMessage::Textbox(origin.downgrade_box()?, event));
         Ok(())
     }
 }
 
 /// Real routed input proves shared allocation, origin identity, captured ordering,
-/// independent snapshot lifetime, and destruction versus retained logical closure.
+/// independent snapshot lifetime, and owner destruction despite retained weak observations.
 #[test]
 fn one_application_queue_handles_two_widget_types_without_retaining_origins() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
@@ -187,12 +187,12 @@ fn one_application_queue_handles_two_widget_types_without_retaining_origins() {
     assert_eq!(buttons.as_raw().object, texts.as_raw().object);
     let button = ui.widgets().button_with_queue("captured", Some(buttons.as_com_ref())).unwrap();
     let textbox = ui.widgets().textbox_with_queue("", Some(texts.as_com_ref())).unwrap();
-    let button_origin = button.as_interface().downgrade().unwrap();
-    let text_origin = textbox.as_interface().downgrade().unwrap();
+    let button_origin = button.as_interface().clone();
+    let text_origin = textbox.as_interface().clone();
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
-    column.insert(0, &button, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
-    column.insert(1, &textbox, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
-    let window = ui.window("shared queue", RECT, &column).unwrap();
+    column.insert(0, button, LinearEdge::new(LayoutTrack::Content)).unwrap();
+    column.insert(1, textbox, LinearEdge::new(LayoutTrack::Content)).unwrap();
+    let window = ui.window("shared queue", RECT, column).unwrap();
     for key in [KeyCode::Tab, KeyCode::Space, KeyCode::Tab] {
         ui.input(
             UiInput::Key(KeyStroke {
@@ -209,15 +209,15 @@ fn one_application_queue_handles_two_widget_types_without_retaining_origins() {
     ui.input(UiInput::Text, "owned snapshot").unwrap();
     ui.update(SIZE).unwrap();
     window.close().unwrap();
-    let retained = button_origin.upgrade().unwrap().unwrap();
+    let retained = button_origin.clone();
     assert_eq!(retained.label().err(), Some(UI_E_CLOSED));
-    drop((retained, button, textbox, column, window, buttons, texts, queue));
-    assert!(button_origin.upgrade().unwrap().is_none());
-    assert!(text_origin.upgrade().unwrap().is_none());
+    drop((retained, window, buttons, texts, queue));
+    assert!(!button_origin.is_alive());
+    assert!(!text_origin.is_alive());
     match messages.try_recv().unwrap() {
         AppMessage::Button(origin, neocogi_ui_nodes_contracts::ButtonEvent::Activated(event)) => {
             assert!(origin.same_object(&button_origin));
-            assert!(origin.upgrade().unwrap().is_none());
+            assert!(!origin.is_alive());
             assert_eq!(event.label, "captured");
         }
         _ => panic!("button should enqueue first"),
@@ -225,7 +225,7 @@ fn one_application_queue_handles_two_widget_types_without_retaining_origins() {
     match messages.try_recv().unwrap() {
         AppMessage::Textbox(origin, neocogi_ui_nodes_contracts::TextboxEvent::Changed(event)) => {
             assert!(origin.same_object(&text_origin));
-            assert!(origin.upgrade().unwrap().is_none());
+            assert!(!origin.is_alive());
             assert_eq!(event.text, "owned snapshot");
         }
         _ => panic!("textbox should enqueue second"),
@@ -241,35 +241,37 @@ fn composite_queues_report_outer_origins_without_retaining_their_children() {
     let (send, messages) = std::sync::mpsc::channel();
     let queue = neocogi_ui::test_event_queue!(
         text_area,
-        (neocogi_com::WeakComPtr<TextAreaAbi>, neocogi_ui::text_area::Event),
+        (neocogi_com::WeakComBox<TextAreaAbi>, neocogi_ui::text_area::Event),
         send,
-        |_queue, origin, event| (origin.downgrade()?, event)
+        |_queue, origin, event| (origin.downgrade_box()?, event)
     )
     .unwrap();
     let area = ui
         .widgets()
         .text_area_with_queue("", TextWrapping::Word, true, Some(queue.as_com_ref()))
         .unwrap();
-    let origin = area.as_interface().downgrade().unwrap();
-    let window = ui.window("area origin", RECT, &area).unwrap();
+    let origin = area.as_interface().clone();
+    let window = ui.window("area origin", RECT, area).unwrap();
     key_for_origin_test(&ui, KeyCode::Tab);
     ui.input(UiInput::Text, "outer text").unwrap();
     ui.update(SIZE).unwrap();
     window.close().unwrap();
-    drop((window, area, queue));
+    drop((window, queue));
     let (captured, event) = messages.try_recv().unwrap();
     assert!(captured.same_object(&origin));
-    assert!(captured.upgrade().unwrap().is_none());
+    assert!(!captured.is_alive());
     assert!(matches!(event, TextAreaEvent::Changed(TextChanged { text, .. }) if text == "outer text"));
 
-    let mut root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
-    let window = ui.window("combo origin", RECT, &root).unwrap();
+    let root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
+    let root_owner = root;
+    let mut root = root_owner.handle();
+    let window = ui.window("combo origin", RECT, root_owner).unwrap();
     let (send, messages) = std::sync::mpsc::channel();
     let queue = neocogi_ui::test_event_queue!(
         combo,
-        (neocogi_com::WeakComPtr<ComboAbi>, neocogi_ui::combo::Event),
+        (neocogi_com::WeakComBox<ComboAbi>, neocogi_ui::combo::Event),
         send,
-        |_queue, origin, event| (origin.downgrade()?, event)
+        |_queue, origin, event| (origin.downgrade_box()?, event)
     )
     .unwrap();
     let combo = ui
@@ -280,17 +282,17 @@ fn composite_queues_report_outer_origins_without_retaining_their_children() {
             Some(queue.as_com_ref()),
         )
         .unwrap();
-    let origin = combo.as_interface().downgrade().unwrap();
-    root.insert(0, &combo, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
+    let origin = combo.as_interface().clone();
+    root.insert(0, combo, LinearEdge::new(LayoutTrack::Content)).unwrap();
     for key in [KeyCode::Tab, KeyCode::Enter, KeyCode::ArrowDown, KeyCode::Enter] {
         key_for_origin_test(&ui, key);
     }
     ui.update(SIZE).unwrap();
     window.close().unwrap();
-    drop((window, root, combo, queue));
+    drop((window, root, queue));
     let (captured, event) = messages.try_recv().unwrap();
     assert!(captured.same_object(&origin));
-    assert!(captured.upgrade().unwrap().is_none());
+    assert!(!captured.is_alive());
     let neocogi_ui::combo::Event::Changed(selection) = event;
     assert_eq!(selection, ChoiceSelection::Selected(1));
 }

@@ -2,7 +2,7 @@
 mod tests {
     use neocogi_ui::com::*;
     use neocogi_com::{ComRef, NcCopyFromBufferOffset, NcStatus};
-    use neocogi_com::{ComPtr, IUnknown, NcString, NC_E_INVALID_ARG};
+    use neocogi_com::{ComPtr, ComBox, IUnknown, NcString, NC_E_INVALID_ARG};
 
     #[neocogi_com::com_class(neocogi_ui::nodes::Button)]
     /// Concrete stand-in for a plugin button, using the same COM macro and ownership path.
@@ -11,8 +11,6 @@ mod tests {
         label: String,
         /// Current requested flags owned by this independent COM fixture.
         requested_flags: WidgetOptions,
-        /// Explicit producer storage enforces one behavioral parent.
-        events: neocogi_ui::nodes::ButtonEventPort,
         /// Sticky invalidation consumed by runtime traversal.
         changed: bool,
     }
@@ -98,12 +96,6 @@ mod tests {
         fn mount(&mut self) -> Result<(), NcStatus> {
             Err(neocogi_com::NC_E_NOINTERFACE)
         }
-        /// Drops the construction receiver even when a test retains an editing handle.
-        fn close(&mut self) -> Result<(), NcStatus> {
-            self.events.close();
-            Ok(())
-        }
-
         /// Fixture policy is independent of any native runtime or theme implementation.
         fn properties(&self) -> Result<WidgetProperties, NcStatus> {
             Ok(WidgetProperties {
@@ -153,13 +145,12 @@ mod tests {
     /// The generic host proxy edits a concrete COM object and shares its invalidation state.
     #[test]
     fn generic_proxy_calls_com_contract() -> Result<(), NcStatus> {
-        let unknown: ComPtr<IUnknown> = TestButton::from_value(TestButton {
+        let unknown: ComBox<IUnknown> = TestButton::into_box(TestButton {
             label: String::new(),
             requested_flags: WidgetOptions::NONE,
-            events: Default::default(),
             changed: false,
         });
-        let mut button = ButtonWidget::from_interface(unknown.query::<ButtonAbi>()?);
+        let mut button = ButtonWidget::from_interface(unknown.downgrade().query::<ButtonAbi>()?);
         button.set_label("Save")?;
         assert_eq!(button.label()?, "Save");
         let mut node = button.node_interface()?;
@@ -182,14 +173,13 @@ mod tests {
     /// Wrong projections fail through QueryInterface and invalid inputs are transactional.
     #[test]
     fn concrete_proxy_rejects_wrong_capabilities_and_invalid_text() {
-        let unknown = TestButton::from_value(TestButton {
+        let unknown = TestButton::into_box(TestButton {
             label: String::from("before"),
             requested_flags: WidgetOptions::NONE,
-            events: Default::default(),
             changed: false,
         });
-        assert_eq!(unknown.query::<IChildrenAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
-        let mut button: ComPtr<ButtonAbi> = unknown.query().unwrap();
+        assert_eq!(unknown.downgrade().query::<IChildrenAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
+        let mut button = unknown.downgrade().query::<ButtonAbi>().unwrap();
         assert_eq!(button.set_label(NcCopyFromBufferOffset::new(1, b"after")), Err(NC_E_INVALID_ARG));
         assert_eq!(button.set_label(NcCopyFromBufferOffset::new(0, &[0xff])), Err(NC_E_INVALID_ARG));
         let proxy = ButtonWidget::from_interface(button);

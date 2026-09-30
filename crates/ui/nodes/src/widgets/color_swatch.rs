@@ -188,9 +188,9 @@ impl ColorSwatch {
         resources: crate::widget_object::SharedAssets,
         rgba: u32,
         label: NcCopyFromBufferOffset<'_, u8>,
-    ) -> Result<ComPtr<ColorSwatchAbi>, NcStatus> {
+    ) -> Result<neocogi_com::ComBox<ColorSwatchAbi>, NcStatus> {
         let value = Self::build(host, rgba, label, Some(&resources))?;
-        Ok(Self::from_value(value).query().expect("ColorSwatch declares its callable class contract"))
+        Ok(Self::into_box(value).query().expect("ColorSwatch declares its callable class contract"))
     }
 
     /// Builds one color swatch with either directly imported or runtime-shared resources.

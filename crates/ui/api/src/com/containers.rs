@@ -18,19 +18,19 @@ impl Widget<SplitViewAbi> {
         self.interface.children()
     }
     /// Inserts a first or second pane; a third pane is rejected before attachment.
-    pub fn insert(&mut self, index: u32, pane: &impl Mountable) -> Result<ChildEditResult, NcStatus> {
-        self.interface.insert(index, pane.mount_widget()?.as_com_ref())
+    pub fn insert(&mut self, index: u32, pane: impl Mountable) -> Result<(), NcStatus> {
+        self.interface.insert(index, pane.mount_widget()?)
     }
-    /// Replaces and closes one pane while preserving the split container.
-    pub fn replace(&mut self, index: u32, pane: &impl Mountable) -> Result<ChildEditResult, NcStatus> {
-        self.interface.replace(index, pane.mount_widget()?.as_com_ref())
+    /// Replaces and destroys one pane while preserving the split container.
+    pub fn replace(&mut self, index: u32, pane: impl Mountable) -> Result<(), NcStatus> {
+        self.interface.replace(index, pane.mount_widget()?)
     }
     /// Removes one pane; the surviving pane fills the allocation after layout.
-    pub fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus> {
+    pub fn remove(&mut self, index: u32) -> Result<(), NcStatus> {
         self.interface.remove(index)
     }
     /// Retires both panes without retiring the split itself.
-    pub fn clear(&mut self) -> Result<ChildEditResult, NcStatus> {
+    pub fn clear(&mut self) -> Result<(), NcStatus> {
         self.interface.clear()
     }
     /// Returns the requested split settings, unaffected by temporary narrow allocations.
@@ -124,9 +124,9 @@ impl Widget<ScrollAreaAbi> {
     pub fn content(&self) -> Result<Widget<IWidgetAbi>, NcStatus> {
         Ok(Widget::from_interface(self.interface.content()?))
     }
-    /// Replaces and closes application content while retaining the same outer scroll object and model.
-    pub fn replace_content(&mut self, content: &impl Mountable) -> Result<ChildEditResult, NcStatus> {
-        self.interface.replace_content(content.mount_widget()?.as_com_ref())
+    /// Replaces and destroys application content while retaining the same outer scroll object and model.
+    pub fn replace_content(&mut self, content: impl Mountable) -> Result<(), NcStatus> {
+        self.interface.replace_content(content.mount_widget()?)
     }
 }
 
@@ -147,20 +147,20 @@ macro_rules! container_proxy {
                 self.interface.set_edge(index, edge)
             }
             /// Inserts the actual child object after validating the complete relationship.
-            /// Err leaves topology unchanged; Ok requires inspecting its separate teardown status when relevant.
-            pub fn insert(&mut self, index: u32, child: &impl Mountable, edge: $edge) -> Result<ChildEditResult, NcStatus> {
-                self.interface.insert(index, child.mount_widget()?.as_com_ref(), edge)
+            /// The candidate is consumed even on Err; failure leaves existing topology unchanged.
+            pub fn insert(&mut self, index: u32, child: impl Mountable, edge: $edge) -> Result<(), NcStatus> {
+                self.interface.insert(index, child.mount_widget()?, edge)
             }
-            /// Replaces one subtree and relationship together. Ok reports committed replacement even if old-child teardown failed.
-            pub fn replace(&mut self, index: u32, child: &impl Mountable, edge: $edge) -> Result<ChildEditResult, NcStatus> {
-                self.interface.replace(index, child.mount_widget()?.as_com_ref(), edge)
+            /// Replaces one subtree and relationship together, dropping the previous child owner on success.
+            pub fn replace(&mut self, index: u32, child: impl Mountable, edge: $edge) -> Result<(), NcStatus> {
+                self.interface.replace(index, child.mount_widget()?, edge)
             }
-            /// Removes and closes one subtree; call the returned outcome's finish after observing the committed edit.
-            pub fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus> {
+            /// Removes one subtree and drops its exclusive owner.
+            pub fn remove(&mut self, index: u32) -> Result<(), NcStatus> {
                 self.interface.remove(index)
             }
             /// Removes all descendants and matching edge metadata while preserving the container object.
-            pub fn clear(&mut self) -> Result<ChildEditResult, NcStatus> {
+            pub fn clear(&mut self) -> Result<(), NcStatus> {
                 self.interface.clear()
             }
         }
@@ -195,14 +195,14 @@ enum Axis {
 }
 impl Axis {
     /// Executes the selected concrete copied-policy read.
-    fn copy(&self, grid: &ComPtr<GridAbi>, output: NcCopyToBufferOffset<'_, LayoutTrack>) -> Result<u32, NcStatus> {
+    fn copy(&self, grid: &WeakComBox<GridAbi>, output: NcCopyToBufferOffset<'_, LayoutTrack>) -> Result<u32, NcStatus> {
         match self {
             Self::Columns => grid.columns(output),
             Self::Rows => grid.rows(output),
         }
     }
     /// Allocates an ordinary application snapshot without retaining plugin state.
-    fn read(&self, grid: &ComPtr<GridAbi>) -> Result<Vec<LayoutTrack>, NcStatus> {
+    fn read(&self, grid: &WeakComBox<GridAbi>) -> Result<Vec<LayoutTrack>, NcStatus> {
         let count = self.copy(grid, NcCopyToBufferOffset::new(0, &mut []))?;
         let mut values = vec![LayoutTrack::Content; count as usize];
         if self.copy(grid, NcCopyToBufferOffset::new(0, &mut values))? != count {
@@ -232,33 +232,33 @@ impl Widget<GridAbi> {
 
 impl WidgetFactory {
     /// Creates an empty split; insert panes in first/second ownership order.
-    pub fn split_view_with_queue(&self, settings: SplitOptions, queue: Option<ComRef<'_, SplitViewEventQueueAbi>>) -> Result<SplitViewWidget, NcStatus> {
-        Ok(SplitViewWidget::from_interface(self.interface.create_split_view(
+    pub fn split_view_with_queue(&self, settings: SplitOptions, queue: Option<ComRef<'_, SplitViewEventQueueAbi>>) -> Result<OwnedWidget<SplitViewAbi>, NcStatus> {
+        Ok(OwnedWidget::from_interface(self.interface.create_split_view(
             settings,
             neocogi_com::NcValueRef::new(&SplitViewEventBinding::from_queue(queue))?,
         )?))
     }
     /// Creates a disclosure whose body starts empty and whose header owns the supplied label.
-    pub fn disclosure(&self, label: &str, style: DisclosureStyle, expanded: bool) -> Result<DisclosureWidget, NcStatus> {
-        Ok(DisclosureWidget::from_interface(self.interface.create_disclosure(
+    pub fn disclosure(&self, label: &str, style: DisclosureStyle, expanded: bool) -> Result<OwnedWidget<DisclosureAbi>, NcStatus> {
+        Ok(OwnedWidget::from_interface(self.interface.create_disclosure(
             NcCopyFromBufferOffset::new(0, label.as_bytes()),
             style,
             expanded,
         )?))
     }
     /// Constructs a framed scroll composite around one unmounted application widget.
-    pub fn scroll_area(&self, content: &impl Mountable, enabled: bool) -> Result<ScrollAreaWidget, NcStatus> {
-        Ok(ScrollAreaWidget::from_interface(
-            self.interface.create_scroll_area(content.mount_widget()?.as_com_ref(), enabled)?,
+    pub fn scroll_area(&self, content: impl Mountable, enabled: bool) -> Result<OwnedWidget<ScrollAreaAbi>, NcStatus> {
+        Ok(OwnedWidget::from_interface(
+            self.interface.create_scroll_area(content.mount_widget()?, enabled)?,
         ))
     }
     /// Creates an empty directional container with one complete axis/cross configuration.
-    pub fn linear(&self, direction: FlowDirection, cross: CrossSize) -> Result<LinearWidget, NcStatus> {
-        Ok(LinearWidget::from_interface(self.interface.create_linear(direction, cross)?))
+    pub fn linear(&self, direction: FlowDirection, cross: CrossSize) -> Result<OwnedWidget<LinearAbi>, NcStatus> {
+        Ok(OwnedWidget::from_interface(self.interface.create_linear(direction, cross)?))
     }
     /// Creates an empty Grid with complete validated track policies on both axes.
-    pub fn grid(&self, columns: &[LayoutTrack], rows: &[LayoutTrack]) -> Result<GridWidget, NcStatus> {
-        Ok(GridWidget::from_interface(self.interface.create_grid(
+    pub fn grid(&self, columns: &[LayoutTrack], rows: &[LayoutTrack]) -> Result<OwnedWidget<GridAbi>, NcStatus> {
+        Ok(OwnedWidget::from_interface(self.interface.create_grid(
             NcCopyFromBufferOffset::new(0, columns),
             NcCopyFromBufferOffset::new(0, rows),
         )?))
@@ -289,25 +289,25 @@ impl Widget<FormAbi> {
         self.interface.set_edge(index, edge)
     }
     /// Attaches one child after validating its complete rectangle.
-    pub fn insert(&mut self, index: u32, child: &impl Mountable, edge: Rect) -> Result<ChildEditResult, NcStatus> {
-        self.interface.insert(index, child.mount_widget()?.as_com_ref(), edge)
+    pub fn insert(&mut self, index: u32, child: impl Mountable, edge: Rect) -> Result<(), NcStatus> {
+        self.interface.insert(index, child.mount_widget()?, edge)
     }
     /// Replaces a child with the supplied geometry.
-    pub fn replace(&mut self, index: u32, child: &impl Mountable, edge: Rect) -> Result<ChildEditResult, NcStatus> {
-        self.interface.replace(index, child.mount_widget()?.as_com_ref(), edge)
+    pub fn replace(&mut self, index: u32, child: impl Mountable, edge: Rect) -> Result<(), NcStatus> {
+        self.interface.replace(index, child.mount_widget()?, edge)
     }
-    /// Closes one owned subtree.
-    pub fn remove(&mut self, index: u32) -> Result<ChildEditResult, NcStatus> {
+    /// Drops one owned subtree.
+    pub fn remove(&mut self, index: u32) -> Result<(), NcStatus> {
         self.interface.remove(index)
     }
-    /// Closes all children while retaining this form.
-    pub fn clear(&mut self) -> Result<ChildEditResult, NcStatus> {
+    /// Drops all child owners while retaining this form.
+    pub fn clear(&mut self) -> Result<(), NcStatus> {
         self.interface.clear()
     }
 }
 impl WidgetFactory {
     /// Creates a form whose child rectangles are interpreted by the runtime node.
-    pub fn form(&self, size: Size) -> Result<FormWidget, NcStatus> {
-        Ok(FormWidget::from_interface(self.interface.create_form(size)?))
+    pub fn form(&self, size: Size) -> Result<OwnedWidget<FormAbi>, NcStatus> {
+        Ok(OwnedWidget::from_interface(self.interface.create_form(size)?))
     }
 }

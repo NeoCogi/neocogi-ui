@@ -4,7 +4,7 @@ use neocogi_com::{
     binary, ComPtr, IUnknown, NcStatus, NcGuid, NcBytes, INcBytesAbi, NcCopyFromBufferOffset, NC_E_INVALID_ARG, NC_E_NOT_FOUND, NC_E_OUT_OF_RANGE,
 };
 use neocogi_com::persistence::{ObjectRecord, IPersistable};
-use neocogi_ui::{Ui, Widget, IWidgetAbi, IWindowAbi, ITextureAbi};
+use neocogi_ui::{Ui, Widget, OwnedWidget, IWidgetAbi, IWindowAbi, ITextureAbi};
 use std::collections::BTreeMap;
 use neocogi_ui::Mountable;
 
@@ -97,11 +97,7 @@ impl Loader {
     /// Validates all constructor receivers before creating the complete candidate tree.
     pub fn compile_with_events(&self, document: &Document, events: EventBindings) -> Result<Component, String> {
         self.services.custom.validate_document(document)?;
-        let object = self.services.construct(document.clone(), events).map_err(|error| error.to_string())?;
-        Ok(Component {
-            interface: object.query().map_err(|error| error.to_string())?,
-            object,
-        })
+        self.services.construct(document.clone(), events).map_err(|error| error.to_string())
     }
     /// Decodes external or embedded binary data before using the same typed construction routine.
     pub fn load(&self, bytes: &[u8]) -> Result<Component, NcStatus> {
@@ -111,22 +107,29 @@ impl Loader {
     pub fn load_with_events(&self, bytes: &[u8], events: EventBindings) -> Result<Component, NcStatus> {
         let document = Document::from_binary(bytes).map_err(|_| NC_E_INVALID_ARG)?;
         self.services.custom.validate_document(&document).map_err(|_| NC_E_INVALID_ARG)?;
-        let object = self.services.construct(document, events)?;
-        Ok(Component { interface: object.query()?, object })
+        self.services.construct(document, events)
     }
 }
 
 /// Compiled document recipe and typed lookups, independent of mounted widget lifetime.
-/// Dropping this result releases its references. A retained root remains usable;
-/// successful attachment transfers logical closure responsibility to the tree.
+/// Dropping this result destroys its unmounted root; weak lookups cannot retain it.
+/// successful attachment transfers the root owner into the tree.
 pub struct Component {
+    /// Unmounted root is moved exactly once into its parent. The metadata index
+    /// below contains observers only and never prolongs a mounted subtree.
+    root_owner: Option<OwnedWidget<IWidgetAbi>>,
     /// Canonical owner retained for authored snapshots and optional capabilities.
     object: ComPtr<IUnknown>,
     /// Cached root/widget lookup projection avoids repeated discovery.
     interface: ComPtr<contracts::IUiComponentAbi>,
 }
 impl Component {
-    /// Retains the actual root. The runtime owns closure after successful attachment.
+    /// Transfers the root into a window/container; repeated transfers fail.
+    /// A rejected insertion drops this owner and invalidates all lookup handles.
+    pub fn take_root(&mut self) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
+        self.root_owner.take().ok_or(neocogi_com::NC_E_CLOSED)
+    }
+    /// Observes the actual root without owning it. Use take_root to transfer it for mounting.
     pub fn root(&self) -> Result<Widget<IWidgetAbi>, NcStatus> {
         Ok(Widget::from_interface(self.interface.root()?))
     }
@@ -142,32 +145,38 @@ impl Component {
 }
 
 impl Mountable for Component {
-    /// Returns the actual root; the tree retains widgets without retaining this recipe.
-    fn mount_widget(&self) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
-        self.interface.root()
+    /// Consuming the component transfers its unique root and releases its recipe.
+    fn mount_widget(mut self) -> Result<neocogi_com::ComBox<IWidgetAbi>, NcStatus> {
+        Ok(self.take_root()?.into_interface())
+    }
+}
+impl Mountable for &mut Component {
+    /// Retains recipe/lookups while consuming the one root owner through &mut self.
+    fn mount_widget(self) -> Result<neocogi_com::ComBox<IWidgetAbi>, NcStatus> {
+        Ok(self.take_root()?.into_interface())
     }
 }
 
 /// Authored recipe and typed lookup capabilities, with ordinary COM reference ownership.
-/// This metadata is not a tree lifetime guard: releasing it must not close a root
-/// retained by the runtime or by an application. Failed construction is closed
-/// by Construction; rejected publication is closed explicitly by ReloadSlot.
+/// This metadata only observes widgets. Component owns an unmounted root separately;
+/// transfer into the tree makes recipe lifetime independent. Failed construction
+/// or publication destroys the candidate owner even when observers were retained.
 #[neocogi_com::com_object(interfaces(contracts::IUiComponent, neocogi_com::persistence::IPersistable))]
 struct Loaded {
     /// Exact authored values; intentionally independent of live interactive state.
     document: Document,
     /// Real tree root, attached only when the host commits the candidate.
     root: Widget<IWidgetAbi>,
-    /// Authored widget keys retain each concrete object for checked application queries.
+    /// Authored widget keys cache weak projections for checked application queries.
     nodes: BTreeMap<String, Widget<IWidgetAbi>>,
 }
 impl contracts::IUiComponent for Loaded {
     /// Shares the mountable widget identity without copying its state.
-    fn root(&self) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
+    fn root(&self) -> Result<neocogi_com::WeakComBox<IWidgetAbi>, NcStatus> {
         self.root.node_interface()
     }
     /// Resolves only widgets authored in this component; concrete type checks follow by QueryInterface.
-    fn widget(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
+    fn widget(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<neocogi_com::WeakComBox<IWidgetAbi>, NcStatus> {
         if name.offset() != 0 {
             return Err(NC_E_INVALID_ARG);
         }
@@ -213,7 +222,7 @@ struct Services {
 }
 impl Services {
     /// Builds the checked widget tree with one cleanup guard until ownership transfers.
-    fn construct(&self, document: Document, events: EventBindings) -> Result<ComPtr<IUnknown>, NcStatus> {
+    fn construct(&self, document: Document, events: EventBindings) -> Result<Component, NcStatus> {
         events.validate(&document, &self.custom)?;
         let mut construction = Construction {
             ui: &self.ui,
@@ -224,14 +233,16 @@ impl Services {
             events,
         };
         let root = construction.build(&document.root)?;
-        // Success transfers the complete typed tree to Loaded; the failed-build guard is disarmed.
-        let nodes = std::mem::take(&mut construction.nodes);
-        drop(construction);
-        Ok(Loaded::from_value(Loaded {
+        let object = Loaded::from_value(Loaded {
             document,
-            root,
-            nodes,
-        }))
+            root: root.handle(),
+            nodes: construction.nodes,
+        });
+        Ok(Component {
+            interface: object.query()?,
+            object,
+            root_owner: Some(root),
+        })
     }
 }
 

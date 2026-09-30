@@ -35,7 +35,7 @@ pub use neocogi_skin_contracts::{
     ISkinDiagnostics, ISkinDiagnosticsAbi, PaletteEdit, SkinPluginFactory, SkinPluginFactoryAbi, StyleCompiler,
     StyleCompilerAbi, ThemeLoader, ThemeLoaderAbi,
 };
-use neocogi_com::{ComInterface, ComPtr, ComRef, INcStringComPtrExt, IUnknown, NcCopyFromBufferOffset, NcStatus};
+use neocogi_com::{ComBox, WeakComBox, ComInterface, ComPtr, ComRef, INcStringComPtrExt, IUnknown, NcCopyFromBufferOffset, NcStatus};
 mod containers;
 pub use containers::{DisclosureWidget, FormWidget, GridWidget, LinearWidget, ScrollAreaWidget, SplitViewWidget};
 mod mount;
@@ -46,26 +46,33 @@ pub mod widget;
 
 /// Generic static proxy for one concrete widget editing capability.
 pub struct Widget<I: ComInterface> {
-    /// One checked, owned reference to the actual plugin object.
-    interface: ComPtr<I>,
+    /// Cached non-owning access; only the owning container retains the widget value.
+    interface: WeakComBox<I>,
 }
 
 impl<I: ComInterface> Clone for Widget<I> {
-    /// Clones the COM reference without copying widget state or topology.
+    /// Clones weak access without retaining widget resources or duplicating ownership.
     fn clone(&self) -> Self {
         Self { interface: self.interface.clone() }
     }
 }
 
 impl<I: ComInterface> Widget<I> {
-    /// Adopts a reference obtained through checked activation or QueryInterface.
-    pub fn from_interface(interface: ComPtr<I>) -> Self {
+    /// Adopts a validated weak projection returned by a container or owner.
+    pub fn from_interface(interface: WeakComBox<I>) -> Self {
         Self { interface }
     }
 
     /// Borrows the exact typed editing interface without changing ownership.
-    pub fn as_interface(&self) -> ComRef<'_, I> {
-        self.interface.as_com_ref()
+    pub fn as_interface(&self) -> &WeakComBox<I> {
+        &self.interface
+    }
+
+    /// Borrows the cached concrete editing interface for custom mutable commands.
+    /// This avoids cloning a weak token just to call a setter; the provider still
+    /// checks owner liveness and its allocation-wide mutable call gate.
+    pub fn as_interface_mut(&mut self) -> &mut WeakComBox<I> {
+        &mut self.interface
     }
 
     /// Replaces all requested widget flags, clearing every omitted bit.
@@ -84,11 +91,41 @@ impl<I: ComInterface> Widget<I> {
         self.node_interface()?.clear_flags(flags)
     }
 
-    /// Obtains the common node capability for attachment; callers cache this at mount.
-    pub fn node_interface(&self) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
+    /// Obtains weak common-widget access; attachment requires transferring an owner.
+    pub fn node_interface(&self) -> Result<WeakComBox<IWidgetAbi>, NcStatus> {
         // Querying preserves object identity and validates the full projected ABI.
         self.interface.query()
     }
+}
+
+/// One unmounted widget owner plus convenient non-owning typed method access.
+/// Insertion consumes this value. Call `handle` before insertion when the form
+/// needs a field for later edits; that field never keeps a removed control alive.
+pub struct OwnedWidget<I: ComInterface> {
+    /// The sole resource owner, transferred into the tree by Mountable.
+    owner: ComBox<I>,
+    /// Cached facade access shares method implementations with mounted controls.
+    view: Widget<I>,
+}
+impl<I: ComInterface> OwnedWidget<I> {
+    /// Adopts one factory result and caches weak editing access without querying.
+    pub fn from_interface(owner: ComBox<I>) -> Self {
+        let view = Widget::from_interface(owner.downgrade());
+        Self { owner, view }
+    }
+    /// Copies a non-owning form field before transferring the widget to a container.
+    pub fn handle(&self) -> Widget<I> { self.view.clone() }
+    /// Transfers the exclusive interface into a lower-level constructor or container.
+    pub fn into_interface(self) -> ComBox<I> { self.owner }
+}
+impl<I: ComInterface> core::ops::Deref for OwnedWidget<I> {
+    type Target = Widget<I>;
+    /// Uses the same typed editing facade before and after attachment.
+    fn deref(&self) -> &Self::Target { &self.view }
+}
+impl<I: ComInterface> core::ops::DerefMut for OwnedWidget<I> {
+    /// Mutable method lookup retains the provider's ordinary COM borrow checks.
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.view }
 }
 
 /// Static convenience wrapper around the dynamically constructed Button class projection.
@@ -289,8 +326,8 @@ impl WidgetFactory {
         wrapping: TextWrapping,
         scrolling: bool,
         queue: Option<ComRef<'_, TextAreaEventQueueAbi>>,
-    ) -> Result<TextAreaWidget, NcStatus> {
-        Ok(TextAreaWidget::from_interface(self.interface.create_text_area(
+    ) -> Result<OwnedWidget<TextAreaAbi>, NcStatus> {
+        Ok(OwnedWidget::from_interface(self.interface.create_text_area(
             NcCopyFromBufferOffset::new(0, text.as_bytes()),
             wrapping,
             scrolling,
@@ -298,63 +335,63 @@ impl WidgetFactory {
         )?))
     }
     /// Constructs an initialized, unmounted checkbox in this runtime.
-    pub fn checkbox_with_queue(&self, label: &str, checked: bool, queue: Option<ComRef<'_, CheckboxEventQueueAbi>>) -> Result<CheckboxWidget, NcStatus> {
-        Ok(CheckboxWidget::from_interface(self.interface.create_checkbox(
+    pub fn checkbox_with_queue(&self, label: &str, checked: bool, queue: Option<ComRef<'_, CheckboxEventQueueAbi>>) -> Result<OwnedWidget<CheckboxAbi>, NcStatus> {
+        Ok(OwnedWidget::from_interface(self.interface.create_checkbox(
             checked,
             NcCopyFromBufferOffset::new(0, label.as_bytes()),
             neocogi_com::NcValueRef::new(&CheckboxEventBinding::from_queue(queue))?,
         )?))
     }
     /// Constructs an initialized, unmounted textbox in this runtime.
-    pub fn textbox_with_queue(&self, text: &str, queue: Option<ComRef<'_, TextboxEventQueueAbi>>) -> Result<TextboxWidget, NcStatus> {
-        Ok(TextboxWidget::from_interface(self.interface.create_textbox(
+    pub fn textbox_with_queue(&self, text: &str, queue: Option<ComRef<'_, TextboxEventQueueAbi>>) -> Result<OwnedWidget<TextboxAbi>, NcStatus> {
+        Ok(OwnedWidget::from_interface(self.interface.create_textbox(
             NcCopyFromBufferOffset::new(0, text.as_bytes()),
             neocogi_com::NcValueRef::new(&TextboxEventBinding::from_queue(queue))?,
         )?))
     }
     /// Constructs an initialized, unmounted text block in this runtime.
-    pub fn text_block(&self, text: &str, wrapping: TextWrapping) -> Result<TextBlockWidget, NcStatus> {
-        Ok(TextBlockWidget::from_interface(
+    pub fn text_block(&self, text: &str, wrapping: TextWrapping) -> Result<OwnedWidget<TextBlockAbi>, NcStatus> {
+        Ok(OwnedWidget::from_interface(
             self.interface.create_text_block(NcCopyFromBufferOffset::new(0, text.as_bytes()), wrapping)?,
         ))
     }
     /// Constructs an initialized, unmounted slider in this runtime.
-    pub fn slider_with_queue(&self, options: SliderOptions, queue: Option<ComRef<'_, SliderEventQueueAbi>>) -> Result<SliderWidget, NcStatus> {
-        Ok(SliderWidget::from_interface(self.interface.create_slider(
+    pub fn slider_with_queue(&self, options: SliderOptions, queue: Option<ComRef<'_, SliderEventQueueAbi>>) -> Result<OwnedWidget<SliderAbi>, NcStatus> {
+        Ok(OwnedWidget::from_interface(self.interface.create_slider(
             options,
             neocogi_com::NcValueRef::new(&SliderEventBinding::from_queue(queue))?,
         )?))
     }
     /// Constructs an initialized, unmounted number in this runtime.
-    pub fn number_with_queue(&self, options: NumberOptions, queue: Option<ComRef<'_, NumberEventQueueAbi>>) -> Result<NumberWidget, NcStatus> {
-        Ok(NumberWidget::from_interface(self.interface.create_number(
+    pub fn number_with_queue(&self, options: NumberOptions, queue: Option<ComRef<'_, NumberEventQueueAbi>>) -> Result<OwnedWidget<NumberAbi>, NcStatus> {
+        Ok(OwnedWidget::from_interface(self.interface.create_number(
             options,
             neocogi_com::NcValueRef::new(&NumberEventBinding::from_queue(queue))?,
         )?))
     }
     /// Constructs an initialized, unmounted color swatch in this runtime.
-    pub fn color_swatch(&self, rgba: u32, label: &str) -> Result<ColorSwatchWidget, NcStatus> {
-        Ok(ColorSwatchWidget::from_interface(
+    pub fn color_swatch(&self, rgba: u32, label: &str) -> Result<OwnedWidget<ColorSwatchAbi>, NcStatus> {
+        Ok(OwnedWidget::from_interface(
             self.interface.create_color_swatch(rgba, NcCopyFromBufferOffset::new(0, label.as_bytes()))?,
         ))
     }
     /// Constructs an initialized, unmounted list item in this runtime.
-    pub fn list_item_with_queue(&self, label: &str, queue: Option<ComRef<'_, ListItemEventQueueAbi>>) -> Result<ListItemWidget, NcStatus> {
-        Ok(ListItemWidget::from_interface(self.interface.create_list_item(
+    pub fn list_item_with_queue(&self, label: &str, queue: Option<ComRef<'_, ListItemEventQueueAbi>>) -> Result<OwnedWidget<ListItemAbi>, NcStatus> {
+        Ok(OwnedWidget::from_interface(self.interface.create_list_item(
             NcCopyFromBufferOffset::new(0, label.as_bytes()),
             neocogi_com::NcValueRef::new(&ListItemEventBinding::from_queue(queue))?,
         )?))
     }
     /// Constructs an initialized, unmounted list box in this runtime.
-    pub fn list_box_with_queue(&self, label: &str, queue: Option<ComRef<'_, ListBoxEventQueueAbi>>) -> Result<ListBoxWidget, NcStatus> {
-        Ok(ListBoxWidget::from_interface(self.interface.create_list_box(
+    pub fn list_box_with_queue(&self, label: &str, queue: Option<ComRef<'_, ListBoxEventQueueAbi>>) -> Result<OwnedWidget<ListBoxAbi>, NcStatus> {
+        Ok(OwnedWidget::from_interface(self.interface.create_list_box(
             NcCopyFromBufferOffset::new(0, label.as_bytes()),
             neocogi_com::NcValueRef::new(&ListBoxEventBinding::from_queue(queue))?,
         )?))
     }
     /// Constructs an initialized, unmounted scrollbar in this runtime.
-    pub fn scrollbar_with_queue(&self, range: ScrollRange, queue: Option<ComRef<'_, ScrollbarEventQueueAbi>>) -> Result<ScrollbarWidget, NcStatus> {
-        Ok(ScrollbarWidget::from_interface(self.interface.create_scrollbar(
+    pub fn scrollbar_with_queue(&self, range: ScrollRange, queue: Option<ComRef<'_, ScrollbarEventQueueAbi>>) -> Result<OwnedWidget<ScrollbarAbi>, NcStatus> {
+        Ok(OwnedWidget::from_interface(self.interface.create_scrollbar(
             range,
             neocogi_com::NcValueRef::new(&ScrollbarEventBinding::from_queue(queue))?,
         )?))
@@ -366,8 +403,8 @@ impl WidgetFactory {
     }
 
     /// Creates and initializes an unmounted button in one concrete API operation.
-    pub fn button_with_queue(&self, label: &str, queue: Option<ComRef<'_, ButtonEventQueueAbi>>) -> Result<ButtonWidget, NcStatus> {
-        Ok(ButtonWidget::from_interface(self.interface.create_button(
+    pub fn button_with_queue(&self, label: &str, queue: Option<ComRef<'_, ButtonEventQueueAbi>>) -> Result<OwnedWidget<ButtonAbi>, NcStatus> {
+        Ok(OwnedWidget::from_interface(self.interface.create_button(
             NcCopyFromBufferOffset::new(0, label.as_bytes()),
             WidgetOptions::FRAME,
             neocogi_com::NcValueRef::new(&ButtonEventBinding::from_queue(queue))?,
@@ -480,7 +517,7 @@ impl Ui {
         items: &[Item],
         selection: ChoiceSelection,
         queue: Option<ComRef<'_, ComboEventQueueAbi>>,
-    ) -> Result<ComboWidget, NcStatus> {
+    ) -> Result<OwnedWidget<ComboAbi>, NcStatus> {
         let (menu_text, entries) = encoded_combo_items(items)?;
         let combo = self.factory.interface.create_combo_box(
             parent,
@@ -489,7 +526,7 @@ impl Ui {
             selection,
             neocogi_com::NcValueRef::new(&ComboEventBinding::from_queue(queue))?,
         )?;
-        Ok(ComboWidget::from_interface(combo))
+        Ok(OwnedWidget::from_interface(combo))
     }
 
     /// Creates a combo from the generated preorder menu contract and its shared UTF-8 storage.
@@ -500,7 +537,7 @@ impl Ui {
         entries: &[ChoiceMenuEntry],
         selection: ChoiceSelection,
         queue: Option<ComRef<'_, ComboEventQueueAbi>>,
-    ) -> Result<ComboWidget, NcStatus> {
+    ) -> Result<OwnedWidget<ComboAbi>, NcStatus> {
         let combo = self.factory.interface.create_combo_box(
             parent,
             NcCopyFromBufferOffset::new(0, menu_text.as_bytes()),
@@ -508,7 +545,7 @@ impl Ui {
             selection,
             neocogi_com::NcValueRef::new(&ComboEventBinding::from_queue(queue))?,
         )?;
-        Ok(ComboWidget::from_interface(combo))
+        Ok(OwnedWidget::from_interface(combo))
     }
 
     /// Creates a hidden standard file picker using the actual runtime's modal and COM controls.
@@ -546,7 +583,7 @@ impl Ui {
         &self.factory
     }
     /// Mounts the actual widget object in a new logical window.
-    pub fn window(&self, title: &str, rect: Rect, root: &impl Mountable) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+    pub fn window(&self, title: &str, rect: Rect, root: impl Mountable) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.window_with_queue(title, rect, root, None)
     }
     /// Constructs with its final typed receiver before returning the surface.
@@ -554,18 +591,18 @@ impl Ui {
         &self,
         title: &str,
         rect: Rect,
-        root: &impl Mountable,
+        root: impl Mountable,
         queue: Option<ComRef<'_, IWindowEventQueueAbi>>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.windows.create_window(
             NcCopyFromBufferOffset::new(0, title.as_bytes()),
             rect,
-            root.mount_widget()?.as_com_ref(),
+            root.mount_widget()?,
             neocogi_com::NcValueRef::new(&IWindowEventBinding::from_queue(queue))?,
         )
     }
     /// Mounts a structural child under a live window from this UI.
-    pub fn child_window(&self, parent: ComRef<'_, IWindowAbi>, title: &str, rect: Rect, root: &impl Mountable) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+    pub fn child_window(&self, parent: ComRef<'_, IWindowAbi>, title: &str, rect: Rect, root: impl Mountable) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.child_window_with_queue(parent, title, rect, root, None)
     }
     /// Constructs with its final typed receiver before returning the surface.
@@ -574,19 +611,19 @@ impl Ui {
         parent: ComRef<'_, IWindowAbi>,
         title: &str,
         rect: Rect,
-        root: &impl Mountable,
+        root: impl Mountable,
         queue: Option<ComRef<'_, IWindowEventQueueAbi>>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.windows.create_child(
             parent,
             NcCopyFromBufferOffset::new(0, title.as_bytes()),
             rect,
-            root.mount_widget()?.as_com_ref(),
+            root.mount_widget()?,
             neocogi_com::NcValueRef::new(&IWindowEventBinding::from_queue(queue))?,
         )
     }
     /// Mounts a hidden modal dialog; show it after initialization with set_visibility.
-    pub fn dialog(&self, parent: ComRef<'_, IWindowAbi>, title: &str, rect: Rect, root: &impl Mountable) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+    pub fn dialog(&self, parent: ComRef<'_, IWindowAbi>, title: &str, rect: Rect, root: impl Mountable) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.dialog_with_queue(parent, title, rect, root, None)
     }
     /// Constructs with its final typed receiver before returning the surface.
@@ -595,19 +632,19 @@ impl Ui {
         parent: ComRef<'_, IWindowAbi>,
         title: &str,
         rect: Rect,
-        root: &impl Mountable,
+        root: impl Mountable,
         queue: Option<ComRef<'_, IWindowEventQueueAbi>>,
     ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
         self.windows.create_dialog(
             parent,
             NcCopyFromBufferOffset::new(0, title.as_bytes()),
             rect,
-            root.mount_widget()?.as_com_ref(),
+            root.mount_widget()?,
             neocogi_com::NcValueRef::new(&IWindowEventBinding::from_queue(queue))?,
         )
     }
     /// Mounts a hidden auto-sized popup with a distinct popup capability.
-    pub fn popup(&self, parent: ComRef<'_, IWindowAbi>, title: &str, root: &impl Mountable) -> Result<ComPtr<IPopupAbi>, NcStatus> {
+    pub fn popup(&self, parent: ComRef<'_, IWindowAbi>, title: &str, root: impl Mountable) -> Result<ComPtr<IPopupAbi>, NcStatus> {
         self.popup_with_queue(parent, title, root, None)
     }
     /// Constructs with its final typed receiver before returning the surface.
@@ -615,13 +652,13 @@ impl Ui {
         &self,
         parent: ComRef<'_, IWindowAbi>,
         title: &str,
-        root: &impl Mountable,
+        root: impl Mountable,
         queue: Option<ComRef<'_, IPopupEventQueueAbi>>,
     ) -> Result<ComPtr<IPopupAbi>, NcStatus> {
         self.windows.create_popup(
             parent,
             NcCopyFromBufferOffset::new(0, title.as_bytes()),
-            root.mount_widget()?.as_com_ref(),
+            root.mount_widget()?,
             neocogi_com::NcValueRef::new(&IPopupEventBinding::from_queue(queue))?,
         )
     }
@@ -841,52 +878,52 @@ impl ListBoxWidget {
 
 impl WidgetFactory {
     /// Creates an explicitly unobserved button without allocating a destination.
-    pub fn button_unobserved(&self, label: &str) -> Result<ButtonWidget, NcStatus> {
+    pub fn button_unobserved(&self, label: &str) -> Result<OwnedWidget<ButtonAbi>, NcStatus> {
         self.button_with_queue(label, None)
     }
 
     /// Creates an explicitly unobserved checkbox without allocating a destination.
-    pub fn checkbox_unobserved(&self, label: &str, checked: bool) -> Result<CheckboxWidget, NcStatus> {
+    pub fn checkbox_unobserved(&self, label: &str, checked: bool) -> Result<OwnedWidget<CheckboxAbi>, NcStatus> {
         self.checkbox_with_queue(label, checked, None)
     }
 
     /// Creates an explicitly unobserved textbox without allocating a destination.
-    pub fn textbox_unobserved(&self, text: &str) -> Result<TextboxWidget, NcStatus> {
+    pub fn textbox_unobserved(&self, text: &str) -> Result<OwnedWidget<TextboxAbi>, NcStatus> {
         self.textbox_with_queue(text, None)
     }
 
     /// Creates an explicitly unobserved text area without allocating a destination.
-    pub fn text_area_unobserved(&self, text: &str, wrapping: TextWrapping, scrolling: bool) -> Result<TextAreaWidget, NcStatus> {
+    pub fn text_area_unobserved(&self, text: &str, wrapping: TextWrapping, scrolling: bool) -> Result<OwnedWidget<TextAreaAbi>, NcStatus> {
         self.text_area_with_queue(text, wrapping, scrolling, None)
     }
 
     /// Creates an explicitly unobserved slider without allocating a destination.
-    pub fn slider_unobserved(&self, options: SliderOptions) -> Result<SliderWidget, NcStatus> {
+    pub fn slider_unobserved(&self, options: SliderOptions) -> Result<OwnedWidget<SliderAbi>, NcStatus> {
         self.slider_with_queue(options, None)
     }
 
     /// Creates an explicitly unobserved number without allocating a destination.
-    pub fn number_unobserved(&self, options: NumberOptions) -> Result<NumberWidget, NcStatus> {
+    pub fn number_unobserved(&self, options: NumberOptions) -> Result<OwnedWidget<NumberAbi>, NcStatus> {
         self.number_with_queue(options, None)
     }
 
     /// Creates an explicitly unobserved list item without allocating a destination.
-    pub fn list_item_unobserved(&self, label: &str) -> Result<ListItemWidget, NcStatus> {
+    pub fn list_item_unobserved(&self, label: &str) -> Result<OwnedWidget<ListItemAbi>, NcStatus> {
         self.list_item_with_queue(label, None)
     }
 
     /// Creates an explicitly unobserved list box without allocating a destination.
-    pub fn list_box_unobserved(&self, label: &str) -> Result<ListBoxWidget, NcStatus> {
+    pub fn list_box_unobserved(&self, label: &str) -> Result<OwnedWidget<ListBoxAbi>, NcStatus> {
         self.list_box_with_queue(label, None)
     }
 
     /// Creates an explicitly unobserved scrollbar without allocating a destination.
-    pub fn scrollbar_unobserved(&self, range: ScrollRange) -> Result<ScrollbarWidget, NcStatus> {
+    pub fn scrollbar_unobserved(&self, range: ScrollRange) -> Result<OwnedWidget<ScrollbarAbi>, NcStatus> {
         self.scrollbar_with_queue(range, None)
     }
 
     /// Creates an explicitly unobserved split view without allocating a destination.
-    pub fn split_view_unobserved(&self, settings: SplitOptions) -> Result<SplitViewWidget, NcStatus> {
+    pub fn split_view_unobserved(&self, settings: SplitOptions) -> Result<OwnedWidget<SplitViewAbi>, NcStatus> {
         self.split_view_with_queue(settings, None)
     }
 }
@@ -898,7 +935,7 @@ impl Ui {
         parent: ComRef<'_, IWindowAbi>,
         items: &[Item],
         selection: ChoiceSelection,
-    ) -> Result<ComboWidget, NcStatus> {
+    ) -> Result<OwnedWidget<ComboAbi>, NcStatus> {
         self.combo_box_with_queue(parent, items, selection, None)
     }
 
@@ -909,7 +946,7 @@ impl Ui {
         text: &str,
         entries: &[ChoiceMenuEntry],
         selection: ChoiceSelection,
-    ) -> Result<ComboWidget, NcStatus> {
+    ) -> Result<OwnedWidget<ComboAbi>, NcStatus> {
         self.combo_menu_with_queue(parent, text, entries, selection, None)
     }
 }

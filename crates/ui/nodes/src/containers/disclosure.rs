@@ -89,11 +89,11 @@ pub struct Disclosure {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::widget_object::WidgetRuntime,
     /// Authoritative fixed header/body ownership used by COM traversal.
-    editor: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
+    editor: neocogi_com::ComBox<neocogi_ui_core_contracts::IChildrenEditorAbi>,
     /// Text capability of the actual header child.
-    header: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextContentAbi>,
+    header: neocogi_com::WeakComBox<neocogi_ui_core_contracts::ITextContentAbi>,
     /// Typed editing capability of the actual vertical body child.
-    body: neocogi_com::ComPtr<neocogi_ui_nodes_contracts::LinearAbi>,
+    body: neocogi_com::WeakComBox<neocogi_ui_nodes_contracts::LinearAbi>,
     /// Same expansion scalar read by the actual header object and parent layout.
     model: Rc<DisclosureState>,
     variant: DisclosureVariant,
@@ -103,9 +103,9 @@ impl Disclosure {
     /// Combines one fixed child composition with the semantic expansion and layout policy.
     fn from_runtime(
         runtime: crate::widget_object::WidgetRuntime,
-        editor: neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenEditorAbi>,
-        header: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextContentAbi>,
-        body: neocogi_com::ComPtr<neocogi_ui_nodes_contracts::LinearAbi>,
+        editor: neocogi_com::ComBox<neocogi_ui_core_contracts::IChildrenEditorAbi>,
+        header: neocogi_com::WeakComBox<neocogi_ui_core_contracts::ITextContentAbi>,
+        body: neocogi_com::WeakComBox<neocogi_ui_nodes_contracts::LinearAbi>,
         model: Rc<DisclosureState>,
         variant: DisclosureVariant,
     ) -> Self {
@@ -358,10 +358,6 @@ impl crate::widget_object::HostedWidget for Disclosure {
         &mut self.runtime
     }
 
-    /// Closes both real structural children through their authoritative writer.
-    fn close_children(&mut self) -> Result<neocogi_ui_core_contracts::ChildEditResult, neocogi_com::NcStatus> {
-        self.editor.close()
-    }
 }
 
 impl crate::widget_object::WidgetAlgorithm for DisclosureHeader {}
@@ -395,9 +391,9 @@ impl DisclosureHeader {
         label: String,
         variant: DisclosureVariant,
         resources: Option<&crate::widget_object::SharedAssets>,
-    ) -> Result<ComPtr<ITextContentAbi>, NcStatus> {
+    ) -> Result<neocogi_com::ComBox<ITextContentAbi>, NcStatus> {
         let runtime = WidgetRuntime::for_resources(host, options, resources)?;
-        Ok(Self::from_value(Self::from_runtime(runtime, model, label, variant))
+        Ok(Self::into_box(Self::from_runtime(runtime, model, label, variant))
             .query()
             .expect("DisclosureHeader declares its text and leaf capabilities"))
     }
@@ -433,9 +429,9 @@ impl Disclosure {
         label: NcCopyFromBufferOffset<'_, u8>,
         style: DisclosureStyle,
         expanded: bool,
-    ) -> Result<ComPtr<DisclosureAbi>, NcStatus> {
+    ) -> Result<neocogi_com::ComBox<DisclosureAbi>, NcStatus> {
         let value = Self::build(host, label, style, expanded, Some(&resources))?;
-        Ok(Self::from_value(value).query().expect("Disclosure declares its callable class contract"))
+        Ok(Self::into_box(value).query().expect("Disclosure declares its callable class contract"))
     }
 
     /// Builds the fixed header/body tree with either direct or runtime-shared resources.
@@ -479,13 +475,13 @@ impl neocogi_ui_nodes_contracts::Disclosure for Disclosure {
     }
 
     /// Returns the actual header whose widget options control presentation and input.
-    fn header(&self) -> Result<ComPtr<ITextContentAbi>, NcStatus> {
+    fn header(&self) -> Result<neocogi_com::WeakComBox<ITextContentAbi>, NcStatus> {
         self.runtime().state.readable()?;
         Ok(self.header.clone())
     }
 
     /// Returns the actual Linear body whose typed edits preserve relationship cardinality.
-    fn body(&self) -> Result<ComPtr<LinearAbi>, NcStatus> {
+    fn body(&self) -> Result<neocogi_com::WeakComBox<LinearAbi>, NcStatus> {
         self.runtime().state.readable()?;
         Ok(self.body.clone())
     }
@@ -494,11 +490,11 @@ impl neocogi_ui_nodes_contracts::Disclosure for Disclosure {
 /// Completed fixed disclosure topology consumed by either construction path.
 struct DisclosureChildren {
     /// Writer owning the header and body in permanent traversal order.
-    editor: ComPtr<IChildrenEditorAbi>,
+    editor: neocogi_com::ComBox<IChildrenEditorAbi>,
     /// Text capability of the actual header returned by the public class.
-    header: ComPtr<ITextContentAbi>,
+    header: neocogi_com::WeakComBox<ITextContentAbi>,
     /// Concrete Linear capability of the actual body returned by the public class.
-    body: ComPtr<LinearAbi>,
+    body: neocogi_com::WeakComBox<LinearAbi>,
 }
 
 /// Builds both structural children before publishing their authoritative sequence.
@@ -516,21 +512,15 @@ fn prepare_children(
         super::Linear::create_com(host.clone(), resources.clone(), FlowDirection::TopToBottom, CrossSize::Stretch)?
     } else {
         let value = super::Linear::build(host.clone(), FlowDirection::TopToBottom, CrossSize::Stretch, None)?;
-        super::Linear::from_value(value).query().expect("Linear declares its callable class contract")
+        super::Linear::into_box(value).query().expect("Linear declares its callable class contract")
     };
     let editor = host.create_children()?;
-    editor
-        .insert(
-            0,
-            header.query::<IWidgetAbi>()?.as_com_ref(),
-        )?
-        .finish()?;
-    editor
-        .insert(
-            1,
-            body.query::<IWidgetAbi>()?.as_com_ref(),
-        )?
-        .finish()?;
+    let header_view = header.downgrade();
+    let body_view = body.downgrade();
+    editor.insert(0, header.query::<IWidgetAbi>()?)?;
+    editor.insert(1, body.query::<IWidgetAbi>()?)?;
+    let header = header_view;
+    let body = body_view;
     Ok(DisclosureChildren { editor, header, body })
 }
 

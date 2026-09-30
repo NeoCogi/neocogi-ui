@@ -5,7 +5,7 @@ use neocogi_demo_contracts::*;
 /// Host-local facts prove plugins never need the consumer's message enum.
 enum Message {
     /// Complete event from the counter's one physical port.
-    Counter(neocogi_com::WeakComPtr<CounterAbi>, CounterEvent),
+    Counter(neocogi_com::WeakComBox<CounterAbi>, CounterEvent),
 }
 #[neocogi_com::com_object(neocogi_demo_contracts::CounterEventQueue)]
 /// The host implements the independently generated custom-widget queue directly.
@@ -16,7 +16,7 @@ struct CounterQueue {
 impl CounterEventQueue for CounterQueue {
     /// Acquire the custom payload through its checked ABI before the producer returns.
     fn post(&mut self, origin: ComRef<'_, CounterAbi>, event: neocogi_com::NcValueRef<'_, CounterEvent>) -> Result<(), NcStatus> {
-        let _ = self.sender.send(Message::Counter(origin.downgrade()?, event.to_owned()?));
+        let _ = self.sender.send(Message::Counter(origin.downgrade_box()?, event.to_owned()?));
         Ok(())
     }
 }
@@ -25,17 +25,17 @@ struct Model {
     /// Captured values prove emission order independently of later producer edits.
     labels: Vec<String>,
     /// Typed extension interface acquired once during construction.
-    counter: ComPtr<CounterAbi>,
+    counter: neocogi_com::WeakComBox<CounterAbi>,
 }
 impl events::EventModel for Model {
     type Message = Message;
     /// Handles the independent plugin's concrete public event protocol.
     fn handle(&mut self, message: Message) -> Result<(), NcStatus> {
         let Message::Counter(origin, event) = message;
-        let Some(origin) = origin.upgrade()? else {
+        let Ok(_call) = origin.borrow() else {
             return Ok(());
         };
-        if !origin.as_com_ref().same_object(self.counter.as_com_ref()) {
+        if !origin.same_object(&self.counter) {
             return Ok(());
         }
         match event {
@@ -57,22 +57,22 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let (events_tx, events) = std::sync::mpsc::channel();
     let queue = CounterQueue::from_value(CounterQueue { sender: events_tx }).query::<CounterEventQueueAbi>()?;
     let binding = neocogi_demo_contracts::CounterEventBinding::from_queue(Some(queue.as_com_ref()));
-    let mut counter = provider.counter(host.as_com_ref(), neocogi_com::NcValueRef::new(&binding)?)?;
-    let probe: ComPtr<IWidgetProbeAbi> = counter.query()?;
-    let widget: ComPtr<IWidgetAbi> = counter.query()?;
+    let counter_owner = provider.counter(host.as_com_ref(), neocogi_com::NcValueRef::new(&binding)?)?;
+    let mut counter = counter_owner.downgrade();
+    let probe: neocogi_com::WeakComBox<IWidgetProbeAbi> = counter.query()?;
+    let widget = counter_owner.query::<IWidgetAbi>()?;
     // Both derived and inherited projections identify the same COM allocation.
-    let derived_identity: ComPtr<neocogi_com::IUnknown> = counter.query()?;
-    let base_identity: ComPtr<neocogi_com::IUnknown> = widget.query()?;
+    let derived_identity: neocogi_com::WeakComBox<neocogi_com::IUnknown> = counter.query()?;
+    let base_identity: neocogi_com::WeakComBox<neocogi_com::IUnknown> = widget.downgrade().query()?;
     assert_eq!(derived_identity.as_raw(), base_identity.as_raw());
-    let mut inset = provider.inset(host.as_com_ref())?;
-    let parent_probe: ComPtr<IWidgetProbeAbi> = inset.query()?;
-    inset.set_child(widget.as_com_ref())?.finish()?;
-    let mut another = provider.inset(host.as_com_ref())?;
-    assert_eq!(another.set_child(widget.as_com_ref()).err(), Some(UI_E_OWNER));
-    assert_eq!(another.children()?.child_count()?, 0);
-    let root = Widget::from_interface(inset.clone());
+    let inset_owner = provider.inset(host.as_com_ref())?;
+    let mut inset = inset_owner.downgrade();
+    let parent_probe: neocogi_com::WeakComBox<IWidgetProbeAbi> = inset.query()?;
+    inset.set_child(widget)?;
+    // The second parent cannot acquire the same owner: set_child consumes it.
+    let root = neocogi_ui::OwnedWidget::from_interface(inset_owner);
     // Capability discovery happens once while wiring the application, never during UI phases.
-    let window = ui.window("Independent extension", Rect { x: 10, y: 10, width: 400, height: 200 }, &root)?;
+    let window = ui.window("Independent extension", Rect { x: 10, y: 10, width: 400, height: 200 }, root)?;
     let app = events::Controller::into_local(events::Controller::new(
         Model {
             labels: Vec::new(),
@@ -122,23 +122,22 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     assert!(probe.calls()?.measures > padded.measures, "resizing remeasures under the new bounds");
     ui.render(size, renderer)?;
 
-    inset.clear()?.finish()?;
+    inset.clear()?;
     assert_eq!(counter.count(), Err(UI_E_CLOSED));
-    assert_eq!(probe.calls()?.closes, 1);
+    assert_eq!(probe.calls(), Err(UI_E_CLOSED));
     assert_eq!(inset.children()?.child_count()?, 0);
     ui.update_with_events(size, owner.as_com_ref())?;
     ui.render(size, renderer)?;
     let replacement = provider.counter(host.as_com_ref(), neocogi_com::NcValueRef::new(&CounterEventBinding::Unobserved)?)?;
-    let replacement_widget: ComPtr<IWidgetAbi> = replacement.query()?;
-    let replacement_probe: ComPtr<IWidgetProbeAbi> = replacement.query()?;
-    inset.set_child(replacement_widget.as_com_ref())?.finish()?;
+    let replacement_view = replacement.downgrade();
+    let replacement_probe = replacement_view.query::<IWidgetProbeAbi>()?;
+    inset.set_child(replacement.query::<IWidgetAbi>()?)?;
     ui.update_with_events(size, owner.as_com_ref())?;
     window.close()?;
-    assert_eq!(replacement.count(), Err(UI_E_CLOSED));
-    assert_eq!(replacement_probe.calls()?.closes, 1);
-    assert_eq!(parent_probe.calls()?.closes, 1);
-    assert_eq!(probe.calls()?.closes, 1, "parent teardown cannot close an already removed child twice");
-    another.close()?;
+    assert_eq!(replacement_view.count(), Err(UI_E_CLOSED));
+    assert_eq!(replacement_probe.calls(), Err(UI_E_CLOSED));
+    assert_eq!(parent_probe.calls(), Err(UI_E_CLOSED));
+    assert_eq!(probe.calls(), Err(UI_E_CLOSED));
     println!("Independent extension passed: inherited counter, shared events, one-child layout, caches, resize, mutation and teardown");
     Ok(())
 }

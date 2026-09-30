@@ -70,7 +70,7 @@ fn create_ui(assets: ComRef<'_, IAssetBundleAbi>, gfx: ComRef<'_, GfxPluginFacto
     let runtime = nc_ui::create_runtime_from_assets(assets, gfx).unwrap();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
     let text = ui.widgets().text_block("Independent UI", TextWrapping::None).unwrap();
-    ui.window("Independent UI", Rect { x: 4, y: 4, width: 160, height: 80 }, &text).unwrap();
+    ui.window("Independent UI", Rect { x: 4, y: 4, width: 160, height: 80 }, text).unwrap();
     ui.update(SIZE).unwrap();
     ui
 }
@@ -206,7 +206,7 @@ fn production_runtime_uses_the_gfx_compositor() {
         .widgets()
         .text_block("GFX boundary", TextWrapping::None)
         .expect("the built-in text block must construct");
-    ui.window("Boundary", Rect { x: 4, y: 4, width: 160, height: 80 }, &text)
+    ui.window("Boundary", Rect { x: 4, y: 4, width: 160, height: 80 }, text)
         .expect("the text block must mount in one window");
     let size = Size { width: 200, height: 120 };
     ui.update(size).expect("the retained tree must commit before rendering");

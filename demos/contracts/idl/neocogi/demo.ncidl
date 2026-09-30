@@ -2,7 +2,7 @@ use neocogi.com.events::EventBinding;
 extern neocogi.com.events;
 extern neocogi.ui.core;
 extern neocogi.ui.document;
-use neocogi.ui.core::{IWidget, ILeafLayout, Activation, IWidgetHost, IContainer, ChildEditResult};
+use neocogi.ui.core::{IWidget, ILeafLayout, Activation, IWidgetHost, IContainer};
 use neocogi.ui.document::IDesignWidgetCatalog;
 
 #[version(1)]
@@ -23,12 +23,11 @@ struct WidgetCalls {
     updates: u64,
     /// Paint attempts, including a failed outward painter call.
     paints: u64,
-    /// Committed logical closures; final COM release is a separate lifetime event.
-    closes: u64,
+
 }
 
 #[version(1)]
-/// Example diagnostics remain readable after logical closure for lifetime assertions.
+/// Example diagnostics are available only while the widget owner remains live.
 interface IWidgetProbe {
     /// Returns counts from the actual allocation, with no callback or copied semantic model.
     fn calls(&self) -> Result<WidgetCalls>;
@@ -57,7 +56,7 @@ class Counter: IWidget + ILeafLayout + IWidgetProbe {
 /// A one-child container demonstrates a domain-specific layout policy over the shared child editor.
 interface IInset: IContainer {
     /// Installs or replaces its one child; removed-child teardown uses the ordinary committed outcome.
-    fn set_child(&mut self, child: &IWidget) -> Result<ChildEditResult>;
+    fn set_child(&mut self, child: ComBox<IWidget>) -> Result<()>;
     /// Sets a nonnegative inset, bounded to avoid arithmetic overflow in doubled extents.
     fn set_padding(&mut self, padding: i32) -> Result<()>;
 }
@@ -66,7 +65,7 @@ interface IInset: IContainer {
 /// Stateless plugin factory receiving runtime authority explicitly for each custom object.
 factory ExtensionProvider: IDesignWidgetCatalog {
     /// Creates a counter whose complete state belongs to the returned COM identity.
-    fn counter(&self, host: &IWidgetHost, events: &EventBinding<Counter, CounterEvent>) -> Result<ComPtr<Counter>>;
+    fn counter(&self, host: &IWidgetHost, events: &EventBinding<Counter, CounterEvent>) -> Result<ComBox<Counter>>;
     /// Creates an empty custom container; child attachment follows the same rules as built-ins.
-    fn inset(&self, host: &IWidgetHost) -> Result<ComPtr<IInset>>;
+    fn inset(&self, host: &IWidgetHost) -> Result<ComBox<IInset>>;
 }

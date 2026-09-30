@@ -3,22 +3,19 @@
 //! This helper lives inside a widget's COM allocation. Its Rust layout never
 //! crosses an interface boundary and it owns no children, runtime, or app sink.
 
-use super::{GeometryChange, IWidgetHostAbi, UI_E_CLOSED, UI_E_OWNER, WidgetOptions};
+use super::{GeometryChange, IWidgetHostAbi, UI_E_OWNER, WidgetOptions};
 use neocogi_com::{ComPtr, ComRef, NcStatus};
 
-/// One-way tree membership and terminal lifetime, independent of COM references.
-/// Closing an unmounted candidate and closing a mounted object share the same
-/// terminal state; neither can acquire a second attachment afterward.
-enum Lifetime {
+/// One-way tree membership. Object lifetime belongs exclusively to ComBox;
+/// this state records only whether the widget has already consumed its attachment.
+enum Attachment {
     /// Construction completed but no tree has claimed this allocation.
     Unmounted,
     /// Exactly one tree attachment has been consumed.
     Mounted,
-    /// Descendants and event delivery have permanently retired.
-    Closed,
 }
 
-/// Common logical lifetime and sticky geometry state for one concrete widget.
+/// Common attachment and sticky geometry state for one concrete widget.
 ///
 /// Compose this value into each widget class. The host capability must contain
 /// only authority state, without a strong reference back to the owning tree.
@@ -31,8 +28,8 @@ pub struct WidgetState {
     requested_flags: WidgetOptions,
     /// Geometry changes retained until the runtime collects them before layout.
     dirty: bool,
-    /// Attachment and closure form one irreversible state machine.
-    lifetime: Lifetime,
+    /// One irreversible attachment claim; value lifetime is enforced by ComBox.
+    attachment: Attachment,
 }
 
 impl WidgetState {
@@ -42,7 +39,7 @@ impl WidgetState {
             host,
             requested_flags: options,
             dirty: false,
-            lifetime: Lifetime::Unmounted,
+            attachment: Attachment::Unmounted,
         }
     }
 
@@ -97,23 +94,13 @@ impl WidgetState {
         self.host.as_com_ref()
     }
 
-    /// Allows observations during layout and paint while rejecting logical closure.
+    /// Allows observations during layout and paint while rejecting runtime shutdown.
     pub fn readable(&self) -> Result<(), NcStatus> {
-        self.local_open()?;
         self.host.check_open()
-    }
-
-    /// Rejects this allocation's terminal state without consulting its owner.
-    fn local_open(&self) -> Result<(), NcStatus> {
-        match self.lifetime {
-            Lifetime::Closed => Err(UI_E_CLOSED),
-            Lifetime::Unmounted | Lifetime::Mounted => Ok(()),
-        }
     }
 
     /// Authorizes an ordinary mutation before the implementation borrows state.
     pub fn writable(&self) -> Result<(), NcStatus> {
-        self.local_open()?;
         self.host.check_mutation()
     }
 
@@ -131,10 +118,9 @@ impl WidgetState {
     /// Drains the marker once while the owning runtime already holds phase authority.
     ///
     /// This is the runtime's mutable collection protocol, not an application
-    /// observation. Mounted widgets close directly during tree teardown, so the
-    /// local terminal flag is authoritative during a tree scan.
+    /// observation. The generated COM entry already protects the live value;
+    /// owner expiration needs no duplicate terminal flag here.
     pub fn take_change(&mut self) -> Result<GeometryChange, NcStatus> {
-        self.local_open()?;
         let dirty = self.dirty;
         self.dirty = false;
         Ok(if dirty { GeometryChange::Changed } else { GeometryChange::NoChange })
@@ -143,51 +129,13 @@ impl WidgetState {
     /// Commits attachment after owner, capability, and topology checks pass.
     pub fn mount(&mut self) -> Result<(), NcStatus> {
         self.writable()?;
-        match self.lifetime {
-            Lifetime::Unmounted => {
-                self.lifetime = Lifetime::Mounted;
+        match self.attachment {
+            Attachment::Unmounted => {
+                self.attachment = Attachment::Mounted;
                 Ok(())
             }
-            Lifetime::Mounted => Err(UI_E_OWNER),
-            Lifetime::Closed => Err(UI_E_CLOSED),
+            Attachment::Mounted => Err(UI_E_OWNER),
         }
     }
 
-    /// Checks whether closure may start without changing the terminal state.
-    ///
-    /// Composite implementations must close descendants before calling
-    /// `complete_close`. A rejected child-editor preflight therefore leaves the
-    /// parent open and retryable. A host already shutting down permits cleanup.
-    pub fn check_close(&self) -> Result<bool, NcStatus> {
-        match self.lifetime {
-            Lifetime::Closed => return Ok(false),
-            Lifetime::Unmounted | Lifetime::Mounted => {}
-        }
-        match self.host.check_mutation() {
-            Ok(()) | Err(UI_E_CLOSED) => Ok(true),
-            Err(error) => Err(error),
-        }
-    }
-
-    /// Commits terminal state after descendants and local event mappings retire.
-    ///
-    /// This step cannot fail or call foreign code. The caller already owns
-    /// exclusive widget access and must not publish completion before cleanup.
-    pub fn complete_close(&mut self) {
-        self.lifetime = Lifetime::Closed;
-        self.dirty = false;
-    }
-
-    /// Closes state for a leaf with no separately owned cleanup responsibilities.
-    /// Composite implementations use `check_close` and `complete_close` around
-    /// their descendant-first cleanup instead of committing state prematurely.
-    pub fn close(&mut self) -> Result<bool, NcStatus> {
-        match self.check_close()? {
-            false => Ok(false),
-            true => {
-                self.complete_close();
-                Ok(true)
-            }
-        }
-    }
 }

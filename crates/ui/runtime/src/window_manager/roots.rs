@@ -1280,7 +1280,7 @@ impl WindowManager {
     /// each widget tree contributes its own handles in descendant-first order.
     pub(crate) fn collect_dispatch_widgets(
         &self,
-        drivers: &mut Vec<neocogi_com::ComPtr<neocogi_ui_core_contracts::IWidgetAbi>>,
+        drivers: &mut Vec<neocogi_com::WeakComBox<neocogi_ui_core_contracts::IWidgetAbi>>,
     ) -> Result<(), neocogi_com::NcStatus> {
         for surface in self.surfaces.nodes.iter().rev() {
             match &surface.surface.body {

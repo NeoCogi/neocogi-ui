@@ -186,7 +186,7 @@ impl LayoutService {
     }
 
     /// Measures the external policy with an owned frame, expiring its scope before returning.
-    pub(super) fn measure(&self, children: &Rc<ChildStore>, policy: &ComPtr<IContainerLayoutAbi>, bounds: LayoutLimits) -> Result<Size, NcStatus> {
+    pub(super) fn measure(&self, children: &Rc<ChildStore>, policy: &neocogi_com::WeakComBox<IContainerLayoutAbi>, bounds: LayoutLimits) -> Result<Size, NcStatus> {
         let guard = self.begin(children, None)?;
         let mut policy = policy.clone();
         let result = policy.measure(guard.scope, bounds, self.service.as_com_ref());
@@ -201,7 +201,7 @@ impl LayoutService {
     pub(super) fn place(
         &self,
         children: &Rc<ChildStore>,
-        policy: &ComPtr<IContainerLayoutAbi>,
+        policy: &neocogi_com::WeakComBox<IContainerLayoutAbi>,
         traversal: &LayoutTraversal,
         rect: Rect,
     ) -> Result<ContainerGeometry, NcStatus> {

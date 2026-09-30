@@ -269,7 +269,7 @@ pub struct Scrollbar {
     pub(crate) axis_state: std::rc::Rc<ScrollAxisState>,
     /// Caller-authored options; dynamic range policy is resolved from the same shared state.
     /// Typed source for user-originated movement; programmatic requests remain silent.
-    events: neocogi_ui_nodes_contracts::ScrollbarEventPort,
+    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::ScrollbarEventQueueAbi>,
 }
 
 /// Coherent copied values shared by a real scrollbar and its co-packaged scroll layout.
@@ -463,10 +463,6 @@ impl crate::LeafWidget for Scrollbar {
 }
 
 impl crate::widget_object::WidgetAlgorithm for Scrollbar {
-    /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
-    fn close_events(&mut self) {
-        self.events.close();
-    }
 
     /// A zero range paints a full thumb but must not establish meaningless pointer capture.
     fn effective_options(&self, options: WidgetOption) -> WidgetOption {
@@ -560,8 +556,8 @@ direct_leaf_layout_impl!(Scrollbar);
 
 impl Scrollbar {
     /// Converts an already host-bound structural scrollbar into its public COM capability.
-    pub(crate) fn into_com(self) -> ComPtr<ScrollbarAbi> {
-        Self::from_value(self).query().expect("Scrollbar declares its callable class contract")
+    pub(crate) fn into_com(self) -> neocogi_com::ComBox<ScrollbarAbi> {
+        Self::into_box(self).query().expect("Scrollbar declares its callable class contract")
     }
 
     /// Constructs the class for the host-bound factory through the same typed contract used by the registry.
@@ -570,11 +566,11 @@ impl Scrollbar {
         resources: crate::widget_object::SharedAssets,
         range: ScrollRange,
         queue: Option<ComPtr<neocogi_ui_nodes_contracts::ScrollbarEventQueueAbi>>,
-    ) -> Result<ComPtr<ScrollbarAbi>, NcStatus> {
+    ) -> Result<neocogi_com::ComBox<ScrollbarAbi>, NcStatus> {
         let mut value = Self::build(host, range, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
-        Self::from_value_cyclic::<ScrollbarAbi>(move |origin| {
-            value.events = neocogi_com::events::EventPort::with_queue(queue, origin);
+        Self::into_box_cyclic::<ScrollbarAbi>(move |origin| {
+            value.events = crate::widget_object::WidgetEvents::with_queue(queue, origin);
             value
         })?
         .query()

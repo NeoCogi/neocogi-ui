@@ -11,7 +11,7 @@ enum Message {
     /// Re-read the selected file, or the built-in document.
     Reload(WeakComPtr<IMenuItemAbi>),
     /// The component's public Save action, independent of its widget layout.
-    Save(WeakComPtr<ButtonAbi>),
+    Save(neocogi_com::WeakComBox<ButtonAbi>),
 }
 #[neocogi_com::com_object(interfaces(neocogi_ui::nodes::ButtonEventQueue, neocogi_ui::IMenuItemEventQueue))]
 /// One application receiver is reused across every document replacement and the static menu.
@@ -23,7 +23,7 @@ impl neocogi_ui::nodes::ButtonEventQueue for AppQueue {
     /// Acquire the activation before returning; current-form membership is checked at dispatch.
     fn post(&mut self, origin: ComRef<'_, ButtonAbi>, event: NcValueRef<'_, neocogi_ui::button::Event>) -> Result<(), NcStatus> {
         neocogi_ui::button::validate(&event.to_owned()?)?;
-        let _ = self.sender.send(Message::Save(origin.downgrade()?));
+        let _ = self.sender.send(Message::Save(origin.downgrade_box()?));
         Ok(())
     }
 }
@@ -63,7 +63,7 @@ impl State {
             None => Document::new("Runtime-loaded UI"),
         };
         let queue = self.queue.query::<ButtonEventQueueAbi>().map_err(|error| error.to_string())?;
-        let outcome = self.slot.reload(
+        self.slot.reload(
             &document,
             Resources::new(),
             move |_| {
@@ -76,9 +76,6 @@ impl State {
                 component.widget::<TextBlockAbi>("title").map(|_| ())
             },
         )?;
-        if outcome.teardown.is_err() {
-            return Err(format!("UI reloaded; old content cleanup: {}", outcome.teardown));
-        }
         Ok(())
     }
 }
@@ -99,11 +96,11 @@ impl AppState for State {
                 }
             }
             Message::Save(origin) => {
-                let Some(origin) = origin.upgrade()? else {
+                if !origin.is_alive() {
                     return Ok(());
                 };
                 if let Some(component) = self.slot.component() {
-                    if !origin.as_com_ref().same_object(component.widget::<ButtonAbi>("save")?.as_interface()) {
+                    if !origin.same_object(component.widget::<ButtonAbi>("save")?.as_interface()) {
                         return Ok(());
                     }
                     self.saves += 1;
@@ -121,11 +118,13 @@ fn run() -> Result<(), HostError> {
     // Asset loading activates a registered GFX provider before Host::new runs.
     neocogi_demo_host::initialize()?;
     let host = Host::new("Runtime UI", Size { width: 800, height: 600 }, neocogi_demo_assets::load_bundle()?)?;
-    let mut root = host.ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
-    let window = host.ui.window("Loaded component", Rect { x: 20, y: 20, width: 740, height: 540 }, &root)?;
+    let root = host.ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
+    let root_handle = root.handle();
+    let window = host.ui.window("Loaded component", Rect { x: 20, y: 20, width: 740, height: 540 }, root)?;
+    let mut root = root_handle;
 
-    let slot = ReloadSlot::new(host.ui.clone(), window.clone())?;
-    root.insert(0, slot.widget(), LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))?.finish()?;
+    let mut slot = ReloadSlot::new(host.ui.clone(), window.clone())?;
+    root.insert(0, slot.take_widget()?, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))?;
     let (sender, receiver) = mpsc::channel();
     let menus = host.ui.menus()?;
     let bar = menus.create("Runtime UI")?;

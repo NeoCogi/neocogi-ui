@@ -83,7 +83,7 @@ pub struct Checkbox {
     /// Current checked value.
     checked: bool,
     /// Single lifetime event slot; the constructor fixes the parent receiver before publishing the widget.
-    events: neocogi_ui_nodes_contracts::CheckboxEventPort,
+    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::CheckboxEventQueueAbi>,
 }
 
 impl Checkbox {
@@ -172,10 +172,7 @@ impl Widget for Checkbox {
 }
 
 impl crate::widget_object::WidgetAlgorithm for Checkbox {
-    /// Ends ordinary native events on logical COM closure, before retained semantic storage is finally released.
-    fn close_events(&mut self) {
-        self.events.close();
-    }
+
 }
 
 impl crate::widget_object::HostedWidget for Checkbox {
@@ -229,11 +226,11 @@ impl Checkbox {
         checked: bool,
         label: NcCopyFromBufferOffset<'_, u8>,
         queue: Option<ComPtr<neocogi_ui_nodes_contracts::CheckboxEventQueueAbi>>,
-    ) -> Result<ComPtr<CheckboxAbi>, NcStatus> {
+    ) -> Result<neocogi_com::ComBox<CheckboxAbi>, NcStatus> {
         let mut value = Self::build(host, checked, label, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
-        Self::from_value_cyclic::<CheckboxAbi>(move |origin| {
-            value.events = neocogi_com::events::EventPort::with_queue(queue, origin);
+        Self::into_box_cyclic::<CheckboxAbi>(move |origin| {
+            value.events = crate::widget_object::WidgetEvents::with_queue(queue, origin);
             value
         })?
         .query()

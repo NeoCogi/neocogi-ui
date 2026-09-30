@@ -20,19 +20,9 @@ pub(crate) struct Construction<'a> {
     /// Receivers are consumed exactly once before each node is published.
     pub events: crate::EventBindings,
 }
-impl Drop for Construction<'_> {
-    /// Failed builds close retained partial topology, including window-owned popup controls.
-    fn drop(&mut self) {
-        for node in self.nodes.values() {
-            if let Ok(mut node) = node.node_interface() {
-                let _ = node.close();
-            }
-        }
-    }
-}
 /// Erases only the concrete widget projection through checked QueryInterface.
-fn root<T: ComInterface>(widget: Widget<T>) -> Result<Widget<IWidgetAbi>, NcStatus> {
-    Ok(Widget::from_interface(widget.node_interface()?))
+fn root<T: ComInterface>(widget: OwnedWidget<T>) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
+    Ok(OwnedWidget::from_interface(widget.into_interface().query()?))
 }
 /// Turns a persistent text policy into the existing runtime enum.
 fn wrapping(value: &Wrapping) -> TextWrapping {
@@ -51,8 +41,8 @@ pub(crate) fn selection(value: Option<u32>) -> ChoiceSelection {
 }
 impl Construction<'_> {
     /// Constructs descendants first and then adopts each into its actual parent.
-    pub fn build(&mut self, node: &Node) -> Result<Widget<IWidgetAbi>, NcStatus> {
-        let children = node.children.iter().map(|child| self.build(&child.node)).collect::<Result<Vec<_>, _>>()?;
+    pub fn build(&mut self, node: &Node) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
+        let mut children = node.children.iter().map(|child| self.build(&child.node)).collect::<Result<Vec<_>, _>>()?;
         let factory = self.ui.widgets();
         let queue = self.events.take(&node.key);
         let mut widget = match &node.widget {
@@ -116,11 +106,8 @@ impl Construction<'_> {
                     selection(*selected),
                     queue.as_ref().map(|queue| queue.query()).transpose()?.as_ref().map(ComPtr::as_com_ref),
                 )?;
-                // Retain the root before further fallible setters so cleanup also removes its popup.
-                let widget = root(combo.clone())?;
-                self.nodes.insert(node.key.clone(), widget.clone());
                 combo.set_placeholder(placeholder)?;
-                widget
+                root(combo)?
             }
             WidgetSpec::Form { width, height } => root(factory.form(Size { width: *width, height: *height })?)?,
             WidgetSpec::Linear { direction, cross } => {
@@ -157,20 +144,27 @@ impl Construction<'_> {
                 },
                 queue.as_ref().map(|queue| queue.query()).transpose()?.as_ref().map(ComPtr::as_com_ref),
             )?)?,
-            WidgetSpec::Scroll { enabled } => root(factory.scroll_area(children.first().ok_or(NC_E_INVALID_ARG)?, *enabled)?)?,
+            WidgetSpec::Scroll { enabled } => {
+                // The scroll constructor consumes its sole child before ordinary
+                // indexed container insertion below; no second owner is retained.
+                if children.len() != 1 {
+                    return Err(NC_E_INVALID_ARG);
+                }
+                root(factory.scroll_area(children.remove(0), *enabled)?)?
+            },
             WidgetSpec::Disclosure { text, tree, expanded } => {
                 root(factory.disclosure(text, if *tree { DisclosureStyle::Tree } else { DisclosureStyle::Header }, *expanded)?)?
             }
             WidgetSpec::Custom { kind, properties, .. } => self.custom.create(kind, self.ui, properties, queue)?,
         };
-        self.nodes.insert(node.key.clone(), widget.clone());
-        for (index, (child, relationship)) in children.iter().zip(&node.children).enumerate() {
+        self.nodes.insert(node.key.clone(), widget.handle());
+        for (index, (child, relationship)) in children.into_iter().zip(&node.children).enumerate() {
             let index = index as u32;
             match (&node.widget, &relationship.edge) {
                 (WidgetSpec::Linear { .. } | WidgetSpec::Disclosure { .. }, Edge::Linear { main, cross }) => {
                     let mut parent = match node.widget {
-                        WidgetSpec::Disclosure { .. } => widget.as_interface().add_ref().query::<DisclosureAbi>()?.body()?,
-                        _ => widget.as_interface().add_ref().query::<LinearAbi>()?,
+                        WidgetSpec::Disclosure { .. } => widget.as_interface().query::<DisclosureAbi>()?.body()?,
+                        _ => widget.as_interface().query::<LinearAbi>()?,
                     };
                     let edge = LinearEdge {
                         main: main.layout().into(),
@@ -180,35 +174,29 @@ impl Construction<'_> {
                         }
                         .into(),
                     };
-                    parent.insert(index, child.as_interface(), edge)?.finish()?;
+                    parent.insert(index, child.into_interface(), edge)?;
                 }
                 (WidgetSpec::Grid { .. }, Edge::Grid { columns, rows }) => widget
                     .as_interface()
-                    .add_ref()
                     .query::<GridAbi>()?
-                    .insert(index, child.as_interface(), GridExtent { columns: *columns, rows: *rows })?
-                    .finish()?,
+                    .insert(index, child.into_interface(), GridExtent { columns: *columns, rows: *rows })?,
                 (WidgetSpec::Form { .. }, Edge::Position { x, y, width, height }) => widget
                     .as_interface()
-                    .add_ref()
                     .query::<FormAbi>()?
                     .insert(
                         index,
-                        child.as_interface(),
+                        child.into_interface(),
                         Rect {
                             x: *x,
                             y: *y,
                             width: *width,
                             height: *height,
                         },
-                    )?
-                    .finish()?,
+                    )?,
                 (WidgetSpec::Split { .. }, Edge::Pane) => widget
                     .as_interface()
-                    .add_ref()
                     .query::<SplitViewAbi>()?
-                    .insert(index, child.as_interface())?
-                    .finish()?,
+                    .insert(index, child.into_interface())?,
                 (WidgetSpec::Scroll { .. }, Edge::Pane) => {} // The constructor already adopted its sole child.
                 _ => return Err(NC_E_INVALID_ARG),
             }
@@ -221,7 +209,7 @@ impl Construction<'_> {
 
 /// Applies logical resources through the concrete class that owns each property.
 fn apply_style(widget: &Widget<IWidgetAbi>, node: &Node, resources: &Resources) -> Result<(), NcStatus> {
-    let source = widget.as_interface().add_ref();
+    let source = widget.as_interface();
     if let Some(font) = &node.style.font {
         let bytes = NcCopyFromBufferOffset::new(0, font.as_bytes());
         macro_rules! font {

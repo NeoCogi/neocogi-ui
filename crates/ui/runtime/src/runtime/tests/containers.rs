@@ -25,7 +25,7 @@ struct ContainerProbe {
     /// Releases the private writer during placement to exercise deferred subtree destruction.
     abandon: Cell<bool>,
     /// Optional reentrant edit attempted inside mount validation's foreign call.
-    mount_edit: RefCell<Option<ComPtr<IChildrenEditorAbi>>>,
+    mount_edit: RefCell<Option<WeakComBox<IChildrenEditorAbi>>>,
 }
 
 #[com_object(interfaces(IWidget, IContainerLayout))]
@@ -34,14 +34,14 @@ struct TestContainer {
     /// Exactly the same static lifetime helper available to independent component authors.
     state: WidgetState,
     /// Private topology authority; IContainerLayout only publishes the distinct read-only view.
-    editor: RefCell<Option<ComPtr<IChildrenEditorAbi>>>,
+    editor: Option<ComBox<IChildrenEditorAbi>>,
     /// Test-only state with no parent or runtime ownership cycle.
     probe: Rc<ContainerProbe>,
 }
 impl TestContainer {
     /// Borrows no editor cell across a COM call.
-    fn editor(&self) -> Result<ComPtr<IChildrenEditorAbi>, NcStatus> {
-        self.editor.borrow().clone().ok_or(UI_E_CLOSED)
+    fn editor(&self) -> Result<WeakComBox<IChildrenEditorAbi>, NcStatus> {
+        self.editor.as_ref().map(ComBox::downgrade).ok_or(UI_E_CLOSED)
     }
     /// Checks retained tokens before recording the current invocation for later rejection.
     fn observe(&self, scope: LayoutScope, layout: ComRef<'_, ILayoutServiceAbi>) {
@@ -74,16 +74,6 @@ impl IWidget for TestContainer {
             assert_eq!(editor.clear(), Err(UI_E_BUSY));
         }
         self.state.mount()
-    }
-    /// Explicit container closure closes its private editor, while retained public views remain safe.
-    fn close(&mut self) -> Result<(), NcStatus> {
-        if self.state.close()? {
-            let editor = self.editor.borrow().clone();
-            if let Some(editor) = editor {
-                editor.close()?.finish()?;
-            }
-        }
-        Ok(())
     }
     /// This geometry-only container leaves pointer targeting to enabled descendants.
     fn properties(&self) -> Result<WidgetProperties, NcStatus> {
@@ -174,7 +164,7 @@ impl IContainerLayout for TestContainer {
             assert!(layout.child_content_size(scope, index)?.height >= 0);
         }
         if self.probe.abandon.get() {
-            let editor = self.editor.borrow_mut().take();
+            let editor = self.editor.take();
             drop(editor);
         }
         if self.probe.fail_place.get() {
@@ -189,18 +179,19 @@ impl IContainerLayout for TestContainer {
 }
 
 /// Creates a custom container without any access to retained Node or runtime storage.
-fn container(runtime: &ComPtr<UiRuntimeAbi>, scopes: RetainedScopes) -> (ComPtr<IWidgetAbi>, ComPtr<IChildrenEditorAbi>, Rc<ContainerProbe>) {
+fn container(runtime: &ComPtr<UiRuntimeAbi>, scopes: RetainedScopes) -> (ComBox<IWidgetAbi>, WeakComBox<IChildrenEditorAbi>, Rc<ContainerProbe>) {
     let host = button(runtime).host().unwrap();
     let editor = host.create_children().unwrap();
     let probe = Rc::new(ContainerProbe { scopes, ..ContainerProbe::default() });
-    let widget = TestContainer::from_value(TestContainer {
+    let editor_view = editor.downgrade();
+    let widget = TestContainer::into_box(TestContainer {
         state: WidgetState::new(host, WidgetOptions::NO_INTERACT),
-        editor: RefCell::new(Some(editor.clone())),
+        editor: Some(editor),
         probe: probe.clone(),
     })
     .query()
     .unwrap();
-    (widget, editor, probe)
+    (widget, editor_view, probe)
 }
 
 /// Nested independent policies restore parent scopes; removal closes the one authoritative subtree.
@@ -210,15 +201,14 @@ fn nested_container_layout_scopes_expire_and_teardown_closes_descendants() {
     let history = Rc::default();
     let (parent, parent_editor, parent_probe) = container(&runtime, Rc::clone(&history));
     let (child, child_editor, child_probe) = container(&runtime, Rc::clone(&history));
-    let mut leaf = button(&runtime);
+    let leaf_owner = button(&runtime);
+    let mut leaf = leaf_owner.downgrade();
     child_editor
-        .insert(0, leaf.query::<IWidgetAbi>().unwrap().as_com_ref())
-        .unwrap()
-        .finish()
+        .insert(0, leaf_owner.query::<IWidgetAbi>().unwrap())
         .unwrap();
-    parent_editor.insert(0, child.as_com_ref()).unwrap().finish().unwrap();
+    parent_editor.insert(0, child).unwrap();
     let child_view = child_editor.view().unwrap();
-    let window = mount(&runtime, &parent).unwrap();
+    let window = mount(&runtime, parent).unwrap();
     runtime.update(SIZE).unwrap();
     assert!(parent_probe.measures.get() > 0 && child_probe.measures.get() > 0);
     assert!(parent_probe.placements.get() > 0 && child_probe.placements.get() > 0);
@@ -239,26 +229,25 @@ fn nested_container_layout_scopes_expire_and_teardown_closes_descendants() {
 
 /// Cyclic edges, aliased collections and reentrant mount edits fail before consuming legitimate ownership.
 #[test]
-fn container_topology_rejects_cycles_shared_collections_and_reentrant_edits() {
+fn container_topology_rejects_cycles_and_reentrant_edits_without_retaining_owners() {
     let runtime = runtime();
-    let (a, a_editor, a_probe) = container(&runtime, Rc::default());
+    let (a, a_editor, _) = container(&runtime, Rc::default());
     let (b, b_editor, _) = container(&runtime, Rc::default());
-    a_editor.insert(0, b.as_com_ref()).unwrap().finish().unwrap();
-    assert_eq!(b_editor.insert(0, a.as_com_ref()), Err(UI_E_OWNER));
-    assert_eq!(a_editor.view().unwrap().child_count().unwrap(), 1);
-    assert_eq!(b_editor.view().unwrap().child_count().unwrap(), 0);
-    *a_probe.mount_edit.borrow_mut() = Some(b_editor.clone());
-    let window = mount(&runtime, &a).unwrap();
-    let alias = TestContainer::from_value(TestContainer {
-        state: WidgetState::new(a.host().unwrap(), WidgetOptions::NO_INTERACT),
-        editor: RefCell::new(Some(a_editor.clone())),
-        probe: Rc::default(),
-    })
-    .query()
-    .unwrap();
-    assert_eq!(mount(&runtime, &alias).unwrap_err(), UI_E_OWNER);
+    let observed = a.downgrade();
+    a_editor.insert(0, b).unwrap();
+    // A rejected cycle consumes the candidate owner. No retained editor can
+    // preserve either subtree after the rejection drops that owner.
+    assert_eq!(b_editor.insert(0, a), Err(UI_E_OWNER));
+    assert!(!observed.is_alive());
+    assert_eq!(a_editor.view().unwrap_err(), UI_E_CLOSED);
+    assert_eq!(b_editor.view().unwrap_err(), UI_E_CLOSED);
+    let (a, _, a_probe) = container(&runtime, Rc::default());
+    let (b, b_editor, _) = container(&runtime, Rc::default());
+    *a_probe.mount_edit.borrow_mut() = Some(b_editor);
+    let window = mount(&runtime, a).unwrap();
     runtime.update(SIZE).unwrap();
     window.close().unwrap();
+    drop(b);
 }
 
 /// Failed preferred sizes and partial child placement both force a fresh successful layout before rendering.
@@ -267,11 +256,11 @@ fn failed_container_layout_retries_without_caching_failed_parent_geometry() {
     let runtime = runtime();
     let (root, editor, probe) = container(&runtime, Rc::default());
     let leaf = button(&runtime);
-    editor.insert(0, leaf.query::<IWidgetAbi>().unwrap().as_com_ref()).unwrap().finish().unwrap();
-    let _window = mount(&runtime, &root).unwrap();
+    editor.insert(0, leaf.query::<IWidgetAbi>().unwrap()).unwrap();
+    let _window = mount(&runtime, root).unwrap();
     // A later root must not receive speculative geometry after an earlier root fails.
     let (later_root, _later_editor, later_probe) = container(&runtime, Rc::default());
-    let _later_window = mount(&runtime, &later_root).unwrap();
+    let _later_window = mount(&runtime, later_root).unwrap();
     probe.fail_measure.set(true);
     assert_eq!(runtime.update(SIZE), Err(NC_E_INVALID_ARG));
     assert_eq!(later_probe.measures.get(), 0);
@@ -293,36 +282,36 @@ fn failed_container_layout_retries_without_caching_failed_parent_geometry() {
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
 }
 
-/// Final writer release closes views immediately and defers actual widget close until observation ends.
+/// Destroying the exclusive writer expires views and destroys children when traversal unwinds.
 #[test]
 fn final_child_writer_release_during_layout_closes_retained_descendants() {
     let runtime = runtime();
     let (root, editor, probe) = container(&runtime, Rc::default());
-    let leaf = button(&runtime);
-    editor.insert(0, leaf.query::<IWidgetAbi>().unwrap().as_com_ref()).unwrap().finish().unwrap();
+    let leaf_owner = button(&runtime);
+    let leaf = leaf_owner.downgrade();
+    editor.insert(0, leaf_owner.query::<IWidgetAbi>().unwrap()).unwrap();
     let view = editor.view().unwrap();
     drop(editor);
-    let window = mount(&runtime, &root).unwrap();
+    let window = mount(&runtime, root).unwrap();
     probe.abandon.set(true);
     assert_eq!(runtime.update(SIZE), Err(UI_E_CLOSED));
     assert_eq!(view.child_count(), Err(UI_E_CLOSED));
     assert_eq!(leaf.label().unwrap_err(), UI_E_CLOSED);
-    // The retired child was closed after observation, so normal explicit root cleanup remains valid.
+    // Child ownership was released; ordinary window removal remains valid.
     window.close().unwrap();
 }
 
 /// Creates a custom leaf with copied geometry observations and no frame inset to obscure its assigned rectangle.
-fn recorded_leaf(runtime: &ComPtr<UiRuntimeAbi>) -> (neocogi_ui::Widget<IWidgetAbi>, Rc<WidgetProbe>) {
+fn recorded_leaf(runtime: &ComPtr<UiRuntimeAbi>) -> (neocogi_ui::OwnedWidget<IWidgetAbi>, Rc<WidgetProbe>) {
     let mut button = button(runtime);
     button.replace_flags(WidgetOptions::NONE).unwrap();
     let probe = Rc::new(WidgetProbe::default());
-    let object = RetainingWidget::from_value(RetainingWidget {
-        lifetime: button.query().unwrap(),
+    let object = RetainingWidget::into_box(RetainingWidget {
         button,
         runtime: runtime.clone(),
         probe: probe.clone(),
     });
-    (neocogi_ui::Widget::from_interface(object.query().unwrap()), probe)
+    (neocogi_ui::OwnedWidget::from_interface(object.query().unwrap()), probe)
 }
 
 /// An active parent token rejects direct reentry while its service method owns the frame for a leaf call.
@@ -332,8 +321,8 @@ fn layout_service_rejects_direct_reentry_without_holding_an_interior_borrow() {
     let (root, editor, probe) = container(&runtime, Rc::default());
     let (leaf, leaf_probe) = recorded_leaf(&runtime);
     *probe.leaf_probe.borrow_mut() = Some(leaf_probe.clone());
-    editor.insert(0, leaf.as_interface()).unwrap().finish().unwrap();
-    let window = mount(&runtime, &root).unwrap();
+    editor.insert(0, leaf.into_interface()).unwrap();
+    let window = mount(&runtime, root).unwrap();
     runtime.update(SIZE).unwrap();
     assert!(leaf_probe.measures.get() > 0);
     let (service, scope) = leaf_probe.parent_layout.borrow().clone().unwrap();
@@ -346,35 +335,34 @@ fn layout_service_rejects_direct_reentry_without_holding_an_interior_borrow() {
 fn builtin_linear_reuses_track_resolution_and_validates_edges_before_mounting() {
     let runtime = runtime();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
-    let mut row = ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Stretch).unwrap();
-    let (first, a) = recorded_leaf(&runtime);
+    let row_owner = ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Stretch).unwrap();
+    let mut row = row_owner.handle();
+    let (first_owner, a) = recorded_leaf(&runtime);
+    let first = first_owner.handle();
     let (second, b) = recorded_leaf(&runtime);
     let (third, c) = recorded_leaf(&runtime);
     let invalid = LinearEdge::new(LayoutTrack::Flex { weight: f32::NAN });
-    assert_eq!(row.insert(0, &first, invalid), Err(NC_E_INVALID_ARG));
-    row.insert(0, &first, LinearEdge::new(LayoutTrack::Fixed { extent: 40 }))
-        .unwrap()
-        .finish()
+    assert_eq!(row.insert(0, first_owner, invalid), Err(NC_E_INVALID_ARG));
+    assert!(!first.as_interface().is_alive());
+    assert_eq!(a.closes.get(), 1);
+    let (first, a) = recorded_leaf(&runtime);
+    row.insert(0, first, LinearEdge::new(LayoutTrack::Fixed { extent: 40 }))
         .unwrap();
-    row.insert(1, &second, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
-        .unwrap()
-        .finish()
+    row.insert(1, second, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
         .unwrap();
-    row.insert(2, &third, LinearEdge::new(LayoutTrack::Flex { weight: 2.0 }))
-        .unwrap()
-        .finish()
+    row.insert(2, third, LinearEdge::new(LayoutTrack::Flex { weight: 2.0 }))
         .unwrap();
     let common = row.node_interface().unwrap();
     assert_eq!(common.query::<IContainerAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     assert_eq!(
         common.query::<IUnknown>().unwrap().as_raw().object,
-        row.as_interface().add_ref().query::<IUnknown>().unwrap().as_raw().object
+        row.as_interface().clone().query::<IUnknown>().unwrap().as_raw().object
     );
     assert_eq!(
         row.children().unwrap().query::<IChildrenEditorAbi>().unwrap_err(),
         neocogi_com::NC_E_NOINTERFACE
     );
-    let window = ui.window("Linear", RECT, &row).unwrap();
+    let window = ui.window("Linear", RECT, row_owner).unwrap();
     runtime.update(SIZE).unwrap();
     let (first_rect, second_rect, third_rect) = (a.latest.get().unwrap().screen, b.latest.get().unwrap().screen, c.latest.get().unwrap().screen);
     assert_eq!(first_rect.width, 40);
@@ -407,17 +395,22 @@ fn builtin_grid_reuses_span_placement_and_bulk_track_validation() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let columns = [LayoutTrack::Fixed { extent: 40 }, LayoutTrack::Fixed { extent: 60 }];
     let rows = [LayoutTrack::Fixed { extent: 20 }, LayoutTrack::Fixed { extent: 30 }];
-    let mut grid = ui.widgets().grid(&columns, &rows).unwrap();
-    let (first, a) = recorded_leaf(&runtime);
+    let grid_owner = ui.widgets().grid(&columns, &rows).unwrap();
+    let mut grid = grid_owner.handle();
+    let (first_owner, a) = recorded_leaf(&runtime);
+    let first = first_owner.handle();
     let (second, b) = recorded_leaf(&runtime);
     let (third, c) = recorded_leaf(&runtime);
-    assert_eq!(grid.insert(0, &first, GridExtent { columns: 0, rows: 1 }), Err(NC_E_INVALID_ARG));
-    grid.insert(0, &first, GridExtent { columns: 1, rows: 1 }).unwrap().finish().unwrap();
-    grid.insert(1, &second, GridExtent { columns: 1, rows: 1 }).unwrap().finish().unwrap();
-    grid.insert(2, &third, GridExtent { columns: 2, rows: 1 }).unwrap().finish().unwrap();
+    assert_eq!(grid.insert(0, first_owner, GridExtent { columns: 0, rows: 1 }), Err(NC_E_INVALID_ARG));
+    assert!(!first.as_interface().is_alive());
+    assert_eq!(a.closes.get(), 1);
+    let (first, a) = recorded_leaf(&runtime);
+    grid.insert(0, first, GridExtent { columns: 1, rows: 1 }).unwrap();
+    grid.insert(1, second, GridExtent { columns: 1, rows: 1 }).unwrap();
+    grid.insert(2, third, GridExtent { columns: 2, rows: 1 }).unwrap();
     assert_eq!(grid.columns().unwrap(), columns);
     assert_eq!(grid.rows().unwrap(), rows);
-    let window = ui.window("Grid", RECT, &grid).unwrap();
+    let window = ui.window("Grid", RECT, grid_owner).unwrap();
     runtime.update(SIZE).unwrap();
     let (first_rect, second_rect, third_rect) = (a.latest.get().unwrap().screen, b.latest.get().unwrap().screen, c.latest.get().unwrap().screen);
     assert_eq!((first_rect.width, first_rect.height), (40, 20));
@@ -444,30 +437,29 @@ fn builtin_grid_reuses_span_placement_and_bulk_track_validation() {
     assert_eq!(a.closes.get(), 1);
 }
 
-/// A failed old-child teardown cannot leave Linear metadata describing the replaced subtree.
+/// Replacement commits matching metadata; reentrant edits are rejected before mutation.
 #[test]
-fn builtin_container_commits_replacement_metadata_before_reporting_failed_teardown() {
+fn builtin_container_replacement_preserves_metadata_and_rejects_reentry() {
     let runtime = runtime();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
-    let mut row = ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Stretch).unwrap();
+    let row_owner = ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Stretch).unwrap();
+    let mut row = row_owner.handle();
     let (first, previous) = recorded_leaf(&runtime);
-    previous.fail_close.set(true);
-    row.insert(0, &first, LinearEdge::new(LayoutTrack::Fixed { extent: 40 }))
-        .unwrap()
-        .finish()
+
+    row.insert(0, first, LinearEdge::new(LayoutTrack::Fixed { extent: 40 }))
         .unwrap();
-    let window = ui.window("replace", RECT, &row).unwrap();
+    let window = ui.window("replace", RECT, row_owner).unwrap();
     runtime.update(SIZE).unwrap();
     let (second, replacement) = recorded_leaf(&runtime);
-    *replacement.close_on_mount.borrow_mut() = Some(row.node_interface().unwrap());
-    let outcome = row.replace(0, &second, LinearEdge::new(LayoutTrack::Fixed { extent: 90 })).unwrap();
-    assert_eq!(outcome.finish(), Err(NC_E_INVALID_ARG));
-    assert_eq!(replacement.close_mount_result.get(), Some(Err(NC_E_BUSY)));
+    *replacement.clear_on_mount.borrow_mut() = Some(row.node_interface().unwrap());
+    let outcome = row.replace(0, second, LinearEdge::new(LayoutTrack::Fixed { extent: 90 })).unwrap();
+    assert_eq!(outcome, ());
+    assert_eq!(replacement.clear_mount_result.get(), Some(Err(NC_E_BUSY)));
     assert_eq!(row.edge(0).unwrap().main, LayoutTrack::Fixed { extent: 90 });
     runtime.update(SIZE).unwrap();
     assert_eq!(replacement.latest.get().unwrap().screen.width, 90);
     assert_eq!(previous.closes.get(), 1);
-    row.remove(0).unwrap().finish().unwrap();
+    row.remove(0).unwrap();
     assert_eq!(row.children().unwrap().child_count().unwrap(), 0);
     runtime.update(SIZE).unwrap();
     window.close().unwrap();
@@ -479,8 +471,10 @@ fn builtin_scroll_area_uses_real_children_and_shared_sticky_invalidation() {
     let runtime = runtime();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let text = format!("{}\n{}", "wide".repeat(80), "another line\n".repeat(50));
-    let mut content = ui.widgets().text_block(&text, TextWrapping::None).unwrap();
-    let mut scroll = ui.widgets().scroll_area(&content, true).unwrap();
+    let content_owner = ui.widgets().text_block(&text, TextWrapping::None).unwrap();
+    let mut content = content_owner.handle();
+    let scroll_owner = ui.widgets().scroll_area(content_owner, true).unwrap();
+    let mut scroll = scroll_owner.handle();
     let root = scroll.node_interface().unwrap();
     assert_eq!(root.query::<IContainerAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     let structural = root.query::<IContainerLayoutAbi>().unwrap().children().unwrap();
@@ -494,7 +488,7 @@ fn builtin_scroll_area_uses_real_children_and_shared_sticky_invalidation() {
         scroll.content().unwrap().node_interface().unwrap().query::<IUnknown>().unwrap().as_raw().object,
         content_identity.as_raw().object
     );
-    let window = ui.window("scroll", RECT, &scroll).unwrap();
+    let window = ui.window("scroll", RECT, scroll_owner).unwrap();
     runtime.update(SIZE).unwrap();
     let info = scroll.info().unwrap();
     assert!(info.maximum.x > 0 && info.maximum.y > 0);
@@ -524,8 +518,9 @@ fn builtin_scroll_area_uses_real_children_and_shared_sticky_invalidation() {
     assert_eq!(disabled.maximum, Point::default());
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     scroll.set_enabled(true).unwrap();
-    let replacement = ui.widgets().text_block("short replacement", TextWrapping::None).unwrap();
-    scroll.replace_content(&replacement).unwrap().finish().unwrap();
+    let replacement_owner = ui.widgets().text_block("short replacement", TextWrapping::None).unwrap();
+    let replacement = replacement_owner.handle();
+    scroll.replace_content(replacement_owner).unwrap();
     assert_eq!(content.text(), Err(UI_E_CLOSED));
     runtime.update(SIZE).unwrap();
     assert_eq!(scroll.info().unwrap().maximum, Point::default());
@@ -542,17 +537,17 @@ fn nested_com_scroll_areas_preserve_boundary_bubbling() {
     let runtime = runtime();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let text = ui.widgets().text_block(&"nested content\n".repeat(60), TextWrapping::None).unwrap();
-    let mut inner = ui.widgets().scroll_area(&text, true).unwrap();
+    let inner_owner = ui.widgets().scroll_area(text, true).unwrap();
+    let mut inner = inner_owner.handle();
     let tail = ui.widgets().text_block(&"outer content\n".repeat(60), TextWrapping::None).unwrap();
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     column
-        .insert(0, &inner, LinearEdge::new(LayoutTrack::Fixed { extent: 110 }))
-        .unwrap()
-        .finish()
+        .insert(0, inner_owner, LinearEdge::new(LayoutTrack::Fixed { extent: 110 }))
         .unwrap();
-    column.insert(1, &tail, LinearEdge::new(LayoutTrack::Content)).unwrap().finish().unwrap();
-    let outer = ui.widgets().scroll_area(&column, true).unwrap();
-    let window = ui.window("nested scroll", RECT, &outer).unwrap();
+    column.insert(1, tail, LinearEdge::new(LayoutTrack::Content)).unwrap();
+    let outer_owner = ui.widgets().scroll_area(column, true).unwrap();
+    let outer = outer_owner.handle();
+    let window = ui.window("nested scroll", RECT, outer_owner).unwrap();
     runtime.update(SIZE).unwrap();
     assert!(inner.info().unwrap().maximum.y > 0);
     assert!(outer.info().unwrap().maximum.y > 0);
@@ -584,7 +579,8 @@ fn nested_com_scroll_areas_preserve_boundary_bubbling() {
 fn disclosure_com_header_controls_the_actual_body_without_a_parent_backpointer() {
     let runtime = runtime();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
-    let mut disclosure = ui.widgets().disclosure("Tree", DisclosureStyle::Tree, false).unwrap();
+    let disclosure_owner = ui.widgets().disclosure("Tree", DisclosureStyle::Tree, false).unwrap();
+    let mut disclosure = disclosure_owner.handle();
     let mut header = disclosure.header().unwrap();
     let mut body = disclosure.body().unwrap();
     let root = disclosure.node_interface().unwrap();
@@ -600,11 +596,9 @@ fn disclosure_com_header_controls_the_actual_body_without_a_parent_backpointer()
         body.node_interface().unwrap().query::<IUnknown>().unwrap().as_raw().object
     );
     let (leaf, probe) = recorded_leaf(&runtime);
-    body.insert(0, &leaf, LinearEdge::new(LayoutTrack::Fixed { extent: 33 }))
-        .unwrap()
-        .finish()
+    body.insert(0, leaf, LinearEdge::new(LayoutTrack::Fixed { extent: 33 }))
         .unwrap();
-    let window = ui.window("disclosure", RECT, &disclosure).unwrap();
+    let window = ui.window("disclosure", RECT, disclosure_owner).unwrap();
     runtime.update(SIZE).unwrap();
     assert!(probe.latest.get().is_none());
     let (renderer, _) = renderer();
@@ -655,7 +649,7 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
     assert_eq!(area.text().unwrap(), "a☃\nb\n");
     let root = area.node_interface().unwrap();
     let identity = root.query::<IUnknown>().unwrap();
-    let concrete = area.as_interface().add_ref();
+    let concrete = area.as_interface().clone();
     assert_eq!(concrete.query::<IUnknown>().unwrap().as_raw().object, identity.as_raw().object);
     assert_eq!(root.query::<ITextEditorAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     assert_eq!(root.query::<ScrollAreaAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
@@ -673,7 +667,9 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
     area.set_cursor(3).unwrap();
     assert_eq!(area.cursor().unwrap(), 1); // A byte inside the snowman clamps to its preceding scalar boundary.
     assert_eq!(editor.cursor().unwrap(), 1);
-    let window = ui.window("editor", RECT, &area).unwrap();
+    let area_owner = area;
+    let mut area = area_owner.handle();
+    let window = ui.window("editor", RECT, area_owner).unwrap();
     runtime.update(SIZE).unwrap();
     let (renderer, probe) = renderer();
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
@@ -758,7 +754,7 @@ fn disclosure_headers_use_the_common_frame_policy_for_both_variants() {
         let mut header = disclosure.header().unwrap().node_interface().unwrap();
         assert_eq!(header.properties().unwrap().frame, frame);
         assert_eq!(header.properties().unwrap().options, defaults);
-        let window = ui.window("framing", RECT, &disclosure).unwrap();
+        let window = ui.window("framing", RECT, disclosure).unwrap();
         let (renderer, _) = renderer();
         // The common traversal supplies the frame once; the content algorithm consumes its
         // inset rectangle. A policy change must make render wait for the new measurement.
@@ -776,56 +772,49 @@ fn disclosure_headers_use_the_common_frame_policy_for_both_variants() {
     }
 }
 
-/// Reentrant construction can reject a different container's child-close
-/// preflight after its widget authority check succeeds. That refusal must not
-/// poison the parent terminal flag or skip descendants on the later legal call.
+/// Reentrant construction rejects a peer's child edits during the host transaction.
+/// Rejection preserves that peer; dropping its owner later destroys it normally.
 #[test]
-fn refused_descendant_close_leaves_parent_retryable() {
+fn reentrant_child_clear_rejection_preserves_the_parent_and_its_children() {
     let runtime = runtime();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let mut victim = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let retained = ui.widgets().button_unobserved("retained descendant").unwrap();
+    let retained_owner = retained;
+    let retained = retained_owner.handle();
     victim
-        .insert(0, &retained, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
-        .unwrap()
-        .finish()
+        .insert(0, retained_owner, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
         .unwrap();
     let mut unrelated = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let (candidate, probe) = recorded_leaf(&runtime);
-    *probe.close_on_mount.borrow_mut() = Some(victim.node_interface().unwrap());
+    *probe.clear_on_mount.borrow_mut() = Some(victim.node_interface().unwrap());
     unrelated
-        .insert(0, &candidate, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
-        .unwrap()
-        .finish()
+        .insert(0, candidate, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
         .unwrap();
-    assert_eq!(probe.close_mount_result.get(), Some(Err(UI_E_BUSY)));
+    assert_eq!(probe.clear_mount_result.get(), Some(Err(UI_E_BUSY)));
     assert!(victim.node_interface().unwrap().properties().is_ok());
     assert_eq!(retained.label().unwrap(), "retained descendant");
-    victim.node_interface().unwrap().close().unwrap();
+    let observed = victim.handle();
+    drop(victim);
     assert_eq!(retained.label(), Err(UI_E_CLOSED));
-    assert_eq!(victim.node_interface().unwrap().properties(), Err(UI_E_CLOSED));
-    victim.node_interface().unwrap().close().unwrap();
+    assert_eq!(observed.node_interface().unwrap().properties(), Err(UI_E_CLOSED));
 }
 
-/// A diagnostic after child retirement must not skip local terminal cleanup or
-/// cause another child close on retry. It cannot undo the committed removal.
+/// Retained weak views cannot postpone or repeat the child destructor.
 #[test]
-fn descendant_cleanup_diagnostic_still_completes_parent_close() {
+fn dropping_a_parent_destroys_its_child_once_despite_retained_weak_views() {
     let runtime = runtime();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let mut parent = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let (child, probe) = recorded_leaf(&runtime);
-    probe.fail_close.set(true);
     parent
-        .insert(0, &child, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
-        .unwrap()
-        .finish()
+        .insert(0, child, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
         .unwrap();
-    let mut parent = parent.node_interface().unwrap();
-    assert_eq!(parent.close(), Err(NC_E_INVALID_ARG));
-    assert_eq!(parent.properties(), Err(UI_E_CLOSED));
+    let observed = parent.node_interface().unwrap();
+    drop(parent);
+    assert_eq!(observed.properties(), Err(UI_E_CLOSED));
     assert_eq!(probe.closes.get(), 1);
-    parent.close().unwrap();
+    drop(observed);
     assert_eq!(probe.closes.get(), 1);
 }
 
@@ -844,10 +833,10 @@ impl Drop for QueueLifetime {
     }
 }
 
-/// Explicit closure and final allocation release share descendant-first cleanup;
-/// dropping a mere cloned handle must never close a live widget.
+/// Idle composite fields release child queues before the parent queue exactly once;
+/// cloning or dropping weak observations never affects the unique owner.
 #[test]
-fn queues_release_children_before_parent_on_close_and_final_drop() {
+fn idle_composite_destruction_releases_child_and_parent_queues_once() {
     for explicit in [false, true] {
         let runtime = runtime();
         let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
@@ -884,18 +873,18 @@ fn queues_release_children_before_parent_on_close_and_final_drop() {
             .unwrap();
             let child = ui.widgets().button_with_queue(label, Some(queue.as_com_ref())).unwrap();
             drop(queue);
-            parent.insert(children.len() as u32, &child).unwrap().finish().unwrap();
-            children.push(child);
+            let observed = child.handle();
+            parent.insert(children.len() as u32, child).unwrap();
+            children.push(observed);
         }
-        drop(parent.clone());
+        drop(parent.handle());
         assert!(observations.try_recv().is_err());
         if explicit {
-            parent.node_interface().unwrap().close().unwrap();
-            parent.node_interface().unwrap().close().unwrap();
-            observed.extend(observations.try_iter());
-            assert_eq!(observed, ["first", "second", "parent"]);
+            let window = ui.window("owned subtree", RECT, parent).unwrap();
+            window.close().unwrap();
+        } else {
+            drop(parent);
         }
-        drop(parent);
         observed.extend(observations.try_iter());
         assert_eq!(observed, ["first", "second", "parent"]);
         for child in &children {

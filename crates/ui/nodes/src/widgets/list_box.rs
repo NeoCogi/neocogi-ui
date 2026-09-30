@@ -77,8 +77,8 @@ pub struct ListBox {
     fit_width: bool,
     /// Initialization-only font.
     font: FontRef,
-    /// Single event slot; receives its destination during construction and closes with the widget.
-    events: neocogi_ui_nodes_contracts::ListBoxEventPort,
+    /// Single event slot; receives its destination during construction and is released when the widget is destroyed.
+    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::ListBoxEventQueueAbi>,
 }
 
 impl ListBox {
@@ -154,10 +154,7 @@ impl Widget for ListBox {
 }
 
 impl crate::widget_object::WidgetAlgorithm for ListBox {
-    /// Logical COM closure cancels ordinary submissions while retained widget references remain safe.
-    fn close_events(&mut self) {
-        self.events.close();
-    }
+
 }
 
 impl crate::widget_object::HostedWidget for ListBox {
@@ -222,11 +219,11 @@ impl ListBox {
         resources: crate::widget_object::SharedAssets,
         label: NcCopyFromBufferOffset<'_, u8>,
         queue: Option<ComPtr<neocogi_ui_nodes_contracts::ListBoxEventQueueAbi>>,
-    ) -> Result<ComPtr<ListBoxAbi>, NcStatus> {
+    ) -> Result<neocogi_com::ComBox<ListBoxAbi>, NcStatus> {
         let mut value = Self::build(host, label, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
-        Self::from_value_cyclic::<ListBoxAbi>(move |origin| {
-            value.events = neocogi_com::events::EventPort::with_queue(queue, origin);
+        Self::into_box_cyclic::<ListBoxAbi>(move |origin| {
+            value.events = crate::widget_object::WidgetEvents::with_queue(queue, origin);
             value
         })?
         .query()

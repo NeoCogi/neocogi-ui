@@ -206,7 +206,7 @@ struct Probe {
     /// Reentry must fail while the runtime owns its installation transaction.
     runtime: ComPtr<UiRuntimeAbi>,
     /// Setter reentry must also fail during the upload boundary.
-    button: ComPtr<ButtonAbi>,
+    button: neocogi_com::WeakComBox<ButtonAbi>,
     /// Last successfully uploaded renderer-owned image projection.
     current: RefCell<ComPtr<IRgbaImageAbi>>,
     /// Forces a recoverable upload failure without changing the current bundle.
@@ -302,13 +302,13 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
         .unwrap();
     let probe = Rc::new(Probe {
         runtime,
-        button: button.as_interface().add_ref(),
+        button: button.as_interface().clone(),
         current: RefCell::new(source.image().unwrap()),
         fail: Cell::new(true),
         uploads: Cell::new(0),
     });
     let renderer: ComPtr<IRendererAbi> = UploadRenderer::from_value(UploadRenderer(probe.clone())).query().unwrap();
-    let _window = ui.window("theme callback", Rect { x: 0, y: 0, width: 400, height: 250 }, &button).unwrap();
+    let _window = ui.window("theme callback", Rect { x: 0, y: 0, width: 400, height: 250 }, button).unwrap();
     let mut data = export_bundle_data(&bundle()).unwrap();
     data.tables.metrics.padding += 10;
     let candidate = data.into_revision(source.as_com_ref()).unwrap();
@@ -371,7 +371,7 @@ fn runtime_install_is_atomic_and_updates_shared_widget_measurement() {
     let runtime = crate::test_support::runtime_from_assets(source.as_com_ref()).unwrap();
     let mut ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let button = ui.widgets().button_unobserved("resources").unwrap();
-    let button_interface = button.as_interface().add_ref();
+    let button_interface = button.as_interface().clone();
     let probe = Rc::new(Probe {
         runtime: runtime.clone(),
         button: button_interface.clone(),
@@ -380,8 +380,8 @@ fn runtime_install_is_atomic_and_updates_shared_widget_measurement() {
         uploads: Cell::new(0),
     });
     let renderer: ComPtr<IRendererAbi> = UploadRenderer::from_value(UploadRenderer(probe.clone())).query().unwrap();
-    let _window = ui.window("assets", Rect { x: 0, y: 0, width: 400, height: 250 }, &button).unwrap();
-    let mut leaf: ComPtr<ILeafLayoutAbi> = button_interface.query().unwrap();
+    let _window = ui.window("assets", Rect { x: 0, y: 0, width: 400, height: 250 }, button).unwrap();
+    let mut leaf: neocogi_com::WeakComBox<ILeafLayoutAbi> = button_interface.query().unwrap();
     let metrics: ComPtr<ITextMetricsAbi> = UnusedMetrics::from_value(UnusedMetrics).query().unwrap();
     let limits = LayoutLimits {
         width: AxisLimit { kind: LimitKind::Unbounded, extent: 0 },

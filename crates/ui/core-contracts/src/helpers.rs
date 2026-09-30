@@ -55,8 +55,10 @@ impl Default for ColoredVertex {
 /// recorded. Bounding source text at mutation prevents uncharged glyph walks in those phases.
 pub const MAX_WINDOW_TITLE_BYTES: usize = 4096;
 
-/// An operation requires an object which has already been logically closed.
-pub const UI_E_CLOSED: NcStatus = NcStatus::from_code(-1000);
+/// An operation requires a widget whose exclusive owner expired, or a removed service.
+// Widget expiration is enforced by COM before UI code is entered. Runtime and
+// window services report the same lifetime status; callers need one policy.
+pub const UI_E_CLOSED: NcStatus = neocogi_com::NC_E_CLOSED;
 
 /// An operation is forbidden in the current phase or would reenter a traversal.
 pub const UI_E_BUSY: NcStatus = NcStatus::from_code(-1001);
@@ -118,13 +120,6 @@ impl ContainerGeometry {
         } else {
             Ok(())
         }
-    }
-}
-
-impl ChildEditResult {
-    /// Reports teardown only after the caller commits its matching relationship metadata.
-    pub fn finish(self) -> Result<(), NcStatus> {
-        if self.teardown.is_err() { Err(self.teardown) } else { Ok(()) }
     }
 }
 

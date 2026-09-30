@@ -31,10 +31,6 @@ impl IWidget for SceneView {
         self.state.mount()
     }
     /// Logical closure remains independent of the native resource's final release.
-    fn close(&mut self) -> Result<(), NcStatus> {
-        self.state.close().map(|_| ())
-    }
-    /// The scene is a passive fixed-preference surface, with no synthetic keyboard target.
     fn properties(&self) -> Result<WidgetProperties, NcStatus> {
         Ok(WidgetProperties {
             options: self.state.requested_flags()?,
@@ -144,15 +140,15 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
         Err(NC_E_INVALID_ARG)
     );
     // The base projection is the same scene allocation, with no extra widget or application callback object.
-    let root = Widget::<IWidgetAbi>::from_interface(
-        SceneView::from_value(SceneView {
+    let root = OwnedWidget::<IWidgetAbi>::from_interface(
+        SceneView::into_box(SceneView {
             state: WidgetState::new(ui.widgets().host()?, WidgetOptions::NONE),
             texture,
             scene: scene.query()?,
         })
         .query()?,
     );
-    let window = ui.window("Native COM mesh and image", Rect { x: 20, y: 20, width: 560, height: 320 }, &root)?;
+    let window = ui.window("Native COM mesh and image", Rect { x: 20, y: 20, width: 560, height: 320 }, root)?;
     ui.update(size)?;
     ui.render(size, renderer)?;
     window.close()?;

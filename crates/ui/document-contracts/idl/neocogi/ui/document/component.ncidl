@@ -6,10 +6,10 @@ use neocogi.ui.core::{IWidget, IWidgetHost};
 /// Getters and setters belong to the returned widget interfaces; event receivers
 /// are supplied to factories during construction, never discovered as commands.
 interface IUiComponent {
-    /// Returns the component's real root; private child handles remain private.
-    fn root(&self) -> Result<ComPtr<IWidget>>;
+    /// Observes the real root without retaining ownership; mounting uses a separate owner transfer.
+    fn root(&self) -> Result<WeakComBox<IWidget>>;
     /// Resolves one authored widget by its stable node key for a checked concrete interface query.
-    fn widget(&self, name: &[u8]) -> Result<ComPtr<IWidget>>;
+    fn widget(&self, name: &[u8]) -> Result<WeakComBox<IWidget>>;
 }
 
 #[version(1)]
@@ -25,8 +25,8 @@ interface IDesignWidgetCatalog {
     /// Constructs one widget through COM using its stable catalog index and
     /// encoded, previously validated constructor properties. Before allocating any
     /// widget, query an observed receiver for the selected product's exact queue.
-    /// Retain that one receiver until close; unobserved is permanent.
-    fn create_widget(&self, index: u32, host: &IWidgetHost, properties: &[u8], events: &WidgetEventBinding) -> Result<ComPtr<IWidget>>;
+    /// Own that receiver until widget destruction; unobserved is permanent.
+    fn create_widget(&self, index: u32, host: &IWidgetHost, properties: &[u8], events: &WidgetEventBinding) -> Result<ComBox<IWidget>>;
 }
 
 #[version(1)]

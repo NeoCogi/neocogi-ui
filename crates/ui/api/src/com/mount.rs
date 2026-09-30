@@ -1,17 +1,18 @@
-//! Typed widget projection at a tree attachment boundary.
-
+//! Exclusive ownership transfer at a tree attachment boundary.
 use super::*;
 
-/// Resolves the actual widget whose one-way attachment the runtime will claim.
-/// No separate controller or metadata lifetime accompanies this capability.
+/// A constructed, unmounted widget whose sole owner can move into a container.
+/// Observers deliberately do not implement this trait: they cannot reattach a
+/// mounted widget or manufacture another owner through an interface query.
 pub trait Mountable {
-    /// Retains the concrete widget; inspection alone never consumes its attachment.
-    fn mount_widget(&self) -> Result<ComPtr<IWidgetAbi>, NcStatus>;
+    /// Consumes ownership and selects the common widget projection once.
+    fn mount_widget(self) -> Result<ComBox<IWidgetAbi>, NcStatus>;
 }
-
-impl<I: ComInterface> Mountable for Widget<I> {
-    /// Queries the common interface on the same object used for typed editing.
-    fn mount_widget(&self) -> Result<ComPtr<IWidgetAbi>, NcStatus> {
-        self.node_interface()
-    }
+impl<I: ComInterface> Mountable for OwnedWidget<I> {
+    /// Interface selection moves the existing owner; it never retains the value.
+    fn mount_widget(self) -> Result<ComBox<IWidgetAbi>, NcStatus> { self.into_interface().query() }
+}
+impl<I: ComInterface> Mountable for ComBox<I> {
+    /// Raw typed factory results can attach without an additional facade object.
+    fn mount_widget(self) -> Result<ComBox<IWidgetAbi>, NcStatus> { self.query() }
 }
