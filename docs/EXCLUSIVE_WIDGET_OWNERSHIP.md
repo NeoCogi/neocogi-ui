@@ -213,3 +213,11 @@ consumer migration as `2cb90ec9`. Fresh verification passed 868 workspace tests
 built native extension smoke run. Browser targets and their test code compile;
 no browser execution or binary-size measurement is claimed. Commands and scope
 are recorded in [widget dispatch verification](WIDGET_EVENT_DISPATCH.md#verification-on-2026-09-29).
+
+## Measured implementation cost
+
+The size correction report records the
+matched min-size builds, Cargo Bloat attribution, and remaining cost of admitted
+weak calls. Shared services select no execution token; exclusive widgets use a
+non-null token and a single-handle facade. The report distinguishes the original
+ownership migration from the later removal of its avoidable overhead.
