@@ -1,8 +1,8 @@
 # Exclusive widget ownership and destruction
 
 This document records the agreed replacement for retained closed widgets. It is
-an implementation contract; migration status below distinguishes available COM
-primitives from consumers still using the previous model.
+the ownership contract shared by COM, UI factories, containers, generated forms,
+and independently built plugins.
 
 ## Why close existed
 
@@ -99,17 +99,90 @@ identity for a queued event. `WeakComBox::is_alive()` is only an observation;
 every subsequent method still checks admission, because another thread may
 remove the owner between the check and the call.
 
-## Scope of removing close
+## Removing the generic close operation
 
-The target is to remove `IWidget::close`, its duplicated event-port lifecycle,
-and fallible descendant-close orchestration once containers own `ComBox` values.
-Window dismissal and dialog cancellation remain application operations: they may
-choose whether to remove an owner and may emit a result before removal. Those
-operations must not be confused with a generic widget close state.
+`IWidget::close`, the widget's `Closed` state, and fallible descendant cleanup are
+removed. `WidgetState` tracks only `Unmounted | Mounted`; the COM owner determines
+whether a value exists. `ChildEditResult` and deferred widget-close queues are
+removed too. Child edits return `Result<()>`. Failure leaves the parent's topology
+unchanged but destroys the consumed candidate; success publishes the new topology
+and drops any removed owner. There is no recoverable destructor status.
 
-Implementation status: COM exclusive owner construction, cached weak dispatch,
-concurrent execution protection, and ownership rejection are implemented first.
-IDL factory/container transfers and their generated-call regressions are now
-implemented. The UI container/form migration remains subsequent work
-on this branch. The historical review finding is not marked resolved until that
-migration and its tests are complete.
+The container also exclusively owns its `IChildrenEditor`. A retained editor
+observer cannot preserve a removed subtree, and retained read views expire when
+that editor is destroyed. An active traversal temporarily owns the child sequence
+and drops it when that traversal unwinds if the editor has disappeared.
+
+Rust field destruction releases the idle subtree. There is no universal promise
+that the parent's destructor waits for an already admitted child call: that would
+block or deadlock a child handler removing its own parent. The parent can be
+destroyed first while the child finishes its admitted call. No new call may enter
+the removed child. Store cleanup that requires live children in the owning
+implementation's ordinary `Drop`, before those child fields are dropped; do not
+reintroduce a generic fallible close protocol.
+
+Window dismissal and file-dialog cancellation remain business operations. An
+explicit dialog cancellation posts its result while the dialog owner still
+exists, then removes the window. Destruction simply disconnects the private inbox
+and releases the outbound queue; it does not manufacture a cancellation event
+from an expired origin. Facts already posted to an application queue remain there.
+
+Explicit picker close attempts cancellation and window removal independently. A
+completion queue error cannot strand the modal. If removal refuses before
+committing, the request is idle and close may retry removal without reposting its
+outcome. Removal errors take precedence over delivery errors; when removal
+succeeds, a delivery error is still returned. There is no `Closed` request state
+or optional private receiver: expired COM ownership is the destruction boundary.
+
+Combo's auxiliary popup has a separate menu-service lifetime. The popup
+coordinator keeps a `WeakComPtr` to that service, so destroying the header releases
+its menu without a fallible call from `Drop`. Normal reconciliation removes the
+expired popup. A regression removes the header during synchronous event forwarding
+and verifies that the destination queue is released despite the active menu call.
+
+## Application and generated-form usage
+
+```rust,no_run
+use neocogi_ui::{Ui, Rect, FlowDirection, CrossSize, LinearEdge, LayoutTrack};
+use neocogi_com::NcStatus;
+fn example(ui: &Ui) -> Result<(), NcStatus> {
+    let button_owner = ui.widgets().button_unobserved("Save")?;
+    let mut button = button_owner.handle(); // Weak editing field.
+    let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
+    column.insert(0, button_owner, LinearEdge::new(LayoutTrack::Content))?;
+    let window = ui.window("Form", Rect { x: 0, y: 0, width: 300, height: 200 }, column)?;
+    button.set_label("Save changes")?;
+    window.close()?; // Removes the tree's exclusive owner.
+    assert_eq!(button.label(), Err(neocogi_ui::UI_E_CLOSED));
+    Ok(())
+}
+```
+
+Custom fields call their generated setters through `as_interface_mut()` and
+getters through `as_interface()`, without retaining another owner.
+
+A compiled document retains its unmounted root owner until `take_root()` or a
+consuming mount moves it into the tree. Its `root()` and node lookups are weak
+observers. Dropping recipe metadata after mounting cannot destroy the tree, and
+retaining that metadata cannot preserve a removed tree. `ReloadSlot::take_widget`
+similarly transfers its stable container once. A failed candidate is destroyed
+even when field validation captured weak handles.
+
+## Verification boundaries
+
+COM integration tests exercise unique transfer, expired cached calls, shared-owner
+rejection, provider destruction, borrowed access and concurrent call/removal races.
+UI tests exercise rejected attachment, retained child editors, replacement,
+self-removal during dispatch, active local guards, queue release, dialogs, and
+compiled/reloaded forms. UI interfaces remain thread-local; the concurrent guarantee
+belongs to explicitly thread-safe COM contracts. Independently built providers
+must implement the same ABI version and keep their code loaded through the last
+weak token. No claim is made that arbitrary foreign raw pointers are safe.
+
+The COM foundation is committed as `490e24cb`, the IDL transfer contract as
+`8667603d`, concrete initialization access as `db15a693`, and the complete UI and
+consumer migration as `2cb90ec9`. Fresh verification passed 868 workspace tests
+(23 ignored by default), 51 native editor acceptance tests, and the independently
+built native extension smoke run. Browser targets and their test code compile;
+no browser execution or binary-size measurement is claimed. Commands and scope
+are recorded in [widget dispatch verification](WIDGET_EVENT_DISPATCH.md#verification-on-2026-09-29).

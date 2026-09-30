@@ -119,9 +119,9 @@ recipes and host-side source generation.
 After installing the compiled bundle, select a font on an actual COM widget:
 
 ```rust,no_run
-use neocogi_ui::{FontRole, TextBlockWidget, TextWrapping, Ui};
+use neocogi_ui::{FontRole, OwnedWidget, TextBlockAbi, TextWrapping, Ui};
 use neocogi_com::NcStatus;
-fn heading(ui: &Ui) -> Result<TextBlockWidget, NcStatus> {
+fn heading(ui: &Ui) -> Result<OwnedWidget<TextBlockAbi>, NcStatus> {
     let mut title = ui.widgets().text_block("Inspector", TextWrapping::None)?;
     title.set_font_role(FontRole::Heading)?;
     Ok(title)

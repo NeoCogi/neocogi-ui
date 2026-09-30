@@ -10,7 +10,13 @@ objects.
 
 Native applications always link the Rust facade. A dynamic assembly links one shared COM runtime and loads the UI, GFX compositor, selected renderer, and optional Skin plugin. A monolith instead links one runtime implementation plus those component rlibs and registers their descriptors directly. Browser builds use the same static registration model. Never link a separate runtime implementation into each dynamic plugin. Loaded or statically registered plugins remain active for the process lifetime; this design does not support hot unloading.
 
-A `ComPtr` keeps an allocation alive. It does not keep a widget attached or a logical window open. Closing a window/subtree ends its input, layout, editing, and painting eligibility even when the application retains typed pointers. Further operations report the documented closed status. Final Release frees allocation storage and must not submit GPU work, invoke application callbacks, or substitute for a fallible close/finish operation.
+Shared services use `ComPtr`; widgets use one non-clonable `ComBox`. Containers
+consume child owners. Application fields retain cached `WeakComBox` observers,
+which cannot prolong a removed value. Dropping the owner rejects new calls;
+admitted calls finish before provider destruction. Final destruction releases
+ordinary fields without a generic widget close callback or recoverable teardown
+result. It must not submit GPU work or invoke application behavior. See
+[exclusive ownership](EXCLUSIVE_WIDGET_OWNERSHIP.md).
 
 Initially each widget mounts once, under one parent in one runtime. Attachment checks duplicate membership, cycles, and owner compatibility before publishing an edit. Container track/span settings belong to the parent-child relationship. Do not place them in a generic widget property map. Foreign-runtime widgets and foreign-renderer resources are errors, even if their numerical IDs happen to match.
 
@@ -42,15 +48,18 @@ Measurement constraints and allocated rectangles have different meanings. Unboun
 
 ## Borrowed calls, paint, and layout
 
-Generated interfaces have one safe calling convention. `ComPtr<IFooAbi>` and
-`ComRef<'_, IFooAbi>` both lend the generated `IFooClient` view, so callers use
+Generated interfaces have one safe calling convention. `ComPtr<IFooAbi>`,
+`ComBox<IFooAbi>`, `WeakComBox<IFooAbi>` and `ComRef<'_, IFooAbi>` lend the generated
+`IFooClient` view, so callers use
 `pointer.method()` without importing an interface-specific extension trait.
 Derived client views dereference through their declared base views for inherited
 method lookup. An owned base projection still requires checked `QueryInterface`;
 method lookup alone never manufactures another COM reference.
 
-`ComRef` borrows a live interface for a call; it can be retained with `add_ref()`.
-Therefore it is not an exclusive, non-retainable Rust borrow. Never create a COM
+`ComRef` borrows a live interface for a call. Shared service borrows can be
+retained with `add_ref()`; exclusive widgets reject shared retention, and callers
+use `downgrade_box()` for a weak identity instead. A generic `ComRef` therefore
+does not promise a non-retainable Rust borrow. Never create a COM
 implementation containing a stack `&mut Painter`, borrowed child storage, a
 native frame borrow, or a borrowed application `&mut State` and assume a ComRef
 prevents it escaping.
@@ -59,7 +68,7 @@ Paint/layout services own their storage and issue invocation tokens. The static 
 
 Scoped layout permits a container to measure/place its indexed children. It does not permit topology edits during layout or unrestricted access to the runtime tree. Recursive child calls restore the enclosing scope correctly before continuing the parent. Applications and plugins must not fabricate authority or treat an invocation token as a durable resource identifier.
 
-Use `&mut self` for methods that change object state and store that state in ordinary fields. The generated object-wide call gate permits overlapping shared calls and returns `NC_E_BUSY` for conflicting mutable or recursive entry before it creates a Rust reference. Interior mutability is reserved for genuinely shared infrastructure such as runtime registries and shared lifecycle tickets; release those short borrows before calling an external widget, container, painter, or application handler. Panics are implementation faults and follow the COM abort policy; they are not converted into recoverable statuses.
+Use `&mut self` for methods that change object state and store that state in ordinary fields. The generated object-wide call gate permits overlapping shared calls and returns `NC_E_BUSY` for conflicting mutable or recursive entry before it creates a Rust reference. Interior mutability is reserved for genuinely shared infrastructure such as runtime registries and asset caches; release those short borrows before calling an external widget, container, painter, or application handler. Panics are implementation faults and follow the COM abort policy; they are not converted into recoverable statuses.
 
 The same rule applies outside COM objects. Event-loop drivers and other values
 with one clear owner use `&mut self` and ordinary fields. `Cell` or `RefCell` is
@@ -107,7 +116,7 @@ policy; binding does not manufacture an invocation ID absent from the protocol.
 Declare cross-COM facts as concrete structs/enums and pass one
 `EventBinding<Object, Event>` into the factory. Multiple event kinds are cases of that
 enum. The behavioral parent creates its typed queue before construction; the
-factory retains it in a private `ContractEventPort` before publishing the widget.
+factory retains the optional typed queue and weak origin as ordinary widget fields.
 `#[com_class(Contract)]` does not generate event installation methods. There is
 no later binding operation. See [the complete contract](CLASS_EVENT_STREAMS.md)
 and [IDL syntax](IDL_MODULES.md#concrete-messages-and-streams).
@@ -143,12 +152,13 @@ Applications can implement concrete `*EventQueue` traits on one shared COM objec
 `*_with_queue` passes a concrete receiver through the COM factory;
 `*_unobserved` chooses permanent non-delivery. There is no later attachment API.
 Windows, popups, menus, built-ins and custom plugins use this same discipline.
-Logical teardown calls `events.close()`, releases the queue and weak origin, and permanently
-rejects later emission. Explicit queue handles retain their own
-fields. Already queued facts retain their values; the repository queues discard
-future posts successfully on channel disconnection. Delivery failures propagate after
-the state transition and do not roll it back. See the
-[class event stream guide](CLASS_EVENT_STREAMS.md) for the complete state machine.
+Widget destruction releases its fixed queue and weak origin as ordinary fields.
+Shared window/popup/menu services retain explicit dismissal semantics and can use
+`EventPort::close`; that lifecycle is not part of `IWidget`. Queued facts retain
+their values. Repository queues discard posts on channel disconnection; other
+queue implementations define their own bounded/full policy. Delivery errors follow
+the committed state change and do not roll it back. See the
+[class event stream guide](CLASS_EVENT_STREAMS.md).
 
 Behavioral composites bind their children to queues targeting a private typed
 channel, then own the receiver and model as fields of the concrete widget.
@@ -156,9 +166,8 @@ Implement `IWidget::dispatch_next(&mut self)` and mount that actual widget.
 There is no separate event-owner identity or second mount/retire lifecycle.
 Mutate local fields through `&mut self`; call distinct children through COM.
 Structural containers such as `ScrollArea` use the no-op dispatch implementation
-and need no inbox merely because they have children. Removing a subtree stops
-further dispatch and closes descendants before parents. An active self-removal
-call returns before the runtime enters its deferred widget close.
+and need no inbox merely because they have children. Removing a subtree drops its exclusive owner and stops new dispatch. An admitted
+call returns before its own value is destroyed; no close retry queue is needed.
 
 The runtime schedules widgets automatically, including in `Ui::update`.
 It settles child messages and layout before dispatching an application message,
@@ -195,7 +204,7 @@ Native GPU integrations belong in the same platform/render plugin as their backe
 A frame finishes explicitly and reports submission/presentation errors. Dropping an unfinished frame abandons it. A successful upload/replacement is published only after validation and backend preparation succeed. On failure, the previous valid bundle remains active. NcStatus reports the recoverable failure category; preserve useful backend diagnostics through the documented diagnostic capability.
 
 
-Window capabilities expose current manager state through copied snapshots. A child inherits its family root's fixed layer; changing a managed child/dialog layer fails. Hiding a parent excludes its structural family, and showing it restores child-local visibility intent without reopening modal dialogs. Popups have a distinct interface, obey the active owner's modal policy, and retain their definition when hidden. Explicit close destroys the corresponding subtree and closes its widgets even when the application retains handles. Parent capabilities are authenticated by their manager-owned COM identity before a widget's mount-once claim is committed. Unknown option bits, malformed visibility/clip tags, invalid dimensions and invalid fixed layers are rejected before mutation.
+Window capabilities expose current manager state through copied snapshots. A child inherits its family root's fixed layer; changing a managed child/dialog layer fails. Hiding a parent excludes its structural family, and showing it restores child-local visibility intent without reopening modal dialogs. Popups have a distinct interface, obey the active owner's modal policy, and retain their definition when hidden. Explicit close destroys the corresponding subtree; retained weak widget handles expire. Parent capabilities are authenticated by their manager-owned COM identity before a widget's mount-once claim is committed. Unknown option bits, malformed visibility/clip tags, invalid dimensions and invalid fixed layers are rejected before mutation.
 
 ## Widget class descriptions and shared protocols
 
@@ -227,10 +236,10 @@ methods, and `Ui::from_interfaces` rejects a factory bound to a different runtim
 Each concrete widget embeds one private `WidgetRuntime`. That non-generic helper
 contains `neocogi_ui::com::widget::WidgetState` plus host-backed resource and
 rendering machinery; it cannot store a semantic widget implementation. `WidgetState`
-owns the host authority, common options, mount-once claim, logical closed flag, and
+owns the host authority, common options, mount-once claim and
 sticky geometry flag. Neither helper owns a runtime tree, application callback, or
 additional widget allocation. Concrete class contracts require `IWidget`, whose
-protocol includes host/mount/close, effective properties, requested flag mutations,
+protocol includes host/mount and dispatch, effective properties, requested flag mutations,
 update, take_change, and paint. Leaf measurement remains the shared `ILeafLayout` protocol. Button
 activation and button-specific styling live directly on `Button`; no
 activation-only, style-only, or lifetime interface is required for that class.
@@ -303,12 +312,11 @@ on every return path. No runtime RefCell guard spans a foreign call. Reentrant
 runtime operations receive BUSY while the slot is occupied; ordinary peer
 widget setters remain available during update. Measurement, painting and
 property/change observation reject mutation through the common host authority.
-Explicit close also respects observational phases. Node removal invokes logical
-widget closure once; retained COM handles then report CLOSED. A component close
-failure is returned by explicit window/runtime teardown after the logical
-removal has committed. Final COM destruction cannot report an error and must
-infallibly mark its event source closed, including when it happens during an
-observational phase.
+Explicit topology mutations respect observational phases. Removal drops owners;
+weak handles then report expiration. An active traversal owns its temporary child
+sequence without retaining a RefCell borrow across foreign calls. If the editor
+is destroyed, that sequence is dropped when traversal unwinds; the invalidated
+layout result must not be submitted as a valid frame.
 
 A failed measurement does not publish a zero-size preference. The runtime reports
 the component error, leaves the node and its ancestor path dirty, and retries on
@@ -354,7 +362,7 @@ use the immutable size and do not call back into the image. Image setters dirty
 geometry but emit no activation. `clear_image` preserves the label and font;
 selecting a button icon replaces its image, and selecting an image replaces its
 icon. A retained widget can retain its image after logical window closure; clear
-the image before closure or release the remaining widget handles to retire it.
+the image before removal, or remove the widget owner to release it.
 
 Width fitting preserves aspect ratio using the allocated content width. Ordinary
 inline placement uses the source dimensions bounded by available width/height,
@@ -464,62 +472,33 @@ child sequence. Querying the view cannot recover edit authority. Expose concrete
 editing methods that keep Linear tracks, Grid spans or application-specific edge
 metadata synchronized; do not return the private editor to callers who are not
 responsible for that metadata. Child references do not transfer tree ownership.
-Widget closure is permanent and idempotent. A composite first retires its child
-collection, then releases its own event mapping and transient activity, then marks
-its own state closed. The actual widget allocation also runs this cleanup from
-`Drop`; dropping an individual `ComPtr` only releases that reference. Retained
-handles keep memory alive, never permission to reactivate a removed widget.
+Widgets have one `ComBox` owner. Container insertion consumes it; application
+fields keep cached `WeakComBox` projections. The container exclusively owns its
+`IChildrenEditor`; retaining a view cannot preserve removed children. Dropping the
+owner releases ordinary child and queue fields. `IWidget::close`, `Closed` widget
+state, and `ChildEditResult` no longer exist.
 
-The shared `WidgetState` has `Unmounted`, `Mounted`, and `Closed` states. Its
-`check_close` only checks permission; `complete_close` commits after cleanup.
-Built-in `HostedWidget::close_children` preserves `ChildEditResult`: refusal to
-acquire the collection leaves the parent open, while a diagnostic after committed
-child removal is reported only after local infallible cleanup and terminal state
-finish. Do not restore an already removed child or reopen an already closed
-widget. Custom COM implementations remain responsible for honoring these same
-lifetime rules; the runtime independently retires their owned descendants.
-
-Insertion consumes the child's sole attachment opportunity after validation.
-Removal closes the entire subtree permanently. Retained application references
-remain memory-safe and report closure; they cannot detach or reparent a widget.
-Indices, owner identity, layout capabilities, collection ownership and prospective
+`WidgetState` tracks `Unmounted | Mounted` only. A failed consuming insertion or
+replacement destroys its candidate but leaves existing topology unchanged.
+Indices, host identity, layout capabilities, collection ownership and prospective
 cycles are checked before a claim commits. Reentrant topology edits during
-attachment validation return `UI_E_BUSY`.
+attachment validation return `UI_E_BUSY`. Children cannot be detached for reuse.
 
-`ChildEditResult` separates a successful topology commit from a removed child's
-fallible teardown. An editor call returning `Err` did not change topology. An
-editor call returning `Ok(outcome)` did change topology, even when
-`outcome.teardown` is an error. Publish matching metadata before calling
-`outcome.finish()` or returning the outcome. For example, the essential order
-inside a concrete replacement method is:
+A successful editor call returns `Ok(())`. Prepare fallible metadata work before
+that call and publish the validated metadata after it. Destruction has no
+recoverable status and cannot turn a committed replacement into an error:
 
 ```rust
-// The concrete model guard owns its state; it holds no RefCell borrow.
-let mut model = self.take_model()?;
 let edge = validate_edge(edge)?;
-let outcome = self.editor.replace(index, child)?;
-model.edges[index as usize] = edge;
-// Metadata now describes the new child even if the old child's close failed.
-outcome.finish()
+self.editor.replace(index, child)?; // Consumes ComBox<IWidget>.
+self.edges[index as usize] = edge;  // Publish matching validated metadata.
+Ok(())
 ```
 
-Validate metadata before calling the editor. Acquire the concrete state guard
-before any operation can commit. Do not attempt to acquire fallible state access
-after the topology commit, and do not propagate teardown failure before updating
-metadata. A concrete read or edit that reenters an already active semantic state
-may return `UI_E_BUSY`. Common lifetime authority must remain separate from that
-state. Closing a container during an active semantic edit must reject before
-partially changing its lifetime.
-
-Final release of the private editor immediately closes the collection, including
-retained read-only views. If a layout invocation currently owns its children,
-those nodes are retired when the owned transaction returns and actually closed
-after the outer observational phase ends. They are no longer live tree edges.
-The runtime does not permit semantic mutation during layout to make teardown
-possible. Releasing the last editor during layout makes that layout result fail
-with `UI_E_CLOSED`; the host must not submit it as a valid frame. Explicit
-container removal closes its child storage even if a custom widget's own close
-implementation subsequently reports an error.
+Owner removal rejects new calls before concrete destruction. An admitted child
+can finish after its parent is destroyed; waiting could deadlock self-removal.
+Use ordinary `Drop` for local cleanup. The full thread and ABI contract is in
+[exclusive ownership](EXCLUSIVE_WIDGET_OWNERSHIP.md).
 
 ## Scoped container layout
 
@@ -611,10 +590,11 @@ For example, a static client can edit actual child capabilities without mirrorin
 plugin state:
 
 ```rust
-let section = ui.widgets().disclosure("Details", DisclosureStyle::Tree, false)?;
-let body = section.body()?;
-let editor = ui.widgets().text_area_unobserved("first line\nsecond line", TextWrapping::Word, true)?;
-body.insert(0, &editor, LinearEdge::new(LayoutTrack::Content))?.finish()?;
+let mut section = ui.widgets().disclosure("Details", DisclosureStyle::Tree, false)?;
+let mut body = section.body()?;
+let editor_owner = ui.widgets().text_area_unobserved("first line\nsecond line", TextWrapping::Word, true)?;
+let mut editor = editor_owner.handle();
+body.insert(0, editor_owner, LinearEdge::new(LayoutTrack::Content))?;
 section.header()?.set_text("Editable details")?;
 section.set_expanded(true)?;
 editor.set_cursor(0)?;
@@ -651,10 +631,9 @@ reset the preferred visual column and request reveal. Visible ordinary updates
 resolve those pending requests; hidden editors retain them until eligible again.
 Widget/application writers must run update before rendering after these edits.
 
-Closing a composite closes its real descendants. A retained header, body, editor,
-or bar reference remains memory-safe and reports logical closure; it cannot keep
-an orphaned interactive subtree alive or be remounted elsewhere. Keeping such a
-reference never transfers the parent's topology authority.
+Destroying a composite releases its child owners. Retained header, body, editor
+and bar observers report expiration; they cannot preserve or remount a subtree.
+Observers never transfer topology authority.
 
 ## Combo and compact menus
 
@@ -789,8 +768,8 @@ private inbox owns child messages and its ordinary mutable model consumes them
 through `IWidget::dispatch_next`. Its public `IFileDialog`, widget and layout
 projections share one COM allocation and borrow gate; the root Linear value is
 embedded directly. Dropping client handles leaves a mounted picker alive.
-Removing it closes its private inbox and settles an active request after any
-active handler returns. Retaining a picker does not retain its runtime. The
+Removing its owner disconnects its private inbox after admitted calls return; it
+does not post a new completion during destruction. A picker handle is weak. The
 static facade depends only on contracts and COM support; Rust model state never
 crosses the ABI.
 
@@ -845,14 +824,13 @@ available for ordinary geometry, visibility and destruction operations.
 
 Cancellation hides the reusable modal and completes one active request. Reopening
 before a previously queued Hidden notification is delivered does not cancel the
-new visible request. Hiding an active modal or its owner queues lifecycle cancellation; destroying
-the view retires the controller at the next safe boundary and cancels once. Explicit picker close and runtime teardown also cancel an active request
-without invoking application callbacks during destruction.
+new visible request. Hiding an active modal or its owner queues lifecycle cancellation; explicit picker close cancels before removing its owner. Destroying the window or
+runtime disconnects the picker without synthesizing a cancellation event.
 
 Each completion is already a committed request outcome in the consumer's inbox.
 Controller/runtime destruction or remapping cannot erase those outcomes.
-An active request is cancelled during retirement; an already completed request is
-not completed again. Failed consumers consume the attempted outcome and preserve
+An active request is abandoned during owner destruction; explicit cancellation
+settles it while still alive. An already completed request is not completed again. Failed consumers consume the attempted outcome and preserve
 unattempted successors. This is the same ownership rule as every other output;
 there is no separate finished/terminal queue. No producer retains application state.
 

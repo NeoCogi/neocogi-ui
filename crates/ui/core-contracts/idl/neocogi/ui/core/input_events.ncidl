@@ -188,7 +188,9 @@ class IFileDialog {
     fn active(&self) -> Result<bool>;
     /// Cancels one active request and hides its reusable modal; idle cancellation returns false.
     fn cancel(&mut self) -> Result<bool>;
-    /// Permanently destroys the modal and ends its active request, while retained handles remain safe.
+    /// Ends the active request and attempts removal independently of completion delivery.
+    /// A removal refusal may be retried; its error takes precedence over delivery failure.
+    /// Successful removal expires weak picker handles, even when delivery returned an error.
     fn close(&mut self) -> Result<()>;
     /// Copies the latest failed directory-read diagnostic without replacing the previous valid listing.
     fn diagnostic(&self) -> Result<ComPtr<INcString>>;

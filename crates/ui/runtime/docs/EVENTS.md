@@ -161,11 +161,10 @@ One channel preserves its sequential UI-thread send order; separate channels
 have no global FIFO. Already queued facts retain their payload after producer
 closure. The repository's concrete queues treat a disconnected receiver as a
 successful no-op. An independent queue can report its own post error, which does
-not undo committed producer state. Logical widget closure releases its queue even
-while editing handles survive. Explicit queue handles retain only their own fields.
+not undo committed producer state. Owner destruction releases the widget queue even while weak editing handles survive. Explicit queue handles retain only their own fields.
 
-A weak origin identifies an allocation, not current form membership. Final strong
-release expires it; logical close with a retained handle does not. Rebuilt controls
+A weak origin identifies an allocation, not current form membership. Dropping the
+exclusive widget owner expires it, even if weak editing fields remain. Rebuilt controls
 must be checked against current fields or command membership, and reloaded forms
 also check their generation. A completed dialog result can remain useful after its
 origin dies, so expiration is not a universal reason to discard all events.
@@ -196,7 +195,7 @@ composite emits declared public results into its enclosing behavioral parent's
 channel. Private messages do not automatically bubble through structural
 containers. One output stream still has one constructor-selected consumer.
 
-Window creation and container edits now borrow `&IWidget` directly. There is no
+Window creation and child insertion consume `ComBox<IWidget>` directly. There is no
 `Mount` value, separate event-owner identity, `Component::new(view, owner)`, or
 second mount/retire state machine. The runtime validates host, layout and topology
 before calling the widget's one-way `mount` operation. Reattachment remains an
@@ -218,8 +217,8 @@ does. Releasing application handles preserves a still-mounted dialog.
 Mounted widget dispatch also runs during ordinary `Ui::update`, without any
 application dispatcher:
 
-1. Synchronize geometry and finish deferred widget close outside traversal.
-2. Visit widgets descendant-first. After one message, settle closure and geometry
+1. Synchronize geometry outside traversal.
+2. Visit widgets descendant-first. After one message, settle topology and geometry
    before reconsidering descendants.
 3. When widget work is quiet, call the optional `IApplicationDispatcher` once.
    Settle newly posted private work before its next application message.
@@ -237,22 +236,17 @@ This simple protocol polls ordinary widgets' no-op methods too. It avoids an
 additional discovery/registration contract, but is not a ready-inbox notification
 system. No frame-time or binary-size improvement is claimed without measurement.
 
-Removal closes descendants and then the parent. When a handler removes itself,
-its active COM borrow prevents recursive close. The runtime retains pending
-close work in descendant-first order and finishes it after the call returns,
-including on handler errors. No successor is dispatched to the removed subtree.
-Composite close drops its receiver and pending private messages, then releases
-its outward event queue. An active file request settles cancellation once. Already
-posted application messages stay in the application's queue.
+Removal drops the subtree's exclusive owner and immediately rejects new calls.
+Admitted calls finish under COM execution protection; the last such call destroys
+the value. Private inboxes and output queues are ordinary fields. No descendant
+close callback, retry queue or terminal widget state exists. A child removing
+its parent may outlive that parent's destructor until its own call returns.
+Application-held local guards obey the same rule. Removing a tree never waits on
+them or retries cleanup on a later update.
 
-A caller-held LocalCom guard can still prevent close at that boundary. Update
-returns `NC_E_BUSY`, retains the pending work and retries after the guard ends;
-an explicitly closed runtime can finish it on another `close()` call. Final
-runtime destruction cannot forcibly enter a borrowed widget: it closes the host
-and releases retry references to avoid an ownership cycle. Such an externally
-retained widget rejects further work and finishes local cleanup on explicit
-close or final release. Release local guards before closing the runtime when
-immediate cleanup is required.
+Explicit file-dialog cancellation posts a result before removal. Destruction
+alone disconnects it without posting a new result. Already queued application
+facts retain their captured values.
 
 One update-wide budget covers handled messages, topology-changing dispatch calls
 and menu reconciliation. Exhaustion returns `UI_E_EVENT_LIMIT` before further
@@ -267,14 +261,12 @@ per update, not total resident message memory.
 `Loader::compile` and `compile_with_events` construct a document; `load` and
 `load_with_events` decode persisted source first. The result retains its authored
 recipe and typed lookups, with no scheduled bookkeeping object or event relay.
-`root()` is the actual mountable widget, not an inspection-only proxy.
-
-Dropping the recipe releases its COM references. It never explicitly closes a
-root still retained by the runtime or the application. If the root has no other
-owner, its ordinary destructor closes descendants. Failed construction closes
-partial trees; `ReloadSlot` explicitly closes a complete rejected candidate,
-including handles retained by a failing field-validation callback. Successful
-replacement leaves closure of the old subtree with the runtime.
+`take_root()` transfers its exclusive root once; `root()` returns a weak observer.
+Mounting a component consumes that same owner. Dropping recipe metadata after
+transfer cannot remove the mounted tree. Dropping an unmounted component destroys
+its tree automatically. Failed construction and rejected reload candidates release
+their owners, even when validation captured weak handles. Successful replacement
+drops the previous root; there is no separate teardown result.
 
 ## Static and dynamic linkage
 

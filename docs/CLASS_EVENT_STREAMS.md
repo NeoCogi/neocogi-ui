@@ -22,7 +22,7 @@ class Button: IWidget { /* getters, setters and widget operations */ }
 enum ButtonEvent { Activated(Activation) }
 factory Widgets {
     fn button(&self, label: &[u8], events: &EventBinding<Button, ButtonEvent>)
-        -> Result<ComPtr<Button>>;
+        -> Result<ComBox<Button>>;
 }
 ```
 
@@ -35,7 +35,8 @@ interfaces and checked value codecs. Neither Rust generics nor channels cross CO
 `post` borrows both arguments for the synchronous call. Generated Rust receives
 `ComRef<'_, ButtonAbi>` and `NcValueRef<'_, ButtonEvent>`. Retaining the event
 requires `to_owned()`, which uses the existing checked, budgeted value decoder.
-Retaining only the origin's identity requires `origin.downgrade()`.
+Retaining a widget origin's identity requires `origin.downgrade_box()`;
+shared service origins use `origin.downgrade()`.
 
 ## One concrete application queue
 
@@ -45,8 +46,8 @@ The following abbreviated Rust illustrates the application-owned boundary:
 
 ```rust,ignore
 enum AppMessage {
-    Button(WeakComPtr<ButtonAbi>, ButtonEvent),
-    Textbox(WeakComPtr<TextboxAbi>, TextboxEvent),
+    Button(WeakComBox<ButtonAbi>, ButtonEvent),
+    Textbox(WeakComBox<TextboxAbi>, TextboxEvent),
 }
 #[com_object(interfaces(ButtonEventQueue, TextboxEventQueue))]
 struct AppQueue { sender: std::sync::mpsc::Sender<AppMessage> }
@@ -56,7 +57,7 @@ impl ButtonEventQueue for AppQueue {
     {
         let event = event.to_owned()?;
         neocogi_ui::button::validate(&event)?;
-        let message = AppMessage::Button(origin.downgrade()?, event);
+        let message = AppMessage::Button(origin.downgrade_box()?, event);
         let _ = self.sender.send(message);
         Ok(())
     }
@@ -95,52 +96,44 @@ flowchart LR
     Widget --> Queue["Application queue COM object"]
     Queue --> Sender["Channel sender"]
     Sender --> Message["Owned event plus weak origin"]
-    Message -. "upgrade if still alive" .-> Widget
+    Message -. "check live origin" .-> Widget
     Consumer["Application owns receiver and model"] --> Message
 ```
 
-The weak edge retains lifetime bookkeeping, not the widget value. Last strong
-release destroys the value and all its resources immediately. `upgrade()` then
-returns `Ok(None)` permanently, even if another allocation later reuses memory.
-Generated objects use one allocation with the common COM control header; its
-empty inline storage remains allocated until the last weak token leaves.
-`ComPtr` occupies two words; `WeakComPtr` and its optional form occupy one word. Weak origins are not free storage, but
-they avoid retaining the widget's resources and descendants through queued work.
-See [core ABI v12](../crates/com/docs/abi-v12.md) for the C lifetime protocol,
-threading permissions, atomic promotion and foreign provider obligations.
+Widgets use `ComBox` ownership and cached two-word `WeakComBox` observers.
+Dropping the sole owner rejects new calls immediately; admitted calls finish
+before destruction. Weak observers have no owning `upgrade`. `borrow()` protects
+an ABI argument for one lexical call, and each generated method independently
+checks admission. Empty allocation storage survives until the last weak token.
+See [exclusive ownership](EXCLUSIVE_WIDGET_OWNERSHIP.md) and
+[ABI v13](../crates/com/docs/abi-v13.md) for threading and provider obligations.
 
-Logical `IWidget::close` is separate from final destruction. Closing retires
-children, releases its queue and weak origin, and prevents further emission.
-Close is idempotent and Drop also performs cleanup. A separately retained closed
-widget still upgrades successfully; its editing methods return the closed status.
-Weak validity alone therefore does not establish that an object is open or belongs
-to the current form. Form generation/membership checks still serve that purpose.
-
-Already queued facts are not retracted. A file-dialog result can remain useful
-after the dialog has died. A handler wanting to edit an origin upgrades it and
-handles absence; a handler interested only in the captured result need not
-upgrade. There is no automatic universal rule to discard messages on expiration.
+There is no `IWidget::close` or independently closed live widget. Widget queues
+and private inboxes are ordinary fields destroyed with the value. Generated forms
+check weak origin liveness, exact identity and generation before invoking a
+current-form handler. Already queued facts are not retracted; applications may
+use their captured data after the producer has died.
 
 ## Construction and composites
 
-A generated COM class offers `from_value_cyclic` / `into_local_cyclic`: its builder
-receives a weak origin before the value is published. Upgrade during that builder
-returns None. An initialization panic cannot publish or resurrect the object.
-`EventPort::with_queue(queue, origin)` fixes delivery in the constructor; it has
-no public installation or replacement method. Unobserved instances need no queue
-allocation and never become observed later.
+Widget implementations use `into_box_cyclic` / `into_local_box_cyclic`. Their
+builder receives a weak origin before publication. Calls during construction
+fail; an initialization panic cannot publish the value. A fixed optional typed
+queue is an ordinary field. It cannot be installed or replaced after publication,
+and unobserved widgets allocate no receiver.
 
 TextArea's private editor posts with the enclosing TextArea identity. Its factory
-retains local access to the unpublished editor only long enough to fix that origin.
-Combo's core choice menu has its own public contract, so a private typed bridge
-forwards its borrowed event with the enclosing Combo origin. The bridge copies no
-payload and its one origin is completed before construction returns. These private
-construction steps cannot become an application attachment protocol.
+uses concrete `LocalBox` access to set that origin before publication. Combo's
+choice menu remains a shared service with its own semantic popup lifecycle; a
+typed bridge forwards with the enclosing Combo's weak origin. Dropping Combo releases its menu. The popup coordinator observes that service
+weakly and removes an expired popup during normal reconciliation, without a
+fallible destructor callback. Those private construction steps do not
+create an application attachment protocol.
 
-Window/popup forest records own delivery storage and retain their COM capabilities
-for their semantic lifetime. Native menu rows similarly retain their public COM
-origin; discarding an application's editing handle must not kill a still-visible
-row's origin. Those capabilities refer back to the forest/declaration weakly.
+Window/popup/menu capabilities remain shared `ComPtr` services with their own
+explicit dismissal/removal operations. `WeakComPtr` and `EventPort` remain useful
+for those non-widget lifetimes; widgets do not use their separate close state.
+
 
 ## Inspection and custom widgets
 
@@ -176,8 +169,8 @@ After checking `slot.accepts(message.generation)`, call
 `message.event.resolve(&app.form)?` to obtain an optional widget-specific `Event`.
 Then call `event.dispatch(&mut app)?`. Resolution and mutable behavior are separate
 so handlers can use their own form fields without a second borrow of the application.
-Expired or unrelated origins yield None. Retained closed origins still need the
-generation check; weak lifetime is not a substitute for form membership.
+Expired or unrelated origins yield None. Generation checks identify the form
+construction attempt; weak lifetime alone does not establish current membership.
 
 The generated `Handlers` trait continues to require one method per emitting
 widget, including two distinct buttons. Missing handlers fail Rust compilation.
@@ -202,5 +195,5 @@ thread-local compile failures, shared promotion races and final value destructio
 
 Compiled generated-form regressions exercise repeated classes, eventless forms,
 custom COM catalogs, raw Rust identifier paths, live input, mutable handlers, and
-replacement with strongly retained old fields. Composite regressions verify that
+replacement with retained weak fields from the old generation. Composite regressions verify that
 TextArea and Combo messages identify their public object and do not keep it alive.

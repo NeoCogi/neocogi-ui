@@ -330,7 +330,7 @@ fn lifecycle_cancellation_is_once_per_request_and_stale_hide_does_not_cancel_reo
     assert_eq!(app.state().len(), 2);
 }
 
-/// Final runtime release queues cancellation without invoking application code or retaining the runtime through its internal handlers.
+/// Final runtime release destroys the picker without synthesizing another completion.
 #[test]
 fn runtime_release_destroys_active_picker_without_posting_from_an_expired_origin() {
     let mut fixture = Fixture::new();
@@ -550,4 +550,106 @@ fn shared_child_queue_discards_events_from_replaced_directory_rows() {
     }
     // The old row has been destroyed; queued facts retain only its weak identity.
     assert!(!old.is_alive());
+}
+
+/// Refuses cancellation delivery through a real generated COM entry.
+#[com_object(interfaces(IFileDialogEventQueue))]
+struct RefusingCompletion;
+impl IFileDialogEventQueue for RefusingCompletion {
+    /// Distinguishes delivery refusal from the window's temporary busy status.
+    fn post(&mut self, _origin: ComRef<'_, IFileDialogAbi>, _event: neocogi_com::NcValueRef<'_, IFileDialogEvent>) -> Result<(), NcStatus> {
+        Err(NC_E_INVALID_ARG)
+    }
+}
+
+/// Delegates to the real modal while refusing its first explicit removal.
+#[com_object(interfaces(IWindow))]
+struct RefusingRemoval {
+    /// The original window remains the actual owner of the picker tree.
+    window: ComPtr<IWindowAbi>,
+    /// The shared IWindow::close signature requires synchronized attempt counting.
+    attempts: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+}
+impl IWindow for RefusingRemoval {
+    /// Preserves observation of the real modal after refused removal.
+    fn snapshot(&self) -> Result<WindowSnapshot, NcStatus> { self.window.snapshot() }
+    /// Preserves title observation.
+    fn title(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> { self.window.title() }
+    /// Delegates ordinary title editing.
+    fn set_title(&self, title: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> { self.window.set_title(title) }
+    /// Delegates ordinary visibility changes.
+    fn set_visibility(&self, visibility: Visibility) -> Result<(), NcStatus> { self.window.set_visibility(visibility) }
+    /// Delegates ordinary presentation changes.
+    fn set_options(&self, options: WindowOptions) -> Result<(), NcStatus> { self.window.set_options(options) }
+    /// Delegates layer validation to the real modal.
+    fn set_layer(&self, layer: u8) -> Result<(), NcStatus> { self.window.set_layer(layer) }
+    /// Preserves normal stacking behavior.
+    fn raise(&self) -> Result<(), NcStatus> { self.window.raise() }
+    /// Preserves parent-owned clipping behavior.
+    fn set_child_clip(&self, clip: ChildClip) -> Result<(), NcStatus> { self.window.set_child_clip(clip) }
+    /// Delegates normal allocation changes.
+    fn set_rect(&self, rect: Rect) -> Result<(), NcStatus> { self.window.set_rect(rect) }
+    /// The first refusal preserves ownership; the next call removes it normally.
+    fn close(&self) -> Result<(), NcStatus> {
+        match self.attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst) {
+            0 => Err(UI_E_BUSY),
+            _ => self.window.close(),
+        }
+    }
+}
+
+/// Installs a temporary failure boundary without replacing the actual modal tree.
+fn refuse_first_removal(fixture: &Fixture) -> std::sync::Arc<std::sync::atomic::AtomicUsize> {
+    let attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let window = fixture.handle.window().unwrap();
+    let proxy = RefusingRemoval::from_value(RefusingRemoval { window, attempts: attempts.clone() }).query().unwrap();
+    fixture.widget.clone().try_borrow_mut().unwrap().model.window = Some(proxy);
+    attempts
+}
+
+/// Delivery failure must not strand a terminal request inside a still-visible modal.
+#[test]
+fn close_removes_dialog_even_when_cancellation_queue_refuses_delivery() {
+    let queue = RefusingCompletion::from_value(RefusingCompletion).query().unwrap();
+    let mut fixture = Fixture::with_queue(queue);
+    let directory = tempfile::tempdir().unwrap();
+    fixture.open(directory.path());
+    let window = fixture.handle.window().unwrap();
+    assert_eq!(fixture.handle.close(), Err(NC_E_INVALID_ARG));
+    assert!(!fixture.handle.as_interface().is_alive());
+    assert_eq!(window.snapshot(), Err(UI_E_CLOSED));
+    assert_eq!(fixture.handle.active(), Err(UI_E_CLOSED));
+}
+
+/// A pre-commit removal refusal is retryable and does not duplicate cancellation.
+#[test]
+fn close_retries_refused_removal_without_reposting_the_completed_request() {
+    let mut fixture = Fixture::new();
+    let directory = tempfile::tempdir().unwrap();
+    fixture.open(directory.path());
+    let events = session(&mut fixture);
+    let attempts = refuse_first_removal(&fixture);
+    assert_eq!(fixture.handle.close(), Err(UI_E_BUSY));
+    assert_eq!(fixture.handle.active(), Ok(false));
+    assert!(fixture.handle.as_interface().is_alive());
+    assert!(matches!(events.try_recv().unwrap(), FileDialogCompletion::Cancelled));
+    assert_eq!(fixture.handle.close(), Ok(()));
+    assert!(!fixture.handle.as_interface().is_alive());
+    assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 2);
+    assert!(events.try_recv().is_err());
+}
+
+/// Failure to remove takes priority over delivery failure, preserving an actionable retry.
+#[test]
+fn close_reports_removal_failure_when_both_cleanup_steps_fail() {
+    let queue = RefusingCompletion::from_value(RefusingCompletion).query().unwrap();
+    let mut fixture = Fixture::with_queue(queue);
+    let directory = tempfile::tempdir().unwrap();
+    fixture.open(directory.path());
+    let attempts = refuse_first_removal(&fixture);
+    assert_eq!(fixture.handle.close(), Err(UI_E_BUSY));
+    assert_eq!(fixture.handle.active(), Ok(false));
+    assert_eq!(fixture.handle.close(), Ok(()));
+    assert!(!fixture.handle.as_interface().is_alive());
+    assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 2);
 }

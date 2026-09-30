@@ -40,14 +40,14 @@ and `load` select permanently unobserved widgets. Delivery errors
 propagate through the emitting operation; there is no relay diagnostic channel.
 
 `Component::widget::<ButtonAbi>("save")` resolves an authored node key and checks
-its concrete COM interface before returning an owned `Widget<ButtonAbi>` handle.
+its concrete COM interface before returning a weak `Widget<ButtonAbi>` observation.
 Generated forms use this lookup for every field. A wrong key or incompatible
 interface fails during candidate preparation, before replacing a live form.
 Getters and setters belong to those widget interfaces. An application can write
 `form.widget_title_1.set_text("Saved")` and read its text through the same field.
 There is no separate command record, setter receiver, named input lookup, or
-`Form.inputs` object. Custom fields expose their own COM methods through
-`as_interface()`; the designer does not maintain a catalog of custom setters.
+`Form.inputs` object. Custom fields expose their own COM getters through `as_interface()` and setters
+through `as_interface_mut()`; the designer does not maintain a catalog of custom setters.
 
 These calls validate and apply changes synchronously and return their result.
 Event queues have a different role: they acquire emitted facts and enqueue the
@@ -55,12 +55,12 @@ behavioral parent's mapped messages. Getters and ordinary state setters do not
 publish user-interaction events. Application code decides when a state change
 should also trigger application behavior.
 
-A compiled component retains the recipe and typed lookup handles. It creates no
-lifetime guard, scheduled event owner or event relay. Dropping it releases those
-references, without explicitly closing a root retained by the application or
-runtime. An otherwise unowned root is destroyed normally and closes descendants. An optional document output alias supplies a
-trace/display name; it does not create a separate bindable endpoint or permit
-receiver replacement. Generated application bindings resolve widgets by node key.
+A compiled component retains the recipe, weak lookup handles and one unmounted
+root owner. `take_root()` moves that owner once; `root()` only observes it.
+Mounting consumes the same root. Dropping metadata after transfer cannot remove
+the mounted tree, and keeping metadata cannot prolong a removed tree. An optional
+output alias is a display name, not a second endpoint or receiver replacement API.
+Generated bindings resolve widgets by node key.
 
 ## Generated application contract
 
@@ -130,8 +130,8 @@ for message in receiver.try_iter() {
 When behavior lives on `App { form, model }`, resolve against `&app.form`, then
 call `event.dispatch(&mut app)`. Two buttons share one queue receiver while their
 origins select separate required handlers. Expired or foreign origins return
-`None`; no current widget is substituted. Weak promotion alone does not reject
-a closed widget retained by an old form, so the generation check remains required.
+`None`; no current widget is substituted. Weak calls cannot promote into ownership. Generation checks additionally identify
+the construction attempt before resolving its concrete widget membership.
 
 Generated forms allocate one queue for the whole construction attempt and none
 when there are no events. The queue owns only a sender and generation, not form
@@ -141,22 +141,19 @@ resolving it into a current widget handler is an explicit application decision.
 
 ## Reload, ownership, and authored state
 
-`ReloadSlot` owns one stable container.
-`reload(document, resources, make_events, check_fields)` prepares receivers,
-validates all keys and exact queue contracts, constructs the unmounted candidate,
-checks concrete fields, and only then replaces the old child. Failed preparation preserves the
-published component. Candidate cleanup closes partial trees and combo popups.
-The returned teardown status reports old-content cleanup after publication; it
-cannot turn a successful replacement into an unpublished one. Each attempt gets
-a distinct generation, even when preparation fails.
+`ReloadSlot::take_widget()` transfers its stable container to the tree once; the
+slot then observes it weakly. `reload(document, resources, make_events, check_fields)`
+prepares receivers, validates contracts, constructs a candidate and checks concrete
+fields before replacement. Failed preparation preserves the published component
+and destroys the candidate, including when validation captured weak handles.
+Successful replacement drops the previous owner. There is no teardown status.
+Every attempt has a distinct generation, including failed attempts.
 
-Mount `Component` itself, its actual `root()`, or use `ReloadSlot`; each path
-passes the same widget to the runtime. Closing or replacing that subtree closes
-its streams. A rejected `ReloadSlot` candidate is explicitly closed even if a
-failing validation callback retained one of its widget handles. Application messages
-already queued remain owned snapshots; generation checks reject stale ones. Application edits belong at ordinary mutation boundaries, outside
-layout and paint. `Component::save()` preserves authored defaults rather than
-user interaction, focus, scrolling, or live application state.
+Mount a `Component`, its `take_root()` result, or a `ReloadSlot::take_widget()`
+result. Removing those trees destroys their widget queues. Already posted facts
+remain application-owned; generation and origin checks reject stale delivery.
+Application edits belong outside layout and paint. `Component::save()` preserves
+authored defaults, not live focus, scrolling or application state.
 
 For surface enablement, call `clear_flags(WidgetOptions::NO_INTERACT)` to enable
 or `set_flags(WidgetOptions::NO_INTERACT)` to disable. Both preserve other current
@@ -190,7 +187,7 @@ Linear, Grid, Split, Scroll, and Disclosure remain ordinary nested containers.
 A host installs custom widgets through `CustomWidgetRegistry`. A local
 `CustomWidgetFactory` returns an owned `DesignWidgetManifest`, normally made by
 `DesignWidgetManifest::from_idl(kind, defaults, &CounterAbi::IDL_INTERFACE)`,
-and a constructor accepting its optional COM receiver and returning `Widget<IWidgetAbi>`. Static conversion checks the
+and a constructor accepting its optional COM receiver and returning `OwnedWidget<IWidgetAbi>`. Static conversion checks the
 product identity and complete reachable event graph. The constructor receiver
 is separate from the product's interface chain. A custom widget
 may expose zero or one event port; multiple logical events belong in one

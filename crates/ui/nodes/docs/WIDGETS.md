@@ -5,7 +5,7 @@ deploy through `neocogi.ui.nodes.runtime`. Core retains only shared node contrac
 engine that mounts their COM capabilities; it contains no built-in implementation catalog.
 
 Applications use `neocogi_ui::Ui::widgets()` to construct independent COM objects.
-A thin `Widget<C>` client owns a checked class projection, with no copied semantic
+Factories return `OwnedWidget<C>`; a thin `Widget<C>` client holds a cached weak projection, with no copied semantic
 state or native widget wrapper. Each callable widget class requires `IWidget` and
 the one applicable shared layout protocol. The class's concrete Rust allocation
 supplies common options, lifecycle, update, measurement, painting, editing, and
@@ -24,15 +24,16 @@ use neocogi_com::{ComPtr, ComRef, NcStatus};
 fn install(ui: &Ui, queue: ComRef<'_, neocogi_ui::CheckboxEventQueueAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
     let checkbox = ui.widgets().checkbox_with_queue("Enable preview", false, Some(queue))?;
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
-    column.insert(0, &checkbox, LinearEdge::new(LayoutTrack::Content))?.finish()?;
-    ui.window("Settings", Rect { x: 40, y: 40, width: 260, height: 120 }, &column)
+    column.insert(0, checkbox, LinearEdge::new(LayoutTrack::Content))?;
+    ui.window("Settings", Rect { x: 40, y: 40, width: 260, height: 120 }, column)
 }
 ```
 
-Attachment consumes the widget's sole mount claim, even while callers retain owned
-editing references. Nodes cannot be reparented or mounted twice. Removal logically
-closes the subtree, so retained handles report CLOSED without becoming dangling
-pointers. Final COM release frees the allocation separately.
+Attachment consumes the exclusive widget owner. Capture `owner.handle()` first
+when a form needs later editing access. Nodes cannot be reparented or mounted
+twice. Removing an owner rejects new calls and destroys the subtree once any
+already admitted call returns. Retained weak handles report `UI_E_CLOSED`; they
+cannot preserve live resources. Generic widget close no longer exists.
 
 ## Controls and standard events
 
@@ -85,11 +86,11 @@ independently of lossy UTF-8 display labels.
 | `ScrollArea` | A single replaceable content root with composed scrollbars |
 | `TextArea` | An actual editor with scrolling; its editor role cannot be replaced |
 
-Each container owns one authoritative child sequence. Concrete edge metadata lives
-with its layout policy. A topology operation returns `ChildEditResult`: topology can
-commit even if closing a removed child fails. Call `finish()` when no additional
-metadata must be reconciled, and do not retry an already committed insertion or
-replacement as if it had rolled back.
+Each container exclusively owns its child editor and actual child owners.
+Concrete edge metadata lives with its layout policy. A topology operation returns
+`Result<()>`. Failure preserves existing topology and destroys a consumed candidate;
+success publishes matching metadata and drops removed owners. Destruction has no
+recoverable status, and there is no `finish()` or separate cleanup outcome.
 
 `SplitView` owns both panes and the divider's geometry and gesture state in one
 concrete container. Its implementation belongs to nodes; core supplies the existing
@@ -97,22 +98,22 @@ concrete container. Its implementation belongs to nodes; core supplies the exist
 There is no split-specific core routing or editor-side drag callback.
 
 ```rust,no_run
-use neocogi_ui::{SplitAxis, SplitOptions, SplitViewWidget, Ui};
+use neocogi_ui::{SplitAxis, SplitOptions, OwnedWidget, SplitViewAbi, Ui};
 use neocogi_com::NcStatus;
-fn split(ui: &Ui) -> Result<SplitViewWidget, NcStatus> {
+fn split(ui: &Ui) -> Result<OwnedWidget<SplitViewAbi>, NcStatus> {
     let mut split = ui.widgets().split_view_unobserved(SplitOptions {
         axis: SplitAxis::Horizontal, // Left/right panes and a vertical handle.
         position: 320, minimum_first: 200, minimum_second: 240, handle_width: 8,
     })?;
-    split.insert(0, &ui.widgets().textbox_unobserved("Inspector")?)?.finish()?;
-    split.insert(1, &ui.widgets().textbox_unobserved("Preview")?)?.finish()?;
+    split.insert(0, ui.widgets().textbox_unobserved("Inspector")?)?;
+    split.insert(1, ui.widgets().textbox_unobserved("Preview")?)?;
     Ok(split)
 }
 ```
 
 Zero panes leave an empty container; one pane fills it; two enable the divider.
-Inserting a third pane fails before consuming its attachment claim. Replace/remove
-close the affected subtree through the ordinary topology transaction.
+Inserting a third pane rejects and destroys the consumed candidate. Replace/remove
+drop the affected owner through the ordinary topology transaction.
 `SplitAxis::Vertical` places the first pane above the second. Positions and minima
 are pixels along the movement axis. The requested position survives temporary
 allocation clamping; when both minima cannot fit, they compress proportionally.

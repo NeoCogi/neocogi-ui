@@ -19,11 +19,10 @@ It must not call back into its own COM projection to obtain another mutable
 borrow. A request to remove its own subtree must stop subsequent dispatch and
 let its active call return before running terminal cleanup.
 
-Closure remains the widget's existing descendant-first, idempotent operation.
-Eventful composites additionally disconnect their private receiver, discard its
-remaining messages, and release their constructor-selected output queue and weak origin.
-Messages already posted to the application's inbox belong to the application.
-
+The sole `ComBox` owner replaces a widget close phase. Dropping it rejects new
+calls; an admitted handler finishes before its value and private inbox are
+destroyed. Child fields own their descendants. Already posted application facts
+remain in the application inbox. See [exclusive ownership](EXCLUSIVE_WIDGET_OWNERSHIP.md).
 
 ## Ownership and publication
 
@@ -39,12 +38,10 @@ only `dispatch_next`; the runtime borrows it for one update and retains nothing.
 The application-owned Controller has ordinary model/receiver fields and no
 attachment/retirement phases.
 
-`Loader::compile` constructs a document recipe and typed lookup handles. It has
-no event interface or hidden lifetime guard. Dropping the result releases its
-references; a retained actual root may still be mounted or already belong to the
-tree. Unreferenced roots close descendants on final destruction. Reload owns
-its publication rollback explicitly and closes rejected candidates even when
-validation retained their handles.
+`Loader::compile` constructs a document recipe, weak lookups and one unmounted
+root owner. `take_root()` or a consuming mount transfers that owner to the tree.
+The metadata can then be dropped independently. Rejected candidates are destroyed
+automatically, including when validation retained weak handles.
 
 ## Scheduling and cost
 
@@ -59,31 +56,35 @@ This is an explicit simplicity tradeoff: there is no second capability query,
 registration table, per-widget delivery ticket or readiness-notification system.
 Binary size and frame-time improvements are not claimed without measurement.
 
-Busy removed widgets wait for closure in descendant-first order. Application-held
-LocalCom guards must be released before immediate cleanup can finish. Final
-runtime destruction cannot reenter such guards; it closes the host and releases
-pending ownership so retained widgets cannot form a cycle through their host.
-Their later explicit close or final release completes local resource cleanup.
+Runtime dispatch snapshots contain weak handles and cannot retain removed values.
+An admitted `LocalBox`/`WeakLocalBox` guard may delay its own value's destruction,
+but removal does not wait, retry, or return busy because of that guard. New calls
+are rejected immediately. Parents need not wait for an already executing child:
+that child can safely remove its own subtree and return. UI remains thread-local;
+thread-safe COM objects use the same nonblocking admission/removal contract.
 
 See the [event guide](../crates/ui/runtime/docs/EVENTS.md) for error semantics,
 work budgets, compiled-form lifetime, and application examples, and
 [finding 09](COM_UI_ADVERSARIAL_REVIEW_2026-09-26.md#09-ieventowner-means-both-behavior-and-a-lifetime-holder--fixed)
 for the superseded design and its history.
 
-## Verification on 2026-09-28
+## Verification on 2026-09-29
 
-- `cargo test --workspace --offline`: 797 passed, 22 ignored, no failures.
+After the exclusive-ownership migration (`2cb90ec9`):
+
+- `cargo test --workspace --offline --no-fail-fast`: 868 passed, 23 ignored,
+  no failures.
 - Offscreen designer and theme-editor library suites with monolith/embedded assets,
-  ignored acceptance tests enabled and timing benchmark excluded: 32 and 17 passed.
-- `scripts/test-extension.sh glow` with the offscreen SDL driver: independently
-  built shared plugins loaded, and extension/COM smoke scenarios passed.
+  ignored acceptance tests enabled and the live-edit benchmark excluded: 33 and
+  18 passed. These runs include independently built custom-catalog discovery.
+- `SDL_VIDEODRIVER=offscreen scripts/test-extension.sh glow`: independently built
+  shared plugins loaded, and extension/COM smoke scenarios passed.
 - WebGL test-target compilation for the full demo, UI designer and theme editor
-  on `wasm32-unknown-unknown`: passed. This is not a browser execution result.
-- Workspace all-target checking, changed Markdown link/fence validation and
-  `git diff --check`: passed. Existing Cargo filename-collision and dead-code
-  warnings do not constitute new performance measurements or test failures.
+  on `wasm32-unknown-unknown`: passed. This is compilation, not browser execution.
+- Changed Markdown link/fence validation and `git diff --check`: passed.
 
-The deployment check also caught three feature-gated smoke calls using the old
-mount wrapper; they now pass the widget directly. Browser test compilation
-exposed a pre-existing `ComPtr::as_ptr` assertion, updated to the object identity
-comparison used by the native test and production check.
+The browser compilation check covers its download/export dialogs and preview test
+harness, which now transfer owners into windows and retain only weak editing
+handles. The native popup regression removes a combo during event forwarding and
+checks that its queue is released without a fallible close callback. No binary-size
+or frame-time improvement is claimed by these functional checks.

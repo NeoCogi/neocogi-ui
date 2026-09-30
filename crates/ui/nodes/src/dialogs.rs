@@ -17,7 +17,7 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 
 /// Request state is an ordinary field of the exclusively borrowed picker model.
 struct Request {
-    /// One authoritative phase covers public calls, child delivery and retirement.
+    /// Active versus idle request state; COM ownership alone controls destruction.
     phase: RequestPhase,
     /// Installed concrete completion receiver; consumers own their committed outcomes.
     completed: WidgetEvents<IFileDialogEventQueueAbi>,
@@ -30,18 +30,11 @@ enum RequestPhase {
     Idle,
     /// One request is awaiting acceptance or cancellation.
     Active,
-    /// Logical widget/window closure permanently rejects new requests.
-    Closed,
 }
 impl Request {
     /// Observes active request eligibility without lending a mutable model borrow.
     fn active(&self) -> bool {
         matches!(self.phase, RequestPhase::Active)
-    }
-
-    /// Observes permanent closure independently of retained COM references.
-    fn closed(&self) -> bool {
-        matches!(self.phase, RequestPhase::Closed)
     }
 
     /// Publishes a fully installed request only from the reusable idle phase.
@@ -52,7 +45,6 @@ impl Request {
                 Ok(())
             }
             RequestPhase::Active => Err(UI_E_BUSY),
-            RequestPhase::Closed => Err(UI_E_CLOSED),
         }
     }
 
@@ -63,19 +55,11 @@ impl Request {
                 self.phase = RequestPhase::Idle;
                 self.completed.post(&IFileDialogEvent::Completed(status))?;
             }
-            RequestPhase::Idle | RequestPhase::Closed => {}
+            RequestPhase::Idle => {}
         }
         Ok(())
     }
-    /// Closes future completion delivery; already posted outcomes remain in the consumer inbox.
-    fn close(&mut self) -> Result<(), NcStatus> {
-        let result = match std::mem::replace(&mut self.phase, RequestPhase::Closed) {
-            RequestPhase::Active => self.completed.post(&IFileDialogEvent::Completed(FileDialogCompletion::Cancelled)),
-            RequestPhase::Idle | RequestPhase::Closed => Ok(()),
-        };
-        self.completed = Default::default();
-        result
-    }
+
 }
 
 /// Node construction data retained by the picker without retaining the core runtime identity.
@@ -127,11 +111,8 @@ impl Model {
         self.window.as_ref().ok_or(UI_E_BUSY)
     }
 
-    /// Rejects closed components and validates public runtime mutation authority.
+    /// Validates runtime mutation authority; the ABI entry already protects lifetime.
     fn owner(&self) -> Result<(), NcStatus> {
-        if self.request.closed() {
-            return Err(UI_E_CLOSED);
-        }
         self.nodes.host.check_mutation()?;
         Ok(())
     }
@@ -445,7 +426,7 @@ impl FileDialog {
         };
         let dialog = Self::into_local_box_cyclic::<IFileDialogAbi>(move |origin| {
             model.request.completed = WidgetEvents::with_queue(queue, origin);
-            Self { shell, model, messages: Some(events) }
+            Self { shell, model, messages: events }
         })?;
         let windows = services.windows.clone();
         let window_sink = dialog.try_borrow()?.model.nodes.queue.query::<IWindowEventQueueAbi>()?;
@@ -618,7 +599,9 @@ impl Model {
                         // An older hide fact must not cancel a newly visible request.
                         self.finish(FileDialogCompletion::Cancelled)?;
                     }
-                    WindowEvent::Destroyed => self.request.close()?,
+                    // Owner destruction disconnects this inbox; it cannot produce
+                    // a completion from an expired widget origin.
+                    WindowEvent::Destroyed => {},
                     _ => {}
                 }
                 None
@@ -673,8 +656,8 @@ struct FileDialog {
     shell: crate::Linear,
     /// Authoritative picker state, including typed child handles and completion mapping.
     model: Model,
-    /// Sole receiving endpoint, dropped on logical close even if public handles survive.
-    messages: Option<Receiver<Message>>,
+    /// Sole receiving endpoint, destroyed with this exclusively owned value.
+    messages: Receiver<Message>,
 }
 
 impl IWidget for FileDialog {
@@ -690,8 +673,7 @@ impl IWidget for FileDialog {
     fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
         IWidget::properties(&self.shell)?;
         self.model.nodes.host.check_mutation()?;
-        let inbox = self.messages.as_ref().ok_or(UI_E_CLOSED)?;
-        match inbox.try_recv() {
+        match self.messages.try_recv() {
             Ok(message) => {
                 self.model.update(message)?;
                 Ok(true)
@@ -768,11 +750,10 @@ impl IFileDialog for FileDialog {
             neocogi_ui::path::decode(filename)?,
         )
     }
-    /// Rejects a closed view immediately, even before its deferred closure runs.
+    /// Reports request activity; expired owners are rejected by the ABI entry.
     fn active(&self) -> Result<bool, NcStatus> {
         IWidget::properties(&self.shell)?;
         match self.model.request.phase {
-            RequestPhase::Closed => Err(UI_E_CLOSED),
             RequestPhase::Active => Ok(true),
             RequestPhase::Idle => Ok(false),
         }
@@ -787,16 +768,17 @@ impl IFileDialog for FileDialog {
     }
     /// Removes the view and settles the request with the current exclusive model access.
     fn close(&mut self) -> Result<(), NcStatus> {
-        if self.model.request.closed() {
-            return Ok(());
-        }
-        // Cancellation is a dialog operation performed while its owner is live.
-        // Removing the window then drops the owner; this admitted call holds the
-        // allocation until it returns, without publishing a closed widget state.
-        self.model.request.close()?;
-        self.model.window()?.close()
+        self.model.owner()?;
+        // End the request once while its origin is alive, but never make owner
+        // removal depend on successful delivery to an external queue. A refused
+        // removal leaves an ordinary idle dialog whose close can be retried.
+        let delivered = self.model.request.finish(FileDialogCompletion::Cancelled);
+        let removed = self.model.window()?.close();
+        // Removal errors take precedence: callers must know the modal may still
+        // exist. If removal succeeded, preserve any cancellation-delivery error.
+        removed.and(delivered)
     }
-    /// Diagnostics remain readable after the component's terminal closure.
+    /// Copies diagnostics while the dialog owner exists; expired handles fail at entry.
     fn diagnostic(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         Ok(NcString::from_utf8_str(&self.model.diagnostic))
     }

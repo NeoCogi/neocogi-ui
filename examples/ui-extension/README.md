@@ -38,13 +38,13 @@ beside `IWidget`; later update, layout, and paint calls use those cached pointer
 External controls share the built-in ownership and routing rules.
 
 The [implementation](src/lib.rs) uses `WidgetState` for common options, mount-once
-ownership, logical closure and sticky invalidation. The counter stores its value
-once and owns a `CounterEventPort` initialized before the factory publishes it.
+attachment and sticky invalidation. The counter stores its value
+once and owns an optional typed queue plus cached weak origin initialized before publication.
 `CounterEvent` is an ordinary IDL enum containing `Activated(Activation)` and
 `Changed(CounterChanged)`; the latter nests the committed count. The factory
 receives one typed queue for that whole enum. There is no later attachment API.
-The counter posts both variants after committing state. Composite close retires
-children first, then local resources and common state; final Drop calls close.
+The counter posts both variants after committing state. Factories transfer `ComBox` owners. The inset consumes its child owner; ordinary
+destruction releases descendants and queues, without `IWidget::close`.
 
 The [acceptance host](../../demos/smoke/src/extension.rs) implements the concrete
 `CounterEventQueue` on an object containing its channel sender and passes that
@@ -61,7 +61,7 @@ The unlinked native designer can load this library with `--plugin` and discover
 the counter without a Rust registration hook. A UI document stores only its kind
 and typed property values; it does not restate the event enum.
 
-The inset retains one `IChildrenEditor` and exposes its read-only view. It reads
+The inset exclusively owns one `ComBox<IChildrenEditor>` and exposes its read-only view. It reads
 the authoritative child count instead of maintaining a second topology flag. Its
 layout methods call indexed `ILayoutService` operations using only the supplied
 scope; they retain neither that service nor its invocation token. Mutable contract
@@ -69,8 +69,8 @@ receivers and the generated object-wide call gate protect the object's inline st
 across outward calls without an implementation-specific guard.
 
 `IWidgetProbe` counts actual phase attempts for acceptance and measurement. Counts
-remain readable after logical closure, so the host can verify each subtree closes
-once while editing handles remain retained. These are example-specific diagnostics,
+are available while the owner exists. After removal the host verifies expiration
+through retained `WeakComBox` projections; probes cannot preserve widget resources. These are example-specific diagnostics,
 not a second widget state model or a required toolkit interface.
 
 Authors remain responsible for truthful `CHANGED` results, external-state updates,

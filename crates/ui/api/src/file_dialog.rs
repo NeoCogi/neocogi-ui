@@ -89,7 +89,9 @@ impl FileDialog {
     pub fn cancel(&mut self) -> Result<bool, NcStatus> {
         self.interface.cancel()
     }
-    /// Cancels an active request, removes the modal, and drops its widget owner.
+    /// Ends an active request and attempts removal even if completion delivery fails.
+    /// Removal errors take precedence and may be retried without another completion.
+    /// Successful removal expires this weak handle, including when delivery failed.
     pub fn close(&mut self) -> Result<(), NcStatus> {
         self.interface.close()
     }
