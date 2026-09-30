@@ -19,7 +19,7 @@ impl EventModel for Removal {
     /// Records both sides of removal so cleanup cannot hide recursive model access.
     fn handle(&mut self, _: ()) -> Result<(), NcStatus> {
         self.trace.borrow_mut().push("handler entered");
-        self.window.as_ref().unwrap().close()?;
+        self.window.as_ref().unwrap().request_close()?;
         self.trace.borrow_mut().push("handler returned");
         match self.fail {
             true => Err(NC_E_INVALID_ARG),
@@ -172,7 +172,7 @@ impl EventModel for OrderedModel {
     fn handle(&mut self, message: OrderedMessage) -> Result<(), NcStatus> {
         self.trace.borrow_mut().push("handled");
         match message {
-            OrderedMessage::Remove(window) => window.close()?,
+            OrderedMessage::Remove(window) => window.request_close()?,
             OrderedMessage::Record => {}
         }
         match self.fail {
@@ -188,9 +188,9 @@ impl Drop for OrderedModel {
     }
 }
 
-/// Removing the tree drops its parent immediately; an admitted child call finishes safely.
+/// A child requests removal, returns, and then ordinary field destruction drops the whole tree.
 #[test]
-fn descendant_self_removal_releases_parent_then_finishes_the_admitted_child() {
+fn descendant_removal_request_drops_the_complete_tree_after_handler_return() {
     for fail in [false, true] {
         let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
         let trace = Rc::new(RefCell::new(Vec::new()));
@@ -226,7 +226,7 @@ fn descendant_self_removal_releases_parent_then_finishes_the_admitted_child() {
         child_send.send(OrderedMessage::Record).unwrap();
         parent_send.send(OrderedMessage::Record).unwrap();
         assert_eq!(ui.update(SIZE), if fail { Err(NC_E_INVALID_ARG) } else { Ok(()) });
-        assert_eq!(&*trace.borrow(), &["handled", "parent", "child"]);
+        assert_eq!(&*trace.borrow(), &["handled", "child", "parent"]);
         assert!(child_send.send(OrderedMessage::Record).is_err());
         assert!(parent_send.send(OrderedMessage::Record).is_err());
         // Retained projections neither reactivate nor repeat terminal cleanup.
@@ -296,7 +296,7 @@ impl neocogi_ui::LeafContent for TopologyEdit {
     fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
         match self.target.take() {
             Some(window) => {
-                window.close()?;
+                window.request_close()?;
                 Ok(self.report_message)
             }
             None => Ok(false),

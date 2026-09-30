@@ -43,7 +43,7 @@ impl PrivateRecord {
         // A consumed edit cannot repeat during a later dispatch sweep.
         match std::mem::replace(&mut self.edit, Edit::None) {
             Edit::None => {}
-            Edit::Close(window) => window.close()?,
+            Edit::Close(window) => window.request_close()?,
             Edit::Insert { mut parent, child } => parent.insert(0, child, LinearEdge::new(LayoutTrack::Content))?,
         }
         Ok(())

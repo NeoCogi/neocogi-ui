@@ -93,7 +93,12 @@ impl FileDialog {
     /// Removal errors take precedence and may be retried without another completion.
     /// Successful removal expires this weak handle, including when delivery failed.
     pub fn close(&mut self) -> Result<(), NcStatus> {
-        self.interface.close()
+        // Obtain the external window first, then finish the provider call before
+        // removing its owner. No executing FileDialog method can destroy itself.
+        let window = self.interface.window()?;
+        let completed = self.interface.cancel().map(|_| ());
+        let removed = window.close();
+        removed.and(completed)
     }
     /// Copies the latest directory-read diagnostic, including native-path display and the concrete OS error.
     pub fn diagnostic(&self) -> Result<String, NcStatus> {

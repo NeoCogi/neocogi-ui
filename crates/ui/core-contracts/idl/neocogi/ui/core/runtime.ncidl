@@ -225,8 +225,11 @@ interface IWindow {
     fn set_child_clip(&self, clip: ChildClip) -> Result<()>;
     /// Changes allocation and schedules layout; negative extents are rejected.
     fn set_rect(&self, rect: Rect) -> Result<()>;
-    /// Removes the subtree; retained capabilities subsequently report closure.
+    /// Synchronously removes the subtree; active descendant calls reject removal with Busy.
     fn close(&self) -> Result<()>;
+    /// Requests removal at the next runtime dispatch boundary, after the requesting widget returns.
+    /// Requests are processed before any subsequent widget or application message, including on handler error.
+    fn request_close(&self) -> Result<()>;
 }
 
 #[version(2)]

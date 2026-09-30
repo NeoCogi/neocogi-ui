@@ -766,18 +766,6 @@ impl IFileDialog for FileDialog {
         model.finish(FileDialogCompletion::Cancelled)?;
         Ok(active)
     }
-    /// Removes the view and settles the request with the current exclusive model access.
-    fn close(&mut self) -> Result<(), NcStatus> {
-        self.model.owner()?;
-        // End the request once while its origin is alive, but never make owner
-        // removal depend on successful delivery to an external queue. A refused
-        // removal leaves an ordinary idle dialog whose close can be retried.
-        let delivered = self.model.request.finish(FileDialogCompletion::Cancelled);
-        let removed = self.model.window()?.close();
-        // Removal errors take precedence: callers must know the modal may still
-        // exist. If removal succeeded, preserve any cancellation-delivery error.
-        removed.and(delivered)
-    }
     /// Copies diagnostics while the dialog owner exists; expired handles fail at entry.
     fn diagnostic(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         Ok(NcString::from_utf8_str(&self.model.diagnostic))

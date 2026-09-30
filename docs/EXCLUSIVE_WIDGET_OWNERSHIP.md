@@ -221,3 +221,18 @@ matched min-size builds, Cargo Bloat attribution, and remaining cost of admitted
 weak calls. Shared services select no execution token; exclusive widgets use a
 non-null token and a single-handle facade. The report distinguishes the original
 ownership migration from the later removal of its avoidable overhead.
+
+### Explicit removal requests
+
+A widget must not synchronously destroy its own owner while one of its methods
+is executing. `IWindow::request_close` queues a window identity. The runtime
+processes it after the current widget call returns, before another message is
+dispatched, including when the handler reports an error. Requests issued outside
+an update run at the next update. This delays the removal operation, not Drop.
+`IWindow::close` remains the synchronous application-side removal operation.
+
+The file-dialog ABI has no self-destroying `close` method. Its Rust facade obtains
+the window, calls `cancel`, and only after that provider call returns calls
+`IWindow::close`. Removal errors take priority over completion-delivery errors;
+removal is still attempted when completion delivery fails. Foreign applications
+use the same sequence of ordinary interface calls.

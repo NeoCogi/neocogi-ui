@@ -571,6 +571,8 @@ struct RefusingRemoval {
     attempts: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
 impl IWindow for RefusingRemoval {
+    /// Requests use the real runtime's post-call removal boundary.
+    fn request_close(&self) -> Result<(), NcStatus> { self.window.request_close() }
     /// Preserves observation of the real modal after refused removal.
     fn snapshot(&self) -> Result<WindowSnapshot, NcStatus> { self.window.snapshot() }
     /// Preserves title observation.
