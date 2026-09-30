@@ -334,7 +334,7 @@ impl IMenus for Runtime {
                 .window_manager
                 .create_menu_popup(&parent, menu, events)
                 .unwrap_or_else(|_| unreachable!("authenticated parent cannot disappear before registration"))
-        })?;
+        });
         self.storage.mounts.borrow_mut().push(SurfaceMount { surface, identity: identity.clone() });
         self.storage.pending.set(true);
         identity.query()

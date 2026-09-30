@@ -181,7 +181,7 @@ fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
                     previous.close()?;
                     let replacement_owner = ui.widgets().textbox_unobserved("")?;
                     let replacement = replacement_owner.handle();
-                    *next = Some(ui.window("replacement", RECT, replacement_owner)?);
+                    *next = Some(ui.window("replacement", RECT, replacement_owner).map_err(|(status, _candidate)| status)?);
                     *editor = Some(replacement);
                     observations.push("activated");
                 }

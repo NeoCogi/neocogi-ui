@@ -190,13 +190,21 @@ impl IChildrenEditor for ChildEditor {
         Ok(self.view.clone())
     }
     /// Validates the slot and candidate before consuming the child's mount-once claim.
-    fn insert(&self, index: u32, widget: neocogi_com::ComBoxInput<'_, IWidgetAbi>) -> Result<(), NcStatus> {
-        self.store.factory.host.check_mutation()?;
-        self.store.factory.check_edit()?;
-        let mut nodes = self.store.take()?;
-        if index as usize > nodes.len() || nodes.len() == u32::MAX as usize {
-            return Err(neocogi_com::NC_E_OUT_OF_RANGE);
-        }
+    fn insert(&self, index: u32, widget: neocogi_com::ComBox<IWidgetAbi>) -> Result<(), (NcStatus, neocogi_com::ComBox<IWidgetAbi>)> {
+        // Validation borrows the destination only; rejection returns the candidate.
+        let prepared = (|| {
+            self.store.factory.host.check_mutation()?;
+            self.store.factory.check_edit()?;
+            let nodes = self.store.take()?;
+            if index as usize > nodes.len() || nodes.len() == u32::MAX as usize {
+                return Err(neocogi_com::NC_E_OUT_OF_RANGE);
+            }
+            Ok(nodes)
+        })();
+        let mut nodes = match prepared {
+            Ok(nodes) => nodes,
+            Err(status) => return Err((status, widget)),
+        };
         let node = self.store.factory.mount_node(widget, Some(&self.store))?;
         nodes
             .insert(index as usize, node)
@@ -205,14 +213,22 @@ impl IChildrenEditor for ChildEditor {
         Ok(())
     }
     /// Validates the entire replacement before committing removal of the old subtree.
-    fn replace(&self, index: u32, widget: neocogi_com::ComBoxInput<'_, IWidgetAbi>) -> Result<(), NcStatus> {
-        self.store.factory.host.check_mutation()?;
-        self.store.factory.check_edit()?;
-        let mut nodes = self.store.take()?;
-        if index as usize >= nodes.len() {
-            return Err(neocogi_com::NC_E_OUT_OF_RANGE);
-        }
-        nodes.get(index as usize).expect("validated index").data.ensure_idle()?;
+    fn replace(&self, index: u32, widget: neocogi_com::ComBox<IWidgetAbi>) -> Result<(), (NcStatus, neocogi_com::ComBox<IWidgetAbi>)> {
+        // Validation borrows the destination only; rejection returns the candidate.
+        let prepared = (|| {
+            self.store.factory.host.check_mutation()?;
+            self.store.factory.check_edit()?;
+            let nodes = self.store.take()?;
+            if index as usize >= nodes.len() {
+                return Err(neocogi_com::NC_E_OUT_OF_RANGE);
+            }
+            nodes.get(index as usize).expect("validated index").data.ensure_idle()?;
+            Ok(nodes)
+        })();
+        let mut nodes = match prepared {
+            Ok(nodes) => nodes,
+            Err(status) => return Err((status, widget)),
+        };
         let node = self.store.factory.mount_node(widget, Some(&self.store))?;
         let previous = std::mem::replace(nodes.get_mut(index as usize).expect("validated index"), node);
         self.store.dirty.set(true);

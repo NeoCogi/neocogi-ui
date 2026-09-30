@@ -239,9 +239,14 @@ fn container_topology_rejects_cycles_and_reentrant_edits_without_retaining_owner
     let (b, b_editor, _) = container(&runtime, Rc::default());
     let observed = a.downgrade();
     a_editor.insert(0, b).unwrap();
-    // A rejected cycle consumes the candidate owner. No retained editor can
-    // preserve either subtree after the rejection drops that owner.
-    assert_eq!(b_editor.insert(0, a), Err(UI_E_OWNER));
+    // B's editor is executing inside A's subtree. Rejection must return A
+    // through that call before the application can decide to mount or drop it.
+    let (status, a) = b_editor.insert(0, a).unwrap_err();
+    assert_eq!(status, UI_E_OWNER);
+    assert!(observed.is_alive());
+    assert_eq!(a_editor.view().unwrap().child_count(), Ok(1));
+    assert_eq!(b_editor.view().unwrap().child_count(), Ok(0));
+    drop(a);
     assert!(!observed.is_alive());
     assert_eq!(a_editor.view().unwrap_err(), UI_E_CLOSED);
     assert_eq!(b_editor.view().unwrap_err(), UI_E_CLOSED);
@@ -346,11 +351,11 @@ fn builtin_linear_reuses_track_resolution_and_validates_edges_before_mounting() 
     let (second, b) = recorded_leaf(&runtime);
     let (third, c) = recorded_leaf(&runtime);
     let invalid = LinearEdge::new(LayoutTrack::Flex { weight: f32::NAN });
-    assert_eq!(row.insert(0, first_owner, invalid), Err(NC_E_INVALID_ARG));
-    assert!(!first.as_interface().is_alive());
-    assert_eq!(a.closes.get(), 1);
-    let (first, a) = recorded_leaf(&runtime);
-    row.insert(0, first, LinearEdge::new(LayoutTrack::Fixed { extent: 40 }))
+    let (status, first_owner) = row.insert(0, first_owner, invalid).unwrap_err();
+    assert_eq!(status, NC_E_INVALID_ARG);
+    assert!(first.as_interface().is_alive());
+    assert_eq!(a.closes.get(), 0);
+    row.insert(0, first_owner, LinearEdge::new(LayoutTrack::Fixed { extent: 40 }))
         .unwrap();
     row.insert(1, second, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
         .unwrap();
@@ -405,11 +410,11 @@ fn builtin_grid_reuses_span_placement_and_bulk_track_validation() {
     let first = first_owner.handle();
     let (second, b) = recorded_leaf(&runtime);
     let (third, c) = recorded_leaf(&runtime);
-    assert_eq!(grid.insert(0, first_owner, GridExtent { columns: 0, rows: 1 }), Err(NC_E_INVALID_ARG));
-    assert!(!first.as_interface().is_alive());
-    assert_eq!(a.closes.get(), 1);
-    let (first, a) = recorded_leaf(&runtime);
-    grid.insert(0, first, GridExtent { columns: 1, rows: 1 }).unwrap();
+    let (status, first_owner) = grid.insert(0, first_owner, GridExtent { columns: 0, rows: 1 }).unwrap_err();
+    assert_eq!(status, NC_E_INVALID_ARG);
+    assert!(first.as_interface().is_alive());
+    assert_eq!(a.closes.get(), 0);
+    grid.insert(0, first_owner, GridExtent { columns: 1, rows: 1 }).unwrap();
     grid.insert(1, second, GridExtent { columns: 1, rows: 1 }).unwrap();
     grid.insert(2, third, GridExtent { columns: 2, rows: 1 }).unwrap();
     assert_eq!(grid.columns().unwrap(), columns);
@@ -898,4 +903,28 @@ fn idle_composite_destruction_releases_child_and_parent_queues_once() {
         observed.extend(observations.try_iter());
         assert_eq!(observed, ["first", "second", "parent"]);
     }
+}
+
+/// A real built-in container forwards rejection through its editor and restores
+/// the typed facade. Neither ABI layer may destroy the offered ancestor.
+#[test]
+fn forwarded_cycle_rejection_returns_a_reusable_complete_tree() {
+    let runtime = runtime();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
+    let mut a = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
+    let b = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
+    let mut b_observer = b.handle();
+    let a_observer = a.handle();
+    let edge = LinearEdge::new(LayoutTrack::Content);
+    a.insert(0, b, edge).unwrap();
+    let (status, a) = b_observer.insert(0, a, edge).unwrap_err();
+    assert_eq!(status, UI_E_OWNER);
+    assert_eq!(a.children().unwrap().child_count(), Ok(1));
+    assert_eq!(b_observer.children().unwrap().child_count(), Ok(0));
+    // Rejection has not spent A's mount-once claim. Publish the unchanged tree.
+    let window = ui.window("returned ancestor", RECT, a).unwrap();
+    runtime.update(SIZE).unwrap();
+    window.close().unwrap();
+    assert!(!a_observer.as_interface().is_alive());
+    assert!(!b_observer.as_interface().is_alive());
 }

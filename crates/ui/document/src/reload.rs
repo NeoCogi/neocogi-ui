@@ -85,7 +85,7 @@ impl ReloadSlot {
         match self.active {
             None => self.slot.insert(0, &mut candidate, edge),
             Some(_) => self.slot.replace(0, &mut candidate, edge),
-        }.map_err(|error| error.to_string())?;
+        }.map_err(|(status, _candidate)| status.to_string())?;
         self.active = Some((generation, candidate));
         Ok(Reloaded { generation })
     }

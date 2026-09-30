@@ -829,7 +829,7 @@ impl TextArea {
             editor.with_mut(|editor| editor.events = crate::widget_object::WidgetEvents::with_queue(queue, origin)).expect("unpublished editor is idle");
             value
         })?
-        .query()
+        .query().map_err(|(status, _unpublished)| status)
     }
 
     /// Builds the fixed editor tree with either direct or runtime-shared resources.
@@ -847,7 +847,7 @@ impl TextArea {
         let text: neocogi_com::WeakComBox<IMultilineEditorAbi> = editor.query()?;
         let font = text.query()?;
         let observer = editor.downgrade();
-        parts.content.insert(0, editor.into_interface::<IWidgetAbi>()?)?;
+        parts.content.insert(0, editor.into_interface::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?).map_err(|(status, _unpublished)| status)?;
         let runtime = crate::widget_object::WidgetRuntime::for_resources(host, crate::WidgetOption::FRAME, resources)?;
         Ok((Self::from_runtime(runtime, parts.editor, text, font, parts.model), observer))
     }

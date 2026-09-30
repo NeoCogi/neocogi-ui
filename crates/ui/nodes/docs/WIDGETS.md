@@ -24,12 +24,15 @@ use neocogi_com::{ComPtr, ComRef, NcStatus};
 fn install(ui: &Ui, queue: ComRef<'_, neocogi_ui::CheckboxEventQueueAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
     let checkbox = ui.widgets().checkbox_with_queue("Enable preview", false, Some(queue))?;
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
-    column.insert(0, checkbox, LinearEdge::new(LayoutTrack::Content))?;
-    ui.window("Settings", Rect { x: 40, y: 40, width: 260, height: 120 }, column)
+    column.insert(0, checkbox, LinearEdge::new(LayoutTrack::Content)).map_err(|(status, _candidate)| status)?;
+    ui.window("Settings", Rect { x: 40, y: 40, width: 260, height: 120 }, column).map_err(|(status, _candidate)| status)
 }
 ```
 
-Attachment consumes the exclusive widget owner. Capture `owner.handle()` first
+Successful attachment consumes the exclusive widget owner. Rejection returns
+`(status, original_owner)` for retry. These fresh-construction examples explicitly
+discard a returned candidate when abandoning construction; forwarding providers
+must instead return it to their caller. Attachment never returns a mounted child. Capture `owner.handle()` first
 when a form needs later editing access. Nodes cannot be reparented or mounted
 twice. Removing an owner rejects new calls and destroys the subtree once any
 already admitted call returns. Retained weak handles report `UI_E_CLOSED`; they
@@ -88,7 +91,8 @@ independently of lossy UTF-8 display labels.
 
 Each container exclusively owns its child editor and actual child owners.
 Concrete edge metadata lives with its layout policy. A topology operation returns
-`Result<()>`. Failure preserves existing topology and destroys a consumed candidate;
+`Result<(), (NcStatus, Owner)>` for insertion/replacement. Failure preserves
+existing topology and returns the unchanged candidate;
 success publishes matching metadata and drops removed owners. Destruction has no
 recoverable status, and there is no `finish()` or separate cleanup outcome.
 
@@ -105,14 +109,14 @@ fn split(ui: &Ui) -> Result<OwnedWidget<SplitViewAbi>, NcStatus> {
         axis: SplitAxis::Horizontal, // Left/right panes and a vertical handle.
         position: 320, minimum_first: 200, minimum_second: 240, handle_width: 8,
     })?;
-    split.insert(0, ui.widgets().textbox_unobserved("Inspector")?)?;
-    split.insert(1, ui.widgets().textbox_unobserved("Preview")?)?;
+    split.insert(0, ui.widgets().textbox_unobserved("Inspector")?).map_err(|(status, _candidate)| status)?;
+    split.insert(1, ui.widgets().textbox_unobserved("Preview")?).map_err(|(status, _candidate)| status)?;
     Ok(split)
 }
 ```
 
 Zero panes leave an empty container; one pane fills it; two enable the divider.
-Inserting a third pane rejects and destroys the consumed candidate. Replace/remove
+Inserting a third pane rejects and returns the unchanged candidate. Replace/remove
 drop the affected owner through the ordinary topology transaction.
 `SplitAxis::Vertical` places the first pane above the second. Positions and minima
 are pixels along the movement axis. The requested position survives temporary

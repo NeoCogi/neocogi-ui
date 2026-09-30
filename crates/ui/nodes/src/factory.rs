@@ -92,9 +92,9 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     /// Composes real bars and a transform container around validated application content.
     fn create_scroll_area(
         &self,
-        content: neocogi_com::ComBoxInput<'_, IWidgetAbi>,
+        content: neocogi_com::ComBox<IWidgetAbi>,
         enabled: bool,
-    ) -> Result<neocogi_com::ComBox<ScrollAreaAbi>, NcStatus> {
+    ) -> Result<neocogi_com::ComBox<ScrollAreaAbi>, (NcStatus, neocogi_com::ComBox<IWidgetAbi>)> {
         crate::ScrollArea::create_com(self.services.host.clone(), self.services.resources.clone(), content, enabled)
     }
 

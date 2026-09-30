@@ -24,12 +24,12 @@ where
         self.interface.children()
     }
     /// Inserts a first or second pane; a third pane is rejected before attachment.
-    pub fn insert(&mut self, index: u32, pane: impl Mountable) -> Result<(), NcStatus> {
-        self.interface.insert(index, pane.mount_widget()?)
+    pub fn insert<W: Mountable>(&mut self, index: u32, pane: W) -> Result<(), (NcStatus, W)> {
+        pane.with_mount(|pane| self.interface.insert(index, pane))
     }
     /// Replaces and destroys one pane while preserving the split container.
-    pub fn replace(&mut self, index: u32, pane: impl Mountable) -> Result<(), NcStatus> {
-        self.interface.replace(index, pane.mount_widget()?)
+    pub fn replace<W: Mountable>(&mut self, index: u32, pane: W) -> Result<(), (NcStatus, W)> {
+        pane.with_mount(|pane| self.interface.replace(index, pane))
     }
     /// Removes one pane; the surviving pane fills the allocation after layout.
     pub fn remove(&mut self, index: u32) -> Result<(), NcStatus> {
@@ -146,8 +146,8 @@ where
         Ok(Widget::from_interface(self.interface.content()?))
     }
     /// Replaces and destroys application content while retaining the same outer scroll object and model.
-    pub fn replace_content(&mut self, content: impl Mountable) -> Result<(), NcStatus> {
-        self.interface.replace_content(content.mount_widget()?)
+    pub fn replace_content<W: Mountable>(&mut self, content: W) -> Result<(), (NcStatus, W)> {
+        content.with_mount(|content| self.interface.replace_content(content))
     }
 }
 
@@ -171,13 +171,13 @@ macro_rules! container_proxy {
                 self.interface.set_edge(index, edge)
             }
             /// Inserts the actual child object after validating the complete relationship.
-            /// The candidate is consumed even on Err; failure leaves existing topology unchanged.
-            pub fn insert(&mut self, index: u32, child: impl Mountable, edge: $edge) -> Result<(), NcStatus> {
-                self.interface.insert(index, child.mount_widget()?, edge)
+            /// Rejection returns the unchanged typed candidate and preserves existing topology.
+            pub fn insert<W: Mountable>(&mut self, index: u32, child: W, edge: $edge) -> Result<(), (NcStatus, W)> {
+                child.with_mount(|child| self.interface.insert(index, child, edge))
             }
             /// Replaces one subtree and relationship together, dropping the previous child owner on success.
-            pub fn replace(&mut self, index: u32, child: impl Mountable, edge: $edge) -> Result<(), NcStatus> {
-                self.interface.replace(index, child.mount_widget()?, edge)
+            pub fn replace<W: Mountable>(&mut self, index: u32, child: W, edge: $edge) -> Result<(), (NcStatus, W)> {
+                child.with_mount(|child| self.interface.replace(index, child, edge))
             }
             /// Removes one subtree and drops its exclusive owner.
             pub fn remove(&mut self, index: u32) -> Result<(), NcStatus> {
@@ -280,10 +280,12 @@ impl WidgetFactory {
         )?))
     }
     /// Constructs a framed scroll composite around one unmounted application widget.
-    pub fn scroll_area(&self, content: impl Mountable, enabled: bool) -> Result<OwnedWidget<ScrollAreaAbi>, NcStatus> {
-        Ok(OwnedWidget::from_interface(
-            self.interface.create_scroll_area(content.mount_widget()?, enabled)?,
-        ))
+    pub fn scroll_area<W: Mountable>(&self, content: W, enabled: bool) -> Result<OwnedWidget<ScrollAreaAbi>, (NcStatus, W)> {
+        content.with_mount(|content| {
+            Ok(OwnedWidget::from_interface(
+                self.interface.create_scroll_area(content, enabled)?,
+            ))
+        })
     }
     /// Creates an empty directional container with one complete axis/cross configuration.
     pub fn linear(&self, direction: FlowDirection, cross: CrossSize) -> Result<OwnedWidget<LinearAbi>, NcStatus> {
@@ -325,12 +327,12 @@ where
         self.interface.set_edge(index, edge)
     }
     /// Attaches one child after validating its complete rectangle.
-    pub fn insert(&mut self, index: u32, child: impl Mountable, edge: Rect) -> Result<(), NcStatus> {
-        self.interface.insert(index, child.mount_widget()?, edge)
+    pub fn insert<W: Mountable>(&mut self, index: u32, child: W, edge: Rect) -> Result<(), (NcStatus, W)> {
+        child.with_mount(|child| self.interface.insert(index, child, edge))
     }
     /// Replaces a child with the supplied geometry.
-    pub fn replace(&mut self, index: u32, child: impl Mountable, edge: Rect) -> Result<(), NcStatus> {
-        self.interface.replace(index, child.mount_widget()?, edge)
+    pub fn replace<W: Mountable>(&mut self, index: u32, child: W, edge: Rect) -> Result<(), (NcStatus, W)> {
+        child.with_mount(|child| self.interface.replace(index, child, edge))
     }
     /// Drops one owned subtree.
     pub fn remove(&mut self, index: u32) -> Result<(), NcStatus> {

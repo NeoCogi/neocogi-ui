@@ -91,7 +91,7 @@ pub(super) fn row(ui: &Ui) -> Result<OwnedWidget<LinearAbi>, NcStatus> {
 /// Appends through the authoritative child count; no second local list or builder closure is retained.
 pub(super) fn append<I: ComInterface, P>(parent: &mut Widget<LinearAbi, P>, child: OwnedWidget<I>, track: LayoutTrack) -> Result<(), NcStatus>
 where P: WidgetStorage<LinearAbi> + core::ops::DerefMut<Target = nodes::LinearClient<neocogi_com::ThreadLocal>> {
-    parent.insert(parent.children()?.child_count()?, child, LinearEdge::new(track))
+    parent.insert(parent.children()?.child_count()?, child, LinearEdge::new(track)).map_err(|(status, _candidate)| status)
 }
 /// Static display text remains a real plugin-owned TextBlock with no application callback.
 pub(super) fn label(ui: &Ui, text: &str) -> Result<OwnedWidget<TextBlockAbi>, NcStatus> {
@@ -154,7 +154,7 @@ where P: WidgetStorage<LinearAbi> + core::ops::DerefMut<Target = nodes::LinearCl
 }
 /// Mounts one fully expanding child directly under a structural floating window.
 fn floating<I: ComInterface>(ui: &Ui, desktop: ComRef<'_, IWindowAbi>, title: &str, area: Rect, content: OwnedWidget<I>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-    let window = ui.child_window(desktop, title, area, content)?;
+    let window = ui.child_window(desktop, title, area, content).map_err(|(status, _candidate)| status)?;
     window.set_options(WindowOptions::FRAME)?;
     Ok(window)
 }
@@ -564,13 +564,13 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
     let mut events_tx = Inputs::new(sender);
     let grid = Rc::new(RefCell::new(GridState::default()));
     let grid_widget = ui.widgets().leaf(GridViewWidget::new(grid.clone()), WidgetOptions::NONE)?;
-    let desktop = ui.window("X-Y Grid Surface", rect(0, 0, 1200, 800), grid_widget)?;
+    let desktop = ui.window("X-Y Grid Surface", rect(0, 0, 1200, 800), grid_widget).map_err(|(status, _candidate)| status)?;
     desktop.set_layer(0)?;
     desktop.set_child_clip(ChildClip::Content)?;
     desktop.set_options(WindowOptions::NO_TITLE | WindowOptions::NO_CLOSE | WindowOptions::NO_RESIZE | WindowOptions::NO_PADDING)?;
     let main_body = column(ui)?;
     let main_body_handle = main_body.handle();
-    let main_scroll = ui.widgets().scroll_area(main_body, true)?;
+    let main_scroll = ui.widgets().scroll_area(main_body, true).map_err(|(status, _candidate)| status)?;
     let mut main_body = main_body_handle;
     let main_scroll_handle = main_scroll.handle();
     let lifecycle = events_tx.queue.query::<IWindowEventQueueAbi>()?;
@@ -580,7 +580,7 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
         rect(40, 40, 300, 450),
         main_scroll,
         Some(lifecycle.as_com_ref()),
-    )?;
+    ).map_err(|(status, _candidate)| status)?;
     demo.set_options(WindowOptions::FRAME | WindowOptions::MINIMIZE_BUTTON | WindowOptions::MAXIMIZE_BUTTON)?;
     let info = [label(ui, "40, 40")?, label(ui, "300, 450")?, label(ui, "0.0")?];
     let combo = ui.combo_box_with_queue(
@@ -632,7 +632,7 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
     let mut log = label(ui, "Welcome to neocogi-ui.")?;
     log.set_font_role(FontRole::Mono)?;
     let log_handle = log.handle();
-    let log_scroll = ui.widgets().scroll_area(log, true)?;
+    let log_scroll = ui.widgets().scroll_area(log, true).map_err(|(status, _candidate)| status)?;
     let entry_sink = events_tx.queue.query::<TextboxEventQueueAbi>()?;
     let mut entry = ui.widgets().textbox_with_queue("", Some(entry_sink.as_com_ref()))?;
     entry.set_font_role(FontRole::Mono)?;

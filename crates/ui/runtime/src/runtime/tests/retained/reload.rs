@@ -933,3 +933,25 @@ fn rejected_reload_closes_retained_candidate_handles_without_touching_the_live_f
 
 #[path = "form_methods.rs"]
 mod form_methods;
+
+/// A failed publication restores the compiled form's root and keeps all lookups
+/// valid. Retrying the same component requires no reconstruction or new binding.
+#[test]
+fn failed_component_mount_returns_its_unmounted_root_for_retry() {
+    let fixture = Headless::standard();
+    let loader = Loader::new(fixture.ui.clone(), None, Resources::new()).unwrap();
+    let mut component = loader.compile(&Document::new("retry")).unwrap();
+    let root = component.root().unwrap();
+    let invalid = Rect { x: 0, y: 0, width: -1, height: 100 };
+    let status = match fixture.ui.window("invalid", invalid, &mut component) {
+        Err((status, _component)) => status,
+        Ok(_) => panic!("negative window extent must be rejected"),
+    };
+    assert_eq!(status, neocogi_com::NC_E_INVALID_ARG);
+    assert!(root.as_interface().is_alive());
+    let window = fixture.ui.window("retry", Rect { x: 0, y: 0, width: 200, height: 100 }, &mut component)
+        .unwrap_or_else(|(status, _)| panic!("valid retry failed: {status:?}"));
+    assert!(component.take_root().is_err(), "success transfers exactly once");
+    window.close().unwrap();
+    assert!(!root.as_interface().is_alive());
+}

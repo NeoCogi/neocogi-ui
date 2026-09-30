@@ -162,7 +162,7 @@ impl SplitView {
             value.events = crate::widget_object::WidgetEvents::with_queue(queue, origin);
             value
         })?
-        .query()
+        .query().map_err(|(status, _unpublished)| status)
     }
 
     /// Retires geometry and gesture state after a committed topology or policy edit.
@@ -219,19 +219,27 @@ impl neocogi_ui_nodes_contracts::SplitView for SplitView {
         self.editor.view()
     }
     /// Checks the two-pane capacity before the new child consumes its attachment claim.
-    fn insert(&mut self, index: u32, child: neocogi_com::ComBoxInput<'_, neocogi_ui_core_contracts::IWidgetAbi>) -> Result<(), NcStatus> {
-        self.runtime.state.writable()?;
-        if self.count >= 2 {
-            return Err(NC_E_OUT_OF_RANGE);
-        }
+    fn insert(&mut self, index: u32, child: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
+        let prepared = (|| {
+            self.runtime.state.writable()?;
+            if self.count >= 2 {
+                return Err(NC_E_OUT_OF_RANGE);
+            }
+            Ok(())
+        })();
+        if let Err(status) = prepared { return Err((status, child)); }
         self.editor.insert(index, child)?;
         self.count += 1;
         self.invalidate();
         Ok(())
     }
     /// Publishes invalidation after the editor commits replacement and drops the old owner.
-    fn replace(&mut self, index: u32, child: neocogi_com::ComBoxInput<'_, neocogi_ui_core_contracts::IWidgetAbi>) -> Result<(), NcStatus> {
-        self.runtime.state.writable()?;
+    fn replace(&mut self, index: u32, child: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
+        let prepared = (|| {
+            self.runtime.state.writable()?;
+            Ok(())
+        })();
+        if let Err(status) = prepared { return Err((status, child)); }
         self.editor.replace(index, child)?;
         self.invalidate();
         Ok(())

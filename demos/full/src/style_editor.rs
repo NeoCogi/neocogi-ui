@@ -232,7 +232,7 @@ impl StyleEditor {
             append(&mut content, line, LayoutTrack::Content)?;
             values.push((metric, handle));
         }
-        let root = ui.widgets().scroll_area(content, true)?;
+        let root = ui.widgets().scroll_area(content, true).map_err(|(status, _candidate)| status)?;
         Ok((
             Self {
                 base,

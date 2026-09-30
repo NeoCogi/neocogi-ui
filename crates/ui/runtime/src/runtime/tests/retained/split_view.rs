@@ -168,18 +168,18 @@ fn split_topology_and_settings_are_validated_before_mutation() {
     let extra = extra_owner.handle();
     split.insert(0, first).unwrap();
     split.insert(1, second).unwrap();
-    assert!(matches!(split.insert(2, extra_owner), Err(neocogi_com::NC_E_OUT_OF_RANGE)));
+    let (status, extra_owner) = split.insert(2, extra_owner).unwrap_err();
+    assert_eq!(status, neocogi_com::NC_E_OUT_OF_RANGE);
     assert_eq!(split.children().unwrap().child_count().unwrap(), 2);
     assert_eq!(
         split.set_settings(SplitOptions { handle_width: -1, ..initial }),
         Err(neocogi_com::NC_E_INVALID_ARG)
     );
     assert_eq!(split.settings().unwrap(), initial);
-    // A rejected consuming insertion destroys that candidate. Build a fresh owner.
-    assert_eq!(extra.label(), Err(UI_E_CLOSED));
-    let extra = fixture.ui.widgets().button_unobserved("fresh").unwrap();
+    // Rejection leaves this same unmounted candidate usable in another container.
+    assert_eq!(extra.label().unwrap(), "unattached");
     let mut other = fixture.ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
-    other.insert(0, extra, LinearEdge::new(LayoutTrack::Content)).unwrap();
+    other.insert(0, extra_owner, LinearEdge::new(LayoutTrack::Content)).unwrap();
     let split_owner = split;
     let mut split = split_owner.handle();
     let owner = window(&fixture.ui, "topology", Rect { x: 10, y: 10, width: 400, height: 120 }, split_owner);

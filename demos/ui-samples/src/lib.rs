@@ -57,7 +57,7 @@ pub fn weights(ui: &Ui, queue: Option<ComRef<'_, ButtonEventQueueAbi>>) -> Resul
     for index in 0..6 {
         let control = button(ui, &format!("Cell {}", index + 1), queue)?;
         buttons.push(control.handle());
-        grid.insert(index, control, GridExtent { columns: 1, rows: 1 })?;
+        grid.insert(index, control, GridExtent { columns: 1, rows: 1 }).map_err(|(status, _unpublished)| status)?;
     }
     append(&mut content, grid, FLEX)?;
     Ok(Sample { content, buttons })
@@ -71,5 +71,5 @@ fn button(ui: &Ui, text: &str, queue: Option<ComRef<'_, ButtonEventQueueAbi>>) -
 }
 /// Appends one explicit relationship using authoritative topology, with no parallel child-state model.
 fn append<I: ComInterface>(parent: &mut OwnedWidget<LinearAbi>, child: OwnedWidget<I>, track: LayoutTrack) -> Result<(), NcStatus> {
-    parent.insert(parent.children()?.child_count()?, child, LinearEdge::new(track))
+    parent.insert(parent.children()?.child_count()?, child, LinearEdge::new(track)).map_err(|(status, _unpublished)| status)
 }

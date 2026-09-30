@@ -158,8 +158,8 @@ interface IContainerLayout {
 
 #[version(2)]
 /// Exclusive topology authority owned by a container implementation.
-/// Insert/replace consume their candidate even on failure; existing topology is
-/// unchanged on Err. Destroying the editor releases children and expires its view.
+/// Insert/replace return their unchanged candidate on failure; existing topology
+/// is unchanged on Err. Success consumes the candidate once. Destroying the editor releases children and expires its view.
 /// Its read-only view is a distinct COM identity: querying that view cannot
 /// bypass a concrete container's matching Linear/Grid/domain edge metadata.
 interface IChildrenEditor {

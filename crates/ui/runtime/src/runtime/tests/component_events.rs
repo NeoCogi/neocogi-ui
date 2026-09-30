@@ -44,7 +44,7 @@ impl PrivateRecord {
         match std::mem::replace(&mut self.edit, Edit::None) {
             Edit::None => {}
             Edit::Close(window) => window.request_close()?,
-            Edit::Insert { mut parent, child } => parent.insert(0, child, LinearEdge::new(LayoutTrack::Content))?,
+            Edit::Insert { mut parent, child } => parent.insert(0, child, LinearEdge::new(LayoutTrack::Content)).map_err(|(status, _candidate)| status)?,
         }
         Ok(())
     }

@@ -182,7 +182,7 @@ mod tests {
             label: String::from("initial"),
             requested_flags: WidgetOptions::NONE,
             changed: false,
-        }).query::<ButtonAbi>()?;
+        }).query::<ButtonAbi>().unwrap();
         let mut owner = OwnedWidget::from_interface(object);
         owner.set_label("before insertion")?;
         let mut field = owner.handle();
@@ -193,7 +193,7 @@ mod tests {
         assert_eq!(owner.label()?, "through field");
         // Attachment moves only the original owner; the field has no retaining
         // conversion and cannot keep the payload alive when that owner expires.
-        let mounted = owner.mount_widget()?;
+        let mounted = owner.with_mount(Ok).unwrap();
         assert!(mounted.downgrade().same_object(field.as_interface()));
         assert_eq!(field.label()?, "through field");
         drop(mounted);

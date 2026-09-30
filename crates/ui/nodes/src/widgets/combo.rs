@@ -265,7 +265,7 @@ impl Combo {
             }
             value
         })?
-        .query()
+        .query().map_err(|(status, _unpublished)| status)
     }
 
     /// Builds one header with runtime-shared resources and no semantic-state mirror.

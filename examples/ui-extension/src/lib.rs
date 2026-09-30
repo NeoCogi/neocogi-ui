@@ -116,7 +116,7 @@ impl CounterObject {
             count: 0,
             event: queue.map(|queue| (queue, origin)),
         })?
-        .query()
+        .query().map_err(|(status, _unpublished)| status)
     }
 
     /// User activation commits before emission, capturing the matching label for deferred delivery.
@@ -215,9 +215,16 @@ impl IContainer for Inset {
 }
 impl IInset for Inset {
     /// Read cardinality from its authoritative sequence; no second has-child flag can become stale.
-    fn set_child(&mut self, child: neocogi_com::ComBoxInput<'_, IWidgetAbi>) -> Result<(), NcStatus> {
-        self.common.state.writable()?;
-        if self.editor.view()?.child_count()? == 0 {
+    fn set_child(&mut self, child: neocogi_com::ComBox<IWidgetAbi>) -> Result<(), (NcStatus, neocogi_com::ComBox<IWidgetAbi>)> {
+        let prepared = (|| {
+            self.common.state.writable()?;
+            self.editor.view()?.child_count()
+        })();
+        let count = match prepared {
+            Ok(count) => count,
+            Err(status) => return Err((status, child)),
+        };
+        if count == 0 {
             self.editor.insert(0, child)
         } else {
             self.editor.replace(0, child)
@@ -350,7 +357,7 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
                 neocogi_ui_document_contracts::WidgetEventBinding::Observed(queue) => Some(queue.query()?),
             },
         )?
-        .query::<IWidgetAbi>()
+        .query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)
     }
 }
 
@@ -373,7 +380,7 @@ impl ExtensionProvider for ExtensionProviderObject {
             padding: 4,
             editor,
         })
-        .query()
+        .query().map_err(|(status, _unpublished)| status)
     }
 }
 neocogi_com::factory_plugin! {

@@ -120,11 +120,11 @@ fn run() -> Result<(), HostError> {
     let host = Host::new("Runtime UI", Size { width: 800, height: 600 }, neocogi_demo_assets::load_bundle()?)?;
     let root = host.ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     let root_handle = root.handle();
-    let window = host.ui.window("Loaded component", Rect { x: 20, y: 20, width: 740, height: 540 }, root)?;
+    let window = host.ui.window("Loaded component", Rect { x: 20, y: 20, width: 740, height: 540 }, root).map_err(|(status, _candidate)| status)?;
     let mut root = root_handle;
 
     let mut slot = ReloadSlot::new(host.ui.clone(), window.clone())?;
-    root.insert(0, slot.take_widget()?, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))?;
+    root.insert(0, slot.take_widget()?, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 })).map_err(|(status, _candidate)| status)?;
     let (sender, receiver) = mpsc::channel();
     let menus = host.ui.menus()?;
     let bar = menus.create("Runtime UI")?;

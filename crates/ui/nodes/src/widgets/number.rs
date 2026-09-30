@@ -300,7 +300,7 @@ impl Number {
             value.events = crate::widget_object::WidgetEvents::with_queue(queue, origin);
             value
         })?
-        .query()
+        .query().map_err(|(status, _unpublished)| status)
     }
 
     /// Builds one number editor with either directly imported or runtime-shared resources.

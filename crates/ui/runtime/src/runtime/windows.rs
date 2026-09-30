@@ -103,38 +103,45 @@ impl RuntimeStorage {
         placement: Placement,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: neocogi_com::ComBoxInput<'_, neocogi_ui_core_contracts::IWidgetAbi>,
-    ) -> Result<ComPtr<IUnknown>, NcStatus> {
-        self.factory.host.check_mutation()?;
-        if rect.width < 0 || rect.height < 0 {
-            return Err(NC_E_INVALID_ARG);
-        }
-        let title = checked_title(title)?;
-        let mut context = self.context()?;
-        self.prune_mounts(&context.window_manager);
-        match &placement {
-            Placement::Window(WindowPlacement::Root, _) => {}
-            Placement::Window(WindowPlacement::Child(parent) | WindowPlacement::Dialog(parent), _) => {
-                if context.window_manager.window_layer(parent).map_err(status)? == LayerBinding::Modal {
-                    return Err(UI_E_POLICY);
+        root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
+    ) -> Result<ComPtr<IUnknown>, (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
+        let prepared = (|| {
+            self.factory.host.check_mutation()?;
+            if rect.width < 0 || rect.height < 0 {
+                return Err(NC_E_INVALID_ARG);
+            }
+            let title = checked_title(title)?;
+            let context = self.context()?;
+            self.prune_mounts(&context.window_manager);
+            match &placement {
+                Placement::Window(WindowPlacement::Root, _) => {}
+                Placement::Window(WindowPlacement::Child(parent) | WindowPlacement::Dialog(parent), _) => {
+                    if context.window_manager.window_layer(parent).map_err(status)? == LayerBinding::Modal {
+                        return Err(UI_E_POLICY);
+                    }
+                }
+                Placement::Popup(parent, _) => {
+                    context.window_manager.window_visible(parent).map_err(status)?;
                 }
             }
-            Placement::Popup(parent, _) => {
-                context.window_manager.window_visible(parent).map_err(status)?;
-            }
-        }
+            Ok((title, context))
+        })();
+        let (title, mut context) = match prepared {
+            Ok(prepared) => prepared,
+            Err(status) => return Err((status, root)),
+        };
         // Root windows and child collections use the same checked mount boundary.
         let node = self.factory.mount_node(root, None)?;
         let manager = &mut context.window_manager;
         let (identity, surface) = match placement {
             Placement::Window(placement, queue) => {
-                LogicalWindow::create(Rc::downgrade(self), manager, placement, Window::new(title, local_rect(rect), node), queue)?
+                LogicalWindow::create(Rc::downgrade(self), manager, placement, Window::new(title, local_rect(rect), node), queue)
             }
             Placement::Popup(parent, queue) => LogicalPopup::create(Rc::downgrade(self), queue, |events| {
                 manager
                     .create_popup(&parent, &title, node, events)
                     .expect("authenticated popup owner cannot disappear during an exclusive transaction")
-            })?,
+            }),
         };
         self.mounts.borrow_mut().push(SurfaceMount { surface, identity: identity.clone() });
         self.pending.set(true);
@@ -148,12 +155,20 @@ impl IWindowManager for Runtime {
         &self,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: neocogi_com::ComBoxInput<'_, neocogi_ui_core_contracts::IWidgetAbi>,
+        root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
         events: neocogi_com::NcValueRef<'_, IWindowEventBinding>,
-    ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-        self.storage
-            .create(Placement::Window(WindowPlacement::Root, events.to_owned()?.into_queue()), title, rect, root)?
-            .query()
+    ) -> Result<ComPtr<IWindowAbi>, (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
+        let prepared = (|| {
+            let queue = events.to_owned()?.into_queue();
+            Ok(Placement::Window(WindowPlacement::Root, queue))
+        })();
+        let placement = match prepared {
+            Ok(placement) => placement,
+            Err(status) => return Err((status, root)),
+        };
+        let surface = self.storage.create(placement, title, rect, root)?;
+        // Construction chose this exact concrete class; publication cannot fail.
+        Ok(surface.query::<IWindowAbi>().expect("constructed surface declares its public interface"))
     }
     /// Authenticates the parent's COM identity before validating ordinary-child policy.
     fn create_child(
@@ -161,17 +176,20 @@ impl IWindowManager for Runtime {
         parent: ComRef<'_, IWindowAbi>,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: neocogi_com::ComBoxInput<'_, neocogi_ui_core_contracts::IWidgetAbi>,
+        root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
         events: neocogi_com::NcValueRef<'_, IWindowEventBinding>,
-    ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-        self.storage
-            .create(
-                Placement::Window(WindowPlacement::Child(self.storage.parent(parent)?), events.to_owned()?.into_queue()),
-                title,
-                rect,
-                root,
-            )?
-            .query()
+    ) -> Result<ComPtr<IWindowAbi>, (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
+        let prepared = (|| {
+            let queue = events.to_owned()?.into_queue();
+            Ok(Placement::Window(WindowPlacement::Child(self.storage.parent(parent)?), queue))
+        })();
+        let placement = match prepared {
+            Ok(placement) => placement,
+            Err(status) => return Err((status, root)),
+        };
+        let surface = self.storage.create(placement, title, rect, root)?;
+        // Construction chose this exact concrete class; publication cannot fail.
+        Ok(surface.query::<IWindowAbi>().expect("constructed surface declares its public interface"))
     }
     /// Creates a hidden dialog while preserving the manager's existing modal-owner rules.
     fn create_dialog(
@@ -179,34 +197,40 @@ impl IWindowManager for Runtime {
         parent: ComRef<'_, IWindowAbi>,
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
-        root: neocogi_com::ComBoxInput<'_, neocogi_ui_core_contracts::IWidgetAbi>,
+        root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
         events: neocogi_com::NcValueRef<'_, IWindowEventBinding>,
-    ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-        self.storage
-            .create(
-                Placement::Window(WindowPlacement::Dialog(self.storage.parent(parent)?), events.to_owned()?.into_queue()),
-                title,
-                rect,
-                root,
-            )?
-            .query()
+    ) -> Result<ComPtr<IWindowAbi>, (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
+        let prepared = (|| {
+            let queue = events.to_owned()?.into_queue();
+            Ok(Placement::Window(WindowPlacement::Dialog(self.storage.parent(parent)?), queue))
+        })();
+        let placement = match prepared {
+            Ok(placement) => placement,
+            Err(status) => return Err((status, root)),
+        };
+        let surface = self.storage.create(placement, title, rect, root)?;
+        // Construction chose this exact concrete class; publication cannot fail.
+        Ok(surface.query::<IWindowAbi>().expect("constructed surface declares its public interface"))
     }
     /// Creates an independently typed popup with one authoritative parent edge in the forest.
     fn create_popup(
         &self,
         parent: ComRef<'_, IWindowAbi>,
         title: NcCopyFromBufferOffset<'_, u8>,
-        root: neocogi_com::ComBoxInput<'_, neocogi_ui_core_contracts::IWidgetAbi>,
+        root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
         events: neocogi_com::NcValueRef<'_, IPopupEventBinding>,
-    ) -> Result<ComPtr<IPopupAbi>, NcStatus> {
-        self.storage
-            .create(
-                Placement::Popup(self.storage.parent(parent)?, events.to_owned()?.into_queue()),
-                title,
-                Rect::default(),
-                root,
-            )?
-            .query()
+    ) -> Result<ComPtr<IPopupAbi>, (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
+        let prepared = (|| {
+            let queue = events.to_owned()?.into_queue();
+            Ok(Placement::Popup(self.storage.parent(parent)?, queue))
+        })();
+        let placement = match prepared {
+            Ok(placement) => placement,
+            Err(status) => return Err((status, root)),
+        };
+        let surface = self.storage.create(placement, title, Rect::default(), root)?;
+        // Construction chose this exact concrete class; publication cannot fail.
+        Ok(surface.query::<IPopupAbi>().expect("constructed surface declares its public interface"))
     }
 }
 
@@ -248,7 +272,7 @@ impl LogicalWindow {
         placement: WindowPlacement,
         window: Window,
         queue: Option<ComPtr<IWindowEventQueueAbi>>,
-    ) -> Result<(ComPtr<IUnknown>, NativeSurface), NcStatus> {
+    ) -> (ComPtr<IUnknown>, NativeSurface) {
         // A single cyclic initializer keeps weak setup, allocation and publication
         // common. Supplying a different FnOnce per placement had duplicated this
         // machinery in the min-size binary despite an identical ownership contract.
@@ -268,9 +292,9 @@ impl LogicalWindow {
                 window,
                 closed: Cell::new(false),
             }
-        })?;
-        let surface = NativeSurface::Window(local.try_borrow()?.window.clone());
-        Ok((local.query()?, surface))
+        }).expect("LogicalWindow declares IWindow");
+        let surface = NativeSurface::Window(local.try_borrow().expect("new local window is idle").window.clone());
+        (local.query().expect("every generated object declares IUnknown"), surface)
     }
 
     /// Secures a live owner while allowing observational reads in layout and paint.
@@ -431,14 +455,14 @@ impl LogicalPopup {
         runtime: Weak<RuntimeStorage>,
         queue: Option<ComPtr<IPopupEventQueueAbi>>,
         register: impl FnOnce(Option<IPopupEventPort>) -> PopupHandle,
-    ) -> Result<(ComPtr<IUnknown>, NativeSurface), NcStatus> {
+    ) -> (ComPtr<IUnknown>, NativeSurface) {
         let local = Self::into_local_cyclic::<IPopupAbi>(|origin| Self {
             runtime,
             popup: register(Some(neocogi_com::events::EventPort::with_queue(queue, origin))),
             closed: false,
-        })?;
-        let surface = NativeSurface::Popup(local.try_borrow()?.popup.clone());
-        Ok((local.query()?, surface))
+        }).expect("LogicalPopup declares IPopup");
+        let surface = NativeSurface::Popup(local.try_borrow().expect("new local popup is idle").popup.clone());
+        (local.query().expect("every generated object declares IUnknown"), surface)
     }
 
     /// Retains the live owner for one synchronous checked call.

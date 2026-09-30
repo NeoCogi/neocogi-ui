@@ -125,7 +125,7 @@ pub struct Component {
 }
 impl Component {
     /// Transfers the root into a window/container; repeated transfers fail.
-    /// A rejected insertion drops this owner and invalidates all lookup handles.
+    /// A rejected insertion returns it; the caller decides whether to retry or drop it.
     pub fn take_root(&mut self) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
         self.root_owner.take().ok_or(neocogi_com::NC_E_CLOSED)
     }
@@ -144,16 +144,32 @@ impl Component {
     }
 }
 
+impl Component {
+    /// Restore the unmounted root on failure so a failed reload can be retried.
+    fn try_mount<R>(&mut self, operation: impl FnOnce(neocogi_com::ComBox<IWidgetAbi>) -> Result<R, (NcStatus, neocogi_com::ComBox<IWidgetAbi>)>)
+        -> Result<R, NcStatus> {
+        let root = self.take_root()?.into_interface();
+        match operation(root) {
+            Ok(value) => Ok(value),
+            Err((status, root)) => {
+                self.root_owner = Some(OwnedWidget::from_interface(root));
+                Err(status)
+            },
+        }
+    }
+}
 impl Mountable for Component {
-    /// Consuming the component transfers its unique root and releases its recipe.
-    fn mount_widget(mut self) -> Result<neocogi_com::ComBox<IWidgetAbi>, NcStatus> {
-        Ok(self.take_root()?.into_interface())
+    /// Release the recipe on successful transfer; return the full component on failure.
+    fn with_mount<R>(mut self, operation: impl FnOnce(neocogi_com::ComBox<IWidgetAbi>) -> Result<R, (NcStatus, neocogi_com::ComBox<IWidgetAbi>)>)
+        -> Result<R, (NcStatus, Self)> {
+        self.try_mount(operation).map_err(|status| (status, self))
     }
 }
 impl Mountable for &mut Component {
-    /// Retains recipe/lookups while consuming the one root owner through &mut self.
-    fn mount_widget(self) -> Result<neocogi_com::ComBox<IWidgetAbi>, NcStatus> {
-        Ok(self.take_root()?.into_interface())
+    /// Preserve recipe/lookups and restore the root before returning a rejected borrow.
+    fn with_mount<R>(self, operation: impl FnOnce(neocogi_com::ComBox<IWidgetAbi>) -> Result<R, (NcStatus, neocogi_com::ComBox<IWidgetAbi>)>)
+        -> Result<R, (NcStatus, Self)> {
+        self.try_mount(operation).map_err(|status| (status, self))
     }
 }
 

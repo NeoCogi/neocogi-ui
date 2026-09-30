@@ -67,7 +67,7 @@ use one atomic header word for owner presence and reader/writer access, followed
 by the weak count and class descriptor pointer. Their generated allocation is one
 common header plus `UnsafeCell<MaybeUninit<T>>`; there is no separate call gate or
 execution pin. Both kinds of provider-local lease occupy two words. Only C-shaped
-records cross plugin boundaries; see [core ABI v14](../crates/com/docs/abi-v14.md).
+records cross plugin boundaries; see [core ABI v15](../crates/com/docs/abi-v15.md).
 
 ## Cached weak calls and threading
 
@@ -138,7 +138,7 @@ remove the owner between the check and the call.
 removed. `WidgetState` tracks only `Unmounted | Mounted`; the COM owner determines
 whether a value exists. `ChildEditResult` and deferred widget-close queues are
 removed too. Child edits return `Result<()>`. Failure leaves the parent's topology
-unchanged but destroys the consumed candidate; success publishes the new topology
+unchanged and returns the original candidate; success publishes the new topology
 and drops any removed owner. There is no recoverable destructor status.
 
 The container exclusively owns its `IChildrenEditor`. A retained editor observer
@@ -153,12 +153,18 @@ An implementation needing live children in its destructor does that work in its
 ordinary `Drop`, before Rust drops its child fields. No generic fallible close
 protocol is required.
 
-Consuming COM inputs remain in the original caller's transfer slot until validation
-succeeds. Providers receive `ComBoxInput`, inspect `as_com_ref`, forward the same
-slot, and call `take` at the ownership commit. This matters for rejected cycles:
-the offered ancestor is destroyed only after the descendant's method returns.
-A rejected input is still destroyed before the client call returns; it is never
-stored in a pending-destruction queue.
+Owning COM methods receive an ordinary `ComBox`. Rejection returns
+`Err((status, original_owner))` through every forwarding call; success consumes the
+owner. All fallible setup precedes acceptance. Generated ABI code validates inputs
+and receiver admission before adopting an owner, and restores the C owner slot on
+failure. A rejected ancestor therefore reaches the caller while still alive; the
+caller can retry or drop it after the descendant returns. `ComBoxInput` is removed.
+
+Facade insert/replace/window calls return the original typed widget in their error.
+`Mountable::with_mount` restores the concrete projection on failure; compiled forms
+also restore their unmounted root. No widget is detached after successful mounting.
+Bottom-up construction remains supported. See [ABI v15](../crates/com/docs/abi-v15.md)
+for multi-input calls and the invalid-success-output contract.
 
 Window dismissal and file-dialog cancellation remain business operations. An
 explicit dialog cancellation posts its result while the dialog owner still
@@ -248,3 +254,7 @@ the window, calls `cancel`, and only after that provider call returns calls
 `IWindow::close`. Removal errors take priority over completion-delivery errors;
 removal is still attempted when completion delivery fails. Foreign applications
 use the same sequence of ordinary interface calls.
+
+The subsequent synchronous Drop size analysis
+records the preceding ABI v14 implementation, a 7,616-byte deployment reduction and
+the removal of one word of exclusive allocation overhead.

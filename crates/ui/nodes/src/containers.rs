@@ -112,11 +112,17 @@ macro_rules! container_edges {
         fn insert(
             &mut self,
             index: u32,
-            child: neocogi_com::ComBoxInput<'_, neocogi_ui_core_contracts::IWidgetAbi>,
+            child: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
             edge: $edge,
-        ) -> Result<(), neocogi_com::NcStatus> {
-            <Self as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
-            let edge = $decode(edge)?;
+        ) -> Result<(), (neocogi_com::NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
+            let prepared = (|| {
+                <Self as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
+                $decode(edge)
+            })();
+            let edge = match prepared {
+                Ok(edge) => edge,
+                Err(status) => return Err((status, child)),
+            };
             let outcome = self.editor.insert(index, child)?;
             <Self as crate::containers::ContainerAlgorithm>::edit_edges(self, crate::containers::EdgeEdit::Insert { index: index as usize, edge });
             Ok(outcome)
@@ -126,11 +132,17 @@ macro_rules! container_edges {
         fn replace(
             &mut self,
             index: u32,
-            child: neocogi_com::ComBoxInput<'_, neocogi_ui_core_contracts::IWidgetAbi>,
+            child: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
             edge: $edge,
-        ) -> Result<(), neocogi_com::NcStatus> {
-            <Self as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
-            let edge = $decode(edge)?;
+        ) -> Result<(), (neocogi_com::NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
+            let prepared = (|| {
+                <Self as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
+                $decode(edge)
+            })();
+            let edge = match prepared {
+                Ok(edge) => edge,
+                Err(status) => return Err((status, child)),
+            };
             let outcome = self.editor.replace(index, child)?;
             <Self as crate::containers::ContainerAlgorithm>::edit_edges(self, crate::containers::EdgeEdit::Replace { index: index as usize, edge });
             Ok(outcome)

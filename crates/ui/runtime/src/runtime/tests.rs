@@ -31,7 +31,7 @@ fn button(runtime: &ComPtr<UiRuntimeAbi>) -> ComBox<ButtonAbi> {
 
 /// Oversized chrome titles fail before a widget is mounted or title text is retained.
 #[test]
-fn oversized_window_title_rejects_creation_and_drops_the_transferred_root() {
+fn oversized_window_title_returns_the_unmounted_root_for_retry() {
     let runtime = runtime();
     let manager: ComPtr<IWindowManagerAbi> = runtime.query().unwrap();
     let root = button(&runtime);
@@ -41,9 +41,12 @@ fn oversized_window_title_rejects_creation_and_drops_the_transferred_root() {
         NcCopyFromBufferOffset::new(0, &oversized), RECT, root.query().unwrap(),
         neocogi_com::NcValueRef::new(&IWindowEventBinding::Unobserved).unwrap(),
     );
-    assert_eq!(result.unwrap_err(), neocogi_com::NC_E_OUT_OF_RANGE);
+    let (status, root) = result.unwrap_err();
+    assert_eq!(status, neocogi_com::NC_E_OUT_OF_RANGE);
+    assert!(observed.label().is_ok());
+    let window = mount(&runtime, root).unwrap();
+    window.close().unwrap();
     assert_eq!(observed.label().unwrap_err(), UI_E_CLOSED);
-    mount(&runtime, button(&runtime).query().unwrap()).unwrap();
 }
 
 /// The facade cannot combine a node provider bound to one retained forest with another runtime.
@@ -244,7 +247,7 @@ fn mount(runtime: &ComPtr<UiRuntimeAbi>, root: ComBox<IWidgetAbi>) -> Result<Com
         RECT,
         root,
         neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
-    )
+    ).map_err(|(status, _rejected)| status)
 }
 
 /// Observable state retained by a fake backend independently of its COM allocation.
@@ -698,7 +701,7 @@ fn child_creation_rejects_foreign_and_modal_parents_before_mounting() {
                 node,
                 neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
             )
-            .unwrap_err(),
+            .unwrap_err().0,
         UI_E_OWNER
     );
     assert!(!rejected.is_alive());
@@ -720,7 +723,7 @@ fn child_creation_rejects_foreign_and_modal_parents_before_mounting() {
                 button(&first).query().unwrap(),
                 neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
             )
-            .unwrap_err(),
+            .unwrap_err().0,
         UI_E_POLICY
     );
     let valid = manager
@@ -919,11 +922,11 @@ fn child_editor_rejects_inputs_without_leaking_owners_and_expires_retained_views
     assert_eq!(view.query::<IChildrenEditorAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     let invalid = button(&runtime);
     let rejected = invalid.downgrade();
-    assert_eq!(editor.insert(1, invalid.query().unwrap()), Err(neocogi_com::NC_E_OUT_OF_RANGE));
+    assert_eq!(editor.insert(1, invalid.query().unwrap()).map_err(|(status, _rejected)| status), Err(neocogi_com::NC_E_OUT_OF_RANGE));
     assert!(!rejected.is_alive());
     let foreign = button(&other);
     let rejected = foreign.downgrade();
-    assert_eq!(editor.insert(0, foreign.query().unwrap()), Err(UI_E_OWNER));
+    assert_eq!(editor.insert(0, foreign.query().unwrap()).map_err(|(status, _rejected)| status), Err(UI_E_OWNER));
     assert!(!rejected.is_alive());
     editor.insert(0, button(&runtime).query().unwrap()).unwrap();
     let held_child = view.child(0).unwrap();

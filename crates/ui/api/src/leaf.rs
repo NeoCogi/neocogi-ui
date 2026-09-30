@@ -120,6 +120,6 @@ impl WidgetFactory {
             state: WidgetState::new(self.host()?, options),
             content,
         });
-        Ok(OwnedWidget::from_interface(object.query()?))
+        Ok(OwnedWidget::from_interface(object.query().expect("LeafObject declares IWidget")))
     }
 }

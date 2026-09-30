@@ -6,6 +6,8 @@ use neocogi_ui::*;
 use std::collections::BTreeMap;
 
 /// Owns all created nodes until construction transfers them to the loaded component.
+/// Rejected candidates are created by this builder and cannot own its call receiver;
+/// discarding their returned owners abandons unpublished construction safely.
 pub(crate) struct Construction<'a> {
     /// Explicitly registered custom COM factories.
     pub custom: &'a crate::CustomWidgetRegistry,
@@ -22,7 +24,7 @@ pub(crate) struct Construction<'a> {
 }
 /// Erases only the concrete widget projection through checked QueryInterface.
 fn root<T: ComInterface>(widget: OwnedWidget<T>) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
-    Ok(OwnedWidget::from_interface(widget.into_interface().query()?))
+    Ok(OwnedWidget::from_interface(widget.into_interface().query().map_err(|(status, _unpublished)| status)?))
 }
 /// Turns a persistent text policy into the existing runtime enum.
 fn wrapping(value: &Wrapping) -> TextWrapping {
@@ -150,7 +152,7 @@ impl Construction<'_> {
                 if children.len() != 1 {
                     return Err(NC_E_INVALID_ARG);
                 }
-                root(factory.scroll_area(children.remove(0), *enabled)?)?
+                root(factory.scroll_area(children.remove(0), *enabled).map_err(|(status, _unpublished)| status)?)?
             },
             WidgetSpec::Disclosure { text, tree, expanded } => {
                 root(factory.disclosure(text, if *tree { DisclosureStyle::Tree } else { DisclosureStyle::Header }, *expanded)?)?
@@ -174,12 +176,12 @@ impl Construction<'_> {
                         }
                         .into(),
                     };
-                    parent.insert(index, child.into_interface(), edge)?;
+                    parent.insert(index, child.into_interface(), edge).map_err(|(status, _unpublished)| status)?;
                 }
                 (WidgetSpec::Grid { .. }, Edge::Grid { columns, rows }) => widget
                     .as_interface()
                     .observe::<GridAbi>()?
-                    .insert(index, child.into_interface(), GridExtent { columns: *columns, rows: *rows })?,
+                    .insert(index, child.into_interface(), GridExtent { columns: *columns, rows: *rows }).map_err(|(status, _unpublished)| status)?,
                 (WidgetSpec::Form { .. }, Edge::Position { x, y, width, height }) => widget
                     .as_interface()
                     .observe::<FormAbi>()?
@@ -192,11 +194,11 @@ impl Construction<'_> {
                             width: *width,
                             height: *height,
                         },
-                    )?,
+                    ).map_err(|(status, _unpublished)| status)?,
                 (WidgetSpec::Split { .. }, Edge::Pane) => widget
                     .as_interface()
                     .observe::<SplitViewAbi>()?
-                    .insert(index, child.into_interface())?,
+                    .insert(index, child.into_interface()).map_err(|(status, _unpublished)| status)?,
                 (WidgetSpec::Scroll { .. }, Edge::Pane) => {} // The constructor already adopted its sole child.
                 _ => return Err(NC_E_INVALID_ARG),
             }

@@ -83,6 +83,13 @@ pub struct Widget<I: ComInterface, P = WeakComBox<I>> {
     contract: core::marker::PhantomData<fn() -> I>,
 }
 
+impl<I: ComInterface, P: core::fmt::Debug> core::fmt::Debug for Widget<I, P> {
+    /// Format the handle identity without entering a widget method.
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("Widget").field(&self.interface).finish()
+    }
+}
+
 impl<I: ComInterface> Clone for Widget<I> {
     /// Clones weak access without retaining widget resources or duplicating ownership.
     fn clone(&self) -> Self {
@@ -636,84 +643,116 @@ impl Ui {
         &self.factory
     }
     /// Mounts the actual widget object in a new logical window.
-    pub fn window(&self, title: &str, rect: Rect, root: impl Mountable) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+    pub fn window<W: Mountable>(&self, title: &str, rect: Rect, root: W) -> Result<ComPtr<IWindowAbi>, (NcStatus, W)> {
         self.window_with_queue(title, rect, root, None)
     }
     /// Constructs with its final typed receiver before returning the surface.
-    pub fn window_with_queue(
+    pub fn window_with_queue<W: Mountable>(
         &self,
         title: &str,
         rect: Rect,
-        root: impl Mountable,
+        root: W,
         queue: Option<ComRef<'_, IWindowEventQueueAbi>>,
-    ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-        self.windows.create_window(
-            NcCopyFromBufferOffset::new(0, title.as_bytes()),
-            rect,
-            root.mount_widget()?,
-            neocogi_com::NcValueRef::new(&IWindowEventBinding::from_queue(queue))?,
-        )
+    ) -> Result<ComPtr<IWindowAbi>, (NcStatus, W)> {
+        let queue_binding = IWindowEventBinding::from_queue(queue);
+        let binding = match neocogi_com::NcValueRef::new(&queue_binding) {
+            Ok(binding) => binding,
+            Err(status) => return Err((status, root)),
+        };
+
+        root.with_mount(|root| {
+            self.windows.create_window(
+                NcCopyFromBufferOffset::new(0, title.as_bytes()),
+                rect,
+                root,
+                binding,
+            )
+        })
     }
     /// Mounts a structural child under a live window from this UI.
-    pub fn child_window(&self, parent: ComRef<'_, IWindowAbi>, title: &str, rect: Rect, root: impl Mountable) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+    pub fn child_window<W: Mountable>(&self, parent: ComRef<'_, IWindowAbi>, title: &str, rect: Rect, root: W) -> Result<ComPtr<IWindowAbi>, (NcStatus, W)> {
         self.child_window_with_queue(parent, title, rect, root, None)
     }
     /// Constructs with its final typed receiver before returning the surface.
-    pub fn child_window_with_queue(
+    pub fn child_window_with_queue<W: Mountable>(
         &self,
         parent: ComRef<'_, IWindowAbi>,
         title: &str,
         rect: Rect,
-        root: impl Mountable,
+        root: W,
         queue: Option<ComRef<'_, IWindowEventQueueAbi>>,
-    ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-        self.windows.create_child(
-            parent,
-            NcCopyFromBufferOffset::new(0, title.as_bytes()),
-            rect,
-            root.mount_widget()?,
-            neocogi_com::NcValueRef::new(&IWindowEventBinding::from_queue(queue))?,
-        )
+    ) -> Result<ComPtr<IWindowAbi>, (NcStatus, W)> {
+        let queue_binding = IWindowEventBinding::from_queue(queue);
+        let binding = match neocogi_com::NcValueRef::new(&queue_binding) {
+            Ok(binding) => binding,
+            Err(status) => return Err((status, root)),
+        };
+
+        root.with_mount(|root| {
+            self.windows.create_child(
+                parent,
+                NcCopyFromBufferOffset::new(0, title.as_bytes()),
+                rect,
+                root,
+                binding,
+            )
+        })
     }
     /// Mounts a hidden modal dialog; show it after initialization with set_visibility.
-    pub fn dialog(&self, parent: ComRef<'_, IWindowAbi>, title: &str, rect: Rect, root: impl Mountable) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+    pub fn dialog<W: Mountable>(&self, parent: ComRef<'_, IWindowAbi>, title: &str, rect: Rect, root: W) -> Result<ComPtr<IWindowAbi>, (NcStatus, W)> {
         self.dialog_with_queue(parent, title, rect, root, None)
     }
     /// Constructs with its final typed receiver before returning the surface.
-    pub fn dialog_with_queue(
+    pub fn dialog_with_queue<W: Mountable>(
         &self,
         parent: ComRef<'_, IWindowAbi>,
         title: &str,
         rect: Rect,
-        root: impl Mountable,
+        root: W,
         queue: Option<ComRef<'_, IWindowEventQueueAbi>>,
-    ) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-        self.windows.create_dialog(
-            parent,
-            NcCopyFromBufferOffset::new(0, title.as_bytes()),
-            rect,
-            root.mount_widget()?,
-            neocogi_com::NcValueRef::new(&IWindowEventBinding::from_queue(queue))?,
-        )
+    ) -> Result<ComPtr<IWindowAbi>, (NcStatus, W)> {
+        let queue_binding = IWindowEventBinding::from_queue(queue);
+        let binding = match neocogi_com::NcValueRef::new(&queue_binding) {
+            Ok(binding) => binding,
+            Err(status) => return Err((status, root)),
+        };
+
+        root.with_mount(|root| {
+            self.windows.create_dialog(
+                parent,
+                NcCopyFromBufferOffset::new(0, title.as_bytes()),
+                rect,
+                root,
+                binding,
+            )
+        })
     }
     /// Mounts a hidden auto-sized popup with a distinct popup capability.
-    pub fn popup(&self, parent: ComRef<'_, IWindowAbi>, title: &str, root: impl Mountable) -> Result<ComPtr<IPopupAbi>, NcStatus> {
+    pub fn popup<W: Mountable>(&self, parent: ComRef<'_, IWindowAbi>, title: &str, root: W) -> Result<ComPtr<IPopupAbi>, (NcStatus, W)> {
         self.popup_with_queue(parent, title, root, None)
     }
     /// Constructs with its final typed receiver before returning the surface.
-    pub fn popup_with_queue(
+    pub fn popup_with_queue<W: Mountable>(
         &self,
         parent: ComRef<'_, IWindowAbi>,
         title: &str,
-        root: impl Mountable,
+        root: W,
         queue: Option<ComRef<'_, IPopupEventQueueAbi>>,
-    ) -> Result<ComPtr<IPopupAbi>, NcStatus> {
-        self.windows.create_popup(
-            parent,
-            NcCopyFromBufferOffset::new(0, title.as_bytes()),
-            root.mount_widget()?,
-            neocogi_com::NcValueRef::new(&IPopupEventBinding::from_queue(queue))?,
-        )
+    ) -> Result<ComPtr<IPopupAbi>, (NcStatus, W)> {
+        let queue_binding = IPopupEventBinding::from_queue(queue);
+        let binding = match neocogi_com::NcValueRef::new(&queue_binding) {
+            Ok(binding) => binding,
+            Err(status) => return Err((status, root)),
+        };
+
+        root.with_mount(|root| {
+            self.windows.create_popup(
+                parent,
+                NcCopyFromBufferOffset::new(0, title.as_bytes()),
+                root,
+                binding,
+            )
+        })
     }
     /// Queues a typed host event while keeping its text buffer local to this call.
     pub fn input(&self, event: UiInput, text: &str) -> Result<(), NcStatus> {

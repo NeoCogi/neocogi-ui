@@ -677,17 +677,17 @@ impl ScrollParts {
             .expect("ScrollSurface declares its widget and container-layout capabilities");
         let editor = host.create_children()?;
         editor
-            .insert(0, surface)?;
+            .insert(0, surface).map_err(|(status, _unpublished)| status)?;
         editor
             .insert(
                 1,
-                horizontal.query::<IWidgetAbi>()?,
-            )?;
+                horizontal.query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?,
+            ).map_err(|(status, _unpublished)| status)?;
         editor
             .insert(
                 2,
-                vertical.query::<IWidgetAbi>()?,
-            )?;
+                vertical.query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?,
+            ).map_err(|(status, _unpublished)| status)?;
         Ok(Self { editor, content: content_view, model })
     }
 }
@@ -697,9 +697,9 @@ impl ScrollArea {
     pub(crate) fn create_com(
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
-        content: neocogi_com::ComBoxInput<'_, IWidgetAbi>,
+        content: neocogi_com::ComBox<IWidgetAbi>,
         enabled: bool,
-    ) -> Result<neocogi_com::ComBox<ScrollAreaAbi>, NcStatus> {
+    ) -> Result<neocogi_com::ComBox<ScrollAreaAbi>, (NcStatus, neocogi_com::ComBox<IWidgetAbi>)> {
         let value = Self::build(host, content, enabled, Some(&resources))?;
         Ok(Self::into_box(value).query().expect("ScrollArea declares its callable class contract"))
     }
@@ -707,13 +707,21 @@ impl ScrollArea {
     /// Builds the fixed scroll composition with either direct or runtime-shared resources.
     fn build(
         host: ComPtr<IWidgetHostAbi>,
-        content: neocogi_com::ComBoxInput<'_, IWidgetAbi>,
+        content: neocogi_com::ComBox<IWidgetAbi>,
         enabled: bool,
         resources: Option<&crate::widget_object::SharedAssets>,
-    ) -> Result<Self, NcStatus> {
-        let parts = ScrollParts::prepare(host.clone(), enabled, resources)?;
+    ) -> Result<Self, (NcStatus, neocogi_com::ComBox<IWidgetAbi>)> {
+        // Build every fallible structural component before taking application content.
+        let prepared = (|| {
+            let parts = ScrollParts::prepare(host.clone(), enabled, resources)?;
+            let runtime = WidgetRuntime::for_resources(host, crate::WidgetOption::FRAME, resources)?;
+            Ok((parts, runtime))
+        })();
+        let (parts, runtime) = match prepared {
+            Ok(prepared) => prepared,
+            Err(status) => return Err((status, content)),
+        };
         parts.content.insert(0, content)?;
-        let runtime = WidgetRuntime::for_resources(host, crate::WidgetOption::FRAME, resources)?;
         Ok(Self::from_runtime(runtime, parts.editor, parts.content, parts.model))
     }
 }
@@ -726,8 +734,8 @@ impl neocogi_ui_nodes_contracts::ScrollArea for ScrollArea {
     }
 
     /// Replaces only application content while preserving every fixed structural role.
-    fn replace_content(&mut self, content: neocogi_com::ComBoxInput<'_, IWidgetAbi>) -> Result<(), NcStatus> {
-        self.runtime().state.writable()?;
+    fn replace_content(&mut self, content: neocogi_com::ComBox<IWidgetAbi>) -> Result<(), (NcStatus, neocogi_com::ComBox<IWidgetAbi>)> {
+        if let Err(status) = self.runtime().state.writable() { return Err((status, content)); }
         self.content.replace(0, content)
     }
 }

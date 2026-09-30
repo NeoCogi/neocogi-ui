@@ -42,7 +42,7 @@ struct SettingsView {
 impl ICompositionRoot for SettingsView {
     /// The host receives an opaque mountable widget, not the child handles.
     fn take_root(&mut self) -> Result<ComBox<IUnknown>, NcStatus> {
-        self.root.take().ok_or(UI_E_CLOSED)?.into_interface().query()
+        Ok(self.root.take().ok_or(UI_E_CLOSED)?.into_interface().query().expect("IUnknown projection"))
     }
     /// Resolves the actual authored child; event attachment uses its typed stream.
     fn widget(&self, name: NcCopyFromBufferOffset<'_, u8>) -> Result<WeakComBox<IUnknown>, NcStatus> {
@@ -149,7 +149,7 @@ impl neocogi_com::persistence::IPersistenceFactory for SettingsFactory {
                     main: LayoutTrack::Fixed { extent: 32 },
                     cross: ChildCrossSize::Stretch,
                 },
-            )?;
+            ).map_err(|(status, _candidate)| status)?;
             root.insert(
                 1,
                 checkbox,
@@ -157,7 +157,7 @@ impl neocogi_com::persistence::IPersistenceFactory for SettingsFactory {
                     main: LayoutTrack::Fixed { extent: 32 },
                     cross: ChildCrossSize::Stretch,
                 },
-            )
+            ).map_err(|(status, _candidate)| status)
         })();
         result?;
         Ok(SettingsView::from_value(SettingsView {

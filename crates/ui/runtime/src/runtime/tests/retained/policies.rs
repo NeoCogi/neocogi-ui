@@ -248,26 +248,22 @@ fn child_clipping_accumulates_and_can_be_disabled_without_changing_child_geometr
     }
 }
 
-/// Failed consuming attachment destroys its candidate; a fresh owner can be mounted.
+/// A foreign parent rejection returns the same candidate without spending its mount claim.
 #[test]
-fn foreign_surface_owner_rejection_destroys_consumed_content() {
+fn foreign_surface_owner_rejection_returns_content_for_retry() {
     let mut fixture = Headless::standard();
     let other = Headless::standard();
     let foreign_body = other.ui.widgets().button_unobserved("foreign").unwrap();
     let foreign = window(&other.ui, "foreign", Rect { x: 0, y: 0, width: 100, height: 80 }, foreign_body);
     let candidate_owner = fixture.ui.widgets().button_unobserved("candidate").unwrap();
     let candidate = candidate_owner.handle();
-    assert_eq!(
-        fixture
-            .ui
-            .child_window(foreign.as_com_ref(), "bad", Rect { x: 0, y: 0, width: 100, height: 80 }, candidate_owner)
-            .unwrap_err(),
-        UI_E_OWNER
-    );
-    assert_eq!(candidate.label(), Err(UI_E_CLOSED));
-    let candidate = fixture.ui.widgets().button_unobserved("fresh candidate").unwrap();
-    let observed = candidate.handle();
-    let owner = window(&fixture.ui, "retry", Rect { x: 10, y: 10, width: 100, height: 80 }, candidate);
+    let (status, candidate_owner) = fixture.ui
+        .child_window(foreign.as_com_ref(), "bad", Rect { x: 0, y: 0, width: 100, height: 80 }, candidate_owner)
+        .unwrap_err();
+    assert_eq!(status, UI_E_OWNER);
+    assert_eq!(candidate.label().unwrap(), "candidate");
+    let observed = candidate_owner.handle();
+    let owner = window(&fixture.ui, "retry", Rect { x: 10, y: 10, width: 100, height: 80 }, candidate_owner);
     fixture.frame(VIEW).unwrap();
     owner.close().unwrap();
     assert_eq!(observed.label(), Err(UI_E_CLOSED));

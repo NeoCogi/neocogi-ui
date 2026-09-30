@@ -206,7 +206,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let queue = ClickQueue::from_value(ClickQueue { sender: session_tx }).query::<ButtonEventQueueAbi>()?;
     let button = ui.widgets().button_with_queue("Hello across COM", Some(queue.as_com_ref()))?;
     let button_handle = button.handle();
-    let window = ui.window("Dynamic UI", Rect { x: 40, y: 40, width: 500, height: 200 }, button)?;
+    let window = ui.window("Dynamic UI", Rect { x: 40, y: 40, width: 500, height: 200 }, button).map_err(|(status, _candidate)| status)?;
     let mut button = button_handle;
     let app = events::Controller::into_local(events::Controller::new(ClickModel { count: 0, button: button.clone() }, session));
     let owner = app.query::<IApplicationDispatcherAbi>()?;
@@ -304,17 +304,17 @@ fn smoke_containers(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let text_handle = text.handle();
     section
         .body()?
-        .insert(0, text, LinearEdge::new(LayoutTrack::Fixed { extent: 100 }))?;
+        .insert(0, text, LinearEdge::new(LayoutTrack::Fixed { extent: 100 })).map_err(|(status, _candidate)| status)?;
     let mut text = text_handle;
     let section_handle = section.handle();
     let mut grid = ui.widgets().grid(&[LayoutTrack::Flex { weight: 1.0 }], &[])?;
-    grid.insert(0, section, GridExtent { columns: 1, rows: 1 })?;
+    grid.insert(0, section, GridExtent { columns: 1, rows: 1 }).map_err(|(status, _candidate)| status)?;
     let mut section = section_handle;
     let tail = ui.widgets().text_block(&"Outer scrolling content\n".repeat(60), TextWrapping::None)?;
-    grid.insert(1, tail, GridExtent { columns: 1, rows: 1 })?;
-    let scroll = ui.widgets().scroll_area(grid, true)?;
+    grid.insert(1, tail, GridExtent { columns: 1, rows: 1 }).map_err(|(status, _candidate)| status)?;
+    let scroll = ui.widgets().scroll_area(grid, true).map_err(|(status, _candidate)| status)?;
     let scroll_handle = scroll.handle();
-    let window = ui.window("Dynamic containers", Rect { x: 20, y: 20, width: 560, height: 320 }, scroll)?;
+    let window = ui.window("Dynamic containers", Rect { x: 20, y: 20, width: 560, height: 320 }, scroll).map_err(|(status, _candidate)| status)?;
     let mut scroll = scroll_handle;
     ui.update(size)?;
     ui.render(size, renderer)?;
@@ -434,11 +434,11 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let directory = SmokeDirectory::new()?;
     let root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     let root_handle = root.handle();
-    let window = ui.window("Dynamic components", Rect { x: 10, y: 10, width: 610, height: 300 }, root)?;
+    let window = ui.window("Dynamic components", Rect { x: 10, y: 10, width: 610, height: 300 }, root).map_err(|(status, _candidate)| status)?;
     let mut root = root_handle;
     let combo = ui.combo_box_unobserved(window.as_com_ref(), &["First", "Selected across COM"], ChoiceSelection::Selected(1))?;
     let combo_handle = combo.handle();
-    root.insert(0, combo, LinearEdge::new(LayoutTrack::Content))?;
+    root.insert(0, combo, LinearEdge::new(LayoutTrack::Content)).map_err(|(status, _candidate)| status)?;
     let combo = combo_handle;
     let menus = ui.menus()?;
     let bar = menus.create("")?;

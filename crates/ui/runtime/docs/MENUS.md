@@ -19,7 +19,7 @@ use neocogi_ui::{ IWindowAbi, Rect, Ui};
 use neocogi_com::{ComPtr, ComRef, NcStatus};
 fn install(ui: &Ui, queue: ComRef<'_, neocogi_ui::IMenuItemEventQueueAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
     let body = ui.widgets().button_unobserved("Document")?;
-    let window = ui.window("Editor", Rect { x: 20, y: 20, width: 640, height: 480 }, body)?;
+    let window = ui.window("Editor", Rect { x: 20, y: 20, width: 640, height: 480 }, body).map_err(|(status, _candidate)| status)?;
     let menus = ui.menus()?;
     let bar = menus.create("Editor menu")?;
     let file = bar.submenu("File")?;

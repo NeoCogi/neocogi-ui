@@ -220,7 +220,7 @@ fn line(
 ) -> Result<OwnedWidget<neocogi_ui::LinearAbi>, NcStatus> {
     let mut line = OwnedWidget::from_interface(crate::Linear::create_com(nodes.host.clone(), nodes.resources.clone(), direction, cross.into())?);
     for (index, (child, track)) in children.into_iter().enumerate() {
-        line.insert(index as u32, child, LinearEdge::new(track))?;
+        line.insert(index as u32, child, LinearEdge::new(track)).map_err(|(status, _unpublished)| status)?;
     }
     Ok(line)
 }
@@ -247,7 +247,7 @@ fn button(nodes: &Rc<DialogNodes>, value: &str) -> Result<OwnedWidget<neocogi_ui
 }
 /// Builds a complete column with exact path actions and fixed ordinary list-row measurements.
 fn column(nodes: &Rc<DialogNodes>, directory: &Path, paths: Vec<PathBuf>, folder: bool) -> Result<Column, NcStatus> {
-    let mut children = vec![(label(nodes, if folder { "Folders" } else { "Files" })?.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Content)];
+    let mut children = vec![(label(nodes, if folder { "Folders" } else { "Files" })?.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?, LayoutTrack::Content)];
     let empty = paths.is_empty();
     let mut actions = Vec::with_capacity(paths.len());
     for path in paths {
@@ -266,10 +266,10 @@ fn column(nodes: &Rc<DialogNodes>, directory: &Path, paths: Vec<PathBuf>, folder
         )?);
         actions.push((item.as_interface().downgrade(), action));
         item.set_icon_role(if folder { ContentIcon::ClosedFolder } else { ContentIcon::File })?;
-        children.push((item.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Content));
+        children.push((item.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?, LayoutTrack::Content));
     }
     if empty {
-        children.push((label(nodes, "(empty)")?.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Content));
+        children.push((label(nodes, "(empty)")?.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?, LayoutTrack::Content));
     }
     Ok(Column {
         root: line(nodes, FlowDirection::TopToBottom, CrossSize::Stretch, children)?,
@@ -320,15 +320,15 @@ impl FileDialog {
         let folders = OwnedWidget::from_interface(crate::ScrollArea::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
-            folder_content.root.into_interface().query::<IWidgetAbi>()?.into(),
+            folder_content.root.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?.into(),
             true,
-        )?);
+        ).map_err(|(status, _unpublished)| status)?);
         let files = OwnedWidget::from_interface(crate::ScrollArea::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
-            file_content.root.into_interface().query::<IWidgetAbi>()?.into(),
+            file_content.root.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?.into(),
             true,
-        )?);
+        ).map_err(|(status, _unpublished)| status)?);
         let error = label(&nodes, "")?;
         // Capture observers before each unique owner moves into the layout tree.
         let path_handle = path.handle();
@@ -349,10 +349,10 @@ impl FileDialog {
             FlowDirection::LeftToRight,
             CrossSize::Content,
             vec![
-                (up.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Fixed { extent: 56 }),
-                (home.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Fixed { extent: 56 }),
-                (path.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Flex { weight: 1.0 }),
-                (go.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Fixed { extent: 56 }),
+                (up.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?, LayoutTrack::Fixed { extent: 56 }),
+                (home.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?, LayoutTrack::Fixed { extent: 56 }),
+                (path.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?, LayoutTrack::Flex { weight: 1.0 }),
+                (go.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?, LayoutTrack::Fixed { extent: 56 }),
             ],
         )?;
         let browser = line(
@@ -360,8 +360,8 @@ impl FileDialog {
             FlowDirection::LeftToRight,
             CrossSize::Stretch,
             vec![
-                (folders.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Flex { weight: 1.0 }),
-                (files.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Flex { weight: 2.0 }),
+                (folders.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?, LayoutTrack::Flex { weight: 1.0 }),
+                (files.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?, LayoutTrack::Flex { weight: 2.0 }),
             ],
         )?;
         let filename_line = line(
@@ -369,8 +369,8 @@ impl FileDialog {
             FlowDirection::LeftToRight,
             CrossSize::Content,
             vec![
-                (label(&nodes, "File name:")?.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Fixed { extent: 86 }),
-                (filename.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Flex { weight: 1.0 }),
+                (label(&nodes, "File name:")?.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?, LayoutTrack::Fixed { extent: 86 }),
+                (filename.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?, LayoutTrack::Flex { weight: 1.0 }),
             ],
         )?;
         let actions = line(
@@ -378,9 +378,9 @@ impl FileDialog {
             FlowDirection::LeftToRight,
             CrossSize::Content,
             vec![
-                (label(&nodes, "")?.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Flex { weight: 1.0 }),
-                (cancel.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Fixed { extent: 96 }),
-                (accept.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Fixed { extent: 96 }),
+                (label(&nodes, "")?.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?, LayoutTrack::Flex { weight: 1.0 }),
+                (cancel.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?, LayoutTrack::Fixed { extent: 96 }),
+                (accept.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?, LayoutTrack::Fixed { extent: 96 }),
             ],
         )?;
         // Embed the actual root layout value in FileDialog. It has no separate COM
@@ -392,16 +392,16 @@ impl FileDialog {
             Some(&nodes.resources),
         )?;
         for (index, (child, track)) in [
-            (toolbar.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Content),
-            (browser.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Flex { weight: 1.0 }),
-            (filename_line.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Content),
-            (error.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Content),
-            (actions.into_interface().query::<IWidgetAbi>()?, LayoutTrack::Content),
+            (toolbar.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?, LayoutTrack::Content),
+            (browser.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?, LayoutTrack::Flex { weight: 1.0 }),
+            (filename_line.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?, LayoutTrack::Content),
+            (error.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?, LayoutTrack::Content),
+            (actions.into_interface().query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?, LayoutTrack::Content),
         ]
         .into_iter()
         .enumerate()
         {
-            neocogi_ui_nodes_contracts::Linear::insert(&mut shell, index as u32, child.into(), LinearEdge::new(track))?;
+            neocogi_ui_nodes_contracts::Linear::insert(&mut shell, index as u32, child.into(), LinearEdge::new(track)).map_err(|(status, _unpublished)| status)?;
         }
         let request = Request {
             phase: RequestPhase::Idle,
@@ -432,14 +432,14 @@ impl FileDialog {
         let window_sink = dialog.try_borrow()?.model.nodes.queue.query::<IWindowEventQueueAbi>()?;
         let window_binding = IWindowEventBinding::from_queue(Some(window_sink.as_com_ref()));
         let mut observer = dialog.downgrade();
-        let root = dialog.into_interface::<IWidgetAbi>()?;
+        let root = dialog.into_interface::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?;
         let window = windows.create_dialog(
             parent,
             NcCopyFromBufferOffset::new(0, b"Open File"),
             FILE_DIALOG_RECT,
             root,
             neocogi_com::NcValueRef::new(&window_binding)?,
-        )?;
+        ).map_err(|(status, _unpublished)| status)?;
         let connected = (|| {
             window.set_options(WindowOptions::FRAME)?;
             observer.with_mut(|local| local.model.window = Some(window.clone()))?;
@@ -472,8 +472,8 @@ impl Model {
     fn install(&mut self, directory: PathBuf, listing: Listing, reset_scroll: bool) -> Result<(), NcStatus> {
         // These are private built-in roles: their composite validates the live
         // modal before replacement and no caller can substitute a foreign child.
-        self.folders.replace_content(listing.folders.root)?;
-        self.files.replace_content(listing.files.root)?;
+        self.folders.replace_content(listing.folders.root).map_err(|(status, _unpublished)| status)?;
+        self.files.replace_content(listing.files.root).map_err(|(status, _unpublished)| status)?;
         self.rows = listing.folders.actions.into_iter().chain(listing.files.actions).collect();
         self.directory = directory;
         self.selected = None;
