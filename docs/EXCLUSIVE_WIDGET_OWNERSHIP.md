@@ -219,7 +219,7 @@ even when field validation captured weak handles.
 COM integration tests exercise unique transfer, expired cached calls, shared-owner
 rejection, provider destruction, borrowed access and concurrent call/removal races.
 UI tests exercise rejected attachment, retained child editors, replacement,
-self-removal requests, scoped local borrows, queue release, dialogs, and
+parent-controlled close intent, scoped local borrows, queue release, dialogs, and
 compiled/reloaded forms. UI interfaces remain thread-local; the concurrent guarantee
 belongs to explicitly thread-safe COM contracts. Independently built providers
 must implement the same ABI version and keep their code loaded through the last
@@ -281,3 +281,9 @@ use the same sequence of ordinary interface calls.
 The subsequent synchronous Drop size analysis
 records the preceding ABI v14 implementation, a 7,616-byte deployment reduction and
 the removal of one word of exclusive allocation overhead.
+
+The ABI v15 follow-up report records removal of
+`ComBoxInput` and automatic close approval, a **3,992-byte deployment increase**,
+887 passing workspace tests, and fresh independent/mixed-compiler plugin checks.
+It supersedes the earlier reports' current-API descriptions while preserving their
+historical measurements.

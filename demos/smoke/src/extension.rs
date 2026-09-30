@@ -54,13 +54,35 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let provider = neocogi_com::Runtime::global()
         .activate_plugin_factory::<ExtensionProviderAbi>(neocogi_com::guid_from_qualified_name("neocogi.example.ui-extension"))?;
     let host = ui.widgets().host()?;
+    // Exercise rejection through the independent extension and runtime DLLs.
+    // B belongs to A, so accepting A under B would form an owning cycle. Every
+    // forwarding layer must return A before the caller can safely destroy it.
+    let a = provider.inset(host.as_com_ref())?;
+    let b = provider.inset(host.as_com_ref())?;
+    let mut a_view = a.downgrade();
+    let mut b_view = b.downgrade();
+    let b = b.query::<IWidgetAbi>().map_err(|(status, _candidate)| status)?;
+    a_view.set_child(b).map_err(|(status, _candidate)| status)?;
+    let a = a.query::<IWidgetAbi>().map_err(|(status, _candidate)| status)?;
+    let original = a.as_raw();
+    let (status, a) = b_view.set_child(a).unwrap_err();
+    assert_eq!(status, UI_E_OWNER);
+    assert_eq!(a.as_raw(), original, "rejection returns exactly the original owner");
+    assert_eq!(a_view.children()?.child_count()?, 1);
+    assert_eq!(b_view.children()?.child_count()?, 0);
+    drop(a);
+    assert_eq!(a_view.children().unwrap_err(), UI_E_CLOSED);
+    assert_eq!(b_view.children().unwrap_err(), UI_E_CLOSED);
+
     let (events_tx, events) = std::sync::mpsc::channel();
     let queue = CounterQueue::from_value(CounterQueue { sender: events_tx }).query::<CounterEventQueueAbi>()?;
     let binding = neocogi_demo_contracts::CounterEventBinding::from_queue(Some(queue.as_com_ref()));
     let counter_owner = provider.counter(host.as_com_ref(), neocogi_com::NcValueRef::new(&binding)?)?;
     let mut counter = counter_owner.downgrade();
     let probe: neocogi_com::WeakComBox<IWidgetProbeAbi> = counter.query()?;
-    let widget = counter_owner.query::<IWidgetAbi>()?;
+    // These construction-only error paths abandon fresh, idle candidates after
+    // the provider has returned; ordinary forwarding code must return the owner.
+    let widget = counter_owner.query::<IWidgetAbi>().map_err(|(status, _candidate)| status)?;
     // Both derived and inherited projections identify the same COM allocation.
     let derived_identity: neocogi_com::WeakComBox<neocogi_com::IUnknown> = counter.query()?;
     let base_identity: neocogi_com::WeakComBox<neocogi_com::IUnknown> = widget.downgrade().query()?;
@@ -68,11 +90,11 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let inset_owner = provider.inset(host.as_com_ref())?;
     let mut inset = inset_owner.downgrade();
     let parent_probe: neocogi_com::WeakComBox<IWidgetProbeAbi> = inset.query()?;
-    inset.set_child(widget)?;
+    inset.set_child(widget).map_err(|(status, _candidate)| status)?;
     // The second parent cannot acquire the same owner: set_child consumes it.
     let root = neocogi_ui::OwnedWidget::from_interface(inset_owner);
     // Capability discovery happens once while wiring the application, never during UI phases.
-    let window = ui.window("Independent extension", Rect { x: 10, y: 10, width: 400, height: 200 }, root)?;
+    let window = ui.window("Independent extension", Rect { x: 10, y: 10, width: 400, height: 200 }, root).map_err(|(status, _candidate)| status)?;
     let app = events::Controller::into_local(events::Controller::new(
         Model {
             labels: Vec::new(),
@@ -131,13 +153,14 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let replacement = provider.counter(host.as_com_ref(), neocogi_com::NcValueRef::new(&CounterEventBinding::Unobserved)?)?;
     let replacement_view = replacement.downgrade();
     let replacement_probe = replacement_view.query::<IWidgetProbeAbi>()?;
-    inset.set_child(replacement.query::<IWidgetAbi>()?)?;
+    let replacement = replacement.query::<IWidgetAbi>().map_err(|(status, _candidate)| status)?;
+    inset.set_child(replacement).map_err(|(status, _candidate)| status)?;
     ui.update_with_events(size, owner.as_com_ref())?;
     window.close()?;
     assert_eq!(replacement_view.count(), Err(UI_E_CLOSED));
     assert_eq!(replacement_probe.calls(), Err(UI_E_CLOSED));
     assert_eq!(parent_probe.calls(), Err(UI_E_CLOSED));
     assert_eq!(probe.calls(), Err(UI_E_CLOSED));
-    println!("Independent extension passed: inherited counter, shared events, one-child layout, caches, resize, mutation and teardown");
+    println!("Independent extension passed: inherited counter, shared events, one-child layout, caches, resize, rejected ownership, mutation and teardown");
     Ok(())
 }
