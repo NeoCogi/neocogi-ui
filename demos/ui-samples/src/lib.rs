@@ -1,6 +1,6 @@
 //! Concrete layout samples shared by the full demo and the theme editor, with no application model.
 #![deny(missing_docs)]
-use neocogi_com::{ComInterface, ComRef, NcStatus};
+use neocogi_com::{ComBox, ComInterface, ComRef, NcStatus, ThreadLocal};
 use neocogi_ui::*;
 
 /// One built sample and the real buttons created with the caller's queue.
@@ -57,7 +57,9 @@ pub fn weights(ui: &Ui, queue: Option<ComRef<'_, ButtonEventQueueAbi>>) -> Resul
     for index in 0..6 {
         let control = button(ui, &format!("Cell {}", index + 1), queue)?;
         buttons.push(control.handle());
-        grid.insert(index, control, GridExtent { columns: 1, rows: 1 }).map_err(|(status, _unpublished)| status)?;
+        let control = control.into_interface().query::<IWidgetAbi>().map_err(|(status, _candidate)| status)?;
+        grid.as_interface_mut().insert(index, control, GridExtent { columns: 1, rows: 1 })
+            .map_err(|(status, _candidate)| status)?;
     }
     append(&mut content, grid, FLEX)?;
     Ok(Sample { content, buttons })
@@ -69,7 +71,27 @@ fn button(ui: &Ui, text: &str, queue: Option<ComRef<'_, ButtonEventQueueAbi>>) -
     button.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
     Ok(button)
 }
-/// Appends one explicit relationship using authoritative topology, with no parallel child-state model.
-fn append<I: ComInterface>(parent: &mut OwnedWidget<LinearAbi>, child: OwnedWidget<I>, track: LayoutTrack) -> Result<(), NcStatus> {
-    parent.insert(parent.children()?.child_count()?, child, LinearEdge::new(track)).map_err(|(status, _unpublished)| status)
+/// Appends a fresh construction candidate, abandoning it if construction fails.
+///
+/// This builder intentionally returns only the status. Applications that need to
+/// retry a rejected typed owner use `Widget::insert` instead. Call it outside the
+/// candidate's active methods: it may destroy the candidate on any failure.
+/// The generic boundary selects IWidget once; all parent storage and child types
+/// then share the same insertion body without converting a rejected owner back.
+#[inline]
+pub fn append<I: ComInterface, P>(parent: &mut Widget<LinearAbi, P>, child: OwnedWidget<I>, track: LayoutTrack) -> Result<(), NcStatus>
+where P: WidgetStorage<LinearAbi> + core::ops::DerefMut<Target = nodes::LinearClient<ThreadLocal>> {
+    let child = child.into_interface().query::<IWidgetAbi>().map_err(|(status, _candidate)| status)?;
+    append_widget(parent.as_interface_mut(), child, track)
+}
+
+/// One construction implementation for every child interface and parent storage.
+/// Keep this out of generic callers so their failure handling is not duplicated.
+#[inline(never)]
+fn append_widget(parent: &mut nodes::LinearClient<ThreadLocal>, child: ComBox<IWidgetAbi>, track: LayoutTrack) -> Result<(), NcStatus> {
+    // The client returns any rejected owner after the provider call has ended.
+    // This builder then drops it through IWidget; no reverse interface query is
+    // needed to destroy an object through its provider's common lifetime header.
+    let index = parent.children()?.child_count()?;
+    parent.insert(index, child, LinearEdge::new(track)).map_err(|(status, _candidate)| status)
 }

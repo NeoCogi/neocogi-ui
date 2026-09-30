@@ -65,9 +65,51 @@ fn select_win311_from_menu(host: &Host, app: &TestApp<State, Message>) -> Result
     Ok(())
 }
 
+/// Construction helpers drop rejected candidates while preserving existing children.
+/// Both parent storage forms must use the same real generated insertion boundary.
+fn construction_rejection_checks(ui: &Ui) -> Result<(), NcStatus> {
+    let mut parent = column(ui)?;
+    let mut observed_parent = parent.handle();
+    let child = label(ui, "retained child")?;
+    let observed_child = child.handle();
+    append(&mut parent, child, LayoutTrack::Content)?;
+
+    let candidate = label(ui, "invalid owner-parent edge")?;
+    let candidate_view = candidate.handle();
+    assert_eq!(append(&mut parent, candidate, LayoutTrack::Fixed { extent: -1 }), Err(NC_E_INVALID_ARG));
+    assert!(!candidate_view.as_interface().is_alive());
+    assert_eq!(parent.children()?.child_count()?, 1);
+    assert!(observed_child.as_interface().is_alive());
+
+    let candidate = ui.widgets().button_unobserved("invalid weak-parent edge")?;
+    let candidate_view = candidate.handle();
+    assert_eq!(append(&mut observed_parent, candidate, LayoutTrack::Fixed { extent: -1 }), Err(NC_E_INVALID_ARG));
+    assert!(!candidate_view.as_interface().is_alive());
+    assert_eq!(parent.children()?.child_count()?, 1);
+
+    // A successful weak-parent insertion still moves the candidate into the tree.
+    let child = ui.widgets().button_unobserved("accepted through weak parent")?;
+    let child_view = child.handle();
+    append(&mut observed_parent, child, LayoutTrack::Content)?;
+    assert_eq!(parent.children()?.child_count()?, 2);
+    assert!(child_view.as_interface().is_alive());
+    drop(parent);
+    assert!(!child_view.as_interface().is_alive());
+    assert!(!observed_child.as_interface().is_alive());
+
+    // A failure before insertion, while obtaining the parent's child count, also
+    // disposes of the fresh candidate without attempting a reverse projection.
+    let candidate = label(ui, "expired parent")?;
+    let candidate_view = candidate.handle();
+    assert_eq!(append(&mut observed_parent, candidate, LayoutTrack::Content), Err(UI_E_CLOSED));
+    assert!(!candidate_view.as_interface().is_alive());
+    Ok(())
+}
+
 /// Exercises application-level composition against real runtime, platform and decoder objects.
 fn exercise() -> Result<(Host, TestApp<State, Message>), HostError> {
     let (host, state, events) = create()?;
+    construction_rejection_checks(&host.ui)?;
     let app = TestApp::new(state, events, State::update);
     let size = host.window.size()?;
     let base = host.ui.assets()?;

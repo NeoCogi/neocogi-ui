@@ -167,6 +167,15 @@ also restore their unmounted root. No widget is detached after successful mounti
 Bottom-up construction remains supported. See [ABI v15](../crates/com/docs/abi-v15.md)
 for multi-input calls and the invalid-success-output contract.
 
+Construction helpers that intentionally abandon rejected candidates need not
+restore a concrete interface merely to drop it. The full demo and shared samples
+use one `neocogi_ui_samples::append` implementation: its thin generic entry selects
+`IWidget`, then a common body uses the parent's generated `LinearClient`. Both
+owner and observer parents borrow that same client view without retaining another
+handle. Failure drops the returned common-interface owner only after the provider
+returns. Applications needing a typed retry continue to use `Widget::insert`;
+forwarding COM methods must still return every original owner.
+
 Window dismissal and file-dialog cancellation remain business operations. An
 explicit dialog cancellation posts its result while the dialog owner still
 exists, then removes the window. Destruction simply disconnects the private inbox

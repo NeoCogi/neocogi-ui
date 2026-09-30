@@ -88,11 +88,8 @@ pub(super) fn column(ui: &Ui) -> Result<OwnedWidget<LinearAbi>, NcStatus> {
 pub(super) fn row(ui: &Ui) -> Result<OwnedWidget<LinearAbi>, NcStatus> {
     ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Content)
 }
-/// Appends through the authoritative child count; no second local list or builder closure is retained.
-pub(super) fn append<I: ComInterface, P>(parent: &mut Widget<LinearAbi, P>, child: OwnedWidget<I>, track: LayoutTrack) -> Result<(), NcStatus>
-where P: WidgetStorage<LinearAbi> + core::ops::DerefMut<Target = nodes::LinearClient<neocogi_com::ThreadLocal>> {
-    parent.insert(parent.children()?.child_count()?, child, LinearEdge::new(track)).map_err(|(status, _candidate)| status)
-}
+/// Shared construction helper abandons rejected candidates only after COM returns.
+pub(super) use neocogi_ui_samples::append;
 /// Static display text remains a real plugin-owned TextBlock with no application callback.
 pub(super) fn label(ui: &Ui, text: &str) -> Result<OwnedWidget<TextBlockAbi>, NcStatus> {
     ui.widgets().text_block(text, TextWrapping::None)
