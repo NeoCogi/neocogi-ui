@@ -294,7 +294,7 @@ fn deep_window_family_preserves_inherited_policy_through_mutation_and_teardown()
     assert_eq!(deepest.snapshot().unwrap_err(), UI_E_CLOSED);
 }
 
-/// Title dragging produces copied geometry events; the close affordance hides the retained window.
+/// Title dragging reports geometry; a close click reports intent without hiding the window.
 #[test]
 fn title_drag_and_close_deliver_window_events_through_the_production_session() {
     let mut fixture = Headless::standard();
@@ -337,10 +337,12 @@ fn title_drag_and_close_deliver_window_events_through_the_production_session() {
         false,
     );
     fixture.ui.update_with_events(VIEW, app.as_interface()).unwrap();
-    assert_eq!(owner.snapshot().unwrap().visibility, Visibility::Hidden);
+    // This parent records and declines the intent. No Hidden event or topology
+    // mutation is manufactured by the caption control itself.
+    assert_eq!(owner.snapshot().unwrap().visibility, Visibility::Visible);
     assert!(matches!(
         app.state().as_slice(),
-        [WindowEvent::GeometryChanged { .. }, WindowEvent::Hidden, WindowEvent::CloseRequested]
+        [WindowEvent::GeometryChanged { .. }, WindowEvent::CloseRequested]
     ));
     assert!(body.label().is_ok());
 }
@@ -485,4 +487,84 @@ fn fresh_press_replaces_revoked_capture_across_window_layers() {
         assert!(update(&a).active);
         assert!(!update(&b).active);
     }
+}
+
+
+/// Application policy is independent of caption dispatch and widget lifetime.
+#[derive(Clone, Copy)]
+enum CaptionDecision {
+    /// Decline without changing the visible tree.
+    Keep,
+    /// A failed application decision must not implicitly authorize removal.
+    Fail,
+    /// Preserve the tree for later reuse while hiding the window explicitly.
+    Hide,
+    /// Approve permanent synchronous removal and descendant destruction.
+    Remove,
+}
+
+/// Real pointer input reaches the parent queue before any closing policy takes
+/// effect. Both a declined decision and a handler error preserve the live view.
+#[test]
+fn caption_close_obeys_the_parents_explicit_decision() {
+    for decision in [CaptionDecision::Keep, CaptionDecision::Fail, CaptionDecision::Hide, CaptionDecision::Remove] {
+        let mut fixture = Headless::standard();
+        let body_owner = fixture.ui.widgets().button_unobserved("live").unwrap();
+        let body = body_owner.handle();
+        let (send, messages) = std::sync::mpsc::channel();
+        let queue = neocogi_ui::test_event_queue!(window, WindowEvent, send, |_queue, _origin, event| event).unwrap();
+        let window = fixture.ui.window_with_queue("close policy", Rect { x: 30, y: 30, width: 180, height: 120 }, body_owner, Some(queue.as_com_ref())).unwrap();
+        fixture.frame(VIEW).unwrap();
+        let app = TestApp::new((window.clone(), decision), messages, |(window, decision), event| {
+            match (event, *decision) {
+                (WindowEvent::CloseRequested, CaptionDecision::Keep) => Ok(()),
+                (WindowEvent::CloseRequested, CaptionDecision::Fail) => Err(neocogi_com::NC_E_INVALID_ARG),
+                (WindowEvent::CloseRequested, CaptionDecision::Hide) => window.set_visibility(Visibility::Hidden),
+                (WindowEvent::CloseRequested, CaptionDecision::Remove) => window.close(),
+                _ => Ok(()),
+            }
+        });
+        pointer(&fixture.ui, Point { x: 200, y: 40 }, true);
+        pointer(&fixture.ui, Point { x: 200, y: 40 }, false);
+        let result = app.update(&fixture.ui, VIEW);
+        match decision {
+            CaptionDecision::Keep | CaptionDecision::Fail => {
+                assert_eq!(result, match decision { CaptionDecision::Fail => Err(neocogi_com::NC_E_INVALID_ARG), _ => Ok(()) });
+                assert_eq!(window.snapshot().unwrap().visibility, Visibility::Visible);
+                assert_eq!(body.label().unwrap(), "live");
+            },
+            CaptionDecision::Hide => {
+                result.unwrap();
+                assert_eq!(window.snapshot().unwrap().visibility, Visibility::Hidden);
+                assert_eq!(body.label().unwrap(), "live");
+            },
+            CaptionDecision::Remove => {
+                result.unwrap();
+                assert_eq!(window.snapshot(), Err(UI_E_CLOSED));
+                assert_eq!(body.label(), Err(UI_E_CLOSED));
+            },
+        }
+    }
+}
+
+/// Even failure to post the caption intent cannot hide a window or drop its body.
+#[test]
+fn rejected_caption_event_leaves_the_window_visible_and_live() {
+    let mut fixture = Headless::standard();
+    let body_owner = fixture.ui.widgets().button_unobserved("live").unwrap();
+    let body = body_owner.handle();
+    let (send, _messages) = std::sync::mpsc::channel();
+    let queue = neocogi_ui::test_event_queue!(window, WindowEvent, send, |_queue, _origin, event| {
+        match event {
+            WindowEvent::CloseRequested => return Err(neocogi_com::NC_E_INVALID_ARG),
+            other => other,
+        }
+    }).unwrap();
+    let window = fixture.ui.window_with_queue("failed intent", Rect { x: 30, y: 30, width: 180, height: 120 }, body_owner, Some(queue.as_com_ref())).unwrap();
+    fixture.frame(VIEW).unwrap();
+    pointer(&fixture.ui, Point { x: 200, y: 40 }, true);
+    pointer(&fixture.ui, Point { x: 200, y: 40 }, false);
+    assert_eq!(fixture.ui.update(VIEW), Err(neocogi_com::NC_E_INVALID_ARG));
+    assert_eq!(window.snapshot().unwrap().visibility, Visibility::Visible);
+    assert_eq!(body.label().unwrap(), "live");
 }

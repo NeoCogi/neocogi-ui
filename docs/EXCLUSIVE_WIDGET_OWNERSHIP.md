@@ -101,9 +101,10 @@ stateDiagram-v2
 
 A method must not destroy its own owner or an ancestor while executing. The UI
 checks the actual subtree's borrow state before committing removal and reports
-`UI_E_BUSY` on reentry; it does not mark a parent closed first. A widget requests
-self-removal with `IWindow::request_close`, which the runtime commits after the
-method returns. Cross-thread Drop may wait; it must not hold a resource that the
+`UI_E_BUSY` on reentry; it does not mark a parent closed first. A widget reports
+close intent through its existing parent channel. The parent decides after the
+method returns; the runtime does not automatically approve requests. Cross-thread
+Drop may wait; it must not hold a resource that the
 executing method needs. Completion depends on admitted calls terminating.
 
 Weak references keep control storage and provider code available, not widget
@@ -240,14 +241,36 @@ weak calls. Shared services select no execution token; exclusive widgets use a
 non-null token and a single-handle facade. The report distinguishes the original
 ownership migration from the later removal of its avoidable overhead.
 
-### Explicit removal requests
+### Parent-controlled removal
 
 A widget must not synchronously destroy its own owner while one of its methods
-is executing. `IWindow::request_close` queues a window identity. The runtime
-processes it after the current widget call returns, before another message is
-dispatched, including when the handler reports an error. Requests issued outside
-an update run at the next update. This delays the removal operation, not Drop.
-`IWindow::close` remains the synchronous application-side removal operation.
+is executing. It posts typed intent to its behavioral parent's existing channel.
+The parent may decline, ask for confirmation, hide, or remove it. A request alone
+changes neither visibility nor ownership; an error does not imply approval.
+`IWindow::request_close` and the runtime's removal request list are removed.
+`IWindow::close` remains the parent's explicit synchronous removal operation.
+
+```mermaid
+sequenceDiagram
+    participant Child as Child / caption control
+    participant Queue as Parent channel
+    participant Parent as Behavioral parent
+    participant Tree as Owning container / window
+    Child->>Queue: post CloseRequested
+    Note over Child: Return with ownership unchanged
+    Parent->>Queue: receive intent
+    alt Decline or await confirmation
+        Note over Parent,Tree: Keep widgets alive and visible
+    else Approve removal
+        Parent->>Tree: remove / close
+        Tree->>Tree: Drop owner and descendants
+        Note over Tree: Drop completes; weak calls now fail
+    end
+```
+
+Posting intent does not discard pending private work. Actual removal destroys the
+receiver and its remaining messages before returning. Application facts already
+posted to the parent channel remain ordinary owned messages.
 
 The file-dialog ABI has no self-destroying `close` method. Its Rust facade obtains
 the window, calls `cancel`, and only after that provider call returns calls

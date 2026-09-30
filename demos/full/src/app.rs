@@ -493,7 +493,11 @@ impl State {
                 self.minimized = false;
                 (rect, false)
             }
-            WindowEvent::CloseRequested => return self.write_log("Closed Demo Window; use Grid > Show Demo Window to restore it"),
+            WindowEvent::CloseRequested => {
+                // This application keeps the demo tree for its explicit Show action.
+                self.demo.set_visibility(Visibility::Hidden)?;
+                return self.write_log("Closed Demo Window; use Grid > Show Demo Window to restore it");
+            },
             WindowEvent::Hidden | WindowEvent::Destroyed => return Ok(()),
         };
         if clamp && (area.width < 240 || area.height < 300) {

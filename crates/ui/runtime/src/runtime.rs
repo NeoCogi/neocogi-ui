@@ -71,7 +71,6 @@ pub(crate) fn create_storage(assets: crate::assets::ImportedAssets, compositor: 
         updating: Cell::new(false),
         menus: RefCell::new(Vec::new()),
         dispatch_widgets: RefCell::new(Vec::new()),
-        removal_requests: RefCell::new(Vec::new()),
     })
 }
 
@@ -118,9 +117,6 @@ pub(crate) struct RuntimeStorage {
     /// Reusable descendant-first widget snapshot within one update; no handles survive a frame.
     /// A callback may edit topology, so no RefCell borrow spans its COM call.
     dispatch_widgets: RefCell<Vec<neocogi_com::WeakComBox<IWidgetAbi>>>,
-    /// Window removal requests contain identities, never widget owners. The dispatcher
-    /// consumes them after provider calls have returned and before further delivery.
-    removal_requests: RefCell<Vec<crate::WindowHandle>>,
 }
 
 /// Temporary association between an actual COM widget and an existing retained root.
@@ -132,28 +128,6 @@ struct SurfaceMount {
 }
 
 impl RuntimeStorage {
-    /// Commits requested removals with no widget call on the stack. Taking the batch
-    /// releases RefCell access before destruction or event delivery can reenter.
-    fn remove_requested_windows(&self) -> Result<(), NcStatus> {
-        if self.removal_requests.borrow().is_empty() {
-            return Ok(());
-        }
-        let mut context = self.context()?;
-        let requests = core::mem::take(&mut *self.removal_requests.borrow_mut());
-        let mut result = Ok(());
-        for window in requests {
-            if let Err(error) = NativeSurface::Window(window.clone()).close(&mut context.window_manager) {
-                // A refused request remains pending for a later safe boundary;
-                // failure of one target does not discard the remaining requests.
-                self.removal_requests.borrow_mut().push(window);
-                result = result.and(Err(error));
-            }
-        }
-        self.pending.set(true);
-        self.prune_mounts(&context.window_manager);
-        result.and(context.window_manager.event_result())
-    }
-
     /// Rebuilds this update's delivery order after topology changes, reusing scratch capacity.
     fn refresh_dispatch_widgets(&self) -> Result<(), NcStatus> {
         if self.factory.state.dispatch_order_changed.get() {
@@ -432,7 +406,6 @@ impl Runtime {
     /// Performs one guarded update; the outer operation releases weak dispatch snapshots.
     fn run_update_cycle(&self, size: Size, dispatcher: Option<ComRef<'_, IApplicationDispatcherAbi>>) -> Result<(), NcStatus> {
         let storage = &self.storage;
-        storage.remove_requested_windows()?;
         let dimensions = Dimensioni::new(size.width, size.height);
         {
             let mut context = storage.context()?;
@@ -497,16 +470,12 @@ impl Runtime {
             let mut index = 0;
             loop {
                 // Retain only this call's widget; release snapshot access before
-                // its handler can change the tree or remove this same object.
+                // its handler can edit other idle subtrees or post parent intent.
                 let widget = self.storage.dispatch_widgets.borrow().get(index).cloned();
                 let Some(mut widget) = widget else { break };
-                // One message per visit lets removal take effect before this
-                // widget receives any successor from its private channel.
+                // One message per visit makes authorized topology edits visible
+                // before using another cached entry. Close intent alone is no edit.
                 let handled = widget.dispatch_next();
-                // Always complete requests after the provider borrow ends, even when
-                // its handler failed. Destruction itself remains synchronous.
-                let removed = self.storage.remove_requested_windows();
-                let handled = handled.and_then(|value| removed.map(|()| value));
                 let handled = match handled {
                     Ok(value) => value,
                     Err(neocogi_com::NC_E_CLOSED) => { index += 1; continue; }
@@ -534,8 +503,7 @@ impl Runtime {
                 Some(mut dispatcher) => dispatcher.dispatch_next(),
                 None => Ok(false),
             };
-            let removed = self.storage.remove_requested_windows();
-            let delivered = delivered.and_then(|value| removed.map(|()| value))?;
+            let delivered = delivered?;
             self.storage.open()?;
             self.storage.phase_result()?;
             match delivered {

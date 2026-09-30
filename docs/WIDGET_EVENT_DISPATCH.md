@@ -59,9 +59,10 @@ Binary size and frame-time improvements are not claimed without measurement.
 Runtime dispatch snapshots contain weak handles and cannot retain removed values.
 Owner Drop rejects new calls and destroys the complete owned value before returning.
 Thread-local removal preflights the existing subtree borrow state and returns Busy
-if it would recursively destroy an executing method. A widget uses
-`IWindow::request_close` to request removal after its callback returns, before the
-next message; handler error does not discard the request. Weak local construction
+if it would recursively destroy an executing method. A widget posts close intent
+to its existing behavioral parent channel. Only the parent decides whether and
+when to remove it; intent and handler errors do not mutate ownership or visibility.
+The runtime has no special removal-request queue. Weak local construction
 access uses scoped closures instead of escaping guards. ThreadSafe COM Drop waits
 for concurrent admitted calls, then destroys on the dropping thread.
 

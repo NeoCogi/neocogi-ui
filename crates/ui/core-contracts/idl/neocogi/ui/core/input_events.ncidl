@@ -123,7 +123,8 @@ enum WindowEvent: u8 {
         /// Captured outer geometry, independent of subsequent window edits.
         rect: Rect,
     },
-    /// The user activated the close affordance; the application decides whether to close.
+    /// Close intent only: visibility and ownership are unchanged. The behavioral
+    /// parent may decline, hide or remove after handling its ordinary queued event.
     CloseRequested,
     /// Visibility became false; later callback code may observe a subsequent show.
     Hidden,

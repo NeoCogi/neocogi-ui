@@ -243,10 +243,13 @@ are ordinary owned fields. Weak references retain empty storage, not widgets.
 
 Thread-local UI removal checks the subtree's actual borrow state before changing
 ownership. An active parent or descendant returns `UI_E_BUSY` and leaves the tree
-intact. A handler requests its own window's removal with `IWindow::request_close`;
-runtime processes the request after the handler returns, even on handler error,
-before dispatching another message. The request stores only a window identity.
-There is no descendant close callback or deferred-destructor queue. Scoped weak
+intact. A child posts close intent through its existing typed parent/application
+channel. It does not approve or schedule its own destruction. The parent handles
+that message after the child returns and may decline, hide, or call the ordinary
+container/window removal operation. Handler errors do not approve pending intent.
+There is no `request_close`, runtime removal list, descendant close callback or
+deferred-destructor queue. Posting intent does not discard other private messages;
+only actual owner removal destroys the inbox and drops what remains pending. Scoped weak
 local access follows the same rule: its closure must not destroy its own owner.
 Explicitly thread-safe COM owner Drop waits for concurrent admitted calls; the
 dropping thread must not hold a resource those calls need to finish.
@@ -287,3 +290,34 @@ contracts and must be rebuilt together after this ABI change.
 and ownership rules. Owned-event measurements
 and the [channel experiment](../../../../docs/EVENT_CHANNEL_EXPERIMENT.md) describe
 superseded implementations; their measurements are not results for this change.
+
+## Caption intent and parent policy
+
+`WindowEvent::CloseRequested` means that the user clicked the close control. The
+runtime leaves visibility and ownership unchanged. A missing receiver or failed
+post does not hide the window. The parent can return `Ok(())` without changing it,
+show a confirmation UI and decide later, hide it for reuse, or remove it. The
+existing `IWindow::close` is the parent's **immediate removal operation**, not an
+intent-posting API or a method on the widget itself. `IWidget` has no close method.
+
+```rust,ignore
+match message {
+    AppMessage::Window(origin, WindowEvent::CloseRequested) => {
+        if may_discard_changes() {
+            if let Some(window) = origin.upgrade()? {
+                window.close()?; // Parent approves; Drop completes here.
+            }
+        }
+    },
+    _ => {},
+}
+```
+
+The standard file-dialog model interprets its window's caption intent as cancelling
+its current file request. It hides the modal, posts one completion, and retains
+the widget for reuse. A successful reopen discards old private interaction
+messages, including old caption intent; already-posted application completions
+remain. Explicit facade `FileDialog::close` is a parent-side convenience that
+finishes `cancel()` first and then removes the window, outside the widget call.
+The platform/native-window `AppState::close_requested() -> Result<bool, NcStatus>`
+is separate and already lets the application approve or decline host shutdown.

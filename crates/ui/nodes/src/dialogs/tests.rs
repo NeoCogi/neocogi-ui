@@ -569,8 +569,6 @@ struct RefusingRemoval {
     attempts: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
 impl IWindow for RefusingRemoval {
-    /// Requests use the real runtime's post-call removal boundary.
-    fn request_close(&self) -> Result<(), NcStatus> { self.window.request_close() }
     /// Preserves observation of the real modal after refused removal.
     fn snapshot(&self) -> Result<WindowSnapshot, NcStatus> { self.window.snapshot() }
     /// Preserves title observation.
@@ -652,4 +650,32 @@ fn close_reports_removal_failure_when_both_cleanup_steps_fail() {
     assert_eq!(fixture.handle.close(), Ok(()));
     assert!(!fixture.handle.as_interface().is_alive());
     assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 2);
+}
+
+
+/// Reopening starts a fresh interaction: old caption intent cannot cancel the
+/// new request. A current intent cancels once while retaining the dialog widget.
+#[test]
+fn caption_intent_cancels_current_request_without_destroying_or_crossing_reopen() {
+    let mut fixture = Fixture::new();
+    let directory = tempfile::tempdir().unwrap();
+    let completions = session(&mut fixture);
+    fixture.open(directory.path());
+    let window = fixture.handle.window().unwrap();
+    let mut queue = fixture.widget.with(|dialog| dialog.model.nodes.queue.query::<IWindowEventQueueAbi>()).unwrap().unwrap();
+    let event = WindowEvent::CloseRequested;
+    queue.post(window.as_com_ref(), neocogi_com::NcValueRef::new(&event).unwrap()).unwrap();
+    assert_eq!(fixture.handle.cancel(), Ok(true));
+    fixture.open(directory.path());
+    fixture.ui.update(SIZE).unwrap();
+    assert_eq!(fixture.handle.active(), Ok(true), "old caption intent belongs to the superseded request");
+    assert_eq!(completions.try_iter().count(), 1, "only explicit cancellation completed the old request");
+    queue.post(window.as_com_ref(), neocogi_com::NcValueRef::new(&event).unwrap()).unwrap();
+    fixture.ui.update(SIZE).unwrap();
+    assert_eq!(fixture.handle.active(), Ok(false));
+    assert_eq!(window.snapshot().unwrap().visibility, Visibility::Hidden);
+    assert_eq!(completions.try_iter().count(), 1);
+    assert!(fixture.handle.as_interface().is_alive(), "request cancellation does not destroy its reusable widget");
+    fixture.handle.close().unwrap();
+    assert!(!fixture.handle.as_interface().is_alive());
 }

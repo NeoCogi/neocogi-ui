@@ -10,10 +10,12 @@ use std::sync::mpsc::{self, Sender};
 enum Message {
     /// Re-read the selected file, or the built-in document.
     Reload(WeakComPtr<IMenuItemAbi>),
+    /// Parent-controlled caption intent and other captured window lifecycle facts.
+    Window(WeakComPtr<IWindowAbi>, neocogi_ui::events::WindowEvent),
     /// The component's public Save action, independent of its widget layout.
     Save(neocogi_com::WeakComBox<ButtonAbi>),
 }
-#[neocogi_com::com_object(interfaces(neocogi_ui::nodes::ButtonEventQueue, neocogi_ui::IMenuItemEventQueue))]
+#[neocogi_com::com_object(interfaces(neocogi_ui::nodes::ButtonEventQueue, neocogi_ui::IMenuItemEventQueue, neocogi_ui::IWindowEventQueue))]
 /// One application receiver is reused across every document replacement and the static menu.
 struct AppQueue {
     /// Queued origins never keep a removed component or control alive.
@@ -32,6 +34,13 @@ impl neocogi_ui::IMenuItemEventQueue for AppQueue {
     fn post(&mut self, origin: ComRef<'_, IMenuItemAbi>, event: NcValueRef<'_, Activation>) -> Result<(), NcStatus> {
         neocogi_ui::events::activation::validate(&event.to_owned()?)?;
         let _ = self.sender.send(Message::Reload(origin.downgrade()?));
+        Ok(())
+    }
+}
+impl neocogi_ui::IWindowEventQueue for AppQueue {
+    /// Map intent into the existing application channel, never mutate the window here.
+    fn post(&mut self, origin: ComRef<'_, IWindowAbi>, event: NcValueRef<'_, neocogi_ui::events::WindowEvent>) -> Result<(), NcStatus> {
+        let _ = self.sender.send(Message::Window(origin.downgrade()?, event.to_owned()?));
         Ok(())
     }
 }
@@ -84,6 +93,11 @@ impl AppState for State {
     /// Runtime calls application handlers only at its normal safe mutation boundary.
     fn update(&mut self, message: Message) -> Result<(), NcStatus> {
         match message {
+            Message::Window(origin, neocogi_ui::events::WindowEvent::CloseRequested) => {
+                // This host retains the loaded form and hides its logical window.
+                if let Some(window) = origin.upgrade()? { window.set_visibility(Visibility::Hidden)?; }
+            },
+            Message::Window(_, _) => {},
             Message::Reload(origin) => {
                 let Some(origin) = origin.upgrade()? else {
                     return Ok(());
@@ -118,17 +132,18 @@ fn run() -> Result<(), HostError> {
     // Asset loading activates a registered GFX provider before Host::new runs.
     neocogi_demo_host::initialize()?;
     let host = Host::new("Runtime UI", Size { width: 800, height: 600 }, neocogi_demo_assets::load_bundle()?)?;
+    let (sender, receiver) = mpsc::channel();
+    let queue = AppQueue::from_value(AppQueue { sender });
+    let lifecycle = queue.query::<IWindowEventQueueAbi>()?;
     let root = host.ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     let root_handle = root.handle();
-    let window = host.ui.window("Loaded component", Rect { x: 20, y: 20, width: 740, height: 540 }, root).map_err(|(status, _candidate)| status)?;
+    let window = host.ui.window_with_queue("Loaded component", Rect { x: 20, y: 20, width: 740, height: 540 }, root, Some(lifecycle.as_com_ref())).map_err(|(status, _candidate)| status)?;
     let mut root = root_handle;
 
     let mut slot = ReloadSlot::new(host.ui.clone(), window.clone())?;
     root.insert(0, slot.take_widget()?, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 })).map_err(|(status, _candidate)| status)?;
-    let (sender, receiver) = mpsc::channel();
     let menus = host.ui.menus()?;
     let bar = menus.create("Runtime UI")?;
-    let queue = AppQueue::from_value(AppQueue { sender });
     let reload_item = bar
         .submenu("File")?
         .item_with_queue("Reload", Some(queue.query::<IMenuItemEventQueueAbi>()?.as_com_ref()))?;

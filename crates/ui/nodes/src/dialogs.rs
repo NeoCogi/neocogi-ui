@@ -589,7 +589,13 @@ impl Model {
         let directory = match message {
             Command::Lifecycle(event) => {
                 match event {
-                    WindowEvent::Hidden | WindowEvent::CloseRequested
+                    // The dialog's model is the behavioral parent of its window
+                    // interaction. A caption request cancels the current request;
+                    // it does not destroy this widget or its modal definition.
+                    WindowEvent::CloseRequested if self.request.active() => {
+                        self.finish(FileDialogCompletion::Cancelled)?;
+                    },
+                    WindowEvent::Hidden
                         if self.request.active()
                             && self
                                 .window()
@@ -747,7 +753,13 @@ impl IFileDialog for FileDialog {
             neocogi_ui::path::decode(directory)?,
             mode,
             neocogi_ui::path::decode(filename)?,
-        )
+        )?;
+        // A successful new request supersedes pending interaction from the old
+        // one, including a queued caption intent. Clear only this private inbox;
+        // completed results already posted to the application remain untouched.
+        // Failed opens return above without discarding queued messages.
+        while self.messages.try_recv().is_ok() {}
+        Ok(())
     }
     /// Reports request activity; expired owners are rejected by the ABI entry.
     fn active(&self) -> Result<bool, NcStatus> {

@@ -54,11 +54,36 @@
 use neocogi_ui::*;
 use neocogi_demo_host::{AppState, Host, HostError, report_exit};
 
-/// This example has no mutable application state; the tree and button belong to the UI plugin.
+/// Application behavior decides whether caption intent removes the logical window.
 struct State;
 impl AppState for State {
-    /// This example has no application messages.
-    type Message = ();
+    /// Own the captured event while observing the logical window without retaining it.
+    type Message = (neocogi_com::WeakComPtr<IWindowAbi>, neocogi_ui::events::WindowEvent);
+    /// Approves this demo's close request after the caption handler has returned.
+    fn update(&mut self, (origin, event): Self::Message) -> Result<(), neocogi_com::NcStatus> {
+        match event {
+            neocogi_ui::events::WindowEvent::CloseRequested => {
+                if let Some(window) = origin.upgrade()? { window.close()?; }
+            },
+            _ => {},
+        }
+        Ok(())
+    }
+}
+
+#[neocogi_com::com_object(neocogi_ui::IWindowEventQueue)]
+/// A concrete COM queue maps the window's one event stream into application messages.
+struct WindowQueue {
+    /// Sending does not retain the window or execute application behavior inline.
+    send: std::sync::mpsc::Sender<<State as AppState>::Message>,
+}
+impl neocogi_ui::IWindowEventQueue for WindowQueue {
+    /// Capture the typed value and weak origin before the producer's call returns.
+    fn post(&mut self, origin: neocogi_com::ComRef<'_, IWindowAbi>, event: neocogi_com::NcValueRef<'_, neocogi_ui::events::WindowEvent>)
+        -> Result<(), neocogi_com::NcStatus> {
+        let _ = self.send.send((origin.downgrade()?, event.to_owned()?));
+        Ok(())
+    }
 }
 
 /// Builds the same small tree on native SDL and browser WebGL through the typed facade.
@@ -69,8 +94,11 @@ fn run() -> Result<(), HostError> {
     hello.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
     let mut tree = host.ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Stretch)?;
     tree.insert(0, hello, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 })).map_err(|(status, _candidate)| status)?;
-    host.ui.window("Hello Window", Rect { x: 40, y: 40, width: 300, height: 400 }, tree).map_err(|(status, _candidate)| status)?;
-    host.run(State, std::sync::mpsc::channel().1)
+    let (send, messages) = std::sync::mpsc::channel();
+    let queue = WindowQueue::from_value(WindowQueue { send }).query::<IWindowEventQueueAbi>()?;
+    host.ui.window_with_queue("Hello Window", Rect { x: 40, y: 40, width: 300, height: 400 }, tree, Some(queue.as_com_ref()))
+        .map_err(|(status, _candidate)| status)?;
+    host.run(State, messages)
 }
 
 /// Reports startup and frame failures through formatting retained by the min-size profile.

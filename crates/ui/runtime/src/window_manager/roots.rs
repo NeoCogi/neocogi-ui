@@ -2918,11 +2918,12 @@ impl WindowManager {
     fn activate_caption_button(&mut self, root: RootId, button: RootCaptionButton, minimized_content_height: i32) {
         match button {
             RootCaptionButton::Close => {
-                // Apply visibility before queuing Close so subscribers observe final policy.
-                self.set_window_visible_id(root, false).expect("caption target must remain registered");
+                // A caption click is intent. The behavioral parent may decline,
+                // hide or remove the window after handling its queued event.
+                // Keep visibility and ownership unchanged, even if posting fails.
                 let result = self
                     .root_node_mut(root)
-                    .expect("closing a root must not destroy it")
+                    .expect("caption target must remain registered")
                     .emit_window_event(WindowEvent::CloseRequested);
                 self.posted(result);
             }

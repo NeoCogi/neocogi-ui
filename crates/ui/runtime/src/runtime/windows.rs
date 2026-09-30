@@ -381,19 +381,8 @@ impl IWindow for LogicalWindow {
         };
         self.edit(WindowEdit::ChildClip(clip))
     }
-    /// Queues identity only; the runtime drops the owner after the calling widget returns.
-    fn request_close(&self) -> Result<(), NcStatus> {
-        let Some(runtime) = self.runtime.upgrade() else { return Ok(()) };
-        if self.closed.get() || runtime.factory.state.closed.get() { return Ok(()) }
-        runtime.factory.host.check_mutation()?;
-        let mut requests = runtime.removal_requests.borrow_mut();
-        requests.try_reserve(1).map_err(|_| neocogi_com::NC_E_OUT_OF_MEMORY)?;
-        requests.push(self.window.clone());
-        runtime.pending.set(true);
-        Ok(())
-    }
-
-    /// Removes the complete native subtree and drops its exclusive widget owners.
+    /// Executes the parent's removal decision and synchronously drops widget owners.
+    /// This is not a close request: active descendants reject it before mutation.
     fn close(&self) -> Result<(), NcStatus> {
         if self.closed.get() {
             return Ok(());
