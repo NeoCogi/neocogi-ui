@@ -31,7 +31,7 @@ pub trait LeafContent: 'static {
 
 }
 
-#[com_object(interfaces(IWidget, ILeafLayout))]
+#[com_object(interfaces(IWidget, ILeafLayout), ownership = exclusive)]
 /// The generic parameter specializes ordinary Rust calls; only concrete IWidget/ILeafLayout cross COM.
 struct LeafObject<Content: LeafContent> {
     /// One common options, mount, closure and geometry-invalidation state.

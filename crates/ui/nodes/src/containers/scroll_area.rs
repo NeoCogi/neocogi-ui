@@ -253,7 +253,7 @@ impl ScrollModel {
 }
 
 /// Concrete three-child scroll composite; its model owns data but no widget or tree backpointer.
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::ScrollArea)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::ScrollArea, ownership = exclusive)]
 pub struct ScrollArea {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::widget_object::WidgetRuntime,
@@ -321,7 +321,7 @@ impl ScrollComposition for ScrollArea {
 }
 
 /// The transform boundary between the viewport and its ordinary content node.
-#[neocogi_com::com_object(interfaces(neocogi_ui_core_contracts::IWidget, neocogi_ui_core_contracts::IContainerLayout))]
+#[neocogi_com::com_object(interfaces(neocogi_ui_core_contracts::IWidget, neocogi_ui_core_contracts::IContainerLayout), ownership = exclusive)]
 struct ScrollSurface {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::widget_object::WidgetRuntime,

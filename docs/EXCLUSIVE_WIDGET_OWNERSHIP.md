@@ -43,6 +43,22 @@ owner. Successful interface selection must borrow or move an existing owner,
 never duplicate it. Shared services may continue to use `ComPtr`; exclusive
 widgets must reject their retaining protocol, including through ABI arguments.
 
+## Ownership is a concrete class policy
+
+Use `#[com_class(Button, ownership = exclusive)]` (or the same option on
+`com_object`) for widgets and other unique owners. Shared services use the default
+`ownership = shared`. These are separate concrete implementation policies;
+an interface does not determine ownership. A class cannot expose both constructor
+families. `com_factory` rejects exclusive ownership because factory handles are
+shared services.
+
+Shared calls borrow their already retained value through the ordinary call gate.
+Exclusive calls first acquire an execution token, then the same borrow gate.
+Their Rust lease stores that token directly; shared leases store no token. This
+avoids charging every renderer, queue, factory, and other shared service for
+widget retirement. The common C control header, interface tables, and cross-plugin
+calls retain their existing ABI; provider-local Rust guards never cross it.
+
 ## Cached weak calls and threading
 
 A weak box stores the canonical control pointer and a validated interface table.

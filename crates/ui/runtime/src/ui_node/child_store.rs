@@ -150,7 +150,7 @@ impl Drop for ChildView {
     }
 }
 
-#[com_object(interfaces(IChildrenEditor))]
+#[com_object(interfaces(IChildrenEditor), ownership = exclusive)]
 /// Private writer; retaining the public view does not grant metadata-bypassing edits.
 struct ChildEditor {
     /// Actual tree owner shared with the separate read-only capability.

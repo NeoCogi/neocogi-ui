@@ -97,7 +97,7 @@ impl ButtonParameters {
     }
 }
 
-#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Button)]
+#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Button, ownership = exclusive)]
 /// Concrete retained button and dynamically constructible COM object.
 ///
 /// The allocation owns its semantic fields directly. `runtime` contains only common host,

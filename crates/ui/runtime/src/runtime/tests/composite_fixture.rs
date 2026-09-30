@@ -4,7 +4,7 @@ use super::*;
 use neocogi_ui::events::EventModel;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
-#[com_object(interfaces(IWidget, IContainerLayout))]
+#[com_object(interfaces(IWidget, IContainerLayout), ownership = exclusive)]
 /// A private inbox and model belong to the mounted widget itself.
 /// The fixture delegates geometry to a real Linear; no dispatcher capability exists.
 pub(super) struct Composite<Model: EventModel> {

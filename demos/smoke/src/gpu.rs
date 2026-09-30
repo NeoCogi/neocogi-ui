@@ -5,7 +5,7 @@ use neocogi_ui::com::widget::WidgetState;
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
 use rs_math3d::{Mat4f, Vec2f, Vec3f};
 
-#[com_object(interfaces(IWidget, ILeafLayout))]
+#[com_object(interfaces(IWidget, ILeafLayout), ownership = exclusive)]
 /// Static host implementation owns one common widget state and typed dynamic GPU capabilities.
 struct SceneView {
     /// Mounting, mutation and lifetime use the same authority as built-in controls.

@@ -101,7 +101,7 @@ use super::text_edit::{
     neocogi_ui_core_contracts::IMultilineEditor,
     neocogi_ui_core_contracts::ILeafLayout,
     neocogi_ui_core_contracts::IFontStyle
-))]
+), ownership = exclusive)]
 pub struct TextEditor {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::widget_object::WidgetRuntime,
@@ -128,7 +128,7 @@ pub struct TextEditor {
 }
 
 /// Concrete fixed scrolling text-area class with one actual editor child.
-#[neocogi_com::com_class(neocogi_ui_nodes_contracts::TextArea)]
+#[neocogi_com::com_class(neocogi_ui_nodes_contracts::TextArea, ownership = exclusive)]
 pub struct TextArea {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::widget_object::WidgetRuntime,

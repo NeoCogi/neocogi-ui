@@ -97,7 +97,7 @@ macro_rules! widget {
     };
 }
 
-#[neocogi_com::com_class(neocogi_demo_contracts::Counter)]
+#[neocogi_com::com_class(neocogi_demo_contracts::Counter, ownership = exclusive)]
 /// Private implementation of the externally declared counter class.
 struct CounterObject {
     /// Common options are authoritative here, without a duplicate presentation copy.
@@ -174,7 +174,7 @@ impl ILeafLayout for CounterObject {
     }
 }
 
-#[com_object(interfaces(IInset, IContainerLayout, IWidgetProbe))]
+#[com_object(interfaces(IInset, IContainerLayout, IWidgetProbe), ownership = exclusive)]
 /// Concrete custom container; the host's editor owns its sole child and enforces attachment/lifetime rules.
 struct Inset {
     /// Common lifecycle has no parent backpointer or mirrored geometry.

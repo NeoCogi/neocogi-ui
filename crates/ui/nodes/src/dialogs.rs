@@ -649,7 +649,7 @@ impl Model {
         Ok(())
     }
 }
-#[com_object(interfaces(IFileDialog, IWidget, IContainerLayout))]
+#[com_object(interfaces(IFileDialog, IWidget, IContainerLayout), ownership = exclusive)]
 /// One concrete composite owns its layout, model and inbox under one COM borrow gate.
 struct FileDialog {
     /// Inline root layout: direct Rust delegation does not reenter a COM projection.

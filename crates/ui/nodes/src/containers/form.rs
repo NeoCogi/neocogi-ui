@@ -28,7 +28,7 @@ fn dimensions(size: Size) -> Result<Size, NcStatus> {
     Ok(size)
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Form)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Form, ownership = exclusive)]
 /// Owns fixed child rectangles; core still owns clipping, traversal, capture and focus.
 pub struct Form {
     /// Common lifecycle, resource access and layout invalidation.

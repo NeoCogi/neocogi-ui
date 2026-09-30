@@ -116,7 +116,7 @@ fn partition(settings: SplitOptions, rect: Recti) -> Partition {
     result
 }
 
-#[neocogi_com::com_class(neocogi_ui_nodes_contracts::SplitView)]
+#[neocogi_com::com_class(neocogi_ui_nodes_contracts::SplitView, ownership = exclusive)]
 /// Concrete container owns pane sizing and its divider; no sibling handles share mutable state.
 pub struct SplitView {
     /// Standard lifetime, resource access, options, and sticky geometry invalidation.

@@ -70,7 +70,7 @@ impl CheckboxParameters {
     }
 }
 
-#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Checkbox)]
+#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Checkbox, ownership = exclusive)]
 /// Concrete retained checkbox and dynamically constructible COM object.
 pub struct Checkbox {
     /// Non-semantic COM lifecycle and host-backed phase resources.

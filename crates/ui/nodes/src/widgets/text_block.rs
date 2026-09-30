@@ -94,7 +94,7 @@ impl TextBlockParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::TextBlock)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::TextBlock, ownership = exclusive)]
 /// Concrete retained text block and dynamically constructible COM object.
 pub struct TextBlock {
     /// Non-semantic COM lifecycle and host-backed phase resources.

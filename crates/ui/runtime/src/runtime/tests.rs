@@ -392,7 +392,7 @@ struct WidgetProbe {
     fail_paint: Cell<bool>,
 }
 
-#[com_object(interfaces(IWidget, ILeafLayout))]
+#[com_object(interfaces(IWidget, ILeafLayout), ownership = exclusive)]
 /// Independently implemented leaf delegates lifetime only to a factory-owned fixture object.
 struct RetainingWidget {
     /// Gives the custom implementation the same runtime ownership identity and mount-once rules.

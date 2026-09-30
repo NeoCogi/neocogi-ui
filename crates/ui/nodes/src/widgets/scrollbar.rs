@@ -258,7 +258,7 @@ impl ScrollbarParameters {
     }
 }
 
-#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Scrollbar)]
+#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Scrollbar, ownership = exclusive)]
 /// Standalone one-axis scrollbar and dynamically constructible COM object.
 pub struct Scrollbar {
     /// Non-semantic COM lifecycle and host-backed phase resources.

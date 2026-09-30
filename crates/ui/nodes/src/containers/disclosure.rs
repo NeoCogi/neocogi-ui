@@ -84,7 +84,7 @@ impl DisclosureState {
 ///
 /// Expansion gates descendant traversal while retaining every owned runtime and its state. It does
 /// not expose or mutate generic node visibility.
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Disclosure)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Disclosure, ownership = exclusive)]
 pub struct Disclosure {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::widget_object::WidgetRuntime,
@@ -151,7 +151,7 @@ impl Disclosure {
 /// Dispatcher-addressable disclosure header.
 ///
 /// The header owns no descendants and shares only expansion data with its layout parent.
-#[neocogi_com::com_object(interfaces(neocogi_ui_core_contracts::ITextContent, neocogi_ui_core_contracts::ILeafLayout))]
+#[neocogi_com::com_object(interfaces(neocogi_ui_core_contracts::ITextContent, neocogi_ui_core_contracts::ILeafLayout), ownership = exclusive)]
 struct DisclosureHeader {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::widget_object::WidgetRuntime,

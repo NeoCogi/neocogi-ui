@@ -77,7 +77,7 @@ impl ListItemParameters {
     }
 }
 
-#[neocogi_com::com_class(neocogi_ui_nodes_contracts::ListItem)]
+#[neocogi_com::com_class(neocogi_ui_nodes_contracts::ListItem, ownership = exclusive)]
 /// Concrete retained list item and dynamically constructible COM object.
 pub struct ListItem {
     /// Non-semantic COM lifecycle and host-backed phase resources.
