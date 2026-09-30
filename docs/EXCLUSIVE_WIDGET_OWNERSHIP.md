@@ -85,6 +85,20 @@ Queued event payloads are already owned facts. Expiring their weak origins does
 not erase the payloads; application policy determines whether a fact remains
 useful. A queue must not retain an owning back-reference to its widget subtree.
 
+## Concrete construction access
+
+`LocalBox<T>` is created only by the generated concrete constructor. It permits
+initialization through `try_borrow_mut(&mut self)` and transfers its owner through
+`into_interface`. `WeakLocalBox<T>` keeps that same compile-time implementation
+proof after transfer and uses the ordinary ABI lifetime/borrow gate. Neither is a
+foreign downcast API. Composites can initialize their private controls without a
+second owner or a `RefCell` around every widget.
+
+A borrowed widget origin can call `ComRef::downgrade_box()` to capture a weak
+identity for a queued event. `WeakComBox::is_alive()` is only an observation;
+every subsequent method still checks admission, because another thread may
+remove the owner between the check and the call.
+
 ## Scope of removing close
 
 The target is to remove `IWidget::close`, its duplicated event-port lifecycle,
