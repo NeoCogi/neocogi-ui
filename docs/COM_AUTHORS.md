@@ -1019,6 +1019,15 @@ match row.insert(0, button, edge) {
 }
 ```
 
+Generated COM adapters reserve their conversion scratch before calling a method
+that can accept an owner. Such methods require a finite maximum cost for copied
+results and converted writable buffers; the maximum must fit before dispatch.
+Your implementation still prepares its own fallible work before committing.
+Completion does not allocate replacement buffers, and all converted outputs are
+validated before any is published. Direct numeric buffers remain in-place.
+[Prepared output completion](COM_OUTPUT_COMPLETION.md) explains the IDL/Rust
+contract, its conservative enum limit, and failure-injection tests.
+
 Fresh private builders may deliberately discard returned candidates after a
 failed ABI call, provided those candidates cannot own an active receiver. There
 is no implicit tuple-to-status conversion that would hide that decision. See
