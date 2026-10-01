@@ -13,6 +13,8 @@ pub(crate) struct Construction<'a> {
     pub custom: &'a crate::CustomWidgetRegistry,
     /// Existing runtime and independently deployed built-in factory.
     pub ui: &'a Ui,
+    /// Application policy; serialized recipes cannot enlarge these ceilings.
+    pub grid_limits: GridLimits,
     /// Required only by window-owned combo popups.
     pub parent: Option<&'a ComPtr<IWindowAbi>>,
     /// Explicit logical image directory supplied by the caller.
@@ -44,6 +46,13 @@ pub(crate) fn selection(value: Option<u32>) -> ChoiceSelection {
 impl Construction<'_> {
     /// Constructs descendants first and then adopts each into its actual parent.
     pub fn build(&mut self, node: &Node) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
+        // Reject excessive explicit tracks before mapping them into ABI buffers or
+        // constructing descendants. Placement itself remains the Grid provider's job.
+        if let WidgetSpec::Grid { columns, rows } = &node.widget {
+            if columns.len() > self.grid_limits.max_columns as usize || rows.len() > self.grid_limits.max_rows as usize {
+                return Err(neocogi_com::NC_E_OUT_OF_RANGE);
+            }
+        }
         let mut children = node.children.iter().map(|child| self.build(&child.node)).collect::<Result<Vec<_>, _>>()?;
         let factory = self.ui.widgets();
         let queue = self.events.take(&node.key);
@@ -129,6 +138,7 @@ impl Construction<'_> {
             WidgetSpec::Grid { columns, rows } => root(factory.grid(
                 &columns.iter().map(Track::layout).collect::<Vec<_>>(),
                 &rows.iter().map(Track::layout).collect::<Vec<_>>(),
+                self.grid_limits,
             )?)?,
             WidgetSpec::Split {
                 vertical,

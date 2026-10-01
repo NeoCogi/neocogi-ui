@@ -29,16 +29,19 @@ pub struct ReloadSlot {
     next: u64,
     /// Trusted custom widget factories shared across candidate attempts.
     custom: crate::CustomWidgetRegistry,
+    /// Host-selected Grid ceilings remain the same across every reload attempt.
+    grid_limits: GridLimits,
 }
 impl ReloadSlot {
     /// Creates an empty unmounted slot; each candidate is bound before publication.
     /// Insert take_widget()? into the application's normal layout and drain the
     /// matching receiver after updates, including across component reloads.
-    pub fn new(ui: Ui, parent: ComPtr<IWindowAbi>) -> Result<Self, NcStatus> {
-        Self::new_with_custom(ui, parent, crate::CustomWidgetRegistry::new())
+    pub fn new(ui: Ui, parent: ComPtr<IWindowAbi>, grid_limits: GridLimits) -> Result<Self, NcStatus> {
+        Self::new_with_custom(ui, parent, crate::CustomWidgetRegistry::new(), grid_limits)
     }
     /// Creates a reload slot with application-installed custom COM widget factories.
-    pub fn new_with_custom(ui: Ui, parent: ComPtr<IWindowAbi>, custom: crate::CustomWidgetRegistry) -> Result<Self, NcStatus> {
+    pub fn new_with_custom(ui: Ui, parent: ComPtr<IWindowAbi>, custom: crate::CustomWidgetRegistry, grid_limits: GridLimits) -> Result<Self, NcStatus> {
+        grid_limits.validate()?;
         let slot = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
         Ok(Self {
             ui,
@@ -48,6 +51,7 @@ impl ReloadSlot {
             active: None,
             next: 0,
             custom,
+            grid_limits,
         })
     }
     /// Transfers the slot into the application's owning layout exactly once.
@@ -77,7 +81,7 @@ impl ReloadSlot {
     ) -> Result<Reloaded, String> {
         self.next = self.next.checked_add(1).ok_or("Reload generation limit reached")?;
         let generation = Generation(self.next);
-        let loader = Loader::new_with_custom(self.ui.clone(), Some(self.parent.clone()), resources, self.custom.clone()).map_err(|error| error.to_string())?;
+        let loader = Loader::new_with_custom(self.ui.clone(), Some(self.parent.clone()), resources, self.custom.clone(), self.grid_limits).map_err(|error| error.to_string())?;
         let receivers = events(generation).map_err(|error| error.to_string())?;
         let mut candidate = loader.compile_with_events(document, receivers)?;
         bind(&candidate, generation).map_err(|error| error.to_string())?;

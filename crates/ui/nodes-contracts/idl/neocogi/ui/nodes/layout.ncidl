@@ -100,30 +100,45 @@ interface Linear: IWidget + IContainerLayout {
     fn replace(&mut self, index: u32, child: ComBox<IWidget>, edge: LinearEdge) -> Result<()>;
 }
 
+#[version(1)]
+/// Immutable application ceilings for explicit tracks and cumulative implicit Grid placement.
+/// These are maxima, not initial sizes; the product bounds occupancy storage and search.
+/// Both values must be positive, at most i32::MAX, with a product fitting isize.
+struct GridLimits {
+    /// Maximum effective columns, including the implicit column of an empty track list.
+    max_columns: u32,
+    /// Maximum effective rows, including all child spans and implicit rows.
+    max_rows: u32,
+}
+
 #[version(2)]
 /// Constructible Grid whose topology, spans, and both track axes share one class contract.
 interface Grid: IWidget + IContainerLayout {
+    /// Returns the immutable resource ceilings chosen by this Grid's constructor.
+    fn limits(&self) -> Result<GridLimits>;
     /// Returns the stable read-only topology view for this container's lifetime.
     fn children(&self) -> Result<ComPtr<IChildren>>;
-    /// Removes one complete subtree and matching span metadata.
+    /// Prepares bounded reflow before removing a subtree; failure preserves its owner.
     fn remove(&mut self, index: u32) -> Result<()>;
-    /// Removes all owned subtrees and matching metadata while retaining reusable capacity.
+    /// Removes all owned subtrees and metadata without a replacement-placement allocation.
     fn clear(&mut self) -> Result<()>;
     /// Copies a range of column policies; offset indexes tracks and the return value is total count.
     fn columns(&self, output: &mut [LayoutTrack]) -> Result<u32>;
-    /// Replaces the complete column sequence after validating every track; input offset must be zero.
+    /// Prepares bounded placement under the new columns before changing tracks; input offset must be zero.
     fn set_columns(&mut self, tracks: &[LayoutTrack]) -> Result<()>;
     /// Copies a range of row policies; offset indexes tracks and the return value is total count.
     fn rows(&self, output: &mut [LayoutTrack]) -> Result<u32>;
-    /// Replaces the complete row sequence after validating every track; input offset must be zero.
+    /// Replaces rows only when all tracks fit the immutable ceiling; input offset must be zero.
     fn set_rows(&mut self, tracks: &[LayoutTrack]) -> Result<()>;
     /// Returns one child's positive Grid-owned span.
     fn edge(&self, index: u32) -> Result<GridExtent>;
-    /// Changes span without replacing the child's identity.
+    /// Prepares complete bounded placement before changing a span; rejection preserves all metadata.
     fn set_edge(&mut self, index: u32, edge: GridExtent) -> Result<()>;
-    /// Validates a positive span and unmounted child before committing insertion.
+    /// Prepares bounded non-overlapping placement before accepting an unmounted child.
+    /// Failure preserves the existing tree and returns the exact unconsumed owner.
     fn insert(&mut self, index: u32, child: ComBox<IWidget>, edge: GridExtent) -> Result<()>;
-    /// Validates replacement before permanently closing the previous indexed subtree.
+    /// Prepares complete bounded placement before replacing and dropping the old subtree.
+    /// Failure returns the incoming owner and preserves the old subtree and metadata.
     fn replace(&mut self, index: u32, child: ComBox<IWidget>, edge: GridExtent) -> Result<()>;
 }
 

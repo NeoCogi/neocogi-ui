@@ -260,17 +260,18 @@ impl super::ContainerAlgorithm for Linear {
     fn edge(&self, index: usize) -> Option<Self::Edge> {
         self.specs.get(index).copied()
     }
-    /// Commits only validated metadata after the host's topology transaction, then discards derived scratch.
-    fn edit_edges(&mut self, edit: super::EdgeEdit<Self::Edge>) {
-        use super::EdgeEdit;
-        match edit {
-            EdgeEdit::Insert { index, edge } => self.specs.insert(index, edge),
-            EdgeEdit::Replace { index, edge } => self.specs[index] = edge,
-            EdgeEdit::Remove { index } => {
-                self.specs.remove(index);
-            }
-            EdgeEdit::Clear => self.specs.clear(),
-        }
+    type Prepared = super::EdgeEdit<LinearItemSpec>;
+
+    /// Linear needs no placement plan; validate indices and reserve its one metadata vector.
+    fn prepare_edges(&mut self, edit: Self::Prepared) -> Result<Self::Prepared, NcStatus> {
+        let len = edit.resulting_len(self.specs.len())?;
+        self.specs.try_reserve(len.saturating_sub(self.specs.len())).map_err(|_| neocogi_com::NC_E_OUT_OF_MEMORY)?;
+        Ok(edit)
+    }
+
+    /// The prepared edit has valid indices and capacity, so publication cannot fail.
+    fn commit_edges(&mut self, prepared: Self::Prepared) {
+        prepared.apply(&mut self.specs);
         self.resolved_main.clear();
     }
 }

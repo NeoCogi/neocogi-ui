@@ -32,31 +32,75 @@
 
 use super::container::ContainerLayoutCtx;
 
-/// Metadata-only edit applied after the host commits the matching child-topology operation.
+/// Requested relationship edit; validate and reserve its metadata before changing ownership.
 pub(super) enum EdgeEdit<E> {
-    /// Inserts one validated relationship at an already validated position.
-    Insert { index: usize, edge: E },
+    /// Inserts one relationship at an index at most the current child count.
+    Insert {
+        /// Position of the new child, permitting append at the current length.
+        index: usize,
+        /// Validated concrete relationship for the incoming child.
+        edge: E,
+    },
     /// Replaces one relationship without changing metadata cardinality.
-    Replace { index: usize, edge: E },
-    /// Removes one relationship after the corresponding subtree has been removed.
-    Remove { index: usize },
-    /// Clears all relationships while retaining reusable storage.
+    Replace {
+        /// Existing child's index; applies to topology replacement or metadata-only edits.
+        index: usize,
+        /// Complete replacement relationship, not a partial update.
+        edge: E,
+    },
+    /// Removes the relationship of an existing child.
+    Remove {
+        /// Existing child whose owner is dropped only after preparation succeeds.
+        index: usize,
+    },
+    /// Clears all relationships; each algorithm chooses whether to retain capacity.
     Clear,
 }
 
-/// Typed relationship access shared by the two editable built-in container algorithms.
+impl<E> EdgeEdit<E> {
+    /// Checks indices and computes prospective cardinality before allocation or attachment.
+    fn resulting_len(&self, len: usize) -> Result<usize, neocogi_com::NcStatus> {
+        use neocogi_com::NC_E_OUT_OF_RANGE;
+        match self {
+            Self::Insert { index, .. } if *index <= len && len < u32::MAX as usize => Ok(len + 1),
+            Self::Replace { index, .. } if *index < len => Ok(len),
+            Self::Remove { index } if *index < len => Ok(len - 1),
+            Self::Clear => Ok(0),
+            _ => Err(NC_E_OUT_OF_RANGE),
+        }
+    }
+
+    /// Applies an index-validated edit to storage already reserved for the resulting length.
+    fn apply(self, values: &mut Vec<E>) {
+        match self {
+            Self::Insert { index, edge } => values.insert(index, edge),
+            Self::Replace { index, edge } => values[index] = edge,
+            Self::Remove { index } => { values.remove(index); }
+            Self::Clear => values.clear(),
+        }
+    }
+}
+
+/// Typed relationship access shared by the editable built-in container algorithms.
 pub(super) trait ContainerAlgorithm: crate::widget_object::WidgetAlgorithm + crate::ContainerWidget {
     /// Concrete relationship data retained by this container.
     type Edge: Copy + PartialEq;
 
+    /// Fully validated metadata that can be published without allocation or failure.
+    type Prepared;
+
     /// Reads one relationship without exposing the owning metadata collection.
     fn edge(&self, index: usize) -> Option<Self::Edge>;
 
-    /// Publishes an infallible metadata edit after topology validation succeeds.
-    fn edit_edges(&mut self, edit: EdgeEdit<Self::Edge>);
+    /// Prepares a prospective edit without changing observable metadata or ownership.
+    /// Reserving scratch capacity is allowed; failure leaves the old semantic state intact.
+    fn prepare_edges(&mut self, edit: EdgeEdit<Self::Edge>) -> Result<Self::Prepared, neocogi_com::NcStatus>;
+
+    /// Publishes prepared metadata after the matching host operation succeeds.
+    fn commit_edges(&mut self, prepared: Self::Prepared);
 }
 
-/// Implements topology methods whose behavior is identical for Linear and Grid.
+/// Implements topology methods whose preparation/commit order is shared by Linear, Grid and Form.
 macro_rules! container_methods {
     () => {
         /// Exposes read-only topology without allowing callers to bypass relationship metadata.
@@ -68,16 +112,18 @@ macro_rules! container_methods {
         /// Publishes matching metadata after the editor drops the removed owner.
         fn remove(&mut self, index: u32) -> Result<(), neocogi_com::NcStatus> {
             <Self as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
+            let prepared = <Self as crate::containers::ContainerAlgorithm>::prepare_edges(self, crate::containers::EdgeEdit::Remove { index: index as usize })?;
             let outcome = self.editor.remove(index)?;
-            <Self as crate::containers::ContainerAlgorithm>::edit_edges(self, crate::containers::EdgeEdit::Remove { index: index as usize });
+            <Self as crate::containers::ContainerAlgorithm>::commit_edges(self, prepared);
             Ok(outcome)
         }
 
         /// Clears topology and relationship metadata in the same guarded operation.
         fn clear(&mut self) -> Result<(), neocogi_com::NcStatus> {
             <Self as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
+            let prepared = <Self as crate::containers::ContainerAlgorithm>::prepare_edges(self, crate::containers::EdgeEdit::Clear)?;
             let outcome = self.editor.clear()?;
-            <Self as crate::containers::ContainerAlgorithm>::edit_edges(self, crate::containers::EdgeEdit::Clear);
+            <Self as crate::containers::ContainerAlgorithm>::commit_edges(self, prepared);
             Ok(outcome)
         }
     };
@@ -100,7 +146,8 @@ macro_rules! container_edges {
             let edge = $decode(edge)?;
             let previous = <Self as crate::containers::ContainerAlgorithm>::edge(self, index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
             if previous != edge {
-                <Self as crate::containers::ContainerAlgorithm>::edit_edges(self, crate::containers::EdgeEdit::Replace { index: index as usize, edge });
+                let prepared = <Self as crate::containers::ContainerAlgorithm>::prepare_edges(self, crate::containers::EdgeEdit::Replace { index: index as usize, edge })?;
+                <Self as crate::containers::ContainerAlgorithm>::commit_edges(self, prepared);
                 <Self as crate::widget_object::HostedWidget>::runtime_mut(self)
                     .state
                     .record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
@@ -108,7 +155,7 @@ macro_rules! container_edges {
             Ok(())
         }
 
-        /// Validates the relationship before the child consumes its sole attachment claim.
+        /// Prepares all relationship storage before the child consumes its sole attachment claim.
         fn insert(
             &mut self,
             index: u32,
@@ -117,18 +164,19 @@ macro_rules! container_edges {
         ) -> Result<(), (neocogi_com::NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
             let prepared = (|| {
                 <Self as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
-                $decode(edge)
+                let edge = $decode(edge)?;
+                <Self as crate::containers::ContainerAlgorithm>::prepare_edges(self, crate::containers::EdgeEdit::Insert { index: index as usize, edge })
             })();
-            let edge = match prepared {
-                Ok(edge) => edge,
+            let prepared = match prepared {
+                Ok(prepared) => prepared,
                 Err(status) => return Err((status, child)),
             };
             let outcome = self.editor.insert(index, child)?;
-            <Self as crate::containers::ContainerAlgorithm>::edit_edges(self, crate::containers::EdgeEdit::Insert { index: index as usize, edge });
+            <Self as crate::containers::ContainerAlgorithm>::commit_edges(self, prepared);
             Ok(outcome)
         }
 
-        /// Commits replacement metadata after the editor replaces and destroys the old owner.
+        /// Prepares replacement metadata before the editor replaces and destroys the old owner.
         fn replace(
             &mut self,
             index: u32,
@@ -137,14 +185,15 @@ macro_rules! container_edges {
         ) -> Result<(), (neocogi_com::NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
             let prepared = (|| {
                 <Self as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
-                $decode(edge)
+                let edge = $decode(edge)?;
+                <Self as crate::containers::ContainerAlgorithm>::prepare_edges(self, crate::containers::EdgeEdit::Replace { index: index as usize, edge })
             })();
-            let edge = match prepared {
-                Ok(edge) => edge,
+            let prepared = match prepared {
+                Ok(prepared) => prepared,
                 Err(status) => return Err((status, child)),
             };
             let outcome = self.editor.replace(index, child)?;
-            <Self as crate::containers::ContainerAlgorithm>::edit_edges(self, crate::containers::EdgeEdit::Replace { index: index as usize, edge });
+            <Self as crate::containers::ContainerAlgorithm>::commit_edges(self, prepared);
             Ok(outcome)
         }
     };

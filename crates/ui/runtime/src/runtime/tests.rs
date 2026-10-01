@@ -221,7 +221,7 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
     let _linear = factory.create_linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let tracks = [LayoutTrack::Content];
     let _grid = factory
-        .create_grid(NcCopyFromBufferOffset::new(0, &tracks), NcCopyFromBufferOffset::new(0, &tracks))
+        .create_grid(NcCopyFromBufferOffset::new(0, &tracks), NcCopyFromBufferOffset::new(0, &tracks), neocogi_ui::GridLimits { max_columns: 2, max_rows: 2 })
         .unwrap();
     let _disclosure = factory.create_disclosure(label, DisclosureStyle::Header, false).unwrap();
     let content = button.query::<IWidgetAbi>().unwrap();

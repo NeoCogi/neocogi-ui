@@ -195,10 +195,13 @@ impl IChildrenEditor for ChildEditor {
         let prepared = (|| {
             self.store.factory.host.check_mutation()?;
             self.store.factory.check_edit()?;
-            let nodes = self.store.take()?;
+            let mut nodes = self.store.take()?;
             if index as usize > nodes.len() || nodes.len() == u32::MAX as usize {
                 return Err(neocogi_com::NC_E_OUT_OF_RANGE);
             }
+            // The metadata provider has prepared its state. Reserve the owning
+            // list too, so no Vec growth remains after mount_node consumes the token.
+            nodes.deref_mut().nodes.try_reserve(1).map_err(|_| neocogi_com::NC_E_OUT_OF_MEMORY)?;
             Ok(nodes)
         })();
         let mut nodes = match prepared {

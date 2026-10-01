@@ -307,7 +307,7 @@ fn smoke_containers(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
         .insert(0, text, LinearEdge::new(LayoutTrack::Fixed { extent: 100 })).map_err(|(status, _candidate)| status)?;
     let mut text = text_handle;
     let section_handle = section.handle();
-    let mut grid = ui.widgets().grid(&[LayoutTrack::Flex { weight: 1.0 }], &[])?;
+    let mut grid = ui.widgets().grid(&[LayoutTrack::Flex { weight: 1.0 }], &[], neocogi_ui::GridLimits { max_columns: 1, max_rows: 2 })?;
     grid.insert(0, section, GridExtent { columns: 1, rows: 1 }).map_err(|(status, _candidate)| status)?;
     let mut section = section_handle;
     let tail = ui.widgets().text_block(&"Outer scrolling content\n".repeat(60), TextWrapping::None)?;

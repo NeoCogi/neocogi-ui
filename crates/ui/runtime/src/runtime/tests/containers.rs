@@ -1,5 +1,6 @@
 //! Independent container policy exercises the same boundary available to a separate plugin.
 use super::*;
+mod grid;
 use neocogi_ui::com::widget::WidgetState;
 
 /// Deliberately retained service/token pairs probe expiry after their real nested invocation.
@@ -404,7 +405,7 @@ fn builtin_grid_reuses_span_placement_and_bulk_track_validation() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let columns = [LayoutTrack::Fixed { extent: 40 }, LayoutTrack::Fixed { extent: 60 }];
     let rows = [LayoutTrack::Fixed { extent: 20 }, LayoutTrack::Fixed { extent: 30 }];
-    let grid_owner = ui.widgets().grid(&columns, &rows).unwrap();
+    let grid_owner = ui.widgets().grid(&columns, &rows, neocogi_ui::GridLimits { max_columns: 2, max_rows: 2 }).unwrap();
     let mut grid = grid_owner.handle();
     let (first_owner, a) = recorded_leaf(&runtime);
     let first = first_owner.handle();
@@ -451,7 +452,7 @@ fn builtin_grid_reuses_span_placement_and_bulk_track_validation() {
 fn builtin_grid_spans_never_overlap_a_tall_previous_child() {
     let runtime = runtime();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
-    let owner = ui.widgets().grid(&[LayoutTrack::Fixed { extent: 30 }; 3], &[LayoutTrack::Fixed { extent: 20 }; 2]).unwrap();
+    let owner = ui.widgets().grid(&[LayoutTrack::Fixed { extent: 30 }; 3], &[LayoutTrack::Fixed { extent: 20 }; 2], neocogi_ui::GridLimits { max_columns: 3, max_rows: 2 }).unwrap();
     let mut grid = owner.handle();
     let mut probes = Vec::new();
     for (index, edge) in [

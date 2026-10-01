@@ -32,12 +32,21 @@ serialized visual output-to-input graph, route expression, or route editor.
 
 ## Loading and typed widget access
 
-Use `Loader::new(ui, parent_window, resources)` or
-`ReloadSlot::new(ui, parent_window)`. The loader returns a `Component` whose
+Use `Loader::new(ui, parent_window, resources, grid_limits)` or
+`ReloadSlot::new(ui, parent_window, grid_limits)`. The loader returns a `Component` whose
 concrete children can be queried before mounting. Supply `EventBindings` to
 `compile_with_events` or `load_with_events` before construction; plain `compile`
 and `load` select permanently unobserved widgets. Delivery errors
 propagate through the emitting operation; there is no relay diagnostic channel.
+
+`grid_limits` is an application-selected `GridLimits { max_columns, max_rows }`.
+It bounds each built-in Grid's explicit tracks and cumulative implicit placement.
+The policy is immutable across reload attempts and is never read from serialized
+content. JSON and binary recipes can be valid for a larger host while construction
+under this host's policy returns `NC_E_OUT_OF_RANGE`; a failed candidate leaves the
+published component intact. The designer preview and runtime-UI example select
+64 columns by 256 rows. See the [Grid contract](../../../docs/GRID_PLACEMENT.md)
+for placement, ownership-return, and resource semantics.
 
 `Component::widget::<ButtonAbi>("save")` resolves an authored node key and checks
 its concrete COM interface before returning a weak `Widget<ButtonAbi>` observation.

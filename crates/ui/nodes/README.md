@@ -35,3 +35,11 @@ core storage. Semantic fields remain ordinary concrete fields wherever ownership
 Node algorithm and picker tests stay beside the sources they exercise. Fixtures retain an actual
 production core runtime through public entrypoints, and the provider-boundary integration test
 activates both plugins before routing and dispatching a real typed activation event.
+
+Grid construction requires explicit immutable `GridLimits`. Each topology/span/
+column edit prepares a complete non-overlapping plan and fallible storage before
+changing child ownership. Rejection returns the incoming owner unchanged; after
+host acceptance, metadata publication cannot fail. Linear and Form use the same
+prepare/commit ordering with only an index check and vector reservation. See the
+[Grid placement contract](../../../docs/GRID_PLACEMENT.md) for numeric policy,
+right-edge clamping, removal reflow, and the regression matrix.

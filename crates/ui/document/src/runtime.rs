@@ -80,14 +80,16 @@ pub struct Loader {
 }
 impl Loader {
     /// Binds construction services; application receivers are supplied separately to each construction attempt.
-    /// The parent window is needed only for controls that own popups.
-    pub fn new(ui: Ui, parent: Option<ComPtr<IWindowAbi>>, resources: Resources) -> Result<Self, NcStatus> {
-        Self::new_with_custom(ui, parent, resources, crate::CustomWidgetRegistry::new())
+    /// The parent window is needed only for controls that own popups. Grid ceilings
+    /// belong to this host policy, not the document; every compiled Grid uses them.
+    pub fn new(ui: Ui, parent: Option<ComPtr<IWindowAbi>>, resources: Resources, grid_limits: neocogi_ui::GridLimits) -> Result<Self, NcStatus> {
+        Self::new_with_custom(ui, parent, resources, crate::CustomWidgetRegistry::new(), grid_limits)
     }
     /// Binds trusted custom COM factories alongside the ordinary built-in constructors.
-    pub fn new_with_custom(ui: Ui, parent: Option<ComPtr<IWindowAbi>>, resources: Resources, custom: crate::CustomWidgetRegistry) -> Result<Self, NcStatus> {
+    pub fn new_with_custom(ui: Ui, parent: Option<ComPtr<IWindowAbi>>, resources: Resources, custom: crate::CustomWidgetRegistry, grid_limits: neocogi_ui::GridLimits) -> Result<Self, NcStatus> {
+        grid_limits.validate()?;
         Ok(Self {
-            services: Services { ui, parent, resources, custom },
+            services: Services { ui, parent, resources, custom, grid_limits },
         })
     }
     /// Validates typed source and constructs directly, without a binary persistence round trip.
@@ -235,6 +237,8 @@ struct Services {
     resources: Resources,
     /// Trusted custom widget construction authority, separate from serialized document data.
     custom: crate::CustomWidgetRegistry,
+    /// Immutable host policy shared by every built-in Grid in each candidate.
+    grid_limits: neocogi_ui::GridLimits,
 }
 impl Services {
     /// Builds the checked widget tree with one cleanup guard until ownership transfers.
@@ -242,6 +246,7 @@ impl Services {
         events.validate(&document, &self.custom)?;
         let mut construction = Construction {
             ui: &self.ui,
+            grid_limits: self.grid_limits,
             custom: &self.custom,
             parent: self.parent.as_ref(),
             resources: &self.resources,

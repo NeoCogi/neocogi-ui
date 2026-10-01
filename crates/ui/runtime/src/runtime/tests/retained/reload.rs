@@ -11,10 +11,15 @@ fn receiver<C: neocogi_com::events::EventSource>(key: &str, queue: ComPtr<C::Que
 
 /// Mounts a document slot in an ordinary window using the production runtime.
 fn slot(ui: &Ui) -> ReloadSlot {
+    slot_with_grid_limits(ui, GridLimits { max_columns: 64, max_rows: 256 })
+}
+
+/// Selects an immutable host policy for reload tests that exercise exact Grid bounds.
+fn slot_with_grid_limits(ui: &Ui, limits: GridLimits) -> ReloadSlot {
     let root_owner = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let mut root = root_owner.handle();
     let owner = window(ui, "runtime documents", Rect { x: 10, y: 10, width: 400, height: 400 }, root_owner);
-    let mut slot = ReloadSlot::new(ui.clone(), owner).unwrap();
+    let mut slot = ReloadSlot::new(ui.clone(), owner, limits).unwrap();
     root.insert(0, slot.take_widget().unwrap(), LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
         .unwrap();
     slot
@@ -481,7 +486,7 @@ fn authored_form_rectangles_survive_binary_reload_and_route_real_clicks() {
 fn typed_and_binary_preparation_have_equivalent_authored_state() {
     let fixture = Headless::standard();
     let document = Document::new("preparation paths");
-    let loader = Loader::new(fixture.ui.clone(), None, Resources::new()).unwrap();
+    let loader = Loader::new(fixture.ui.clone(), None, Resources::new(), neocogi_ui::GridLimits { max_columns: 64, max_rows: 256 }).unwrap();
     let typed = loader.compile(&document).unwrap();
     let binary = loader.load(&document.to_binary().unwrap()).unwrap();
     assert_ne!(
@@ -771,7 +776,7 @@ fn textbox_enum_stream_drives_form_action_and_public_sink() {
 #[test]
 fn construction_bindings_reject_duplicate_unknown_nonemitting_and_wrong_typed_sources() {
     let fixture = Headless::standard();
-    let loader = Loader::new(fixture.ui.clone(), None, Resources::new()).unwrap();
+    let loader = Loader::new(fixture.ui.clone(), None, Resources::new(), neocogi_ui::GridLimits { max_columns: 64, max_rows: 256 }).unwrap();
     let document = Document::new("constructor bindings");
     for (key, wrong_type) in [("missing", false), ("title", false), ("save", true)] {
         let (sender, messages) = std::sync::mpsc::channel::<()>();
@@ -831,7 +836,7 @@ fn typed_and_binary_candidates_own_constructor_mappings_and_preserve_recipe_byte
     let fixture = Headless::standard();
     let document = Document::new("observed recipe");
     let bytes = document.to_binary().unwrap();
-    let loader = Loader::new(fixture.ui.clone(), None, Resources::new()).unwrap();
+    let loader = Loader::new(fixture.ui.clone(), None, Resources::new(), neocogi_ui::GridLimits { max_columns: 64, max_rows: 256 }).unwrap();
     for binary in [false, true] {
         let (sender, messages) = std::sync::mpsc::channel::<()>();
         let events = receiver::<ButtonAbi>("save", neocogi_ui::test_event_queue!(button, (), sender, |_queue, _origin, _| ()).unwrap()).unwrap();
@@ -880,7 +885,7 @@ fn compiled_metadata_can_drop_before_the_actual_root_is_mounted() {
     for binary in [false, true] {
         let fixture = Headless::standard();
         let document = Document::new("independent recipe lifetime");
-        let loader = Loader::new(fixture.ui.clone(), None, Resources::new()).unwrap();
+        let loader = Loader::new(fixture.ui.clone(), None, Resources::new(), neocogi_ui::GridLimits { max_columns: 64, max_rows: 256 }).unwrap();
         let (sender, messages) = std::sync::mpsc::channel::<()>();
         let events = receiver::<ButtonAbi>("save", neocogi_ui::test_event_queue!(button, (), sender, |_queue, _origin, _| ()).unwrap()).unwrap();
         let mut compiled = match binary {
@@ -939,7 +944,7 @@ mod form_methods;
 #[test]
 fn failed_component_mount_returns_its_unmounted_root_for_retry() {
     let fixture = Headless::standard();
-    let loader = Loader::new(fixture.ui.clone(), None, Resources::new()).unwrap();
+    let loader = Loader::new(fixture.ui.clone(), None, Resources::new(), neocogi_ui::GridLimits { max_columns: 64, max_rows: 256 }).unwrap();
     let mut component = loader.compile(&Document::new("retry")).unwrap();
     let root = component.root().unwrap();
     let invalid = Rect { x: 0, y: 0, width: -1, height: 100 };
@@ -954,4 +959,69 @@ fn failed_component_mount_returns_its_unmounted_root_for_retry() {
     assert!(component.take_root().is_err(), "success transfers exactly once");
     window.close().unwrap();
     assert!(!root.as_interface().is_alive());
+}
+
+/// Builds a compact authored Grid; runtime limits deliberately do not appear in its recipe.
+fn grid_document(spans: &[(u32, u32)]) -> Document {
+    let mut document = Document::new("bounded grid");
+    document.outputs.clear();
+    document.root = Node::new("grid", WidgetSpec::Grid {
+        columns: vec![Track::Content], rows: vec![Track::Content],
+    });
+    for (index, &(columns, rows)) in spans.iter().enumerate() {
+        document.root.children.push(Child {
+            edge: Edge::Grid { columns, rows },
+            node: Node::new(format!("child{index}"), WidgetSpec::TextBlock { text: "cell".into(), wrapping: Wrapping::None }),
+        });
+    }
+    document
+}
+
+/// Typed and persisted documents both obey the host's policy, including cumulative implicit rows.
+#[test]
+fn loaded_grid_uses_host_limits_on_both_construction_paths() {
+    let fixture = Headless::standard();
+    let limits = GridLimits { max_columns: 2, max_rows: 2 };
+    let loader = Loader::new(fixture.ui.clone(), None, Resources::new(), limits).unwrap();
+    let exact = grid_document(&[(1, 2)]);
+    let typed = loader.compile(&exact).unwrap();
+    let binary = loader.load(&exact.to_binary().unwrap()).unwrap();
+    for component in [typed, binary] {
+        assert_eq!(component.widget::<GridAbi>("grid").unwrap().limits().unwrap(), limits);
+        assert_eq!(Document::from_binary(&component.save().unwrap()).unwrap(), exact);
+    }
+    let mut excessive_columns = exact.clone();
+    if let WidgetSpec::Grid { columns, .. } = &mut excessive_columns.root.widget {
+        *columns = vec![Track::Content; 3];
+    }
+    let mut excessive_rows = exact.clone();
+    if let WidgetSpec::Grid { rows, .. } = &mut excessive_rows.root.widget {
+        *rows = vec![Track::Content; 3];
+    }
+    for document in [grid_document(&[(1, u32::MAX)]), grid_document(&[(1, 2), (1, 1)]), excessive_columns, excessive_rows] {
+        // The portable recipe can be valid for another host. Admission, not
+        // serialization, applies this application's specific resource ceilings.
+        let bytes = document.to_binary().unwrap();
+        let json = Document::from_json(&document.to_json().unwrap()).unwrap();
+        assert!(loader.compile(&json).is_err());
+        assert_eq!(loader.load(&bytes).err(), Some(neocogi_com::NC_E_OUT_OF_RANGE));
+    }
+    let larger = Loader::new(fixture.ui.clone(), None, Resources::new(), GridLimits { max_columns: 2, max_rows: 3 }).unwrap();
+    assert!(larger.compile(&grid_document(&[(1, 2), (1, 1)])).is_ok());
+}
+
+/// An over-budget reload must not invalidate handles or replace the authored live component.
+#[test]
+fn rejected_grid_reload_preserves_published_component() {
+    let mut fixture = Headless::standard();
+    let mut slot = slot_with_grid_limits(&fixture.ui, GridLimits { max_columns: 2, max_rows: 2 });
+    let document = grid_document(&[(1, 2)]);
+    let committed = slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
+    let mut old = slot.component().unwrap().widget::<TextBlockAbi>("child0").unwrap();
+    let saved = slot.component().unwrap().save().unwrap();
+    assert!(slot.reload(&grid_document(&[(1, 2), (1, 1)]), Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).is_err());
+    assert!(slot.accepts(committed.generation));
+    assert_eq!(slot.component().unwrap().save().unwrap(), saved);
+    old.set_text("Still owned by the committed Grid").unwrap();
+    fixture.frame(VIEW).unwrap();
 }

@@ -49,11 +49,15 @@ factory UiFactory: IConstructionHost + IFileDialogs {
     fn create_split_view(&self, settings: SplitOptions, events: &EventBinding<SplitView, SplitViewEvent>) -> Result<ComBox<SplitView>>;
     /// Creates a fixed-coordinate form with a positive preferred content size.
     fn create_form(&self, size: Size) -> Result<ComBox<Form>>;
-    /// Creates an empty Grid with validated complete column and row policies; input offsets must be zero.
+    /// Creates an empty Grid with validated tracks and immutable caller-selected limits.
+    /// Input offsets must be zero; explicit and implicit tracks obey the same ceilings.
+    /// Zero limits are invalid; excessive counts/products return OUT_OF_RANGE, and
+    /// failed placement reservations return OUT_OF_MEMORY before ownership changes.
     fn create_grid(
         &self,
         columns: &[LayoutTrack],
         rows: &[LayoutTrack],
+        limits: GridLimits,
     ) -> Result<ComBox<Grid>>;
     /// Constructs an unmounted boolean control with body-font presentation.
     fn create_checkbox(&self, checked: bool, label: &[u8], events: &EventBinding<Checkbox, CheckboxEvent>) -> Result<ComBox<Checkbox>>;

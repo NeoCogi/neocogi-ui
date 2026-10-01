@@ -245,6 +245,10 @@ impl<P> Widget<GridAbi, P>
 where
     P: WidgetStorage<GridAbi> + core::ops::DerefMut<Target = <GridAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
 {
+    /// Returns the immutable construction policy enforced by all Grid edits.
+    pub fn limits(&self) -> Result<GridLimits, NcStatus> {
+        self.interface.limits()
+    }
     /// Copies the current column policies into application-owned typed values.
     pub fn columns(&self) -> Result<Vec<LayoutTrack>, NcStatus> {
         Axis::Columns.read(&self.interface)
@@ -291,11 +295,14 @@ impl WidgetFactory {
     pub fn linear(&self, direction: FlowDirection, cross: CrossSize) -> Result<OwnedWidget<LinearAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_linear(direction, cross)?))
     }
-    /// Creates an empty Grid with complete validated track policies on both axes.
-    pub fn grid(&self, columns: &[LayoutTrack], rows: &[LayoutTrack]) -> Result<OwnedWidget<GridAbi>, NcStatus> {
+    /// Creates an empty Grid with immutable application-selected track/placement ceilings.
+    /// Limits bound explicit columns and all explicit/implicit rows; no maximum-sized
+    /// storage is allocated up front. Rejected edits preserve their incoming owner.
+    pub fn grid(&self, columns: &[LayoutTrack], rows: &[LayoutTrack], limits: GridLimits) -> Result<OwnedWidget<GridAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_grid(
             NcCopyFromBufferOffset::new(0, columns),
             NcCopyFromBufferOffset::new(0, rows),
+            limits,
         )?))
     }
 }

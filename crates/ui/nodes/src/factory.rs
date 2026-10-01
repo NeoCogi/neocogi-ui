@@ -126,9 +126,10 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
         &self,
         columns: NcCopyFromBufferOffset<'_, LayoutTrack>,
         rows: NcCopyFromBufferOffset<'_, LayoutTrack>,
+        limits: GridLimits,
     ) -> Result<neocogi_com::ComBox<GridAbi>, NcStatus> {
         self.services.host.check_mutation()?;
-        crate::Grid::create_com(self.services.host.clone(), self.services.resources.clone(), columns, rows)
+        crate::Grid::create_com(self.services.host.clone(), self.services.resources.clone(), columns, rows, limits)
     }
 
     /// Validates complete checkbox initialization before allocating its COM identity.

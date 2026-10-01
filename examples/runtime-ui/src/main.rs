@@ -140,7 +140,7 @@ fn run() -> Result<(), HostError> {
     let window = host.ui.window_with_queue("Loaded component", Rect { x: 20, y: 20, width: 740, height: 540 }, root, Some(lifecycle.as_com_ref())).map_err(|(status, _candidate)| status)?;
     let mut root = root_handle;
 
-    let mut slot = ReloadSlot::new(host.ui.clone(), window.clone())?;
+    let mut slot = ReloadSlot::new(host.ui.clone(), window.clone(), GridLimits { max_columns: 64, max_rows: 256 })?;
     root.insert(0, slot.take_widget()?, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 })).map_err(|(status, _candidate)| status)?;
     let menus = host.ui.menus()?;
     let bar = menus.create("Runtime UI")?;

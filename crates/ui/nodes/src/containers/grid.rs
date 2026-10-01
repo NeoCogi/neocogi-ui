@@ -75,56 +75,44 @@ impl Default for GridSpan {
     }
 }
 
-/// Private owner of Grid edge metadata indexed to an adjacent [`Children`] collection.
+/// Complete child relationship metadata, prepared independently of the owning tree.
 ///
-/// Child ownership is deliberately not stored here. Every mutation receives the authoritative
-/// collection explicitly and updates spans before returning. This keeps Grid metadata synchronized
-/// while the concrete [`Container`] remains the sole strong owner of retained nodes.
+/// A candidate owns spans and derived placements together. Publishing it is an
+/// infallible move after the host accepts the topology operation. Occupancy is
+/// preparation-only scratch and is discarded instead of retained by every Grid.
 #[derive(Default)]
-struct GridItems {
-    /// Grid-owned spans matched one-for-one with the adjacent child collection.
+pub(crate) struct GridItems {
+    /// Positive authored spans, in exactly the child store's order.
     spans: Vec<GridSpan>,
-    /// Row-major placement derived from `spans` and `columns`.
+    /// Non-overlapping bounded placements, indexed one-for-one with spans.
     placements: Vec<GridPlacement>,
-    /// Reused occupancy bitmap needed only while rebuilding `placements`.
-    occupied: Vec<bool>,
-    /// Effective column count used by the current derived placements.
-    columns: usize,
 }
 
 impl GridItems {
-    /// Returns the Grid-owned span associated with one child index.
+    /// Reads one relationship from the last fully committed plan.
     fn span(&self, index: usize) -> Option<GridSpan> {
-        self.debug_assert_synchronized(self.spans.len());
+        debug_assert_eq!(self.spans.len(), self.placements.len());
         self.spans.get(index).copied()
     }
 
-    /// Updates the placement column count and immediately restores the derived-data invariant.
-    fn set_columns(&mut self, columns: usize) {
-        self.columns = columns.max(1);
-        self.rebuild_placements(self.spans.len());
-    }
-
-    /// Recomputes row-major placement into retained buffers.
-    ///
-    /// This runs only when Grid topology, spans, or column count changes. Immutable measurement
-    /// reads the resulting placements and therefore never needs interior mutability or allocation.
-    fn rebuild_placements(&mut self, child_count: usize) {
-        grid_placements_into(child_count, self.columns, &self.spans, &mut self.placements, &mut self.occupied);
-    }
-
-    /// Checks the parallel-vector and derived-placement invariants at mutation boundaries.
-    fn debug_assert_synchronized(&self, child_count: usize) {
-        debug_assert_eq!(
-            child_count,
-            self.spans.len(),
-            "Grid child and placement collections must remain index-synchronized"
-        );
-        debug_assert_eq!(
-            child_count,
-            self.placements.len(),
-            "Grid child and derived placement collections must remain index-synchronized"
-        );
+    /// Prepares an edge edit, or reflows unchanged spans for a column change.
+    /// No live semantic state changes during validation or fallible reservation.
+    fn prepare(&self, edit: Option<super::EdgeEdit<GridSpan>>, columns: usize, limits: GridLimits) -> Result<Self, NcStatus> {
+        let len = match &edit {
+            Some(edit) => edit.resulting_len(self.spans.len())?,
+            None => self.spans.len(),
+        };
+        if len == 0 {
+            return Ok(Self::default());
+        }
+        let mut spans = Vec::new();
+        spans.try_reserve_exact(len.max(self.spans.len())).map_err(|_| neocogi_com::NC_E_OUT_OF_MEMORY)?;
+        spans.extend_from_slice(&self.spans);
+        if let Some(edit) = edit {
+            edit.apply(&mut spans);
+        }
+        let placements = grid_placements(&spans, columns, limits.max_rows as usize)?;
+        Ok(Self { spans, placements })
     }
 }
 
@@ -139,8 +127,10 @@ impl GridItems {
 ///
 /// Every private `GridSpan` is normalized to at least one row and one column. Push, insert, removal,
 /// replacement, span changes, and column-track changes rebuild derived placements before the
-/// updated state becomes observable. A retained occupancy bitmap is reused during those rebuilds,
-/// and debug assertions keep children, spans, and placements index-synchronized.
+/// updated state becomes observable. The constructor's immutable limits bound every candidate,
+/// including cumulative implicit rows. A temporary occupancy bitmap verifies full rectangles;
+/// its allocation and the completed plan precede child attachment. Rejection retains the old
+/// metadata and the incoming owner, without rollback or another ownership wrapper.
 ///
 /// A spanning child's intrinsic deficit is distributed across the non-Fixed tracks in its span.
 /// Explicit Fixed tracks remain exact overflow boundaries. Integer deficit remainders go to earlier
@@ -168,6 +158,8 @@ pub struct Grid {
     runtime: crate::widget_object::WidgetRuntime,
     /// Sole writer for children mounted through this container's COM contract.
     pub(crate) editor: neocogi_com::ComBox<neocogi_ui_core_contracts::IChildrenEditorAbi>,
+    /// Application-selected immutable ceilings; documents cannot override these.
+    limits: GridLimits,
     /// Grid-owned spans and their derived row-major placements.
     items: GridItems,
     /// Horizontal track policies used by measurement and placement.
@@ -179,23 +171,20 @@ pub struct Grid {
 }
 
 impl Grid {
-    /// Combines validated tracks with the runtime and authoritative COM child writer.
+    /// Combines tracks/limits already validated by construction with the authoritative child writer.
     pub(crate) fn from_runtime(
         runtime: crate::widget_object::WidgetRuntime,
         editor: neocogi_com::ComBox<neocogi_ui_core_contracts::IChildrenEditorAbi>,
         column_tracks: Vec<TrackSize>,
         row_tracks: Vec<TrackSize>,
+        limits: GridLimits,
     ) -> Self {
-        let items = GridItems {
-            spans: Vec::new(),
-            placements: Vec::new(),
-            occupied: Vec::new(),
-            columns: column_tracks.len().max(1),
-        };
+        let items = GridItems::default();
         Self {
             runtime,
             editor,
             items,
+            limits,
             column_tracks,
             row_tracks,
             layout: GridLayout::default(),
@@ -207,20 +196,9 @@ impl Grid {
         &self.column_tracks
     }
 
-    /// Replaces the column track policies without changing child ownership.
-    pub fn set_column_tracks(&mut self, tracks: impl IntoIterator<Item = TrackSize>) {
-        self.column_tracks = tracks.into_iter().collect();
-        self.items.set_columns(self.column_tracks.len());
-    }
-
     /// Returns the row track policies.
     pub fn row_tracks(&self) -> &[TrackSize] {
         &self.row_tracks
-    }
-
-    /// Replaces the row track policies without changing child ownership.
-    pub fn set_row_tracks(&mut self, tracks: impl IntoIterator<Item = TrackSize>) {
-        self.row_tracks = tracks.into_iter().collect();
     }
 }
 
@@ -245,24 +223,22 @@ impl super::ContainerAlgorithm for Grid {
     fn edge(&self, index: usize) -> Option<Self::Edge> {
         self.items.span(index)
     }
-    /// Commits validated metadata, rebuilding placements once after the matching topology commit.
-    fn edit_edges(&mut self, edit: super::EdgeEdit<Self::Edge>) {
-        use super::EdgeEdit;
-        match edit {
-            EdgeEdit::Insert { index, edge } => self.items.spans.insert(index, edge),
-            EdgeEdit::Replace { index, edge } => self.items.spans[index] = edge,
-            EdgeEdit::Remove { index } => {
-                self.items.spans.remove(index);
-            }
-            EdgeEdit::Clear => self.items.spans.clear(),
-        }
-        self.items.rebuild_placements(self.items.spans.len());
+    type Prepared = GridItems;
+
+    /// Compute the entire bounded plan while the old child collection remains authoritative.
+    fn prepare_edges(&mut self, edit: super::EdgeEdit<Self::Edge>) -> Result<GridItems, NcStatus> {
+        self.items.prepare(Some(edit), self.column_tracks.len().max(1), self.limits)
+    }
+
+    /// No validation or allocation remains after the host accepts the child operation.
+    fn commit_edges(&mut self, prepared: GridItems) {
+        self.items = prepared;
     }
 }
 
 use crate::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
 use neocogi_ui_core_contracts::{IWidgetHostAbi};
-use neocogi_ui_nodes_contracts::{GridAbi, GridExtent, LayoutTrack};
+use neocogi_ui_nodes_contracts::{GridAbi, GridExtent, GridLimits, LayoutTrack};
 use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus};
 
 direct_widget_phase_impl!(Grid);
@@ -275,8 +251,9 @@ impl Grid {
         resources: crate::widget_object::SharedAssets,
         columns: NcCopyFromBufferOffset<'_, LayoutTrack>,
         rows: NcCopyFromBufferOffset<'_, LayoutTrack>,
+        limits: GridLimits,
     ) -> Result<neocogi_com::ComBox<GridAbi>, NcStatus> {
-        let value = Self::build(host, columns, rows, Some(&resources))?;
+        let value = Self::build(host, columns, rows, limits, Some(&resources))?;
         Ok(Self::into_box(value).query().expect("Grid declares its callable class contract"))
     }
 
@@ -285,18 +262,26 @@ impl Grid {
         host: ComPtr<IWidgetHostAbi>,
         columns: NcCopyFromBufferOffset<'_, LayoutTrack>,
         rows: NcCopyFromBufferOffset<'_, LayoutTrack>,
+        limits: GridLimits,
         resources: Option<&crate::widget_object::SharedAssets>,
     ) -> Result<Self, NcStatus> {
-        let columns = local_tracks(columns)?;
-        let rows = local_tracks(rows)?;
+        limits.validate()?;
+        let columns = local_tracks(columns, limits.max_columns)?;
+        let rows = local_tracks(rows, limits.max_rows)?;
         let editor = host.create_children()?;
         let runtime = WidgetRuntime::for_resources(host, crate::WidgetOption::NO_INTERACT, resources)?;
-        Ok(Self::from_runtime(runtime, editor, columns, rows))
+        Ok(Self::from_runtime(runtime, editor, columns, rows, limits))
     }
 }
 
 impl neocogi_ui_nodes_contracts::Grid for Grid {
     container_methods!();
+
+    /// Resource policy is immutable for the lifetime of this Grid.
+    fn limits(&self) -> Result<GridLimits, NcStatus> {
+        self.runtime().state.readable()?;
+        Ok(self.limits)
+    }
 
     /// Copies column policy from the one concrete Grid state.
     fn columns(&self, output: NcCopyToBufferOffset<'_, LayoutTrack>) -> Result<u32, NcStatus> {
@@ -307,9 +292,11 @@ impl neocogi_ui_nodes_contracts::Grid for Grid {
     /// Validates all input before rebuilding column-dependent span placement.
     fn set_columns(&mut self, tracks: NcCopyFromBufferOffset<'_, LayoutTrack>) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
-        let tracks = local_tracks(tracks)?;
+        let tracks = local_tracks(tracks, self.limits.max_columns)?;
         if self.column_tracks() != tracks {
-            self.set_column_tracks(tracks);
+            let prepared = self.items.prepare(None, tracks.len().max(1), self.limits)?;
+            self.column_tracks = tracks;
+            self.items = prepared;
             self.runtime_mut().state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
         }
         Ok(())
@@ -324,9 +311,11 @@ impl neocogi_ui_nodes_contracts::Grid for Grid {
     /// Replaces row policy only after validating the complete typed input.
     fn set_rows(&mut self, tracks: NcCopyFromBufferOffset<'_, LayoutTrack>) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
-        let tracks = local_tracks(tracks)?;
+        let tracks = local_tracks(tracks, self.limits.max_rows)?;
         if self.row_tracks() != tracks {
-            self.set_row_tracks(tracks);
+            // Row policy does not change placement. Existing implicit rows have
+            // already passed the same immutable ceiling during plan preparation.
+            self.row_tracks = tracks;
             self.runtime_mut().state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
         }
         Ok(())
@@ -336,11 +325,19 @@ impl neocogi_ui_nodes_contracts::Grid for Grid {
 }
 
 /// Validates a complete track sequence before constructing or mutating Grid state.
-fn local_tracks(tracks: NcCopyFromBufferOffset<'_, LayoutTrack>) -> Result<Vec<TrackSize>, NcStatus> {
-    if tracks.offset() != 0 || tracks.len() > u32::MAX as usize {
+fn local_tracks(tracks: NcCopyFromBufferOffset<'_, LayoutTrack>, maximum: u32) -> Result<Vec<TrackSize>, NcStatus> {
+    if tracks.offset() != 0 {
         return Err(neocogi_com::NC_E_INVALID_ARG);
     }
-    tracks.as_slice().iter().copied().map(super::local_track).collect()
+    if tracks.len() > maximum as usize {
+        return Err(neocogi_com::NC_E_OUT_OF_RANGE);
+    }
+    let mut result = Vec::new();
+    result.try_reserve_exact(tracks.len()).map_err(|_| neocogi_com::NC_E_OUT_OF_MEMORY)?;
+    for track in tracks.as_slice() {
+        result.push(super::local_track(*track)?);
+    }
+    Ok(result)
 }
 
 /// Copies a requested track range and returns the complete retained cardinality.
@@ -657,6 +654,7 @@ fn resolve_columns_into(ctx: &mut impl GridMeasureCtx, state: &Grid, available_w
     let count = state.column_tracks.len().max(1);
     let spacing = ctx.spacing();
     columns.clear();
+    columns.try_reserve(count).map_err(|_| neocogi_com::NC_E_OUT_OF_MEMORY)?;
     for index in 0..count {
         columns.push(preferred_column(ctx, state, index, spacing)?);
     }
@@ -675,6 +673,7 @@ fn resolve_rows_into(
     let (_, count) = grid_dimensions(state);
     let spacing = ctx.spacing();
     rows.clear();
+    rows.try_reserve(count).map_err(|_| neocogi_com::NC_E_OUT_OF_MEMORY)?;
     for index in 0..count {
         rows.push(preferred_row(ctx, state, index, spacing, |_ctx, placement| {
             Ok(track_span(columns, placement.column, placement.column_span, spacing))
@@ -750,81 +749,68 @@ struct GridPlacement {
     row_span: usize,
 }
 
-/// Rebuilds row-major placements and occupancy into reusable Grid-owned buffers.
-fn grid_placements_into(child_count: usize, columns: usize, spans: &[GridSpan], placements: &mut Vec<GridPlacement>, occupied: &mut Vec<bool>) {
+/// Prepares a complete placement vector before any child owner can be transferred.
+///
+/// Search advances monotonically through at most columns * max_rows origins.
+/// Every candidate checks its entire effective rectangle. The bitmap grows only
+/// to accepted footprints, with checked arithmetic and fallible reservations;
+/// no storage is allocated for unused policy headroom.
+fn grid_placements(spans: &[GridSpan], columns: usize, max_rows: usize) -> Result<Vec<GridPlacement>, NcStatus> {
     let columns = columns.max(1);
-    occupied.clear();
-    placements.clear();
-    placements.reserve(child_count);
+    let maximum = columns.checked_mul(max_rows).filter(|cells| *cells <= isize::MAX as usize)
+        .ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
+    if spans.len() > maximum || spans.iter().any(|span| span.rows() > max_rows) {
+        return Err(neocogi_com::NC_E_OUT_OF_RANGE);
+    }
+    let mut occupied = Vec::new();
+    let mut placements = Vec::new();
+    placements.try_reserve_exact(spans.len()).map_err(|_| neocogi_com::NC_E_OUT_OF_MEMORY)?;
     let mut search_row = 0;
     let mut search_column = 0;
-
-    // Continue after each placed span rather than restarting at the origin for every child.
-    for index in 0..child_count {
-        let span = spans.get(index).copied().unwrap_or(GridSpan::ONE);
-        let (row, column) = first_free_grid_rectangle(occupied, columns, search_row, search_column, span);
-        // A span is intrinsically non-zero. Only the parent-dependent right-edge clamp remains.
-        // column_span = min(requested_span, max(column_count - start_column, 1)).
-        let column_span = span.columns().min(columns.saturating_sub(column).max(1));
-        let row_span = span.rows();
-        mark_grid_occupied(occupied, columns, row, column, row_span, column_span);
-        placements.push(GridPlacement {
-            child_index: index,
-            column,
-            row,
-            column_span,
-            row_span,
-        });
-
+    for (index, span) in spans.iter().copied().enumerate() {
+        let (row, column) = first_free_grid_rectangle(&occupied, columns, search_row, search_column, span, max_rows)?;
+        let column_span = span.columns().min(columns - column);
+        let end_row = row.checked_add(span.rows()).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
+        let required = end_row.checked_mul(columns).filter(|cells| *cells <= maximum)
+            .ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
+        if required > occupied.len() {
+            occupied.try_reserve_exact(required - occupied.len()).map_err(|_| neocogi_com::NC_E_OUT_OF_MEMORY)?;
+            occupied.resize(required, false);
+        }
+        // Search checked this exact rectangle; marking and publication cannot fail.
+        for y in row..end_row {
+            occupied[y * columns + column..y * columns + column + column_span].fill(true);
+        }
+        placements.push(GridPlacement { child_index: index, column, row, column_span, row_span: span.rows() });
         search_row = row;
-        // next_search_column = placed_column + occupied_column_span.
-        search_column = column.saturating_add(column_span);
-        while search_column >= columns {
-            search_column -= columns;
+        search_column = column + column_span;
+        if search_column == columns {
+            search_column = 0;
             search_row += 1;
         }
     }
+    Ok(placements)
 }
 
-/// Finds the first entirely free effective rectangle in row-major order.
-///
-/// A free origin does not imply a free span: a preceding tall child can occupy a
-/// later column or row. Apply the same right-edge clamp during both search and
-/// publication so the footprint tested here is exactly the footprint retained.
-fn first_free_grid_rectangle(occupied: &[bool], columns: usize, mut row: usize, mut column: usize, span: GridSpan) -> (usize, usize) {
+/// Finds the first entirely free effective rectangle, or exhausts the row ceiling.
+/// Empty unallocated rows require no scanning. The right-edge clamp is applied
+/// here exactly as in publication, so a smaller footprint can fit at the last column.
+fn first_free_grid_rectangle(occupied: &[bool], columns: usize, mut row: usize, mut column: usize, span: GridSpan, max_rows: usize) -> Result<(usize, usize), NcStatus> {
     loop {
+        let end_row = row.checked_add(span.rows()).filter(|end| *end <= max_rows)
+            .ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
         while column < columns {
             let end_column = column + span.columns().min(columns - column);
-            let end_row = row.saturating_add(span.rows());
-            // Unallocated rows are empty. Search itself does not grow storage.
-            let free = (row..end_row).all(|y| {
-                (column..end_column).all(|x| !occupied.get(y * columns + x).copied().unwrap_or(false))
+            let free = (row..end_row.min(occupied.len() / columns)).all(|y| {
+                occupied[y * columns + column..y * columns + end_column].iter().all(|cell| !cell)
             });
             if free {
-                return (row, column);
+                return Ok((row, column));
             }
             column += 1;
         }
         row += 1;
         column = 0;
-    }
-}
-
-/// Marks every cell covered by one validated placement span.
-fn mark_grid_occupied(occupied: &mut Vec<bool>, columns: usize, row: usize, column: usize, row_span: usize, column_span: usize) {
-    // Row spans may extend the current bitmap; column spans are clamped at the right Grid edge.
-    // end_row = start_row + max(row_span, 1); required_cells = end_row * column_count.
-    let end_row = row.saturating_add(row_span.max(1));
-    let required = end_row.saturating_mul(columns);
-    if occupied.len() < required {
-        occupied.resize(required, false);
-    }
-    // end_column = min(start_column + max(column_span, 1), column_count).
-    let end_column = column.saturating_add(column_span.max(1)).min(columns);
-    for y in row..end_row {
-        for x in column..end_column {
-            occupied[y * columns + x] = true;
-        }
     }
 }
 
@@ -843,15 +829,10 @@ mod tests {
 
     #[test]
     fn placement_uses_validated_spans_and_clamps_only_at_the_right_edge() {
-        let mut placements = Vec::new();
-        let mut occupied = Vec::new();
-        grid_placements_into(
-            3,
-            3,
+        let placements = grid_placements(
             &[GridSpan::new(2, 1), GridSpan::new(8, 1), GridSpan::new(1, 2)],
-            &mut placements,
-            &mut occupied,
-        );
+            3, 3,
+        ).unwrap();
 
         assert_eq!(
             placements,
@@ -884,11 +865,9 @@ mod tests {
     /// A wide span must skip a free origin when a tall earlier child occupies its interior.
     #[test]
     fn placement_checks_the_whole_rectangle_and_preserves_edge_clamping() {
-        let mut placements = Vec::new();
-        let mut occupied = Vec::new();
-        grid_placements_into(4, 3, &[
+        let placements = grid_placements(&[
             GridSpan::ONE, GridSpan::new(1, 2), GridSpan::ONE, GridSpan::new(2, 1),
-        ], &mut placements, &mut occupied);
+        ], 3, 2).unwrap();
         assert_eq!(placements[3], GridPlacement {
             child_index: 3, column: 2, row: 1, column_span: 1, row_span: 1,
         });
@@ -905,7 +884,48 @@ mod tests {
     #[test]
     fn rectangle_search_rejects_occupancy_below_the_origin() {
         let occupied = [false, false, false, false, true, false];
-        assert_eq!(first_free_grid_rectangle(&occupied, 3, 0, 0, GridSpan::new(2, 2)), (0, 2));
+        assert_eq!(first_free_grid_rectangle(&occupied, 3, 0, 0, GridSpan::new(2, 2), 2), Ok((0, 2)));
+    }
+
+    /// Overflow and cumulative row exhaustion are rejected without a large allocation.
+    #[test]
+    fn placement_rejects_unrepresentable_or_exhausted_footprints() {
+        use neocogi_com::NC_E_OUT_OF_RANGE;
+        assert_eq!(grid_placements(&[GridSpan::ONE], usize::MAX, 2), Err(NC_E_OUT_OF_RANGE));
+        assert_eq!(grid_placements(&[GridSpan::new(1, u32::MAX as usize)], 1, 2), Err(NC_E_OUT_OF_RANGE));
+        assert_eq!(grid_placements(&[GridSpan::new(1, 2), GridSpan::ONE], 1, 2), Err(NC_E_OUT_OF_RANGE));
+        assert!(grid_placements(&[GridSpan::new(1, 2), GridSpan::ONE], 1, 3).is_ok());
+    }
+
+    /// Enumerate small spanning layouts and check geometric exclusion without reading the bitmap.
+    #[test]
+    fn accepted_small_plans_have_no_overlaps_and_stay_within_the_policy() {
+        let choices = [GridSpan::ONE, GridSpan::new(1, 2), GridSpan::new(2, 1), GridSpan::new(2, 2), GridSpan::new(4, 1)];
+        let mut accepted = 0;
+        for mut encoded in 0..choices.len().pow(4) {
+            let spans = core::array::from_fn::<_, 4, _>(|_| {
+                let span = choices[encoded % choices.len()];
+                encoded /= choices.len();
+                span
+            });
+            let placements = match grid_placements(&spans, 3, 3) {
+                Ok(placements) => placements,
+                Err(status) => { assert_eq!(status, neocogi_com::NC_E_OUT_OF_RANGE); continue; }
+            };
+            accepted += 1;
+            assert_eq!(placements.len(), spans.len());
+            for (index, a) in placements.iter().enumerate() {
+                assert_eq!(a.child_index, index);
+                assert!(a.column + a.column_span <= 3 && a.row + a.row_span <= 3);
+                assert_eq!(a.column_span, spans[index].columns().min(3 - a.column));
+                assert_eq!(a.row_span, spans[index].rows());
+                for b in &placements[index + 1..] {
+                    assert!(a.column + a.column_span <= b.column || b.column + b.column_span <= a.column
+                        || a.row + a.row_span <= b.row || b.row + b.row_span <= a.row);
+                }
+            }
+        }
+        assert!(accepted > 100);
     }
 
     #[test]
@@ -933,10 +953,11 @@ mod tests {
     fn fixed_grid_resolves_both_axes_without_measuring_children() {
         let mut grid = crate::test_support::algorithm::Algorithm::new(crate::WidgetOption::NONE, |runtime| {
             let editor = runtime.state.host().create_children().unwrap();
-            Grid::from_runtime(runtime, editor, vec![TrackSize::Fixed(24); 32], vec![TrackSize::Fixed(24); 32])
+            Grid::from_runtime(runtime, editor, vec![TrackSize::Fixed(24); 32], vec![TrackSize::Fixed(24); 32], GridLimits { max_columns: 32, max_rows: 32 })
         });
         let items = &mut grid.items;
-        grid_placements_into(1024, 32, &[], &mut items.placements, &mut items.occupied);
+        items.spans = vec![GridSpan::ONE; 1024];
+        items.placements = grid_placements(&items.spans, 32, 32).unwrap();
         let mut layout = GridLayout::default();
         resolve_columns_into(&mut FixedGridMetrics, &grid, AvailableSpace::bounded(1000), &mut layout.columns).unwrap();
         resolve_rows_into(&mut FixedGridMetrics, &grid, AvailableSpace::bounded(1000), &layout.columns, &mut layout.rows).unwrap();
@@ -970,10 +991,11 @@ mod tests {
     fn grid_measurement_stops_at_the_first_failed_child() {
         let mut grid = crate::test_support::algorithm::Algorithm::new(crate::WidgetOption::NONE, |runtime| {
             let editor = runtime.state.host().create_children().unwrap();
-            Grid::from_runtime(runtime, editor, vec![TrackSize::Content; 2], vec![TrackSize::Content; 2])
+            Grid::from_runtime(runtime, editor, vec![TrackSize::Content; 2], vec![TrackSize::Content; 2], GridLimits { max_columns: 2, max_rows: 2 })
         });
         let items = &mut grid.items;
-        grid_placements_into(4, 2, &[], &mut items.placements, &mut items.occupied);
+        items.spans = vec![GridSpan::ONE; 4];
+        items.placements = grid_placements(&items.spans, 2, 2).unwrap();
         let mut context = FailingMetrics { calls: 0, fail_at: 2 };
         let mut columns = Vec::new();
         assert_eq!(

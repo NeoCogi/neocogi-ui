@@ -69,16 +69,18 @@ impl super::ContainerAlgorithm for Form {
     fn edge(&self, index: usize) -> Option<Rect> {
         self.edges.get(index).copied()
     }
-    /// Publishes metadata only after the matching topology operation has committed.
-    fn edit_edges(&mut self, edit: super::EdgeEdit<Rect>) {
-        match edit {
-            super::EdgeEdit::Insert { index, edge } => self.edges.insert(index, edge),
-            super::EdgeEdit::Replace { index, edge } => self.edges[index] = edge,
-            super::EdgeEdit::Remove { index } => {
-                self.edges.remove(index);
-            }
-            super::EdgeEdit::Clear => self.edges.clear(),
-        }
+    type Prepared = super::EdgeEdit<Rect>;
+
+    /// Fixed rectangles need only validated indices and reserved relationship storage.
+    fn prepare_edges(&mut self, edit: Self::Prepared) -> Result<Self::Prepared, NcStatus> {
+        let len = edit.resulting_len(self.edges.len())?;
+        self.edges.try_reserve(len.saturating_sub(self.edges.len())).map_err(|_| neocogi_com::NC_E_OUT_OF_MEMORY)?;
+        Ok(edit)
+    }
+
+    /// Publishes the prepared edit without allocation after ownership has committed.
+    fn commit_edges(&mut self, prepared: Self::Prepared) {
+        prepared.apply(&mut self.edges);
     }
 }
 direct_widget_phase_impl!(Form);

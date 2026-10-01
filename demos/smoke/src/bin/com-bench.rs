@@ -119,7 +119,7 @@ impl Workload {
         let mut buttons = Vec::new();
         let root = if shape == "wide" {
             let tracks = [LayoutTrack::Fixed { extent: 24 }; 32];
-            let mut grid = factory.grid(&tracks, &tracks)?;
+            let mut grid = factory.grid(&tracks, &tracks, neocogi_ui::GridLimits { max_columns: 32, max_rows: 32 })?;
             for index in 0..1024 {
                 let mut button = factory.button_unobserved("MMMM")?;
                 button.replace_flags(WidgetOptions::NONE)?;

@@ -63,7 +63,7 @@ fn generated_shared_queue_resolves_origins_and_rejects_replaced_forms() {
     let root_owner = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let mut root = root_owner.handle();
     let window = ui.window("generated", RECT, root_owner).unwrap();
-    let mut slot = ReloadSlot::new(ui.clone(), window.clone()).unwrap();
+    let mut slot = ReloadSlot::new(ui.clone(), window.clone(), neocogi_ui::GridLimits { max_columns: 64, max_rows: 256 }).unwrap();
     root.insert(0, slot.take_widget().unwrap(), LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
         .unwrap();
     let document = Document::from_json(include_bytes!(concat!(

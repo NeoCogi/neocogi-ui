@@ -389,6 +389,7 @@ fn run() -> Result<(), HostError> {
     let grid = host.ui.widgets().grid(
         &[LayoutTrack::Flex { weight: 1.0 }; 4],
         &[LayoutTrack::Flex { weight: KEYPAD_ROW_HEIGHT_WEIGHT }; 5],
+        neocogi_ui::GridLimits { max_columns: 4, max_rows: 5 },
     )?;
     let mut tree = host.ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     let display_handle = display.handle();

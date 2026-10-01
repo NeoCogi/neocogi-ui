@@ -17,3 +17,21 @@ impl LinearEdge {
         self
     }
 }
+
+impl crate::GridLimits {
+    /// Rejects unusable ceilings before a host accepts this resource policy.
+    /// The i32 axis bound matches track-count arithmetic in pixel layout; the
+    /// checked product also makes every permitted flat occupancy index representable.
+    /// No storage is allocated for the maximum: only actual placements allocate cells.
+    pub fn validate(self) -> Result<(), neocogi_com::NcStatus> {
+        if self.max_columns == 0 || self.max_rows == 0 {
+            return Err(neocogi_com::NC_E_INVALID_ARG);
+        }
+        let cells = (self.max_columns as usize).checked_mul(self.max_rows as usize);
+        match cells {
+            Some(cells) if cells <= isize::MAX as usize
+                && self.max_columns <= i32::MAX as u32 && self.max_rows <= i32::MAX as u32 => Ok(()),
+            _ => Err(neocogi_com::NC_E_OUT_OF_RANGE),
+        }
+    }
+}
