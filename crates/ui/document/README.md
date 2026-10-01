@@ -164,6 +164,13 @@ remain application-owned; generation and origin checks reject stale delivery.
 Application edits belong outside layout and paint. `Component::save()` preserves
 authored defaults, not live focus, scrolling or application state.
 
+`Style.options = None` leaves the concrete constructor's requested flags intact;
+`Some(0)` explicitly clears them. Only `Some(bits)` calls `replace_flags` during
+loading. This applies to custom COM providers as well as built-ins. There is no
+per-kind defaults table. Read `IWidget.requested_flags()` for current
+constructor/setter configuration. See the [constructor configuration contract](../../../docs/WIDGET_CONSTRUCTOR_DEFAULTS.md)
+for examples, designer behavior and the history of this distinction.
+
 For surface enablement, call `clear_flags(WidgetOptions::NO_INTERACT)` to enable
 or `set_flags(WidgetOptions::NO_INTERACT)` to disable. Both preserve other current
 requested bits. Do not write `properties().options` back into settings: effective

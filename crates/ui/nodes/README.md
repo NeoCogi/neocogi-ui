@@ -58,3 +58,7 @@ include derived input flags such as `GRAB_SCROLL`; never save it as configuratio
 The requested getter obeys the same readable-lifetime checks as other properties.
 Custom providers must implement it from the same state their flag setters edit.
 The IDL only describes these ordinary methods: it contains no widget-default policy.
+
+See the [provider-owned configuration contract](../../../docs/WIDGET_CONSTRUCTOR_DEFAULTS.md)
+for document absence versus explicit zero, designer inspection, custom plugins,
+and the history of the removed duplicate default policy.

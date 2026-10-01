@@ -48,6 +48,7 @@ factory UiFactory: IConstructionHost + IFileDialogs {
     /// Creates an empty split view; panes attach through its validated two-child editor.
     fn create_split_view(&self, settings: SplitOptions, events: &EventBinding<SplitView, SplitViewEvent>) -> Result<ComBox<SplitView>>;
     /// Creates a fixed-coordinate form with a positive preferred content size.
+    /// Dimensions affect preferred geometry only; initial requested flags are size-independent.
     fn create_form(&self, size: Size) -> Result<ComBox<Form>>;
     /// Creates an empty Grid with validated tracks and immutable caller-selected limits.
     /// Input offsets must be zero; explicit and implicit tracks obey the same ceilings.

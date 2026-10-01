@@ -213,7 +213,12 @@ impl Construction<'_> {
                 _ => return Err(NC_E_INVALID_ARG),
             }
         }
-        widget.replace_flags(node.style.options.map(WidgetOptions::from_raw).unwrap_or_else(|| node.widget.default_options()))?;
+        // Absence preserves the concrete provider's configuration, including
+        // custom widgets. Explicit zero is still an intentional full replacement.
+        match node.style.options {
+            Some(bits) => widget.replace_flags(WidgetOptions::from_raw(bits))?,
+            None => {}
+        }
         apply_style(&widget, node, self.resources)?;
         Ok(widget)
     }

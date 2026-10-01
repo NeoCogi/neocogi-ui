@@ -42,6 +42,8 @@ pub struct Form {
 }
 impl Form {
     /// Creates a host-bound form after validating its preferred dimensions.
+    /// Initial requested flags are size-independent; size changes content geometry
+    /// only. Authoring tools can inspect one fresh Form for its frame policy.
     pub(crate) fn create_com(host: ComPtr<IWidgetHostAbi>, resources: crate::widget_object::SharedAssets, size: Size) -> Result<neocogi_com::ComBox<FormAbi>, NcStatus> {
         let size = dimensions(size)?;
         let editor = host.create_children()?;

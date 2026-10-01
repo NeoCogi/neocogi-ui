@@ -1025,3 +1025,29 @@ fn rejected_grid_reload_preserves_published_component() {
     old.set_text("Still owned by the committed Grid").unwrap();
     fixture.frame(VIEW).unwrap();
 }
+
+/// Absence survives every transport without replacing provider defaults; zero remains explicit.
+#[test]
+fn authored_flag_absence_and_explicit_masks_round_trip_without_live_state() {
+    let fixture = Headless::standard();
+    let loader = Loader::new(fixture.ui.clone(), None, Resources::new(), GridLimits { max_columns: 64, max_rows: 256 }).unwrap();
+    let direct = fixture.ui.widgets().button_unobserved("Save").unwrap();
+    for flags in [None, Some(0), Some((WidgetOptions::ALIGN_RIGHT | WidgetOptions::NO_INTERACT).raw())] {
+        let mut document = Document {
+            version: VERSION, name: "constructor flags".into(),
+            root: Node::new("save", WidgetSpec::Button { text: "Save".into() }), outputs: vec![],
+        };
+        document.root.style.options = flags;
+        let expected = flags.map(WidgetOptions::from_raw).unwrap_or(direct.requested_flags().unwrap());
+        let component = loader.compile(&document).unwrap();
+        let mut widget = component.root().unwrap();
+        assert_eq!(widget.requested_flags().unwrap(), expected);
+        // Live application edits cannot convert authored absence into a saved mask.
+        widget.replace_flags(WidgetOptions::ALIGN_CENTER).unwrap();
+        let bytes = component.save().unwrap();
+        assert_eq!(Document::from_binary(&bytes).unwrap(), document);
+        let loaded = loader.load(&bytes).unwrap();
+        assert_eq!(loaded.root().unwrap().requested_flags().unwrap(), expected);
+        assert_eq!(Document::from_json(&document.to_json().unwrap()).unwrap(), document);
+    }
+}

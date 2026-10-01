@@ -8,7 +8,7 @@ use neocogi.ui.core::{
     IChoiceMenuEvent, ChoiceMenuEntry, ChoiceSelection, Activation, IChildren,
     IConstructionHost, IContainerLayout, IFileDialogs, ILeafLayout, IScrolling,
     TextChanged, TextSubmitted, ITextContent, IWidget, IWidgetHost, IWindow, ScrollInfo,
-    TextWrapping, UiRuntime, WidgetOptions,
+    TextWrapping, UiRuntime,
 };
 use neocogi.renderer::{ITexture, Rect, Size};
 use neocogi.gfx::FontRole;

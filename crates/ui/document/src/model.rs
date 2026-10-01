@@ -56,7 +56,9 @@ pub struct Child {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ComSerialize, ComDeserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Style {
-    /// Explicit widget option bits, or the normal constructor defaults.
+    /// Explicit requested flag replacement, including zero, or no override (None).
+    /// Absence preserves the concrete provider's constructor configuration; the
+    /// document schema never supplies a competing per-kind defaults table.
     pub options: Option<u16>,
     /// Named font in the supplied asset bundle, or the widget default.
     pub font: Option<String>,
@@ -643,28 +645,4 @@ fn validate_node<'a>(node: &'a Node, depth: usize, nodes: &mut BTreeMap<&'a str,
         validate_node(&child.node, depth + 1, nodes)?;
     }
     Ok(())
-}
-
-impl WidgetSpec {
-    /// Authored constructor option defaults for this document revision.
-    /// Dynamic routing bits (scroll eligibility or an empty split) are deliberately
-    /// excluded: reading effective runtime properties back as authoring would
-    /// freeze transient behavior into a later setter or saved document.
-    pub fn default_options(&self) -> neocogi_ui::WidgetOptions {
-        use neocogi_ui::WidgetOptions as Options;
-        match self {
-            Self::Button { .. }
-            | Self::Textbox { .. }
-            | Self::TextArea { .. }
-            | Self::Slider { .. }
-            | Self::Number { .. }
-            | Self::Combo { .. }
-            | Self::Scroll { .. } => Options::FRAME,
-            Self::ColorSwatch { .. } => Options::FRAME | Options::ALIGN_CENTER | Options::NO_INTERACT,
-            Self::Form { .. } | Self::TextBlock { .. } | Self::Linear { .. } | Self::Grid { .. } | Self::Disclosure { .. } => Options::NO_INTERACT,
-            Self::Checkbox { .. } | Self::ListItem { .. } | Self::ListBox { .. } | Self::Scrollbar { .. } | Self::Split { .. } | Self::Custom { .. } => {
-                Options::NONE
-            }
-        }
-    }
 }
