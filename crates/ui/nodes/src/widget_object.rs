@@ -209,6 +209,10 @@ macro_rules! direct_widget_phase_impl {
                 })
             }
 
+            /// Reads the constructor/setter state, excluding algorithm-derived policy bits.
+            fn requested_flags(&self) -> Result<neocogi_ui_core_contracts::WidgetOptions, neocogi_com::NcStatus> {
+                <$name as crate::widget_object::HostedWidget>::runtime(self).state.requested_flags()
+            }
             /// Replaces requested flags using the concrete widget's one common state.
             fn replace_flags(&mut self, flags: neocogi_ui_core_contracts::WidgetOptions) -> Result<(), neocogi_com::NcStatus> {
                 <$name as crate::widget_object::HostedWidget>::runtime_mut(self)

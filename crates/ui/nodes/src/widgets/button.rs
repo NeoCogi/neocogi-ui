@@ -330,10 +330,11 @@ impl Button {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         label: NcCopyFromBufferOffset<'_, u8>,
-        options: WidgetOptions,
         queue: Option<ComPtr<neocogi_ui_nodes_contracts::ButtonEventQueueAbi>>,
     ) -> Result<neocogi_com::ComBox<ButtonAbi>, NcStatus> {
-        let mut value = Self::build(host, label, options, Some(&resources))?;
+        // The concrete provider chooses initial presentation. Facades and loaders
+        // must not repeat this policy; explicit overrides use IWidget setters.
+        let mut value = Self::build(host, label, WidgetOptions::FRAME, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
         Self::into_box_cyclic::<ButtonAbi>(move |origin| {
             value.events = crate::widget_object::WidgetEvents::with_queue(queue, origin);

@@ -62,6 +62,10 @@ impl<Content: LeafContent> IWidget for LeafObject<Content> {
             frame: Content::FRAME,
         })
     }
+    /// Reads the requested configuration without including transient runtime policy.
+    fn requested_flags(&self) -> Result<WidgetOptions, NcStatus> {
+        self.state.requested_flags()
+    }
     /// Options and their sticky geometry effect follow the standard widget contract.
     fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
         self.state.replace_flags(flags)

@@ -84,6 +84,10 @@ impl IWidget for TestContainer {
             frame: WidgetFrame::Panel,
         })
     }
+    /// Reads the requested configuration without including transient runtime policy.
+    fn requested_flags(&self) -> Result<WidgetOptions, NcStatus> {
+        self.state.requested_flags()
+    }
     /// Common option changes share the same sticky invalidation as built-in widgets.
     fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
         self.state.replace_flags(flags)

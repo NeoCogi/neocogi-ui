@@ -104,6 +104,10 @@ mod tests {
                 frame: WidgetFrame::Generic,
             })
         }
+        /// Reads the requested configuration without including transient runtime policy.
+        fn requested_flags(&self) -> Result<WidgetOptions, NcStatus> {
+            Ok(self.requested_flags)
+        }
         /// Replaces requested bits and preserves earlier label/geometry invalidation.
         fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
             flags.validate()?;

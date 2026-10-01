@@ -25,7 +25,6 @@ fn button(runtime: &ComPtr<UiRuntimeAbi>) -> ComBox<ButtonAbi> {
         .unwrap()
         .create_button(
             NcCopyFromBufferOffset::new(0, b""),
-            WidgetOptions::FRAME,
             neocogi_com::NcValueRef::new(&neocogi_ui_nodes_contracts::ButtonEventBinding::Unobserved).unwrap(),
         )
         .unwrap()
@@ -160,7 +159,6 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
     let button = factory
         .create_button(
             label,
-            WidgetOptions::FRAME,
             neocogi_com::NcValueRef::new(&neocogi_ui_nodes_contracts::ButtonEventBinding::Unobserved).unwrap(),
         )
         .unwrap();
@@ -463,6 +461,10 @@ impl IWidget for RetainingWidget {
             properties.keyboard |= 256;
         }
         Ok(properties)
+    }
+    /// Reads the requested configuration without including transient runtime policy.
+    fn requested_flags(&self) -> Result<WidgetOptions, NcStatus> {
+        self.button.requested_flags()
     }
     /// Common options are delegated to the shared fixture state.
     fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {

@@ -52,6 +52,11 @@ interface IWidget {
     /// Returns effective frame, focus and input policy, including behavior-derived flags.
     /// This observation is not requested configuration and must not be written back as such.
     fn properties(&self) -> Result<WidgetProperties>;
+    /// Returns current requested configuration, initialized by the concrete constructor.
+    /// Excludes behavior-derived flags from properties(); safe to use as the baseline
+    /// for explicit authoring edits. Setters change this value; it is not a saved
+    /// copy of construction defaults. Uses the same readable-lifetime checks as properties.
+    fn requested_flags(&self) -> Result<WidgetOptions>;
     /// Replaces all current requested flags; unspecified flags are cleared.
     /// Rejects unknown bits and forbidden mutations before changing state. A real change
     /// records sticky geometry invalidation; an identical replacement preserves that marker.

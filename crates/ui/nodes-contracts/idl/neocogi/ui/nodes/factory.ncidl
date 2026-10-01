@@ -77,8 +77,9 @@ factory UiFactory: IConstructionHost + IFileDialogs {
     fn create_list_box(&self, label: &[u8], events: &EventBinding<ListBox, ListBoxEvent>) -> Result<ComBox<ListBox>>;
     /// Constructs a scrollbar with a validated orientation and normalized range.
     fn create_scrollbar(&self, range: ScrollRange, events: &EventBinding<Scrollbar, ScrollbarEvent>) -> Result<ComBox<Scrollbar>>;
-    /// Constructs an initialized, unmounted Button through its concrete class contract.
-    fn create_button(&self, label: &[u8], options: WidgetOptions, events: &EventBinding<Button, ButtonEvent>) -> Result<ComBox<Button>>;
+    /// Constructs an initialized, unmounted Button using its provider-owned defaults.
+    /// Explicit presentation overrides use IWidget.replace_flags after construction.
+    fn create_button(&self, label: &[u8], events: &EventBinding<Button, ButtonEvent>) -> Result<ComBox<Button>>;
     /// Atomically binds one combo header, choice-menu popup, and validated model to its window.
     fn create_combo_box(
         &self,

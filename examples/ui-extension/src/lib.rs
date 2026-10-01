@@ -54,6 +54,10 @@ macro_rules! widget {
                     frame: $frame,
                 })
             }
+            /// Reads the requested configuration without including transient runtime policy.
+            fn requested_flags(&self) -> Result<WidgetOptions, NcStatus> {
+                self.common.state.requested_flags()
+            }
             /// Common option edits retain a geometry marker without copying options into content state.
             fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
                 self.common.state.replace_flags(flags)

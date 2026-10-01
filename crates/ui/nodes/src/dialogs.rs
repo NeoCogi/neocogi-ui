@@ -243,7 +243,6 @@ fn button(nodes: &Rc<DialogNodes>, value: &str) -> Result<OwnedWidget<neocogi_ui
         nodes.host.clone(),
         nodes.resources.clone(),
         NcCopyFromBufferOffset::new(0, value.as_bytes()),
-        WidgetOptions::FRAME,
         Some(queue),
     )?);
     Ok(button)
@@ -697,6 +696,10 @@ impl IWidget for FileDialog {
     /// Uses the root layout's authoritative options and interaction policy.
     fn properties(&self) -> Result<WidgetProperties, NcStatus> {
         IWidget::properties(&self.shell)
+    }
+    /// Reads the requested configuration without including transient runtime policy.
+    fn requested_flags(&self) -> Result<WidgetOptions, NcStatus> {
+        IWidget::requested_flags(&self.shell)
     }
     /// Replaces only requested flags on the actual inline root state.
     fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {

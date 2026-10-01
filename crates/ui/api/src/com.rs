@@ -114,6 +114,12 @@ impl<I: ComInterface, P: WidgetStorage<I>> Widget<I, P> {
         &mut self.interface
     }
 
+    /// Reads constructor/setter configuration through COM, excluding effective runtime policy.
+    /// A newly constructed widget reports its provider's defaults until explicitly edited.
+    pub fn requested_flags(&self) -> Result<WidgetOptions, NcStatus> {
+        self.node_interface()?.requested_flags()
+    }
+
     /// Replaces all requested flags, clearing every omitted bit through the provider.
     pub fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
         self.node_interface()?.replace_flags(flags)
@@ -466,7 +472,6 @@ impl WidgetFactory {
     pub fn button_with_queue(&self, label: &str, queue: Option<ComRef<'_, ButtonEventQueueAbi>>) -> Result<OwnedWidget<ButtonAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_button(
             NcCopyFromBufferOffset::new(0, label.as_bytes()),
-            WidgetOptions::FRAME,
             neocogi_com::NcValueRef::new(&ButtonEventBinding::from_queue(queue))?,
         )?))
     }

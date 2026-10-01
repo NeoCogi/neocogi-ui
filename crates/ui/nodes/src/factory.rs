@@ -243,7 +243,6 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     fn create_button(
         &self,
         label: NcCopyFromBufferOffset<'_, u8>,
-        options: WidgetOptions,
         events: neocogi_com::NcValueRef<'_, ButtonEventBinding>,
     ) -> Result<neocogi_com::ComBox<ButtonAbi>, NcStatus> {
         self.services.host.check_mutation()?;
@@ -251,7 +250,6 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
             self.services.host.clone(),
             self.services.resources.clone(),
             label,
-            options,
             events.to_owned()?.into_queue(),
         )
     }

@@ -56,6 +56,10 @@ impl<Model: EventModel> IWidget for Composite<Model> {
     fn properties(&self) -> Result<WidgetProperties, NcStatus> {
         self.shell.node_interface()?.properties()
     }
+    /// Reads the requested configuration without including transient runtime policy.
+    fn requested_flags(&self) -> Result<WidgetOptions, NcStatus> {
+        self.shell.node_interface()?.requested_flags()
+    }
     /// Changes the same requested flags used for layout and paint.
     fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
         self.shell.node_interface()?.replace_flags(flags)

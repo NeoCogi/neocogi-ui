@@ -8,6 +8,7 @@ fn widget_flag_edits_preserve_requested_state_and_sticky_invalidation() {
     let button = button(&runtime);
     let mut widget: WeakComBox<IWidgetAbi> = button.downgrade().query().unwrap();
     widget.take_change().unwrap();
+    assert_eq!(widget.requested_flags().unwrap(), WidgetOptions::FRAME);
 
     // Replacement clears omitted constructor bits, while selective edits preserve new ones.
     widget.replace_flags(WidgetOptions::ALIGN_RIGHT).unwrap();
@@ -35,6 +36,7 @@ fn widget_flag_edits_preserve_requested_state_and_sticky_invalidation() {
     assert_eq!(widget.take_change().unwrap(), GeometryChange::Changed);
     widget.replace_flags(WidgetOptions::NONE).unwrap();
     assert_eq!(button.properties().unwrap().options, WidgetOptions::NONE);
+    assert_eq!(widget.requested_flags().unwrap(), WidgetOptions::NONE);
     assert_eq!(widget.take_change().unwrap(), GeometryChange::Changed);
 }
 
@@ -59,6 +61,7 @@ fn widget_flag_edits_reject_unknown_masks_and_closed_objects() {
     assert_eq!(widget.take_change().unwrap(), GeometryChange::NoChange);
 
     drop(owner);
+    assert_eq!(widget.requested_flags(), Err(neocogi_com::NC_E_DROPPED));
     assert_eq!(widget.replace_flags(WidgetOptions::NONE), Err(neocogi_com::NC_E_DROPPED));
     assert_eq!(widget.set_flags(WidgetOptions::FRAME), Err(neocogi_com::NC_E_DROPPED));
     assert_eq!(widget.clear_flags(WidgetOptions::NONE), Err(neocogi_com::NC_E_DROPPED));
@@ -66,7 +69,30 @@ fn widget_flag_edits_reject_unknown_masks_and_closed_objects() {
     // Unmounted handles are also invalidated when their allocating runtime closes.
     let mut detached: ComBox<IWidgetAbi> = button(&runtime).query().unwrap();
     runtime.close().unwrap();
+    assert_eq!(detached.requested_flags(), Err(UI_E_CLOSED));
     assert_eq!(detached.replace_flags(WidgetOptions::NONE), Err(UI_E_CLOSED));
     assert_eq!(detached.set_flags(WidgetOptions::FRAME), Err(UI_E_CLOSED));
     assert_eq!(detached.clear_flags(WidgetOptions::NONE), Err(UI_E_CLOSED));
+}
+
+/// Both construction entry points use provider defaults; runtime input policy is never configuration.
+#[test]
+fn provider_defaults_and_requested_flags_survive_facade_and_effective_policy() {
+    let runtime = runtime();
+    let factory = nc_ui_nodes::UiFactory::bind(runtime.as_com_ref()).unwrap();
+    let direct = button(&runtime);
+    let ui = neocogi_ui::Ui::from_interfaces(runtime, factory).unwrap();
+    let mut facade = ui.widgets().button_unobserved("Save").unwrap();
+    assert_eq!(direct.requested_flags().unwrap(), WidgetOptions::FRAME);
+    assert_eq!(facade.requested_flags().unwrap(), direct.requested_flags().unwrap());
+    facade.replace_flags(WidgetOptions::NONE).unwrap();
+    assert_eq!(facade.requested_flags().unwrap(), WidgetOptions::NONE);
+    facade.set_flags(WidgetOptions::ALIGN_RIGHT).unwrap();
+    assert_eq!(facade.requested_flags().unwrap(), WidgetOptions::ALIGN_RIGHT);
+
+    // Scrolling derives GRAB_SCROLL for routing. It must never become an authored
+    // flag simply because an editor reads the current widget configuration.
+    let editor = ui.widgets().text_area_unobserved("scroll", TextWrapping::Word, true).unwrap();
+    assert_eq!(editor.requested_flags().unwrap(), WidgetOptions::FRAME);
+    assert_ne!(editor.node_interface().unwrap().properties().unwrap().options.raw() & WidgetOptions::GRAB_SCROLL.raw(), 0);
 }

@@ -43,3 +43,18 @@ host acceptance, metadata publication cannot fail. Linear and Form use the same
 prepare/commit ordering with only an index check and vector reservation. See the
 [Grid placement contract](../../../docs/GRID_PLACEMENT.md) for numeric policy,
 right-edge clamping, removal reflow, and the regression matrix.
+
+## Constructor configuration
+
+Concrete providers choose initial widget flags. `UiFactory.create_button(label,
+events)` constructs the normal framed Button, just as the other factory methods
+choose their own initial presentation. Rust convenience methods forward the
+construction request without supplying a second default mask. Application-specific
+presentation uses `IWidget.replace_flags`, `set_flags`, or `clear_flags` afterward.
+
+`IWidget.requested_flags()` reads that constructor/setter configuration through
+COM. `IWidget.properties().options` describes effective runtime behavior and may
+include derived input flags such as `GRAB_SCROLL`; never save it as configuration.
+The requested getter obeys the same readable-lifetime checks as other properties.
+Custom providers must implement it from the same state their flag setters edit.
+The IDL only describes these ordinary methods: it contains no widget-default policy.
