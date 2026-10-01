@@ -169,7 +169,10 @@ creation. Exhaustion returns an error without wrapping or changing the active fo
 The token owns no widgets and adds no allocation/reference counting. `accepts`
 compares the complete pair; generated dispatch also validates the weak origin.
 Allocator mutation uses `&mut self`. Concurrent slot creation must serialize access
-to the same allocator; posting a copied token from another thread requires no lock.
+to the same allocator. Copied tokens need no synchronization beyond the channel's
+ordinary transport.
+The [reload identity contract](../../../docs/RELOAD_GENERATION_IDENTITY.md) defines
+allocator lifetime, reservation ordering, exhaustion, examples and regression coverage.
 
 Mount a `Component`, its `take_root()` result, or a `ReloadSlot::take_widget()`
 result. Removing those trees destroys their widget queues. Already posted facts

@@ -118,7 +118,7 @@ impl Document {
             )
             .unwrap();
         }
-        source.push_str("}\n/// A captured event belongs to exactly one component reload attempt.\npub struct Message {\n    /// Reject stale messages with ReloadSlot::accepts before dispatch.\n    pub generation: neocogi_ui_document::Generation,\n    /// Complete typed widget event.\n    pub event: QueuedEvent,\n}\n");
+        source.push_str("}\n/// A captured event belongs to one slot/attempt in the application ReloadIds domain.\npub struct Message {\n    /// Preserve the complete slot/attempt pair; check ReloadSlot::accepts before dispatch.\n    pub generation: neocogi_ui_document::Generation,\n    /// Complete typed widget event.\n    pub event: QueuedEvent,\n}\n");
         source.push_str("/// Application-owned behavior; every emitting widget requires an implementation.\npub trait Handlers {\n");
         for (index, node, payload) in &events {
             writeln!(source, "    /// Handles the event from widget {:?} after traversal releases widget borrows.\n    fn {}(&mut self, event: {}) -> Result<(), neocogi_com::NcStatus>;", node.key, symbol("on", &node.key, *index), payload).unwrap();

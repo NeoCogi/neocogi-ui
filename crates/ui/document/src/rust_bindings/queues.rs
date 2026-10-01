@@ -109,7 +109,7 @@ pub(super) fn emit(source: &mut String, events: &[(usize, &Node, String)], custo
             queues.iter().map(|queue| queue.implementation.as_str()).collect::<Vec<_>>().join(", ")
         )
         .unwrap();
-        source.push_str("/// One application queue allocation serves every widget in this construction attempt.\nstruct FormQueue {\n    /// Fixed reload identity, independent of widget lifetime.\n    generation: neocogi_ui_document::Generation,\n    /// Retains the channel, never the form, model or widgets.\n    send: std::sync::mpsc::Sender<Message>,\n}\n");
+        source.push_str("/// One application queue allocation serves every widget in this construction attempt.\nstruct FormQueue {\n    /// Complete slot/attempt identity from the application ReloadIds domain.\n    generation: neocogi_ui_document::Generation,\n    /// Retains the channel, never the form, model or widgets.\n    send: std::sync::mpsc::Sender<Message>,\n}\n");
         for (index, queue) in queues.iter().enumerate() {
             writeln!(source, "impl {} for FormQueue {{\n    /// Acquires the snapshot and weak origin, then enqueues without running handlers.\n    fn post(&mut self, origin: neocogi_com::ComRef<'_, {}>, event: neocogi_com::NcValueRef<'_, {}>) -> Result<(), neocogi_com::NcStatus> {{\n        let event = event.to_owned()?;", queue.implementation, queue.interface, queue.payload).unwrap();
             if let Some(validate) = &queue.validate {
@@ -118,7 +118,7 @@ pub(super) fn emit(source: &mut String, events: &[(usize, &Node, String)], custo
             writeln!(source, "        let event = QueuedEvent::Source{index} {{ origin: origin.downgrade_box()?, event }};\n        let _ = self.send.send(Message {{ generation: self.generation, event }});\n        Ok(())\n    }}\n}}").unwrap();
         }
     }
-    source.push_str("/// Supplies shared queue projections before Loader or ReloadSlot creates widgets.\npub fn events(generation: neocogi_ui_document::Generation, send: std::sync::mpsc::Sender<Message>) -> Result<neocogi_ui_document::EventBindings, neocogi_com::NcStatus> {\n    let mut bindings = neocogi_ui_document::EventBindings::new();\n");
+    source.push_str("/// Supplies shared queue projections before Loader or ReloadSlot creates widgets.\n/// Use the token issued by a slot constructed with the receiving application's ReloadIds.\npub fn events(generation: neocogi_ui_document::Generation, send: std::sync::mpsc::Sender<Message>) -> Result<neocogi_ui_document::EventBindings, neocogi_com::NcStatus> {\n    let mut bindings = neocogi_ui_document::EventBindings::new();\n");
     match queues.is_empty() {
         true => source.push_str("    let _ = (generation, send, &mut bindings);\n"),
         false => {

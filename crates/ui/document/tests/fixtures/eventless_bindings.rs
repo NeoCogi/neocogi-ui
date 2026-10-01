@@ -2,9 +2,9 @@
 /// Complete captured widget events, one variant per event-producing widget.
 pub enum Event {
 }
-/// A captured event belongs to exactly one component reload attempt.
+/// A captured event belongs to one slot/attempt in the application ReloadIds domain.
 pub struct Message {
-    /// Reject stale messages with ReloadSlot::accepts before dispatch.
+    /// Preserve the complete slot/attempt pair; check ReloadSlot::accepts before dispatch.
     pub generation: neocogi_ui_document::Generation,
     /// Complete typed widget event.
     pub event: QueuedEvent,
@@ -48,6 +48,7 @@ impl QueuedEvent {
     }
 }
 /// Supplies shared queue projections before Loader or ReloadSlot creates widgets.
+/// Use the token issued by a slot constructed with the receiving application's ReloadIds.
 pub fn events(generation: neocogi_ui_document::Generation, send: std::sync::mpsc::Sender<Message>) -> Result<neocogi_ui_document::EventBindings, neocogi_com::NcStatus> {
     let mut bindings = neocogi_ui_document::EventBindings::new();
     let _ = (generation, send, &mut bindings);

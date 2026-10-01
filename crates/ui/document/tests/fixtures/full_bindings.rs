@@ -16,9 +16,9 @@ pub enum Event {
     /// Complete event stream from authored widget "combo".
     Widget7(neocogi_ui::combo::Event),
 }
-/// A captured event belongs to exactly one component reload attempt.
+/// A captured event belongs to one slot/attempt in the application ReloadIds domain.
 pub struct Message {
-    /// Reject stale messages with ReloadSlot::accepts before dispatch.
+    /// Preserve the complete slot/attempt pair; check ReloadSlot::accepts before dispatch.
     pub generation: neocogi_ui_document::Generation,
     /// Complete typed widget event.
     pub event: QueuedEvent,
@@ -207,7 +207,7 @@ impl QueuedEvent {
 #[neocogi_com::com_object(interfaces(neocogi_ui::nodes::IEventQueueInstance0517d9243d615b7d80421e7a13f2acac, neocogi_ui::nodes::IEventQueueInstance1bb30dd91a74581d939df2bf2c3ed308, neocogi_ui::nodes::IEventQueueInstancec95e3d4dc4375ebf8d2dd2827a5a36d8, neocogi_ui::nodes::IEventQueueInstance7f7563cbeb7b5354b412a35d95c4f0c3, neocogi_ui::nodes::IEventQueueInstanced998bacc3a98553fa30d0c4b9a180789, neocogi_ui::nodes::IEventQueueInstanceaf0d7b53ec305e8ea1ab44ef4721cdad, neocogi_ui::nodes::IEventQueueInstancec51448c5bc925b9db65195711c0433be))]
 /// One application queue allocation serves every widget in this construction attempt.
 struct FormQueue {
-    /// Fixed reload identity, independent of widget lifetime.
+    /// Complete slot/attempt identity from the application ReloadIds domain.
     generation: neocogi_ui_document::Generation,
     /// Retains the channel, never the form, model or widgets.
     send: std::sync::mpsc::Sender<Message>,
@@ -283,6 +283,7 @@ impl neocogi_ui::nodes::IEventQueueInstancec51448c5bc925b9db65195711c0433be for 
     }
 }
 /// Supplies shared queue projections before Loader or ReloadSlot creates widgets.
+/// Use the token issued by a slot constructed with the receiving application's ReloadIds.
 pub fn events(generation: neocogi_ui_document::Generation, send: std::sync::mpsc::Sender<Message>) -> Result<neocogi_ui_document::EventBindings, neocogi_com::NcStatus> {
     let mut bindings = neocogi_ui_document::EventBindings::new();
     let queue = FormQueue::from_value(FormQueue { generation, send });

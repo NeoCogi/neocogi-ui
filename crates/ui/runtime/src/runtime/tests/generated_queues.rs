@@ -88,6 +88,24 @@ fn generated_shared_queue_resolves_origins_and_rejects_replaced_forms() {
         form: form.unwrap(),
         observed: Vec::new(),
     };
+    // A second live form shares this application inbox and begins at attempt one.
+    // Its container stays unmounted so keyboard input below reaches only the first.
+    let mut foreign_slot = ReloadSlot::new(
+        &mut ids, ui.clone(), window.clone(), neocogi_ui::GridLimits { max_columns: 64, max_rows: 256 },
+    ).unwrap();
+    let mut foreign_form = None;
+    foreign_slot.reload(
+        &document, Resources::new(), |generation| generated::events(generation, send.clone()),
+        |component, _| { foreign_form = Some(generated::bind(component)?); Ok(()) },
+    ).unwrap();
+    let foreign_form = foreign_form.unwrap();
+    let foreign_event = generated::QueuedEvent::Source0 {
+        origin: foreign_form.widget_first_1.as_interface().clone(),
+        event: neocogi_ui::button::Event::Activated(Activation { label: "foreign form".into() }),
+    };
+    assert!(foreign_event.resolve(&app.form).unwrap().is_none(),
+        "origin checks remain required independently of generation filtering");
+
     for input in [KeyCode::Tab, KeyCode::Space, KeyCode::Tab, KeyCode::Space, KeyCode::Tab] {
         key(&ui, input);
     }
@@ -96,6 +114,7 @@ fn generated_shared_queue_resolves_origins_and_rejects_replaced_forms() {
     assert!(app.observed.is_empty(), "enqueueing must not run application behavior");
     for message in messages.try_iter() {
         assert!(slot.accepts(message.generation));
+        assert!(!foreign_slot.accepts(message.generation), "same attempt number, different slot");
         let event = message.event.resolve(&app.form).unwrap().unwrap();
         event.dispatch(&mut app).unwrap();
     }

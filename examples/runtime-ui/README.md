@@ -8,11 +8,17 @@ only after loading and connecting a complete candidate.
 
 One concrete `AppQueue` implements both `ButtonEventQueue` and
 `IMenuItemEventQueue`. It owns only the sender and is reused across reloads.
-Messages carry weak origins. Before applying Save, the application promotes the
-origin and compares it with the current component's `save` field. A queued event
-from a removed form is ignored even when another client retains that old button.
+Messages carry weak origins. Before applying Save, the application checks origin
+liveness and compares it with the current component's `save` field. A queued event
+from a removed form is ignored; observers cannot retain the removed widget.
 The reload command is likewise checked against the actual static menu entry.
 There are no per-widget mapping callbacks or receiver allocations.
+
+Application startup owns `ReloadIds` alongside the channel and passes it to the
+slot constructor. Additional or recreated slots sharing this message flow must
+reuse that allocator. Reload tokens contain `(slot_id, attempt)`; this example's
+Save handler continues to authenticate the widget origin directly. See the
+[reload identity contract](../../docs/RELOAD_GENERATION_IDENTITY.md).
 
 The `runtime-ui` assembly stages `neocogi-example-ui`. Its Cargo package remains
 `neocogi-runtime-ui-example`; use `--bin neocogi-example-ui` when selecting the
