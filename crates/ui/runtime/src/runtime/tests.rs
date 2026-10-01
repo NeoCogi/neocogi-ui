@@ -7,6 +7,7 @@ mod containers;
 mod embedded_input;
 mod widget_flags;
 mod dispatch_errors;
+mod shutdown;
 
 /// Positive drawable size shared by the deterministic headless fixtures.
 const SIZE: Size = Size { width: 640, height: 400 };

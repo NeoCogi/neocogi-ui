@@ -512,11 +512,6 @@ impl ChoiceMenuManager {
         }
         Ok(changed)
     }
-
-    /// Drops private controller capabilities after runtime closure removed every root family.
-    pub(crate) fn clear(&mut self) {
-        self.controllers.clear();
-    }
 }
 
 /// Converts generic surface policy failures at this private composition boundary.

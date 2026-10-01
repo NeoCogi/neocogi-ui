@@ -25,6 +25,12 @@ calls and destroys its value, private inbox and owned descendants before returni
 A self-removal request runs only after the current handler has returned. Already posted application facts
 remain in the application inbox. See [exclusive ownership](EXCLUSIVE_WIDGET_OWNERSHIP.md).
 
+Whole-runtime shutdown is a terminal application decision: `Ui::close()` drops
+its context without publishing individual window/popup lifecycle events or
+executing pending dispatch. It leaves application-owned queued facts intact.
+Required request completion precedes shutdown; see the
+[context shutdown contract](UI_RUNTIME_SHUTDOWN.md).
+
 ## Ownership and publication
 
 A composite is the mounted widget. FileDialog embeds its Linear root, model and
@@ -158,3 +164,31 @@ The current regression suite covers:
 
 These changes add no dispatch ticket, per-widget active flag, new close phase or
 second queue. The older verification section above remains historical evidence.
+
+## Executed acceptance — October 1, 2026
+
+Revisions `bd213e1c` (status meanings) and `a805e1dc` (iterator and propagation)
+implement this contract on `fix/widget-dispatch-iteration-errors`. Before the
+scheduler change, three new regressions failed because live `NC_E_CLOSED` errors
+were swallowed; the real expired-dependency test already passed after the status
+split. All four behavior regressions and the iterator regression now pass. This
+separately demonstrates why changing status names was insufficient.
+
+Executed after the scheduler change:
+
+| Verification | Result |
+| --- | --- |
+| Runtime and node library suites | 204 runtime + 91 node tests passed, including existing budget, topology, reentrancy and idle-allocation checks. |
+| Native demo, theme editor and designer | 6 + 25 + 33 tests passed with `SDL_VIDEODRIVER=offscreen`, `monolith,embed-assets`, normally ignored tests included, benchmarks excluded and one test thread. The designer exercised its independent custom-plugin fixture. |
+| WebGL consumers | Demo and both editors compiled with tests for `wasm32-unknown-unknown`, no default features and `webgl`. No browser was executed for this change. |
+| Workspace | `cargo check --workspace --all-targets` passed; existing unrelated dead-code warnings remain. |
+| Native C ABI | The generated ABI fixture passed again after its expiry-status parameter names were updated. |
+
+The preceding status commit also passed COM core tests/doctests (52), focused
+ABI/status/native-C integration tests (10 outer tests), shared/exclusive lifetime
+and output-completion tests (44), compiled IDL tests (121), UI facade tests (3),
+and cargo-neocogi module tests (3). Its runtime/node suite passed before the five
+additional scheduler tests were added. These checks cover the changed status
+consumers; they do not claim a new multi-compiler compatibility matrix, sanitizer
+run, or binary-size result. Cargo artifacts were cleaned before and after each
+commit.

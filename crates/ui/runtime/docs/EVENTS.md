@@ -334,3 +334,17 @@ remain. Explicit facade `FileDialog::close` is a parent-side convenience that
 finishes `cancel()` first and then removes the window, outside the widget call.
 The platform/native-window `AppState::close_requested() -> Result<bool, NcStatus>`
 is separate and already lets the application approve or decline host shutdown.
+
+
+## Whole-context shutdown
+
+`Ui::close()` terminates the context after busy preflight and drops its complete
+owned state. It does not replay individual window/popup removal, post `Destroyed`
+or dismissal events, or dispatch private/application messages. The application
+must settle required requests before shutdown. Already queued application facts
+remain application-owned; widget-private inboxes and pending raw input are dropped
+with their owners. Repeated shutdown succeeds without additional work.
+
+Ordinary `IWindow::close()` still publishes its terminal facts and reports posting
+failures after complete removal. See the [shutdown contract](../../../../docs/UI_RUNTIME_SHUTDOWN.md)
+for the ownership boundary, callback behavior, history and regression coverage.

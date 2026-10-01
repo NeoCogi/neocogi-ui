@@ -18,6 +18,9 @@
 //! and performs any file writes.
 //!
 //! Decode exact native paths with `events::completed_file_path` when handling a completion.
+//! Whole-context `Ui::close()` drops the picker without synthesizing cancellation or
+//! dispatching pending completion work. If application shutdown requires a cancellation
+//! result, call `cancel()` and handle that result before terminating the UI context.
 use crate::*;
 use neocogi_com::{ComPtr, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
 use std::path::{Path, PathBuf};

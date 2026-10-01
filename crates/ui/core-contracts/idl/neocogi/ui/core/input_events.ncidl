@@ -116,7 +116,9 @@ struct TextSubmitted {
 }
 
 #[version(1)]
-/// Captured window lifecycle or user chrome interaction; Destroyed is the one terminal fact.
+/// Captured window lifecycle or user chrome interaction while the UI context runs.
+/// Destroyed reports individual removal. Whole-context shutdown and final runtime Drop
+/// release producers without posting terminal lifecycle notifications.
 enum WindowEvent: u8 {
     /// A user move or resize committed this complete outer rectangle.
     GeometryChanged {
@@ -128,7 +130,9 @@ enum WindowEvent: u8 {
     CloseRequested,
     /// Visibility became false; later callback code may observe a subsequent show.
     Hidden,
-    /// The window and its descendants were logically destroyed; delivered once after producer closure.
+    /// Individual removal committed for this window and its descendants. Posted once before
+    /// releasing its record; delivery failure does not undo destruction. Whole-runtime shutdown
+    /// emits no such fact. Queued facts remain readable independently of the removed widget tree.
     Destroyed,
     /// The user minimized to this complete compact rectangle.
     Minimized {
@@ -148,7 +152,8 @@ enum WindowEvent: u8 {
 }
 
 #[version(1)]
-/// Captured popup dismissal fact.
+/// Captured popup dismissal during ordinary operation. Whole-runtime shutdown
+/// drops popup storage without synthesizing dismissal notifications.
 enum PopupDismissed: u8 {
     /// The popup left the active branch without fabricating destruction history.
     Dismissed,

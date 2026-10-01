@@ -788,7 +788,11 @@ impl Ui {
     pub fn install_assets(&mut self, assets: ComRef<'_, IAssetBundleAbi>, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
         self.runtime.install_assets(assets, renderer)
     }
-    /// Closes the runtime's complete retained forest while handles may remain allocated.
+    /// Terminates this UI context, synchronously dropping mounted trees and private resources.
+    /// Does not publish window/popup lifecycle events or dispatch pending application work.
+    /// Settle application requests first; facts already in application queues are not retracted.
+    /// Busy rejection leaves the context live. Success is terminal and repeated calls succeed.
+    /// Retained window services are closed; weak widget handles observe dropped owners.
     pub fn close(&self) -> Result<(), NcStatus> {
         self.runtime.close()
     }

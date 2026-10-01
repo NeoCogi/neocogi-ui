@@ -101,6 +101,8 @@ pub struct Runtime {
 /// All authoritative runtime state is private to the UI plugin.
 pub(crate) struct RuntimeStorage {
     /// Idle engine slot; transactions take ownership so no RefCell borrow spans a COM call.
+    /// Terminal shutdown consumes the context and leaves this slot permanently empty;
+    /// public entry points check the runtime's closed state before requesting it.
     context: RefCell<Option<RuntimeContext>>,
     /// Surface capabilities authenticate parents; the forest alone owns widget nodes.
     mounts: RefCell<Vec<SurfaceMount>>,
@@ -178,7 +180,8 @@ impl RuntimeStorage {
 }
 
 impl Drop for RuntimeStorage {
-    /// Final release closes retained handles even without an explicit application close.
+    /// Final release silently drops the context even without explicit application shutdown.
+    /// An earlier close already consumed that owner; no lifecycle posting or second teardown runs.
     fn drop(&mut self) {
         self.factory.state.closed.set(true);
         // Runtime release must occur outside its widgets' active calls. Dropping
@@ -319,27 +322,29 @@ impl UiRuntime for Runtime {
         // diagnostics retain backend detail while the public UI operation reports UI_E_RENDER.
         context.submit(size, 0xff302820, renderer).map_err(|_| UI_E_RENDER)
     }
-    /// Removes every root while leaving independent retained COM handles safely closed.
+    /// Ends this UI context without publishing individual surface lifecycle events.
+    /// Busy preflight preserves the live context. Once accepted, ordinary Drop releases
+    /// its complete forest and private resources; already queued application facts remain owned
+    /// by the application. Repeated shutdown succeeds without running destruction again.
     fn close(&self) -> Result<(), NcStatus> {
         let storage = &self.storage;
         if storage.factory.state.closed.get() {
             return Ok(());
         }
-        let mut context = storage.context()?;
+        let context = storage.context()?;
         context.window_manager.ensure_widgets_idle()?;
-        let surfaces: Vec<_> = storage.mounts.borrow().iter().map(|m| m.surface.clone()).collect();
+        // All fallible validation precedes the terminal commit. Mark services closed before
+        // foreign destructors can reenter, then consume the context instead of replaying
+        // ordinary window/popup removal (which would post lifecycle notifications).
         storage.factory.state.closed.set(true);
         let clipboard = storage.factory.state.clipboard.take();
-        drop(clipboard);
-        storage.factory.state.error.set(None);
-        for surface in surfaces {
-            surface.close(&mut context.window_manager)?;
-        }
+        drop(context.into_inner());
         storage.mounts.borrow_mut().clear();
-        context.clear_choice_menus();
-        drop(context);
-        let views = storage.factory.state.error.take().map_or(Ok(()), Err);
-        views
+        storage.menus.borrow_mut().clear();
+        storage.dispatch_widgets.borrow_mut().clear();
+        storage.factory.state.error.set(None);
+        drop(clipboard);
+        Ok(())
     }
 }
 
@@ -347,8 +352,18 @@ impl UiRuntime for Runtime {
 struct ContextTransaction<'a> {
     /// Empty while calls are active; reentry sees BUSY instead of a borrow panic.
     slot: &'a RefCell<Option<RuntimeContext>>,
-    /// Owned engine restored on every return path, including error unwinding.
+    /// Owned engine restored on ordinary return or error unwinding. Explicit terminal
+    /// extraction leaves None, so the consumed context cannot be restored accidentally.
     value: Option<RuntimeContext>,
+}
+
+impl ContextTransaction<'_> {
+    /// Transfers the context out and leaves its storage slot empty when this guard drops.
+    /// Shutdown calls this only after idle preflight and publishing the terminal runtime state.
+    /// Every ordinary operation instead lets Drop restore the still-owned context.
+    fn into_inner(mut self) -> RuntimeContext {
+        self.value.take().expect("live transaction owns its context")
+    }
 }
 
 impl core::ops::Deref for ContextTransaction<'_> {
@@ -368,6 +383,7 @@ impl core::ops::DerefMut for ContextTransaction<'_> {
 
 impl Drop for ContextTransaction<'_> {
     /// Reentry never receives the slot, so it is empty and unborrowed here.
+    /// Restores the engine for ordinary operations, or None after terminal extraction.
     fn drop(&mut self) {
         *self.slot.borrow_mut() = self.value.take();
     }

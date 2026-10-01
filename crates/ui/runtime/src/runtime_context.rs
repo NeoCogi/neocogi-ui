@@ -13,6 +13,9 @@ use neocogi_gfx_contracts::GfxCompositorAbi;
 use neocogi_renderer_contracts::{IRendererAbi, Size};
 
 /// Production UI state with no renderer executor or render-stream implementation.
+/// Shutdown drops this owner directly after idle preflight. Field destruction releases
+/// the compositor, complete surface forest, queued raw input and private menu controllers
+/// without executing ordinary window-removal operations or posting lifecycle facts.
 pub(crate) struct RuntimeContext {
     /// Immutable application identities against which derived revisions are authenticated.
     resource_catalog: ResourceCatalog,
@@ -45,11 +48,6 @@ impl RuntimeContext {
     /// Reconciles typed choice-menu intent with generic popup operations through exclusive ownership.
     pub(crate) fn reconcile_choice_menus(&mut self) -> Result<bool, NcStatus> {
         self.choice_menus.reconcile(&mut self.window_manager)
-    }
-
-    /// Releases private choice-menu capabilities after their structurally owned popups are gone.
-    pub(crate) fn clear_choice_menus(&mut self) {
-        self.choice_menus.clear();
     }
 
     /// Returns the focused editor's committed drawable rectangle, when one exists.

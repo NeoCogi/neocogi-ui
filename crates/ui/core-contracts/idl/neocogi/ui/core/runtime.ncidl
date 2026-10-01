@@ -227,6 +227,8 @@ interface IWindow {
     fn set_rect(&self, rect: Rect) -> Result<()>;
     /// Executes the parent's removal decision synchronously; active descendants reject with Busy.
     /// CloseRequested only reports intent. No runtime queue automatically approves it.
+    /// Publishes Destroyed while this runtime continues; delivery errors do not undo removal.
+    /// Whole-runtime shutdown instead drops the context without lifecycle notifications.
     fn close(&self) -> Result<()>;
 }
 
@@ -294,7 +296,11 @@ interface UiRuntime: IInputSink + IWindowManager + IMenus + IChoiceMenus {
     fn text_input_area(&self) -> Result<TextInputArea>;
     /// Paints only after update has synchronized geometry for this drawable size.
     fn render(&self, size: Size, renderer: &IRenderer) -> Result<()>;
-    /// Drops all mounted root owners and shuts down the runtime; admitted calls finish safely.
+    /// Terminates this UI context and synchronously drops all mounted trees and private resources.
+    /// Busy preflight leaves the context live; after acceptance no lifecycle notifications are
+    /// posted and no pending application messages are dispatched. Settle application requests
+    /// before calling; facts already delivered to application queues are not retracted.
+    /// Repeated calls succeed. Retained services are closed and weak widgets observe dropped owners.
     fn close(&self) -> Result<()>;
 }
 
