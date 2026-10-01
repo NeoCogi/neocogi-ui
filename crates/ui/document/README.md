@@ -33,7 +33,7 @@ serialized visual output-to-input graph, route expression, or route editor.
 ## Loading and typed widget access
 
 Use `Loader::new(ui, parent_window, resources, grid_limits)` or
-`ReloadSlot::new(ui, parent_window, grid_limits)`. The loader returns a `Component` whose
+`ReloadSlot::new(&mut reload_ids, ui, parent_window, grid_limits)`. The loader returns a `Component` whose
 concrete children can be queried before mounting. Supply `EventBindings` to
 `compile_with_events` or `load_with_events` before construction; plain `compile`
 and `load` select permanently unobserved widgets. Delivery errors
@@ -156,7 +156,20 @@ prepares receivers, validates contracts, constructs a candidate and checks concr
 fields before replacement. Failed preparation preserves the published component
 and destroys the candidate, including when validation captured weak handles.
 Successful replacement drops the previous owner. There is no teardown status.
-Every attempt has a distinct generation, including failed attempts.
+Create one application-owned `ReloadIds::new()` for all slots whose messages
+can meet in the same dispatch queue. Pass `&mut reload_ids` to every slot constructor,
+including slots in separate UI runtimes or slots replacing destroyed ones. Preserve
+that allocator across slot recreation; never restart it while older messages can
+still arrive. Different allocators define separate domains and their tokens must
+not be compared or mixed. No library-static counter supplies process-wide identity.
+
+Every attempt gets a copied `Generation` containing `(slot_id, attempt)`, including
+failed attempts. Slot IDs are never recycled; attempts advance before receiver
+creation. Exhaustion returns an error without wrapping or changing the active form.
+The token owns no widgets and adds no allocation/reference counting. `accepts`
+compares the complete pair; generated dispatch also validates the weak origin.
+Allocator mutation uses `&mut self`. Concurrent slot creation must serialize access
+to the same allocator; posting a copied token from another thread requires no lock.
 
 Mount a `Component`, its `take_root()` result, or a `ReloadSlot::take_widget()`
 result. Removing those trees destroys their widget queues. Already posted facts

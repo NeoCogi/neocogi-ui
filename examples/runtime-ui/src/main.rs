@@ -3,7 +3,7 @@ use neocogi_com::{ComPtr, ComRef, WeakComPtr, NcValueRef, NcStatus, IUnknown};
 use neocogi_ui_document::EventBindings;
 use neocogi_demo_host::{AppState, Host, HostError};
 use neocogi_ui::*;
-use neocogi_ui_document::{Document, ReloadSlot, Resources};
+use neocogi_ui_document::{Document, ReloadIds, ReloadSlot, Resources};
 use std::sync::mpsc::{self, Sender};
 
 /// Application messages retain nonowning identities, checked against the current component.
@@ -132,6 +132,9 @@ fn run() -> Result<(), HostError> {
     // Asset loading activates a registered GFX provider before Host::new runs.
     neocogi_demo_host::initialize()?;
     let host = Host::new("Runtime UI", Size { width: 800, height: 600 }, neocogi_demo_assets::load_bundle()?)?;
+    // One allocator belongs to this application's dispatch domain. Reuse it for
+    // any additional/recreated slots that post into the same channel.
+    let mut reload_ids = ReloadIds::new();
     let (sender, receiver) = mpsc::channel();
     let queue = AppQueue::from_value(AppQueue { sender });
     let lifecycle = queue.query::<IWindowEventQueueAbi>()?;
@@ -140,7 +143,7 @@ fn run() -> Result<(), HostError> {
     let window = host.ui.window_with_queue("Loaded component", Rect { x: 20, y: 20, width: 740, height: 540 }, root, Some(lifecycle.as_com_ref())).map_err(|(status, _candidate)| status)?;
     let mut root = root_handle;
 
-    let mut slot = ReloadSlot::new(host.ui.clone(), window.clone(), GridLimits { max_columns: 64, max_rows: 256 })?;
+    let mut slot = ReloadSlot::new(&mut reload_ids, host.ui.clone(), window.clone(), GridLimits { max_columns: 64, max_rows: 256 })?;
     root.insert(0, slot.take_widget()?, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 })).map_err(|(status, _candidate)| status)?;
     let menus = host.ui.menus()?;
     let bar = menus.create("Runtime UI")?;

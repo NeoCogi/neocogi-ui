@@ -26,7 +26,8 @@ impl button_form::Handlers for button_form::Form {
 #[test]
 fn generated_form_fields_preserve_widget_validation_silence_and_reload_lifetime() {
     let mut fixture = Headless::standard();
-    let mut slot = slot(&fixture.ui);
+    let mut ids = ReloadIds::new();
+    let mut slot = slot(&mut ids, &fixture.ui);
     let document = Document::from_json(include_bytes!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../document/tests/fixtures/bindings.ui.json"
@@ -114,7 +115,8 @@ fn generated_form_fields_preserve_widget_validation_silence_and_reload_lifetime(
 #[test]
 fn generated_event_handler_uses_widget_methods_after_receiving_the_user_event() {
     let mut fixture = Headless::standard();
-    let mut slot = slot(&fixture.ui);
+    let mut ids = ReloadIds::new();
+    let mut slot = slot(&mut ids, &fixture.ui);
     let document = Document::from_json(include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../document/tests/fixtures/empty.ui.json"))).unwrap();
     let (send, events) = std::sync::mpsc::channel();
     slot.reload(

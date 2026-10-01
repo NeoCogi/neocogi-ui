@@ -10,16 +10,16 @@ fn receiver<C: neocogi_com::events::EventSource>(key: &str, queue: ComPtr<C::Que
 }
 
 /// Mounts a document slot in an ordinary window using the production runtime.
-fn slot(ui: &Ui) -> ReloadSlot {
-    slot_with_grid_limits(ui, GridLimits { max_columns: 64, max_rows: 256 })
+fn slot(ids: &mut ReloadIds, ui: &Ui) -> ReloadSlot {
+    slot_with_grid_limits(ids, ui, GridLimits { max_columns: 64, max_rows: 256 })
 }
 
 /// Selects an immutable host policy for reload tests that exercise exact Grid bounds.
-fn slot_with_grid_limits(ui: &Ui, limits: GridLimits) -> ReloadSlot {
+fn slot_with_grid_limits(ids: &mut ReloadIds, ui: &Ui, limits: GridLimits) -> ReloadSlot {
     let root_owner = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let mut root = root_owner.handle();
     let owner = window(ui, "runtime documents", Rect { x: 10, y: 10, width: 400, height: 400 }, root_owner);
-    let mut slot = ReloadSlot::new(ui.clone(), owner, limits).unwrap();
+    let mut slot = ReloadSlot::new(ids, ui.clone(), owner, limits).unwrap();
     root.insert(0, slot.take_widget().unwrap(), LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
         .unwrap();
     slot
@@ -29,7 +29,8 @@ fn slot_with_grid_limits(ui: &Ui, limits: GridLimits) -> ReloadSlot {
 #[test]
 fn failed_reload_preserves_live_widget_handles_and_authored_save() {
     let mut fixture = Headless::standard();
-    let mut slot = slot(&fixture.ui);
+    let mut ids = ReloadIds::new();
+    let mut slot = slot(&mut ids, &fixture.ui);
     let document = Document::new("test");
     let loaded = slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     let mut title = slot.component().unwrap().widget::<TextBlockAbi>("title").unwrap();
@@ -65,7 +66,8 @@ fn failed_reload_preserves_live_widget_handles_and_authored_save() {
 #[test]
 fn outputs_rebind_and_queued_old_events_have_distinct_generations() {
     let mut fixture = Headless::standard();
-    let mut slot = slot(&fixture.ui);
+    let mut ids = ReloadIds::new();
+    let mut slot = slot(&mut ids, &fixture.ui);
     let mut document = Document::new("button");
     document.root = Node::new("save", WidgetSpec::Button { text: "Save".into() });
     let (sender, events) = std::sync::mpsc::channel();
@@ -96,7 +98,8 @@ fn outputs_rebind_and_queued_old_events_have_distinct_generations() {
 #[test]
 fn all_builtin_document_controls_construct_and_reload() {
     let mut fixture = Headless::standard();
-    let mut slot = slot(&fixture.ui);
+    let mut ids = ReloadIds::new();
+    let mut slot = slot(&mut ids, &fixture.ui);
     let kinds = vec![
         WidgetSpec::Button { text: "b".into() },
         WidgetSpec::Checkbox { text: "c".into(), checked: true },
@@ -249,7 +252,8 @@ fn all_builtin_document_controls_construct_and_reload() {
 #[test]
 fn widget_setters_validate_values_and_remain_separate_from_event_delivery() {
     let fixture = Headless::standard();
-    let mut slot = slot(&fixture.ui);
+    let mut ids = ReloadIds::new();
+    let mut slot = slot(&mut ids, &fixture.ui);
     for widget in [
         WidgetSpec::Checkbox { text: "check".into(), checked: false },
         WidgetSpec::Slider {
@@ -353,7 +357,8 @@ fn widget_setters_validate_values_and_remain_separate_from_event_delivery() {
 #[test]
 fn widget_flag_enablement_preserves_live_application_flags() {
     let fixture = Headless::standard();
-    let mut slot = slot(&fixture.ui);
+    let mut ids = ReloadIds::new();
+    let mut slot = slot(&mut ids, &fixture.ui);
     let document = Document {
         version: VERSION,
         name: "live flags".into(),
@@ -392,7 +397,8 @@ fn widget_flag_enablement_preserves_live_application_flags() {
 #[test]
 fn widget_flag_enablement_preserves_requested_flags_without_capturing_effective_flags() {
     let fixture = Headless::standard();
-    let mut slot = slot(&fixture.ui);
+    let mut ids = ReloadIds::new();
+    let mut slot = slot(&mut ids, &fixture.ui);
     let mut root = Node::new("scroll", WidgetSpec::Scroll { enabled: true });
     root.children.push(Child {
         edge: Edge::Pane,
@@ -442,7 +448,8 @@ fn widget_flag_enablement_preserves_requested_flags_without_capturing_effective_
 #[test]
 fn authored_form_rectangles_survive_binary_reload_and_route_real_clicks() {
     let mut fixture = Headless::standard();
-    let mut slot = slot(&fixture.ui);
+    let mut ids = ReloadIds::new();
+    let mut slot = slot(&mut ids, &fixture.ui);
     let mut document = Document::new("fixed form");
     document.root = Node::new("form", WidgetSpec::Form { width: 360, height: 300 });
     document.root.children.push(Child {
@@ -505,7 +512,8 @@ fn typed_and_binary_preparation_have_equivalent_authored_state() {
 #[test]
 fn selection_offset_and_position_setters_preserve_configuration_and_retire() {
     let fixture = Headless::standard();
-    let mut slot = slot(&fixture.ui);
+    let mut ids = ReloadIds::new();
+    let mut slot = slot(&mut ids, &fixture.ui);
     let mut document = Document {
         version: VERSION,
         name: "focused setters".into(),
@@ -619,7 +627,8 @@ fn selection_offset_and_position_setters_preserve_configuration_and_retire() {
 #[test]
 fn application_handles_real_click_and_closed_form_retires() {
     let mut fixture = Headless::standard();
-    let mut slot = slot(&fixture.ui);
+    let mut ids = ReloadIds::new();
+    let mut slot = slot(&mut ids, &fixture.ui);
     let mut document = Document::new("private action");
     document.root = Node::new("button", WidgetSpec::Button { text: "Before".into() });
     document.outputs.clear();
@@ -663,7 +672,8 @@ fn application_handles_real_click_and_closed_form_retires() {
 #[test]
 fn application_owns_checkbox_actions_and_complete_event_consumption() {
     let mut fixture = Headless::standard();
-    let mut slot = slot(&fixture.ui);
+    let mut ids = ReloadIds::new();
+    let mut slot = slot(&mut ids, &fixture.ui);
     let mut document = Document::new("forwarded state");
     document.root = Node::new("form", WidgetSpec::Form { width: 300, height: 200 });
     for (key, y) in [("source", 0), ("target", 60), ("second", 120)] {
@@ -715,7 +725,8 @@ fn application_owns_checkbox_actions_and_complete_event_consumption() {
 #[test]
 fn textbox_enum_stream_drives_form_action_and_public_sink() {
     let mut fixture = Headless::standard();
-    let mut slot = slot(&fixture.ui);
+    let mut ids = ReloadIds::new();
+    let mut slot = slot(&mut ids, &fixture.ui);
     let mut document = Document::new("text event owner");
     document.root = Node::new("form", WidgetSpec::Form { width: 300, height: 200 });
     document.root.children.push(Child {
@@ -857,7 +868,8 @@ fn typed_and_binary_candidates_own_constructor_mappings_and_preserve_recipe_byte
 #[test]
 fn rejected_form_field_validation_releases_new_receivers_and_keeps_previous_generation() {
     let fixture = Headless::standard();
-    let mut slot = slot(&fixture.ui);
+    let mut ids = ReloadIds::new();
+    let mut slot = slot(&mut ids, &fixture.ui);
     let document = Document::new("reject candidate");
     let active = slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     let previous = slot.component().unwrap().widget::<ButtonAbi>("save").unwrap();
@@ -912,7 +924,8 @@ fn compiled_metadata_can_drop_before_the_actual_root_is_mounted() {
 #[test]
 fn rejected_reload_closes_retained_candidate_handles_without_touching_the_live_form() {
     let fixture = Headless::standard();
-    let mut slot = slot(&fixture.ui);
+    let mut ids = ReloadIds::new();
+    let mut slot = slot(&mut ids, &fixture.ui);
     let document = Document::new("explicit candidate rollback");
     let active = slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     let previous = slot.component().unwrap().widget::<ButtonAbi>("save").unwrap();
@@ -1014,7 +1027,8 @@ fn loaded_grid_uses_host_limits_on_both_construction_paths() {
 #[test]
 fn rejected_grid_reload_preserves_published_component() {
     let mut fixture = Headless::standard();
-    let mut slot = slot_with_grid_limits(&fixture.ui, GridLimits { max_columns: 2, max_rows: 2 });
+    let mut ids = ReloadIds::new();
+    let mut slot = slot_with_grid_limits(&mut ids, &fixture.ui, GridLimits { max_columns: 2, max_rows: 2 });
     let document = grid_document(&[(1, 2)]);
     let committed = slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     let mut old = slot.component().unwrap().widget::<TextBlockAbi>("child0").unwrap();
@@ -1049,5 +1063,121 @@ fn authored_flag_absence_and_explicit_masks_round_trip_without_live_state() {
         let loaded = loader.load(&bytes).unwrap();
         assert_eq!(loaded.root().unwrap().requested_flags().unwrap(), expected);
         assert_eq!(Document::from_json(&document.to_json().unwrap()).unwrap(), document);
+    }
+}
+
+/// Creates an unmounted slot whose sole owner is still inside ReloadSlot. Dropping
+/// the helper therefore destroys the loaded widgets immediately, without requiring
+/// a mounted parent's separate removal operation. The ordinary host window remains.
+fn detached_slot(ids: &mut ReloadIds, ui: &Ui) -> ReloadSlot {
+    let root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
+    let parent = window(ui, "reload identity", Rect { x: 0, y: 0, width: 300, height: 200 }, root);
+    ReloadSlot::new(ids, ui.clone(), parent, GridLimits { max_columns: 64, max_rows: 256 }).unwrap()
+}
+
+/// Two UI runtimes may feed one application inbox. Payload-only messages still
+/// identify their exact slot even when both slots have made just one attempt.
+#[test]
+fn reload_generations_distinguish_slots_across_runtimes_on_one_channel() {
+    let first_runtime = Headless::standard();
+    let second_runtime = Headless::standard();
+    let mut ids = ReloadIds::new();
+    let mut first = detached_slot(&mut ids, &first_runtime.ui);
+    let mut second = detached_slot(&mut ids, &second_runtime.ui);
+    let document = Document::new("shared inbox");
+    let (send, receive) = std::sync::mpsc::channel();
+    let a = first.reload(&document, Resources::new(), |generation| {
+        send.send((generation, "first result")).unwrap();
+        Ok(EventBindings::new())
+    }, |_, _| Ok(())).unwrap().generation;
+    let b = second.reload(&document, Resources::new(), |generation| {
+        send.send((generation, "second result")).unwrap();
+        Ok(EventBindings::new())
+    }, |_, _| Ok(())).unwrap().generation;
+    assert_ne!(a, b, "slot-local attempt 1 must not collide across runtimes");
+    assert!(first.accepts(a));
+    assert!(!second.accepts(a));
+    assert!(second.accepts(b));
+    assert!(!first.accepts(b));
+    assert_eq!(receive.recv().unwrap(), (a, "first result"));
+    assert_eq!(receive.recv().unwrap(), (b, "second result"));
+}
+
+/// The inbox can outlive every widget and slot; recreated slots cannot accept old facts.
+#[test]
+fn recreated_reload_slot_rejects_queued_facts_from_destroyed_slot() {
+    let fixture = Headless::standard();
+    let mut ids = ReloadIds::new();
+    let document = Document::new("retained inbox");
+    let (send, receive) = std::sync::mpsc::channel();
+    let mut first = detached_slot(&mut ids, &fixture.ui);
+    let original = first.reload(&document, Resources::new(), |generation| {
+        // Only an owned payload and plain token survive in the application queue.
+        send.send((generation, String::from("old fact"))).unwrap();
+        Ok(EventBindings::new())
+    }, |_, _| Ok(())).unwrap().generation;
+    let old_widget = first.component().unwrap().root().unwrap();
+    drop(first);
+    assert!(!old_widget.as_interface().is_alive());
+
+    let mut replacement = detached_slot(&mut ids, &fixture.ui);
+    assert!(!replacement.accepts(original), "an unpublished slot accepts nothing");
+    let current = replacement.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap().generation;
+    let (queued, payload) = receive.recv().unwrap();
+    assert_eq!(queued, original);
+    assert_eq!(payload, "old fact");
+    assert_ne!(current, original);
+    assert!(!replacement.accepts(queued));
+    assert!(replacement.accepts(current));
+}
+
+/// Receiver, constructor and field-binding failures all consume distinct attempts
+/// without changing the active form; messages captured by failures are never accepted.
+#[test]
+fn rejected_reload_attempts_never_reuse_tokens_or_replace_active_identity() {
+    let fixture = Headless::standard();
+    let mut ids = ReloadIds::new();
+    let mut slot = detached_slot(&mut ids, &fixture.ui);
+    let document = Document::new("attempt failures");
+    let initial = slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap().generation;
+    let original_root = slot.component().unwrap().root().unwrap();
+    let (send, receive) = std::sync::mpsc::channel();
+
+    assert!(slot.reload(&document, Resources::new(), |generation| {
+        send.send(generation).unwrap();
+        Err(neocogi_com::NC_E_INVALID_ARG)
+    }, |_, _| panic!("receiver rejection must precede field binding")).is_err());
+    assert!(slot.accepts(initial));
+
+    let mut invalid = document.clone();
+    invalid.root.children[0].node.style.font = Some("missing-constructor-resource".into());
+    assert!(slot.reload(&invalid, Resources::new(), |generation| {
+        send.send(generation).unwrap();
+        Ok(EventBindings::new())
+    }, |_, _| panic!("construction rejection must precede field binding")).is_err());
+    assert!(slot.accepts(initial));
+
+    assert!(slot.reload(&document, Resources::new(), |generation| {
+        send.send(generation).unwrap();
+        Ok(EventBindings::new())
+    }, |_, _| Err(neocogi_com::NC_E_INVALID_ARG)).is_err());
+    assert!(slot.accepts(initial));
+    assert!(original_root.as_interface().is_alive());
+    assert!(original_root.as_interface().same_object(slot.component().unwrap().root().unwrap().as_interface()));
+
+    let rejected = receive.try_iter().collect::<Vec<_>>();
+    assert_eq!(rejected.len(), 3);
+    for (index, generation) in rejected.iter().enumerate() {
+        assert_ne!(*generation, initial);
+        assert!(!rejected[..index].contains(generation));
+        assert!(!slot.accepts(*generation));
+    }
+    let current = slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap().generation;
+    assert!(!slot.accepts(initial));
+    assert!(slot.accepts(current));
+    assert!(!original_root.as_interface().is_alive());
+    for generation in rejected {
+        assert_ne!(generation, current);
+        assert!(!slot.accepts(generation));
     }
 }

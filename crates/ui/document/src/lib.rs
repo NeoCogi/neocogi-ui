@@ -20,4 +20,4 @@ mod rust_bindings;
 mod runtime;
 pub use runtime::{Component, DOCUMENT_TYPE, Loader, Resources};
 mod reload;
-pub use reload::{Generation, ReloadSlot, Reloaded};
+pub use reload::{Generation, ReloadIds, ReloadSlot, Reloaded};
