@@ -65,6 +65,7 @@ struct LinearEdge {
 
 #[version(1)]
 /// Positive Grid-owned cell span; placement clamps columns at the right grid boundary.
+/// Row-major search skips any candidate whose effective rectangle intersects an earlier child.
 struct GridExtent {
     /// Number of logical columns, greater than zero.
     columns: u32,

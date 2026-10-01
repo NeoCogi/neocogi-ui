@@ -446,6 +446,33 @@ fn builtin_grid_reuses_span_placement_and_bulk_track_validation() {
     assert_eq!(a.closes.get(), 1);
 }
 
+/// Exercise span exclusion through generated COM calls and actual screen layout.
+#[test]
+fn builtin_grid_spans_never_overlap_a_tall_previous_child() {
+    let runtime = runtime();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
+    let owner = ui.widgets().grid(&[LayoutTrack::Fixed { extent: 30 }; 3], &[LayoutTrack::Fixed { extent: 20 }; 2]).unwrap();
+    let mut grid = owner.handle();
+    let mut probes = Vec::new();
+    for (index, edge) in [
+        GridExtent { columns: 1, rows: 1 }, GridExtent { columns: 1, rows: 2 },
+        GridExtent { columns: 1, rows: 1 }, GridExtent { columns: 2, rows: 1 },
+    ].into_iter().enumerate() {
+        let (child, probe) = recorded_leaf(&runtime);
+        grid.insert(index as u32, child, edge).unwrap();
+        probes.push(probe);
+    }
+    let window = ui.window("span exclusion", RECT, owner).unwrap();
+    runtime.update(SIZE).unwrap();
+    let tall = probes[1].latest.get().unwrap().screen;
+    let last = probes[3].latest.get().unwrap().screen;
+    assert!(last.x >= tall.x + tall.width);
+    assert_eq!(last.x, probes[2].latest.get().unwrap().screen.x);
+    assert_eq!(last.width, 30); // Requested two columns clamp to one at the right edge.
+    assert!(last.y > tall.y);
+    window.close().unwrap();
+}
+
 /// Replacement commits matching metadata; reentrant edits are rejected before mutation.
 #[test]
 fn builtin_container_replacement_preserves_metadata_and_rejects_reentry() {

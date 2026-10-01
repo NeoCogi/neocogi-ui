@@ -761,8 +761,8 @@ fn grid_placements_into(child_count: usize, columns: usize, spans: &[GridSpan], 
 
     // Continue after each placed span rather than restarting at the origin for every child.
     for index in 0..child_count {
-        let (row, column) = first_free_grid_cell(occupied, columns, search_row, search_column);
         let span = spans.get(index).copied().unwrap_or(GridSpan::ONE);
+        let (row, column) = first_free_grid_rectangle(occupied, columns, search_row, search_column, span);
         // A span is intrinsically non-zero. Only the parent-dependent right-edge clamp remains.
         // column_span = min(requested_span, max(column_count - start_column, 1)).
         let column_span = span.columns().min(columns.saturating_sub(column).max(1));
@@ -786,17 +786,21 @@ fn grid_placements_into(child_count: usize, columns: usize, spans: &[GridSpan], 
     }
 }
 
-/// Finds the first unoccupied cell at or after a row-major search position.
-fn first_free_grid_cell(occupied: &mut Vec<bool>, columns: usize, mut row: usize, mut column: usize) -> (usize, usize) {
+/// Finds the first entirely free effective rectangle in row-major order.
+///
+/// A free origin does not imply a free span: a preceding tall child can occupy a
+/// later column or row. Apply the same right-edge clamp during both search and
+/// publication so the footprint tested here is exactly the footprint retained.
+fn first_free_grid_rectangle(occupied: &[bool], columns: usize, mut row: usize, mut column: usize, span: GridSpan) -> (usize, usize) {
     loop {
-        // Grow by complete rows so `row * columns + column` remains a valid flat index.
-        // required_cells = (row + 1) * column_count.
-        let required = row.saturating_add(1).saturating_mul(columns);
-        if occupied.len() < required {
-            occupied.resize(required, false);
-        }
         while column < columns {
-            if !occupied[row * columns + column] {
+            let end_column = column + span.columns().min(columns - column);
+            let end_row = row.saturating_add(span.rows());
+            // Unallocated rows are empty. Search itself does not grow storage.
+            let free = (row..end_row).all(|y| {
+                (column..end_column).all(|x| !occupied.get(y * columns + x).copied().unwrap_or(false))
+            });
+            if free {
                 return (row, column);
             }
             column += 1;
@@ -875,6 +879,33 @@ mod tests {
                 },
             ]
         );
+    }
+
+    /// A wide span must skip a free origin when a tall earlier child occupies its interior.
+    #[test]
+    fn placement_checks_the_whole_rectangle_and_preserves_edge_clamping() {
+        let mut placements = Vec::new();
+        let mut occupied = Vec::new();
+        grid_placements_into(4, 3, &[
+            GridSpan::ONE, GridSpan::new(1, 2), GridSpan::ONE, GridSpan::new(2, 1),
+        ], &mut placements, &mut occupied);
+        assert_eq!(placements[3], GridPlacement {
+            child_index: 3, column: 2, row: 1, column_span: 1, row_span: 1,
+        });
+        // Check every pair independently of the occupancy representation.
+        for (index, a) in placements.iter().enumerate() {
+            for b in &placements[index + 1..] {
+                assert!(a.column + a.column_span <= b.column || b.column + b.column_span <= a.column
+                    || a.row + a.row_span <= b.row || b.row + b.row_span <= a.row);
+            }
+        }
+    }
+
+    /// The second row matters even when every cell on the candidate's first row is empty.
+    #[test]
+    fn rectangle_search_rejects_occupancy_below_the_origin() {
+        let occupied = [false, false, false, false, true, false];
+        assert_eq!(first_free_grid_rectangle(&occupied, 3, 0, 0, GridSpan::new(2, 2)), (0, 2));
     }
 
     #[test]

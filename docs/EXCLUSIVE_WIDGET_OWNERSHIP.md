@@ -296,3 +296,12 @@ The ABI v15 follow-up report records removal of
 887 passing workspace tests, and fresh independent/mixed-compiler plugin checks.
 It supersedes the earlier reports' current-API descriptions while preserving their
 historical measurements.
+
+The latest construction size follow-up shares
+construction work after interface selection, avoids restoring discarded candidates'
+concrete types, resolves identical owner projections at compile time, and removes
+temporary weak projections. It recovers **7,328 bytes** without changing ABI 15 or
+these ownership rules: the deployment is **1,504,112 bytes**, **3,336 below** the
+pre-returned-owner baseline. Final verification includes **889 passing workspace
+tests**, packaged construction regressions and fresh independent/mixed-compiler
+plugin checks. The earlier increase is a historical intermediate result.
