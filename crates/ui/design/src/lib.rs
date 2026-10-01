@@ -6,6 +6,8 @@
 //! and descriptor references never cross the plugin boundary.
 #![deny(missing_docs)]
 
+pub mod bounded_json;
+
 use neocogi_com::design::{IdlInterface, IdlShape};
 use serde::{Deserialize, Serialize};
 use neocogi_com::{ComSerialize, ComDeserialize};
@@ -52,6 +54,29 @@ impl CustomValue {
 
 /// Maximum encoded bytes accepted for one plugin-provided widget description.
 pub const MAX_DESIGN_DESCRIPTOR_BYTES: usize = 64 * 1024;
+/// Maximum compact JSON bytes for one custom widget's complete constructor properties.
+/// Separate from catalog metadata, even though both currently permit 64 KiB.
+pub const MAX_CUSTOM_PROPERTY_BYTES: usize = 64 * 1024;
+
+/// Checks the transport size of all constructor properties without encoding a buffer.
+/// Schema/name/kind validation remains the registry or provider's responsibility.
+pub fn validate_properties_size(properties: &[CustomProperty]) -> Result<(), String> {
+    bounded_json::encoded_len(properties, MAX_CUSTOM_PROPERTY_BYTES, bounded_json::Format::Compact).map(|_| ())
+}
+
+/// Encodes a constructor payload under the same byte policy as decode_properties.
+pub fn encode_properties(properties: &[CustomProperty]) -> Result<Vec<u8>, String> {
+    bounded_json::to_vec(properties, MAX_CUSTOM_PROPERTY_BYTES, bounded_json::Format::Compact)
+}
+
+/// Rejects oversized transport before parsing; providers still validate their schema.
+pub fn decode_properties(bytes: &[u8]) -> Result<Vec<CustomProperty>, String> {
+    if bytes.len() > MAX_CUSTOM_PROPERTY_BYTES {
+        return Err("Custom widget properties exceed byte limit".into());
+    }
+    serde_json::from_slice(bytes).map_err(|error| error.to_string())
+}
+
 /// Current authoring descriptor schema revision.
 /// Revision 8 adds the checked Rust implementation trait for shared application
 /// queues. The receiver remains separate from the product interface chain.
@@ -330,12 +355,11 @@ impl DesignWidgetManifest {
 
     /// Serializes a validated descriptor for one synchronous COM catalog read.
     pub fn encode(&self) -> Result<Vec<u8>, String> {
+        // Validate recursive type expressions before entering serde's recursive
+        // traversal. Then reject oversize output without materializing a buffer.
         self.validate()?;
-        let bytes = serde_json::to_vec(self).map_err(|error| error.to_string())?;
-        if bytes.len() > MAX_DESIGN_DESCRIPTOR_BYTES {
-            return Err("Design widget descriptor exceeds byte limit".into());
-        }
-        Ok(bytes)
+        bounded_json::encoded_len(self, MAX_DESIGN_DESCRIPTOR_BYTES, bounded_json::Format::Compact)?;
+        bounded_json::to_vec(self, MAX_DESIGN_DESCRIPTOR_BYTES, bounded_json::Format::Compact)
     }
 
     /// Decodes one bounded, owned descriptor copied through COM.
@@ -658,5 +682,43 @@ mod tests {
             ]),
         };
         assert!(validate_value_graph(&[value]).unwrap_err().contains("duplicate enum case"));
+    }
+
+    /// Constructor transports share exact byte limits; each field alone may fit
+    /// while their combined JSON exceeds the allowance. Escapes consume real bytes.
+    #[test]
+    fn custom_property_encoding_and_decoding_share_the_exact_byte_boundary() {
+        let mut properties = vec![CustomProperty { name: "text".into(), value: CustomValue::Text(String::new()) }];
+        let base = encode_properties(&properties).unwrap().len();
+        let available = MAX_CUSTOM_PROPERTY_BYTES - base;
+        let mut text = "\n".repeat(available / 2);
+        if available % 2 != 0 { text.push('x'); }
+        properties[0].value = CustomValue::Text(text);
+        validate_properties_size(&properties).unwrap();
+        let exact = encode_properties(&properties).unwrap();
+        assert_eq!(exact.len(), MAX_CUSTOM_PROPERTY_BYTES);
+        assert_eq!(decode_properties(&exact).unwrap(), properties);
+        if let CustomValue::Text(text) = &mut properties[0].value { text.push('x'); }
+        assert!(validate_properties_size(&properties).is_err());
+        assert!(encode_properties(&properties).is_err());
+        let mut excessive = exact;
+        excessive.push(b' ');
+        assert!(decode_properties(&excessive).is_err());
+        let properties = vec![
+            CustomProperty { name: "first".into(), value: CustomValue::Text("a".repeat(40_000)) },
+            CustomProperty { name: "second".into(), value: CustomValue::Text("b".repeat(40_000)) },
+        ];
+        assert!(encode_properties(&properties[..1]).is_ok());
+        assert!(encode_properties(&properties[1..]).is_ok());
+        assert!(validate_properties_size(&properties).is_err());
+    }
+
+    /// Catalog descriptions use the same bounded writer as constructor properties.
+    #[test]
+    fn oversized_descriptor_is_rejected_before_output_materialization() {
+        let mut manifest = counter_manifest();
+        manifest.defaults = vec![CustomProperty { name: "text".into(), value: CustomValue::Text("x".repeat(MAX_DESIGN_DESCRIPTOR_BYTES)) }];
+        assert!(manifest.encode().is_err());
+        assert!(DesignWidgetManifest::decode(&serde_json::to_vec(&manifest).unwrap()).is_err());
     }
 }

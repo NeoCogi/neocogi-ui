@@ -14,6 +14,20 @@ state byte counts as one collection element and one value, alongside the outer
 record's other values. This is intentional collection accounting, not an implicit
 binary-blob representation. See the [binary limit definitions](../../com/core/README.md#binary-resource-limits).
 
+Typed `Loader::compile` uses `Document::validate_binary()` before cloning the recipe
+or calling any widget factory. It checks both persistence layers without allocating
+encoded output. `Document::to_binary()` uses the same preflight before its temporary
+inner encoding. Shape validation alone (`Document::validate`) does not promise binary
+saveability; the current outer value budget permits at most 999,979 encoded state
+bytes. JSON source retains its independent 16 MiB policy.
+
+JSON output, catalog descriptions and constructor properties share exact bounded
+JSON writers/counters. Custom properties permit 64 KiB for the complete compact
+payload per widget, including escaping and field names. The entire candidate is
+checked before construction; COM providers must also enforce that limit before
+parsing direct calls. See [document resource admission](../../../docs/DOCUMENT_RESOURCE_ADMISSION.md)
+for accounting, history, failure ordering and the designer's portable-path reserve.
+
 A `Document` contains a tree of built-in widget constructors, styles, resources,
 and parent-owned layout edges. Each node has a unique stable key. Its physical
 event port count is zero or one. A text editor's single port carries the whole

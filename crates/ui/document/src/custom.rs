@@ -73,9 +73,11 @@ impl CustomWidgetRegistry {
             .ok_or_else(|| format!("Custom widget kind {kind} is not registered"))
     }
 
-    /// Checks every custom node against the installed constructor schema.
+    /// Admits the complete persistent recipe and every custom constructor schema.
+    /// Binary and property budgets are checked before recipe cloning or any provider
+    /// call; local and independently loaded factories follow the same policy.
     pub fn validate_document(&self, document: &Document) -> Result<(), String> {
-        document.validate()?;
+        document.validate_binary()?;
         self.validate_node(&document.root)
     }
 

@@ -29,10 +29,10 @@ impl CustomWidgetFactory for CatalogWidgetFactory {
 
     /// Calls the plugin's common COM constructor with typed, encoded properties.
     fn create(&self, ui: &Ui, properties: &[CustomProperty], sink: Option<ComPtr<IUnknown>>) -> Result<neocogi_ui::OwnedWidget<IWidgetAbi>, NcStatus> {
-        let encoded = serde_json::to_vec(properties).map_err(|_| NC_E_INVALID_ARG)?;
-        if encoded.len() > MAX_DESIGN_DESCRIPTOR_BYTES {
-            return Err(NC_E_INVALID_ARG);
-        }
+        // The registry preflights the complete document before construction. Keep
+        // this boundary bounded too, so direct adapter calls cannot allocate an
+        // arbitrarily large transport buffer before discovering its limit.
+        let encoded = neocogi_ui_design::encode_properties(properties).map_err(|_| NC_E_INVALID_ARG)?;
         let host = ui.widgets().host()?;
         let binding = match sink {
             None => neocogi_ui_document_contracts::WidgetEventBinding::Unobserved,

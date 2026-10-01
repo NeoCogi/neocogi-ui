@@ -46,9 +46,36 @@ fn limits() -> neocogi_com::persistence::Limits {
     }
 }
 impl Document {
-    /// Wraps this typed initialization in the existing COM persistence envelope.
+    /// Checks structural validity and both binary layers without allocating output.
+    /// Successful admission guarantees saveability under the current persistence
+    /// policy, not resource availability or successful widget/provider construction.
+    pub fn validate_binary(&self) -> Result<(), String> {
+        self.validate_binary_with_text_reserve(0)
+    }
+
+    /// Also reserves growth in existing string payloads, for portable image-key
+    /// rewriting by authoring tools. The caller must bound added UTF-8 bytes and
+    /// preserve the value/collection shape; inserting fields or nodes requires a
+    /// fresh validation of that changed document. This reserves binary resources,
+    /// not future property/name validity; those semantic rules still apply after
+    /// a rewrite. No document or output is copied.
+    pub fn validate_binary_with_text_reserve(&self, additional_bytes: usize) -> Result<(), String> {
+        let policy = limits().binary;
+        // The serializer's finite value/depth budgets protect this traversal even
+        // before structural validation can build name indexes or format errors.
+        let state = binary::encoded_len_with_limits(self, policy).map_err(|error| error.to_string())?;
+        let reserved = state.checked_add(additional_bytes).filter(|size| *size <= policy.bytes)
+            .ok_or("UI document exceeds the binary byte limit")?;
+        // A Vec<u8> envelope charges every state byte as a value. Checking only
+        // the inner encoding would miss the stricter outer cumulative budget.
+        ObjectRecord::encoded_leaf_len(reserved, policy).map_err(|error| error.to_string())?;
+        self.validate()
+    }
+
+    /// Wraps admitted initialization in the existing COM persistence envelope.
+    /// Preflight both layers before allocating even the temporary inner encoding.
     pub fn to_binary(&self) -> Result<Vec<u8>, String> {
-        self.validate()?;
+        self.validate_binary()?;
         let state = binary::to_vec_with_limits(self, limits().binary).map_err(|error| error.to_string())?;
         binary::to_vec_with_limits(
             &ObjectRecord {
@@ -96,7 +123,8 @@ impl Loader {
     pub fn compile(&self, document: &Document) -> Result<Component, String> {
         self.compile_with_events(document, EventBindings::new())
     }
-    /// Validates all constructor receivers before creating the complete candidate tree.
+    /// Checks binary saveability and custom payload budgets before cloning the
+    /// recipe. Receiver validation then precedes construction of any widget.
     pub fn compile_with_events(&self, document: &Document, events: EventBindings) -> Result<Component, String> {
         self.services.custom.validate_document(document)?;
         self.services.construct(document.clone(), events).map_err(|error| error.to_string())

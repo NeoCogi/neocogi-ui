@@ -8,7 +8,7 @@ use neocogi_ui_core_contracts::*;
 use neocogi_demo_contracts::*;
 use neocogi_ui::{Painter, events::Activation};
 use neocogi_com::{ComBox, WeakComBox, ComPtr, ComRef, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG, com_factory, com_object};
-use neocogi_ui_design::{CustomProperty, DesignWidgetManifest};
+use neocogi_ui_design::DesignWidgetManifest;
 use neocogi_ui_document_contracts::IDesignWidgetCatalog;
 
 /// Common state is inline; the example adds no second widget allocation or type-erased data.
@@ -345,10 +345,12 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
         properties: NcCopyFromBufferOffset<'_, u8>,
         events: neocogi_com::NcValueRef<'_, neocogi_ui_document_contracts::WidgetEventBinding>,
     ) -> Result<ComBox<IWidgetAbi>, NcStatus> {
-        if index != 0 {
+        if index != 0 || properties.offset() != 0 {
             return Err(NC_E_INVALID_ARG);
         }
-        let values: Vec<CustomProperty> = serde_json::from_slice(properties.as_slice()).map_err(|_| NC_E_INVALID_ARG)?;
+        // Independently built providers apply the host's same encoded-property
+        // ceiling before parsing, including calls that bypass document loading.
+        let values = neocogi_ui_design::decode_properties(properties.as_slice()).map_err(|_| NC_E_INVALID_ARG)?;
         if !values.is_empty() {
             return Err(NC_E_INVALID_ARG);
         }

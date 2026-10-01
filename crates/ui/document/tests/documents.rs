@@ -131,3 +131,56 @@ fn removed_inputs_and_previous_document_revisions_are_rejected() {
     envelope.state = binary::to_vec(&legacy).unwrap();
     assert!(Document::from_binary(&binary::to_vec(&envelope).unwrap()).unwrap_err().contains("Unsupported UI document revision"));
 }
+
+/// The outer state's Vec<u8> is charged as values, even when inner text fits its
+/// byte policy. Independent exact counts detect a return of the old bypass.
+#[test]
+fn binary_admission_includes_outer_state_and_matches_saved_round_trip() {
+    let mut document = Document::new("");
+    let base = neocogi_com::binary::encoded_len_with_limits(&document, neocogi_com::binary::Limits::default()).unwrap();
+    // Envelope: one record, UUID sequence + 16 bytes, revision, state sequence,
+    // and empty children sequence = 21 values before the state's byte values.
+    document.name = "x".repeat(1_000_000 - 21 - base);
+    document.validate_binary().unwrap();
+    let bytes = document.to_binary().unwrap();
+    assert_eq!(Document::from_binary(&bytes).unwrap(), document);
+    document.name.push('x');
+    document.validate().unwrap(); // Shape and JSON policy remain distinct.
+    assert!(document.to_json().is_ok());
+    assert!(document.validate_binary().is_err());
+    assert!(document.to_binary().is_err());
+}
+
+/// Whole-document accounting cannot be evaded through multiple moderate strings;
+/// already allocated caller inputs do not authorize a second unbounded copy.
+#[test]
+fn binary_admission_charges_aggregate_fields_and_portable_text_growth() {
+    let mut document = Document::new("");
+    document.name = "a".repeat(600_000);
+    document.root.children[0].node.widget = WidgetSpec::TextBlock { text: "b".repeat(600_000), wrapping: Wrapping::None };
+    assert!(document.validate_binary().is_err());
+    document.name.clear();
+    document.validate_binary().unwrap();
+    assert!(document.validate_binary_with_text_reserve(600_000).is_err());
+    assert!(document.validate_binary_with_text_reserve(usize::MAX).is_err());
+    document.validate_binary_with_text_reserve(1).unwrap();
+}
+
+/// Pretty JSON has its own symmetric byte envelope. Exact acceptance uses actual
+/// escaping, not a sum of Rust string lengths, and never changes binary policy.
+#[test]
+fn json_byte_limit_counts_escaped_text_and_aggregate_overhead() {
+    let mut document = Document::new("");
+    let base = document.to_json().unwrap().len();
+    let available = MAX_BYTES - base;
+    document.name = "\n".repeat(available / 2);
+    if available % 2 != 0 { document.name.push('x'); }
+    let exact = document.to_json().unwrap();
+    assert_eq!(exact.len(), MAX_BYTES);
+    assert_eq!(Document::from_json(&exact).unwrap(), document);
+    document.name.push('x');
+    assert!(document.to_json().is_err());
+    let mut excessive = exact;
+    excessive.push(b' ');
+    assert!(Document::from_json(&excessive).is_err());
+}

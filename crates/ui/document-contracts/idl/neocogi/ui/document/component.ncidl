@@ -26,6 +26,8 @@ interface IDesignWidgetCatalog {
     /// encoded, previously validated constructor properties. Before allocating any
     /// widget, query an observed receiver for the selected product's exact queue.
     /// Own that receiver until widget destruction; unobserved is permanent.
+    /// Properties use compact JSON with the shared 64 KiB ceiling from ui-design;
+    /// providers must check it before parsing, including direct calls outside the loader.
     fn create_widget(&self, index: u32, host: &IWidgetHost, properties: &[u8], events: &WidgetEventBinding) -> Result<ComBox<IWidget>>;
 }
 

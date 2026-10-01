@@ -471,14 +471,14 @@ impl Document {
         result.validate()?;
         Ok(result)
     }
-    /// Emits readable editable source; validation prevents saving a broken authored tree.
+    /// Emits readable editable source under the JSON byte policy. Exact counting
+    /// rejects oversized output without materializing it, including escaped text.
+    /// Binary saveability is checked separately by validate_binary()/the loader.
     pub fn to_json(&self) -> Result<Vec<u8>, String> {
         self.validate()?;
-        let bytes = serde_json::to_vec_pretty(self).map_err(|error| error.to_string())?;
-        if bytes.len() > MAX_BYTES {
-            return Err("UI document exceeds the byte limit".into());
-        }
-        Ok(bytes)
+        use neocogi_ui_design::bounded_json::{self, Format};
+        bounded_json::encoded_len(self, MAX_BYTES, Format::Pretty)?;
+        bounded_json::to_vec(self, MAX_BYTES, Format::Pretty)
     }
 }
 
@@ -601,6 +601,9 @@ fn validate_node<'a>(node: &'a Node, depth: usize, nodes: &mut BTreeMap<&'a str,
         } => *position >= 0 && *minimum_first >= 0 && *minimum_second >= 0 && *handle > 0 && node.children.len() <= 2,
         Form { width, height } => *width > 0 && *height > 0,
         Custom { kind, properties } => {
+            // Bound the whole encoded payload before building a per-property
+            // name index. Splitting text across fields cannot evade this budget.
+            neocogi_ui_design::validate_properties_size(properties)?;
             let mut names = std::collections::BTreeSet::new();
             !kind.is_empty()
                 && properties

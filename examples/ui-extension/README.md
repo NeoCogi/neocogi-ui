@@ -77,3 +77,11 @@ Authors remain responsible for truthful `CHANGED` results, external-state update
 hidden-widget synchronization, observational layout/paint, event ownership and
 explicit redraw scheduling. The complete obligations and failure rules are in
 [COM_AUTHORS.md](../../docs/COM_AUTHORS.md).
+
+The catalog's constructor uses `neocogi_ui_design::decode_properties` to enforce
+the shared 64 KiB property-JSON ceiling before parsing, including direct COM calls
+that bypass the document loader. It rejects nonzero buffer offsets and then checks
+its own property schema and event queue. Catalog descriptions use the same bounded
+JSON implementation through `DesignWidgetManifest::encode`; neither producer builds
+an oversized buffer before checking it. See the
+[document admission contract](../../docs/DOCUMENT_RESOURCE_ADMISSION.md).
