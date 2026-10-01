@@ -67,16 +67,46 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: rustup toolchain install nightly --profile minimal
-      - run: cargo build -p neocogi-com-runtime
-      - name: Shared runtime, checked ABI, compile cases and independent producer workflows
-        env:
-          NC_COM_RUNTIME_LINK_DIR: ${{ github.workspace }}/target/debug
-          LD_LIBRARY_PATH: ${{ github.workspace }}/target/debug:${{ github.workspace }}/target/debug/deps
-        run: cargo test -p neocogi-com-core -p neocogi-com-macros -p neocogi-com-runtime -p neocogi-inspect -p neocogi-com --features neocogi-com/runtime
-      - name: Independent static runtime selection
-        run: cargo test -p neocogi-com --no-default-features --features 'std macros static-runtime'
-      - name: IDL message lowering, malformed input, and nested-message compile cases
+      - name: Local ABI, compile cases, inspector and static runtime selection
+        run: cargo test -p neocogi-com-core -p neocogi-com-macros -p neocogi-com-runtime -p neocogi-inspect -p neocogi-com --features neocogi-com/static-runtime
+      - name: IDL value lowering, malformed input and generated compile cases
         run: cargo test -p neocogi-idl
+      - name: Driver rejects missing tests, artifacts and stale success evidence
+        run: python3 -m unittest discover -s crates/com/scripts -p test_compatibility.py
+      - name: Relocated monolith without native NeoCogi libraries
+        run: cargo test -p neocogi-example-com-plugin --test build_modes
+
+  # Independent role builds are distinct from ordinary same-compiler unit tests.
+  com-compatibility:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, suite: linked }
+          - { os: ubuntu-latest, suite: build-flags }
+          - { os: macos-latest, suite: linked }
+          - { os: windows-latest, suite: linked }
+    steps:
+      - uses: actions/checkout@v6
+      - run: rustup toolchain install stable --profile minimal
+      - name: Install second compiler for independently selected build policies
+        if: matrix.suite == 'build-flags'
+        run: rustup toolchain install nightly --profile minimal
+      - name: Build explicit runtime DSO and execute relocated host/plugin communication
+        run: python3 crates/com/scripts/compatibility.py --suite ${{ matrix.suite }}
+
+  # Miri interprets pure Rust; sanitizers execute the real shared-library boundary.
+  com-safety:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [safety, address, thread]
+    steps:
+      - uses: actions/checkout@v6
+      - run: rustup toolchain install nightly --profile minimal --component miri --component rust-src
+      - run: python3 crates/com/scripts/compatibility.py --suite ${{ matrix.suite }}
 
   native:
     runs-on: ubuntu-latest
