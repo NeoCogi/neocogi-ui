@@ -26,8 +26,8 @@ factory Widgets {
 }
 ```
 
-`Object` must be an interface/class; `Event` must be a declared value. The IDL
-backend checks that the binding names the constructor's returned product as its
+`Object` must be an interface/class; `Event` must be a declared value. IDL
+resolution checks that the binding names the constructor's returned product as its
 origin, that a constructor accepts at most one binding, and that constructors of
 the same product agree on the event type. Generics still produce concrete ABI
 interfaces and checked value codecs. Neither Rust generics nor channels cross COM.
