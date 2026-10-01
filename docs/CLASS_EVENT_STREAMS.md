@@ -32,6 +32,12 @@ origin, that a constructor accepts at most one binding, and that constructors of
 the same product agree on the event type. Generics still produce concrete ABI
 interfaces and checked value codecs. Neither Rust generics nor channels cross COM.
 
+Resolution owns one constructor/helper plan shared by collision validation,
+Rust emission and event metadata. The four binding/queue aliases apply to all
+associated product ownership forms; `ProductEventPort` is emitted only for a
+shared `ComPtr` construction path. Exclusive widgets retain their queue and
+`WeakComBox` directly. See [constructor names and diagnostics](IDL_CONSTRUCTOR_NAMES.md).
+
 `post` borrows both arguments for the synchronous call. Generated Rust receives
 `ComRef<'_, ButtonAbi>` and `NcValueRef<'_, ButtonEvent>`. Retaining the event
 requires `to_owned()`, which uses the existing checked, budgeted value decoder.
