@@ -104,10 +104,10 @@ fn generated_form_fields_preserve_widget_validation_silence_and_reload_lifetime(
     // The application's old Form cannot mutate a replacement generation even
     // though its concrete COM references keep the old allocations alive.
     slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
-    assert_eq!(form.widget_button_1.label(), Err(UI_E_CLOSED));
-    assert_eq!(form.widget_text_3.set_text("stale"), Err(UI_E_CLOSED));
-    assert_eq!(form.widget_split_6.set_position(10), Err(UI_E_CLOSED));
-    assert_eq!(form.widget_combo_7.replace_items(&["stale"], ChoiceSelection::None), Err(UI_E_CLOSED));
+    assert_eq!(form.widget_button_1.label(), Err(neocogi_com::NC_E_DROPPED));
+    assert_eq!(form.widget_text_3.set_text("stale"), Err(neocogi_com::NC_E_DROPPED));
+    assert_eq!(form.widget_split_6.set_position(10), Err(neocogi_com::NC_E_DROPPED));
+    assert_eq!(form.widget_combo_7.replace_items(&["stale"], ChoiceSelection::None), Err(neocogi_com::NC_E_DROPPED));
 }
 
 /// A setter is synchronous and silent; a real interaction queues the generated event for later handling.

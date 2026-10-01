@@ -190,7 +190,7 @@ fn split_topology_and_settings_are_validated_before_mutation() {
     assert_eq!(second_state.borrow().paints.last().unwrap().rect.width, 400);
     owner.close().unwrap();
     assert!(second_state.borrow().closed);
-    assert_eq!(split.settings(), Err(UI_E_CLOSED));
+    assert_eq!(split.settings(), Err(neocogi_com::NC_E_DROPPED));
 }
 
 /// Direct setters retain unrelated live settings, validate before mutation and remain silent.
@@ -243,8 +243,8 @@ fn split_position_setter_preserves_policy_and_checks_the_real_com_boundary() {
         let handle = split.handle();
         drop(split);
         let mut split = handle;
-        assert_eq!(split.set_position(100), Err(UI_E_CLOSED));
-        assert_eq!(abi.set_position(-1), Err(UI_E_CLOSED));
+        assert_eq!(split.set_position(100), Err(neocogi_com::NC_E_DROPPED));
+        assert_eq!(abi.set_position(-1), Err(neocogi_com::NC_E_DROPPED));
         assert_eq!(events.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected));
     }
 }

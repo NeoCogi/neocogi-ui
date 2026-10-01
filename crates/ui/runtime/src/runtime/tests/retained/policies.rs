@@ -266,7 +266,7 @@ fn foreign_surface_owner_rejection_returns_content_for_retry() {
     let owner = window(&fixture.ui, "retry", Rect { x: 10, y: 10, width: 100, height: 80 }, candidate_owner);
     fixture.frame(VIEW).unwrap();
     owner.close().unwrap();
-    assert_eq!(observed.label(), Err(UI_E_CLOSED));
+    assert_eq!(observed.label(), Err(neocogi_com::NC_E_DROPPED));
 }
 
 /// A deep family changes visibility and inherited layer consistently without exposing private roots.
@@ -541,7 +541,7 @@ fn caption_close_obeys_the_parents_explicit_decision() {
             CaptionDecision::Remove => {
                 result.unwrap();
                 assert_eq!(window.snapshot(), Err(UI_E_CLOSED));
-                assert_eq!(body.label(), Err(UI_E_CLOSED));
+                assert_eq!(body.label(), Err(neocogi_com::NC_E_DROPPED));
             },
         }
     }

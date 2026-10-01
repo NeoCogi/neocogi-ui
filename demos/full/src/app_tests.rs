@@ -101,7 +101,7 @@ fn construction_rejection_checks(ui: &Ui) -> Result<(), NcStatus> {
     // disposes of the fresh candidate without attempting a reverse projection.
     let candidate = label(ui, "expired parent")?;
     let candidate_view = candidate.handle();
-    assert_eq!(append(&mut observed_parent, candidate, LayoutTrack::Content), Err(UI_E_CLOSED));
+    assert_eq!(append(&mut observed_parent, candidate, LayoutTrack::Content), Err(neocogi_com::NC_E_DROPPED));
     assert!(!candidate_view.as_interface().is_alive());
     Ok(())
 }
@@ -164,7 +164,7 @@ fn packaged_full_application_themes_images_actions_and_close() {
     let (host, app) = exercise().unwrap();
     let retained = app.state().combo.clone();
     drop(host);
-    assert_eq!(retained.selection(), Err(UI_E_CLOSED));
+    assert_eq!(retained.selection(), Err(neocogi_com::NC_E_DROPPED));
     drop(app);
 }
 

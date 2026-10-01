@@ -27,7 +27,7 @@ fn constructor_queue_allocates_once_and_drops_with_logical_widget_closure() {
     let observed = handle;
     assert!(matches!(receiver.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
     // The closed editing handle can outlive its queue without retaining its captures.
-    assert_eq!(observed.text(), Err(UI_E_CLOSED));
+    assert_eq!(observed.text(), Err(neocogi_com::NC_E_DROPPED));
     drop(unobserved);
 }
 
@@ -197,7 +197,7 @@ fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
     ui.input(UiInput::Text, "arrived after replacement").unwrap();
     app.update(&ui, SIZE).unwrap();
     assert_eq!(probe.calls.get(), 0);
-    assert_eq!(button.label(), Err(UI_E_CLOSED));
+    assert_eq!(button.label(), Err(neocogi_com::NC_E_DROPPED));
     assert_eq!(app.state().5, ["activated", "destroyed"]);
     assert_eq!(app.state().4.as_ref().unwrap().text().unwrap(), "arrived after replacement");
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
@@ -231,8 +231,8 @@ fn dropping_inbox_and_application_releases_runtime_without_a_source_sink_cycle()
     drop(events);
     assert!(button.label().is_ok());
     drop(ui);
-    assert_eq!(button.label(), Err(UI_E_CLOSED));
-    assert_eq!(window.title().unwrap_err(), UI_E_CLOSED);
+    assert_eq!(button.label(), Err(neocogi_com::NC_E_DROPPED));
+    assert_eq!(window.title().unwrap_err(), neocogi_com::NC_E_DROPPED);
 }
 
 /// Every scalar and labelled-action source publishes only actual user interaction through the shared transport.

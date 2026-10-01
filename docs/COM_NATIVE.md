@@ -235,7 +235,7 @@ NEOCOGI_DEMO_FRAMES=8 cargo neocogi run --assembly full --variant glow
 Malformed or zero limits fail at startup. Omission runs until OS close or the
 application's `AppState::frame` returns false. Frame errors propagate to the native
 entry point. The host closes the UI logically before releasing its capabilities;
-retained widget handles then report `UI_E_CLOSED`.
+retained widget handles then report `NC_E_DROPPED`.
 
 ```sh
 scripts/test-demo.sh glow

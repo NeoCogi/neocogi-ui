@@ -55,9 +55,9 @@ impl Default for ColoredVertex {
 /// recorded. Bounding source text at mutation prevents uncharged glyph walks in those phases.
 pub const MAX_WINDOW_TITLE_BYTES: usize = 4096;
 
-/// An operation requires a widget whose exclusive owner expired, or a removed service.
-// Widget expiration is enforced by COM before UI code is entered. Runtime and
-// window services report the same lifetime status; callers need one policy.
+/// A runtime, window, collection or transport service has closed.
+/// Its COM capability may still exist. Calls through a widget observer whose
+/// exclusive owner was dropped instead report `neocogi_com::NC_E_DROPPED`.
 pub const UI_E_CLOSED: NcStatus = neocogi_com::NC_E_CLOSED;
 
 /// An operation is forbidden in the current phase or would reenter a traversal.

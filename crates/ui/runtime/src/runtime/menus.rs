@@ -35,7 +35,7 @@ impl Drop for Builder {
 impl Builder {
     /// Checks logical lifetime and mutation policy before borrowing declaration storage.
     fn owner(&self) -> Result<Rc<RuntimeStorage>, NcStatus> {
-        let runtime = self.runtime.upgrade().ok_or(UI_E_CLOSED)?;
+        let runtime = self.runtime.upgrade().ok_or(neocogi_com::NC_E_DROPPED)?;
         runtime.factory.host.check_mutation()?;
         if !self.declaration.alive.get() {
             return Err(UI_E_CLOSED);
@@ -164,7 +164,7 @@ impl Edit {
 impl Item {
     /// Upgrades only for one operation and rejects retained capabilities after runtime closure.
     fn owner(&self) -> Result<Rc<RuntimeStorage>, NcStatus> {
-        let runtime = self.runtime.upgrade().ok_or(UI_E_CLOSED)?;
+        let runtime = self.runtime.upgrade().ok_or(neocogi_com::NC_E_DROPPED)?;
         runtime.open()?;
         Ok(runtime)
     }

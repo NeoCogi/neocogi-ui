@@ -35,7 +35,7 @@ discard a returned candidate when abandoning construction; forwarding providers
 must instead return it to their caller. Attachment never returns a mounted child. Capture `owner.handle()` first
 when a form needs later editing access. Nodes cannot be reparented or mounted
 twice. Removing an owner rejects new calls and destroys the subtree once any
-already admitted call returns. Retained weak handles report `UI_E_CLOSED`; they
+already admitted call returns. Retained weak handles report `NC_E_DROPPED`; they
 cannot preserve live resources. Generic widget close no longer exists.
 
 ## Controls and standard events

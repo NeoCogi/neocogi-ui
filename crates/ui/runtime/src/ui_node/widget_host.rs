@@ -50,7 +50,7 @@ impl IWidgetHost for WidgetHost {
     /// Exposes current metadata to independent widget implementations without granting tree ownership.
     fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         self.check_open()?;
-        let factory = self.state.factory.borrow().upgrade().ok_or(UI_E_CLOSED)?;
+        let factory = self.state.factory.borrow().upgrade().ok_or(neocogi_com::NC_E_DROPPED)?;
         let revision = factory.resources.borrow();
         Ok(revision.source().add_ref())
     }
@@ -58,7 +58,7 @@ impl IWidgetHost for WidgetHost {
     /// Issues a private writer and distinct read-only view for a new empty collection.
     fn create_children(&self) -> Result<neocogi_com::ComBox<IChildrenEditorAbi>, NcStatus> {
         self.check_mutation()?;
-        let factory = self.state.factory.try_borrow().map_err(|_| UI_E_BUSY)?.upgrade().ok_or(UI_E_CLOSED)?;
+        let factory = self.state.factory.try_borrow().map_err(|_| UI_E_BUSY)?.upgrade().ok_or(neocogi_com::NC_E_DROPPED)?;
         Ok(super::child_store::create(factory))
     }
 

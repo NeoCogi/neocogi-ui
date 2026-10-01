@@ -46,7 +46,7 @@ fn oversized_window_title_returns_the_unmounted_root_for_retry() {
     assert!(observed.label().is_ok());
     let window = mount(&runtime, root).unwrap();
     window.close().unwrap();
-    assert_eq!(observed.label().unwrap_err(), UI_E_CLOSED);
+    assert_eq!(observed.label().unwrap_err(), neocogi_com::NC_E_DROPPED);
 }
 
 /// The facade cannot combine a node provider bound to one retained forest with another runtime.
@@ -312,7 +312,7 @@ fn mount_validation_destroys_rejected_owners_and_removal_expires_observers() {
     let candidate = button(&first);
     let rejected = candidate.downgrade();
     assert_eq!(mount(&second, candidate.query().unwrap()).unwrap_err(), UI_E_OWNER);
-    assert_eq!(rejected.label().unwrap_err(), UI_E_CLOSED);
+    assert_eq!(rejected.label().unwrap_err(), neocogi_com::NC_E_DROPPED);
     let owner = button(&first);
     let mut observed = owner.downgrade();
     let window = mount(&first, owner.query().unwrap()).unwrap();
@@ -320,7 +320,7 @@ fn mount_validation_destroys_rejected_owners_and_removal_expires_observers() {
     assert_eq!(observed.set_label(NcCopyFromBufferOffset::new(0, &[0xff])), Err(NC_E_INVALID_ARG));
     assert_eq!(observed.label().unwrap().to_string().unwrap(), "");
     window.close().unwrap();
-    assert_eq!(observed.set_label(NcCopyFromBufferOffset::new(0, b"expired")), Err(UI_E_CLOSED));
+    assert_eq!(observed.set_label(NcCopyFromBufferOffset::new(0, b"expired")), Err(neocogi_com::NC_E_DROPPED));
     let detached = button(&first);
     drop(first);
     assert_eq!(detached.label().unwrap_err(), UI_E_CLOSED);
@@ -671,7 +671,7 @@ fn window_com_capabilities_preserve_hierarchy_layers_visibility_and_subtree_clos
     runtime.update(SIZE).unwrap();
     root.close().unwrap();
     for mut button in [root_button, child_button, dialog_button] {
-        assert_eq!(button.set_label(NcCopyFromBufferOffset::new(0, b"closed")), Err(UI_E_CLOSED));
+        assert_eq!(button.set_label(NcCopyFromBufferOffset::new(0, b"closed")), Err(neocogi_com::NC_E_DROPPED));
     }
     assert_eq!(child.snapshot().unwrap_err(), UI_E_CLOSED);
     assert_eq!(dialog.set_visibility(Visibility::Visible), Err(UI_E_CLOSED));
@@ -779,7 +779,7 @@ fn popup_com_capability_enforces_active_owner_policy_and_permanent_removal() {
     popup.close().unwrap();
     popup.close().unwrap();
     assert_eq!(popup.visibility(), Err(UI_E_CLOSED));
-    assert_eq!(popup_button.label().unwrap_err(), UI_E_CLOSED);
+    assert_eq!(popup_button.label().unwrap_err(), neocogi_com::NC_E_DROPPED);
     runtime.update(SIZE).unwrap();
     let (renderer, _) = renderer();
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
@@ -933,11 +933,11 @@ fn child_editor_rejects_inputs_without_leaking_owners_and_expires_retained_views
     let replacement = button(&runtime);
     let observed = replacement.downgrade();
     editor.replace(0, replacement.query().unwrap()).unwrap();
-    assert_eq!(held_child.properties(), Err(UI_E_CLOSED));
+    assert_eq!(held_child.properties(), Err(neocogi_com::NC_E_DROPPED));
     assert_eq!(view.child_count().unwrap(), 1);
     drop(editor);
     assert_eq!(view.child_count(), Err(UI_E_CLOSED));
-    assert_eq!(observed.label().unwrap_err(), UI_E_CLOSED);
+    assert_eq!(observed.label().unwrap_err(), neocogi_com::NC_E_DROPPED);
 }
 
 /// A failed old-child close reports a committed replacement, so matching metadata can still commit.
@@ -966,7 +966,7 @@ fn child_edit_reports_committed_topology_separately_from_teardown_failure() {
     );
     editor.clear().unwrap();
     assert_eq!(view.child_count().unwrap(), 0);
-    assert_eq!(replacement.label().unwrap_err(), UI_E_CLOSED);
+    assert_eq!(replacement.label().unwrap_err(), neocogi_com::NC_E_DROPPED);
 }
 
 /// The static facade observes one inherited state, normalized text and honest setter markers.
@@ -1027,6 +1027,7 @@ fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validati
     assert_eq!(block.set_wrapping(TextWrapping::from_raw(99)), Err(neocogi_com::NC_E_INVALID_TAG));
     assert_eq!(common.take_change().unwrap(), GeometryChange::NoChange);
     runtime.close().unwrap();
+    // These unmounted widgets still have owners; only their runtime service closed.
     assert_eq!(textbox.text(), Err(UI_E_CLOSED));
     assert_eq!(checkbox.set_checked(false), Err(UI_E_CLOSED));
 }
@@ -1199,7 +1200,7 @@ fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
         ui.update(SIZE).unwrap();
         ui.render(SIZE, renderer.as_com_ref()).unwrap();
         window.close().unwrap();
-        assert_eq!(observed.properties(), Err(UI_E_CLOSED));
+        assert_eq!(observed.properties(), Err(neocogi_com::NC_E_DROPPED));
     }
 }
 
@@ -1530,7 +1531,7 @@ fn static_leaf_content_recovers_from_reentry_and_errors_with_one_owned_lifetime(
     window.close().unwrap();
     assert_eq!(probe.closes.get(), 1);
     assert_eq!(probe.drops.get(), 1);
-    assert_eq!(node.properties().err(), Some(UI_E_CLOSED));
+    assert_eq!(node.properties().err(), Some(neocogi_com::NC_E_DROPPED));
     target.borrow_mut().take();
     drop(node);
     drop(widget);

@@ -148,7 +148,7 @@ fn failed_open_and_overlapping_requests_preserve_previous_state_and_expose_nativ
     assert!(fixture.handle.diagnostic().unwrap().is_empty());
     assert_eq!(fixture.widget.with(|dialog| dialog.model.directory.clone()).unwrap(), directory.path());
     fixture.handle.close().unwrap();
-    assert_eq!(fixture.handle.active(), Err(UI_E_CLOSED));
+    assert_eq!(fixture.handle.active(), Err(neocogi_com::NC_E_DROPPED));
 }
 
 /// A dangling entry fails the complete candidate instead of publishing a partial directory.
@@ -325,7 +325,7 @@ fn lifecycle_cancellation_is_once_per_request_and_stale_hide_does_not_cancel_reo
     fixture.owner.close().unwrap();
     app.update(&fixture.ui, SIZE).unwrap();
     assert_eq!(app.state().len(), 2);
-    assert_eq!(fixture.handle.active(), Err(UI_E_CLOSED));
+    assert_eq!(fixture.handle.active(), Err(neocogi_com::NC_E_DROPPED));
     app.update(&fixture.ui, SIZE).unwrap();
     assert_eq!(app.state().len(), 2);
 }
@@ -343,7 +343,7 @@ fn runtime_release_destroys_active_picker_without_posting_from_an_expired_origin
     drop(fixture);
     assert_eq!(host.check_open(), Err(UI_E_CLOSED));
     assert!(outcomes.is_empty());
-    assert_eq!(handle.active(), Err(UI_E_CLOSED));
+    assert_eq!(handle.active(), Err(neocogi_com::NC_E_DROPPED));
     for message in events.try_iter() {
         outcomes.push(completed_file_path(&message).unwrap());
     }
@@ -616,7 +616,7 @@ fn close_removes_dialog_even_when_cancellation_queue_refuses_delivery() {
     assert_eq!(fixture.handle.close(), Err(NC_E_INVALID_ARG));
     assert!(!fixture.handle.as_interface().is_alive());
     assert_eq!(window.snapshot(), Err(UI_E_CLOSED));
-    assert_eq!(fixture.handle.active(), Err(UI_E_CLOSED));
+    assert_eq!(fixture.handle.active(), Err(neocogi_com::NC_E_DROPPED));
 }
 
 /// A pre-commit removal refusal is retryable and does not duplicate cancellation.

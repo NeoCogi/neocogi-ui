@@ -170,7 +170,7 @@ impl IContainerLayout for TestContainer {
             let editor = self.editor.take();
             drop(editor);
             assert_eq!(view.child_count(), Err(UI_E_CLOSED));
-            assert_eq!(child.properties(), Err(UI_E_CLOSED));
+            assert_eq!(child.properties(), Err(neocogi_com::NC_E_DROPPED));
         }
         if self.probe.fail_place.get() {
             return Err(NC_E_INVALID_ARG);
@@ -229,7 +229,7 @@ fn nested_container_layout_scopes_expire_and_teardown_closes_descendants() {
     runtime.update(SIZE).unwrap();
     window.close().unwrap();
     assert_eq!(child_view.child_count(), Err(UI_E_CLOSED));
-    assert_eq!(leaf.label().unwrap_err(), UI_E_CLOSED);
+    assert_eq!(leaf.label().unwrap_err(), neocogi_com::NC_E_DROPPED);
 }
 
 /// Cyclic edges, aliased collections and reentrant mount edits fail before consuming legitimate ownership.
@@ -249,8 +249,8 @@ fn container_topology_rejects_cycles_and_reentrant_edits_without_retaining_owner
     assert_eq!(b_editor.view().unwrap().child_count(), Ok(0));
     drop(a);
     assert!(!observed.is_alive());
-    assert_eq!(a_editor.view().unwrap_err(), UI_E_CLOSED);
-    assert_eq!(b_editor.view().unwrap_err(), UI_E_CLOSED);
+    assert_eq!(a_editor.view().unwrap_err(), neocogi_com::NC_E_DROPPED);
+    assert_eq!(b_editor.view().unwrap_err(), neocogi_com::NC_E_DROPPED);
     let (a, _, a_probe) = container(&runtime, Rc::default());
     let (b, b_editor, _) = container(&runtime, Rc::default());
     *a_probe.mount_edit.borrow_mut() = Some(b_editor);
@@ -306,7 +306,7 @@ fn final_child_writer_release_during_layout_closes_retained_descendants() {
     probe.abandon.set(true);
     assert_eq!(runtime.update(SIZE), Err(UI_E_CLOSED));
     assert_eq!(view.child_count(), Err(UI_E_CLOSED));
-    assert_eq!(leaf.label().unwrap_err(), UI_E_CLOSED);
+    assert_eq!(leaf.label().unwrap_err(), neocogi_com::NC_E_DROPPED);
     // Child ownership was released; ordinary window removal remains valid.
     window.close().unwrap();
 }
@@ -558,14 +558,14 @@ fn builtin_scroll_area_uses_real_children_and_shared_sticky_invalidation() {
     let replacement_owner = ui.widgets().text_block("short replacement", TextWrapping::None).unwrap();
     let replacement = replacement_owner.handle();
     scroll.replace_content(replacement_owner).unwrap();
-    assert_eq!(content.text(), Err(UI_E_CLOSED));
+    assert_eq!(content.text(), Err(neocogi_com::NC_E_DROPPED));
     runtime.update(SIZE).unwrap();
     assert_eq!(scroll.info().unwrap().maximum, Point::default());
     assert_eq!(structural.child_count().unwrap(), 3);
     window.close().unwrap();
-    assert_eq!(horizontal.range().unwrap_err(), UI_E_CLOSED);
-    assert_eq!(vertical.range().unwrap_err(), UI_E_CLOSED);
-    assert_eq!(replacement.text(), Err(UI_E_CLOSED));
+    assert_eq!(horizontal.range().unwrap_err(), neocogi_com::NC_E_DROPPED);
+    assert_eq!(vertical.range().unwrap_err(), neocogi_com::NC_E_DROPPED);
+    assert_eq!(replacement.text(), Err(neocogi_com::NC_E_DROPPED));
 }
 
 /// Nested wheel routing consumes movable inner scrolling and bubbles only after its range is exhausted.
@@ -672,8 +672,8 @@ fn disclosure_com_header_controls_the_actual_body_without_a_parent_backpointer()
     assert_eq!(header.text().unwrap(), "Longer tree label");
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     window.close().unwrap();
-    assert_eq!(header.text(), Err(UI_E_CLOSED));
-    assert_eq!(body.children().unwrap_err(), UI_E_CLOSED);
+    assert_eq!(header.text(), Err(neocogi_com::NC_E_DROPPED));
+    assert_eq!(body.children().unwrap_err(), neocogi_com::NC_E_DROPPED);
     assert_eq!(probe.closes.get(), 1);
 }
 
@@ -773,9 +773,9 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
     runtime.update(SIZE).unwrap();
     assert_eq!(scroll.info().unwrap().maximum, Point::default());
     window.close().unwrap();
-    assert_eq!(area.text(), Err(UI_E_CLOSED));
-    assert_eq!(editor.cursor(), Err(UI_E_CLOSED));
-    assert_eq!(scroll.info().unwrap_err(), UI_E_CLOSED);
+    assert_eq!(area.text(), Err(neocogi_com::NC_E_DROPPED));
+    assert_eq!(editor.cursor(), Err(neocogi_com::NC_E_DROPPED));
+    assert_eq!(scroll.info().unwrap_err(), neocogi_com::NC_E_DROPPED);
 }
 
 /// Common frame policy remains observable on the actual header object and invalidates only on edits.
@@ -833,8 +833,8 @@ fn reentrant_child_clear_rejection_preserves_the_parent_and_its_children() {
     assert_eq!(retained.label().unwrap(), "retained descendant");
     let observed = victim.handle();
     drop(victim);
-    assert_eq!(retained.label(), Err(UI_E_CLOSED));
-    assert_eq!(observed.node_interface().unwrap().properties(), Err(UI_E_CLOSED));
+    assert_eq!(retained.label(), Err(neocogi_com::NC_E_DROPPED));
+    assert_eq!(observed.node_interface().unwrap().properties(), Err(neocogi_com::NC_E_DROPPED));
 }
 
 /// Retained weak views cannot postpone or repeat the child destructor.
@@ -849,7 +849,7 @@ fn dropping_a_parent_destroys_its_child_once_despite_retained_weak_views() {
         .unwrap();
     let observed = parent.node_interface().unwrap();
     drop(parent);
-    assert_eq!(observed.properties(), Err(UI_E_CLOSED));
+    assert_eq!(observed.properties(), Err(neocogi_com::NC_E_DROPPED));
     assert_eq!(probe.closes.get(), 1);
     drop(observed);
     assert_eq!(probe.closes.get(), 1);
@@ -925,7 +925,7 @@ fn idle_composite_destruction_releases_child_and_parent_queues_once() {
         observed.extend(observations.try_iter());
         assert_eq!(observed, ["first", "second", "parent"]);
         for child in &children {
-            assert_eq!(child.label(), Err(UI_E_CLOSED));
+            assert_eq!(child.label(), Err(neocogi_com::NC_E_DROPPED));
         }
         drop(children);
         observed.extend(observations.try_iter());

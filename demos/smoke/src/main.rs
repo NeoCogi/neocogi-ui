@@ -233,7 +233,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         ui.update_with_events(size, owner.as_com_ref())?;
         ui.render(size, renderer.as_com_ref())?;
         window.close()?;
-        assert_eq!(button.set_label("closed"), Err(UI_E_CLOSED));
+        assert_eq!(button.set_label("closed"), Err(neocogi_com::NC_E_DROPPED));
         smoke_containers(&ui, size, renderer.as_com_ref())?;
         smoke_components(&ui, size, renderer.as_com_ref())?;
         gpu::smoke(&ui, size, renderer.as_com_ref())?;
@@ -329,8 +329,8 @@ fn smoke_containers(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     ui.update(size)?;
     ui.render(size, renderer)?;
     window.close()?;
-    assert_eq!(text.text(), Err(UI_E_CLOSED));
-    assert_eq!(section.expanded(), Err(UI_E_CLOSED));
+    assert_eq!(text.text(), Err(neocogi_com::NC_E_DROPPED));
+    assert_eq!(section.expanded(), Err(neocogi_com::NC_E_DROPPED));
     Ok(())
 }
 
@@ -484,7 +484,7 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     picker.close()?;
     window.close()?;
     ui.update_with_events(size, owner.as_com_ref())?;
-    assert_eq!(combo.selection(), Err(UI_E_CLOSED));
+    assert_eq!(combo.selection(), Err(neocogi_com::NC_E_DROPPED));
     assert_eq!(item.label(), Err(UI_E_CLOSED));
     Ok(())
 }

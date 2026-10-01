@@ -71,8 +71,8 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     assert_eq!(a_view.children()?.child_count()?, 1);
     assert_eq!(b_view.children()?.child_count()?, 0);
     drop(a);
-    assert_eq!(a_view.children().unwrap_err(), UI_E_CLOSED);
-    assert_eq!(b_view.children().unwrap_err(), UI_E_CLOSED);
+    assert_eq!(a_view.children().unwrap_err(), neocogi_com::NC_E_DROPPED);
+    assert_eq!(b_view.children().unwrap_err(), neocogi_com::NC_E_DROPPED);
 
     let (events_tx, events) = std::sync::mpsc::channel();
     let queue = CounterQueue::from_value(CounterQueue { sender: events_tx }).query::<CounterEventQueueAbi>()?;
@@ -145,8 +145,8 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     ui.render(size, renderer)?;
 
     inset.clear()?;
-    assert_eq!(counter.count(), Err(UI_E_CLOSED));
-    assert_eq!(probe.calls(), Err(UI_E_CLOSED));
+    assert_eq!(counter.count(), Err(neocogi_com::NC_E_DROPPED));
+    assert_eq!(probe.calls(), Err(neocogi_com::NC_E_DROPPED));
     assert_eq!(inset.children()?.child_count()?, 0);
     ui.update_with_events(size, owner.as_com_ref())?;
     ui.render(size, renderer)?;
@@ -157,10 +157,10 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     inset.set_child(replacement).map_err(|(status, _candidate)| status)?;
     ui.update_with_events(size, owner.as_com_ref())?;
     window.close()?;
-    assert_eq!(replacement_view.count(), Err(UI_E_CLOSED));
-    assert_eq!(replacement_probe.calls(), Err(UI_E_CLOSED));
-    assert_eq!(parent_probe.calls(), Err(UI_E_CLOSED));
-    assert_eq!(probe.calls(), Err(UI_E_CLOSED));
+    assert_eq!(replacement_view.count(), Err(neocogi_com::NC_E_DROPPED));
+    assert_eq!(replacement_probe.calls(), Err(neocogi_com::NC_E_DROPPED));
+    assert_eq!(parent_probe.calls(), Err(neocogi_com::NC_E_DROPPED));
+    assert_eq!(probe.calls(), Err(neocogi_com::NC_E_DROPPED));
     println!("Independent extension passed: inherited counter, shared events, one-child layout, caches, resize, rejected ownership, mutation and teardown");
     Ok(())
 }

@@ -197,8 +197,8 @@ mod tests {
         assert!(mounted.downgrade().same_object(field.as_interface()));
         assert_eq!(field.label()?, "through field");
         drop(mounted);
-        assert_eq!(field.label(), Err(neocogi_com::NC_E_CLOSED));
-        assert_eq!(field.set_label("too late"), Err(neocogi_com::NC_E_CLOSED));
+        assert_eq!(field.label(), Err(neocogi_com::NC_E_DROPPED));
+        assert_eq!(field.set_label("too late"), Err(neocogi_com::NC_E_DROPPED));
         Ok(())
     }
 

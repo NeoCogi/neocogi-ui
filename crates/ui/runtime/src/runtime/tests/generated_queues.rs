@@ -122,7 +122,7 @@ fn generated_shared_queue_resolves_origins_and_rejects_replaced_forms() {
     let old_origin = app.form.widget_text_3.as_interface().clone();
     assert!(!old_origin.is_alive(), "old form fields are observers, never owners");
     assert!(old.event.resolve(&replacement).unwrap().is_none());
-    assert_eq!(app.form.widget_text_3.text().unwrap_err(), UI_E_CLOSED);
+    assert_eq!(app.form.widget_text_3.text().unwrap_err(), neocogi_com::NC_E_DROPPED);
 
     // An unrelated live widget with the right interface cannot select a handler.
     let outsider = ui.widgets().button_unobserved("outsider").unwrap();

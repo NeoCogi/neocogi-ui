@@ -59,9 +59,9 @@ fn widget_flag_edits_reject_unknown_masks_and_closed_objects() {
     assert_eq!(widget.take_change().unwrap(), GeometryChange::NoChange);
 
     drop(owner);
-    assert_eq!(widget.replace_flags(WidgetOptions::NONE), Err(UI_E_CLOSED));
-    assert_eq!(widget.set_flags(WidgetOptions::FRAME), Err(UI_E_CLOSED));
-    assert_eq!(widget.clear_flags(WidgetOptions::NONE), Err(UI_E_CLOSED));
+    assert_eq!(widget.replace_flags(WidgetOptions::NONE), Err(neocogi_com::NC_E_DROPPED));
+    assert_eq!(widget.set_flags(WidgetOptions::FRAME), Err(neocogi_com::NC_E_DROPPED));
+    assert_eq!(widget.clear_flags(WidgetOptions::NONE), Err(neocogi_com::NC_E_DROPPED));
 
     // Unmounted handles are also invalidated when their allocating runtime closes.
     let mut detached: ComBox<IWidgetAbi> = button(&runtime).query().unwrap();

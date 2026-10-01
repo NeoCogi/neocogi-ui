@@ -108,7 +108,7 @@ Drop may wait; it must not hold a resource that the
 executing method needs. Completion depends on admitted calls terminating.
 
 Weak references keep control storage and provider code available, not widget
-resources. Calls after owner removal report `NC_E_CLOSED`, meaning an expired
+resources. Calls after owner removal report `NC_E_DROPPED`, meaning an expired
 owner rather than an independently closed live widget. Allocation storage may
 remain until the last weak token disappears. Cross-plugin destruction and
 storage release always call the allocating provider through the C ABI.
@@ -208,7 +208,7 @@ fn example(ui: &Ui) -> Result<(), NcStatus> {
     let window = ui.window("Form", Rect { x: 0, y: 0, width: 300, height: 200 }, column)?;
     button.set_label("Save changes")?;
     window.close()?; // Removes the tree's exclusive owner.
-    assert_eq!(button.label(), Err(neocogi_ui::UI_E_CLOSED));
+    assert_eq!(button.label(), Err(neocogi_com::NC_E_DROPPED));
     Ok(())
 }
 ```

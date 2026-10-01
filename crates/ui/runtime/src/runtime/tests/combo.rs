@@ -90,7 +90,7 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
 
     window.close().unwrap();
-    assert_eq!(combo.selection(), Err(UI_E_CLOSED));
+    assert_eq!(combo.selection(), Err(neocogi_com::NC_E_DROPPED));
 }
 
 /// Construction rejects an invalid initial selection without altering the owner window.
@@ -225,7 +225,7 @@ fn combo_removal_during_forwarding_releases_menu_queue_without_close_callback() 
     }
     ui.update(SIZE).unwrap();
     assert_eq!(calls.get(), 1);
-    assert_eq!(combo.selection(), Err(UI_E_CLOSED));
+    assert_eq!(combo.selection(), Err(neocogi_com::NC_E_DROPPED));
     assert!(weak_queue.upgrade().unwrap().is_none(), "the popup coordinator must not retain the dead header's destination");
     assert_eq!(root.children().unwrap().child_count(), Ok(0));
     let (renderer, _) = renderer();

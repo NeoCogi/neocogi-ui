@@ -68,8 +68,8 @@ fn parent_decides_removal_after_child_returns_even_when_the_child_fails() {
         assert_eq!(&*trace.borrow(), &["handler entered", "handler returned", "closed"]);
         assert_eq!(window.snapshot(), Err(UI_E_CLOSED));
         assert!(send.send(()).is_err());
-        assert_eq!(events.dispatch_next(), Err(UI_E_CLOSED));
-        assert_eq!(events.dispatch_next(), Err(UI_E_CLOSED));
+        assert_eq!(events.dispatch_next(), Err(neocogi_com::NC_E_DROPPED));
+        assert_eq!(events.dispatch_next(), Err(neocogi_com::NC_E_DROPPED));
         assert_eq!(trace.borrow().len(), 3);
     }
 }
@@ -84,7 +84,7 @@ fn composite_widget_has_one_attachment_and_expired_observers_cannot_mount() {
     let first = ui.window("first", RECT, local.into_interface::<IWidgetAbi>().unwrap()).unwrap();
     assert_eq!(observed.mount(), Err(UI_E_OWNER));
     first.close().unwrap();
-    assert_eq!(observed.mount(), Err(UI_E_CLOSED));
+    assert_eq!(observed.mount(), Err(neocogi_com::NC_E_DROPPED));
 }
 
 /// Idle application dispatch adds no allocation to an otherwise identical warmed update.
@@ -130,7 +130,7 @@ fn owner_removal_rejects_active_borrows_then_destroys_before_returning() {
         match close_runtime { true => ui.close().unwrap(), false => window.close().unwrap() }
         assert_eq!(&*trace.borrow(), &["closed"]);
         assert!(send.send(()).is_err());
-        assert_eq!(observed.with(|_| ()), Err(UI_E_CLOSED));
+        assert_eq!(observed.with(|_| ()), Err(neocogi_com::NC_E_DROPPED));
     }
 }
 
@@ -144,7 +144,7 @@ fn ordinary_widgets_have_no_private_queue_and_reject_dispatch_after_removal() {
     let window = ui.window("ordinary", RECT, button).unwrap();
     assert_eq!(widget.dispatch_next(), Ok(false));
     window.close().unwrap();
-    assert_eq!(widget.dispatch_next(), Err(UI_E_CLOSED));
+    assert_eq!(widget.dispatch_next(), Err(neocogi_com::NC_E_DROPPED));
 }
 
 /// Private commands distinguish subtree removal from work which must be discarded.
@@ -237,8 +237,8 @@ fn descendant_removal_request_drops_the_complete_tree_after_handler_return() {
         assert!(child_send.send(OrderedMessage::Record).is_err());
         assert!(parent_send.send(OrderedMessage::Record).is_err());
         // Retained projections neither reactivate nor repeat terminal cleanup.
-        assert_eq!(child.query::<IWidgetAbi>().unwrap().dispatch_next(), Err(UI_E_CLOSED));
-        assert_eq!(parent.query::<IWidgetAbi>().unwrap().dispatch_next(), Err(UI_E_CLOSED));
+        assert_eq!(child.query::<IWidgetAbi>().unwrap().dispatch_next(), Err(neocogi_com::NC_E_DROPPED));
+        assert_eq!(parent.query::<IWidgetAbi>().unwrap().dispatch_next(), Err(neocogi_com::NC_E_DROPPED));
         assert_eq!(trace.borrow().len(), 3);
     }
 }
@@ -380,9 +380,9 @@ fn final_runtime_release_does_not_leak_a_borrowed_widget_or_its_private_inbox() 
         drop(ui);
         assert!(weak.upgrade().is_none(), "runtime Drop must destroy queued values before returning");
         let mut widget = view.node_interface().unwrap();
-        assert_eq!(widget.dispatch_next(), Err(UI_E_CLOSED));
+        assert_eq!(widget.dispatch_next(), Err(neocogi_com::NC_E_DROPPED));
         if explicit_close {
-            assert_eq!(widget.dispatch_next(), Err(UI_E_CLOSED));
+            assert_eq!(widget.dispatch_next(), Err(neocogi_com::NC_E_DROPPED));
         }
         drop(widget);
         drop(view);

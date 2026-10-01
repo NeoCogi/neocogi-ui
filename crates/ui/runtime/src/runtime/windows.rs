@@ -302,7 +302,7 @@ impl LogicalWindow {
         if self.closed.get() {
             return Err(UI_E_CLOSED);
         }
-        let runtime = self.runtime.upgrade().ok_or(UI_E_CLOSED)?;
+        let runtime = self.runtime.upgrade().ok_or(neocogi_com::NC_E_DROPPED)?;
         runtime.open()?;
         Ok(runtime)
     }
@@ -459,7 +459,7 @@ impl LogicalPopup {
         if self.closed {
             return Err(UI_E_CLOSED);
         }
-        let runtime = self.runtime.upgrade().ok_or(UI_E_CLOSED)?;
+        let runtime = self.runtime.upgrade().ok_or(neocogi_com::NC_E_DROPPED)?;
         runtime.open()?;
         Ok(runtime)
     }

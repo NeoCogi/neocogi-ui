@@ -210,7 +210,7 @@ fn one_application_queue_handles_two_widget_types_without_retaining_origins() {
     ui.update(SIZE).unwrap();
     window.close().unwrap();
     let retained = button_origin.clone();
-    assert_eq!(retained.label().err(), Some(UI_E_CLOSED));
+    assert_eq!(retained.label().err(), Some(neocogi_com::NC_E_DROPPED));
     drop((retained, window, buttons, texts, queue));
     assert!(!button_origin.is_alive());
     assert!(!text_origin.is_alive());
@@ -310,4 +310,25 @@ fn key_for_origin_test(ui: &neocogi_ui::Ui, key: KeyCode) {
         "",
     )
     .unwrap();
+}
+
+/// A retained port distinguishes an expired COM origin from deliberate service closure.
+#[test]
+fn expired_origin_and_explicit_port_close_have_distinct_statuses() {
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let menu = ui.menus().unwrap().create("short-lived producer").unwrap();
+    let origin = menu.item("origin").unwrap();
+    let (send, messages) = std::sync::mpsc::channel();
+    let queue = neocogi_ui::test_event_queue!(activation, String, send, |_queue, _origin, event| event.label).unwrap();
+    let mut port = EventPort::<IMenuItemEventQueueAbi>::with_queue(Some(queue), origin.as_interface().downgrade().unwrap());
+    // The unmounted declaration owns the other strong origin reference.
+    // Drop both owners while leaving this separate port and its weak origin alive.
+    drop(origin);
+    drop(menu);
+    let event = Activation { label: "expired origin".into() };
+    assert_eq!(port.post(&event), Err(neocogi_com::NC_E_DROPPED));
+    assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
+    port.close();
+    assert_eq!(port.post(&event), Err(neocogi_com::NC_E_CLOSED));
+    assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
 }

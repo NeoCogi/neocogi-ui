@@ -56,8 +56,8 @@ fn failed_reload_preserves_live_widget_handles_and_authored_save() {
     let replacement = slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     assert!(!slot.accepts(loaded.generation));
     assert!(slot.accepts(replacement.generation));
-    assert_eq!(title.set_text("Stale handle"), Err(UI_E_CLOSED));
-    assert_eq!(title.text(), Err(UI_E_CLOSED));
+    assert_eq!(title.set_text("Stale handle"), Err(neocogi_com::NC_E_DROPPED));
+    assert_eq!(title.text(), Err(neocogi_com::NC_E_DROPPED));
     fixture.frame(VIEW).unwrap();
 }
 
@@ -655,7 +655,7 @@ fn application_handles_real_click_and_closed_form_retires() {
     slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     // Container closure queues retirement until the next safe runtime boundary.
     fixture.frame(VIEW).unwrap();
-    assert_eq!(root.dispatch_next(), Err(UI_E_CLOSED));
+    assert_eq!(root.dispatch_next(), Err(neocogi_com::NC_E_DROPPED));
     assert!(button.label().is_err());
 }
 
@@ -827,7 +827,7 @@ fn construction_bindings_reject_duplicate_unknown_nonemitting_and_wrong_typed_so
     assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
     drop(component);
     assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
-    assert_eq!(retained.label(), Err(UI_E_CLOSED));
+    assert_eq!(retained.label(), Err(neocogi_com::NC_E_DROPPED));
 }
 
 /// Both loading paths install the same receiver before returning a candidate; live bindings never enter saved bytes.
@@ -848,7 +848,7 @@ fn typed_and_binary_candidates_own_constructor_mappings_and_preserve_recipe_byte
         assert_eq!(candidate.save().unwrap(), bytes);
         assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
         drop(candidate);
-        assert_eq!(retained.label(), Err(UI_E_CLOSED));
+        assert_eq!(retained.label(), Err(neocogi_com::NC_E_DROPPED));
         assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
     }
 }
@@ -903,7 +903,7 @@ fn compiled_metadata_can_drop_before_the_actual_root_is_mounted() {
         assert!(button.label().is_ok(), "the runtime owns the mounted tree");
         assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
         window.close().unwrap();
-        assert_eq!(button.label(), Err(UI_E_CLOSED));
+        assert_eq!(button.label(), Err(neocogi_com::NC_E_DROPPED));
         assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
     }
 }
@@ -931,8 +931,8 @@ fn rejected_reload_closes_retained_candidate_handles_without_touching_the_live_f
     assert!(slot.accepts(active.generation));
     assert!(previous.label().is_ok());
     let (root, button) = retained.unwrap();
-    assert_eq!(root.node_interface().unwrap().properties(), Err(UI_E_CLOSED));
-    assert_eq!(button.label(), Err(UI_E_CLOSED));
+    assert_eq!(root.node_interface().unwrap().properties(), Err(neocogi_com::NC_E_DROPPED));
+    assert_eq!(button.label(), Err(neocogi_com::NC_E_DROPPED));
     assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
 }
 
