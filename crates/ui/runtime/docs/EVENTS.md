@@ -232,6 +232,19 @@ cleared at the end of every update; only its vector capacity survives. It cannot
 keep a removed widget alive across idle frames. No separate per-widget delivery
 ticket, event-owner allocation, or active bit exists.
 
+The cache is checked out into local update-owned scratch storage. Its iterator
+checks each weak receiver on `next()`; scheduling uses `&mut` scratch access and
+holds no cache `RefCell` borrow through a handler. Both success and returned error
+clear observers and restore reusable capacity.
+
+Every error returned by a live handler stops the update. `NC_E_DROPPED` can come
+from another object the handler tried to use; `NC_E_CLOSED` can come from a closed
+service. Neither is a scheduler instruction to skip the receiver. The attempted
+message stays consumed, while successors, later widget/application work and later
+raw input remain queued. Completed handler edits are not rolled back. Retry
+rebuilds the current tree. See the [dispatch and iterator contract](../../../../docs/WIDGET_EVENT_DISPATCH.md)
+and [status meanings](../../../../docs/COM_LIFETIME_ERRORS.md).
+
 This simple protocol polls ordinary widgets' no-op methods too. It avoids an
 additional discovery/registration contract, but is not a ready-inbox notification
 system. No frame-time or binary-size improvement is claimed without measurement.

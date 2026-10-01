@@ -629,7 +629,8 @@ fn boundary_budget_stops_a_cascade_and_preserves_the_unattempted_message() {
             Ok(())
         });
         let mut remaining = 2;
-        let result = runtime.dispatch_boundary(Some(app.as_interface()), Dimensioni::new(SIZE.width, SIZE.height), &mut remaining);
+        let mut widgets = DispatchWidgets::default();
+        let result = runtime.dispatch_boundary(Some(app.as_interface()), Dimensioni::new(SIZE.width, SIZE.height), &mut remaining, &mut widgets);
         assert_eq!(result, Err(UI_E_EVENT_LIMIT));
         assert_eq!(remaining, 0);
         assert_eq!(app.state().0, 2);

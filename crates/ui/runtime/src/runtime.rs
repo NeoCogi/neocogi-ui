@@ -12,6 +12,8 @@ use crate::ui_node::paint_service::{Metrics, PaintService};
 use crate::{Dimensioni, runtime_context::RuntimeContext};
 pub(crate) mod choices;
 mod menus;
+mod dispatch_widgets;
+use dispatch_widgets::DispatchWidgets;
 mod windows;
 use windows::NativeSurface;
 
@@ -70,7 +72,7 @@ pub(crate) fn create_storage(assets: crate::assets::ImportedAssets, compositor: 
         pending: Cell::new(true),
         updating: Cell::new(false),
         menus: RefCell::new(Vec::new()),
-        dispatch_widgets: RefCell::new(Vec::new()),
+        dispatch_widgets: RefCell::new(DispatchWidgets::default()),
     })
 }
 
@@ -114,9 +116,10 @@ pub(crate) struct RuntimeStorage {
     updating: Cell<bool>,
     /// Weak declaration authentication retains no unused menu tree or application state.
     menus: RefCell<Vec<(usize, std::rc::Weak<menus::Declaration>)>>,
-    /// Reusable descendant-first widget snapshot within one update; no handles survive a frame.
-    /// A callback may edit topology, so no RefCell borrow spans its COM call.
-    dispatch_widgets: RefCell<Vec<neocogi_com::WeakComBox<IWidgetAbi>>>,
+    /// Reusable weak dispatch storage, checked out while an update executes.
+    /// The shared runtime needs interior mutability only for checkout/return;
+    /// scheduling uses a local collection and &mut access, without a callback-spanning borrow.
+    dispatch_widgets: RefCell<DispatchWidgets>,
 }
 
 /// Temporary association between an actual COM widget and an existing retained root.
@@ -129,12 +132,10 @@ struct SurfaceMount {
 
 impl RuntimeStorage {
     /// Rebuilds this update's delivery order after topology changes, reusing scratch capacity.
-    fn refresh_dispatch_widgets(&self) -> Result<(), NcStatus> {
+    fn refresh_dispatch_widgets(&self, widgets: &mut DispatchWidgets) -> Result<(), NcStatus> {
         if self.factory.state.dispatch_order_changed.get() {
             let context = self.context()?;
-            let mut drivers = self.dispatch_widgets.borrow_mut();
-            drivers.clear();
-            context.window_manager.collect_dispatch_widgets(&mut drivers)?;
+            widgets.rebuild(&context.window_manager)?;
             self.factory.state.dispatch_order_changed.set(false);
         }
         Ok(())
@@ -395,16 +396,18 @@ impl Runtime {
             return Err(UI_E_BUSY);
         }
         let _guard = UpdateGuard(&storage.updating);
-        let result = self.run_update_cycle(size, dispatcher);
-        // Dispatch snapshots hold weak access only. Discard expired observers
-        // between frames while preserving reusable vector capacity.
-        storage.dispatch_widgets.borrow_mut().clear();
+        let mut widgets = storage.dispatch_widgets.take();
+        let result = self.run_update_cycle(size, dispatcher, &mut widgets);
+        // Restore scratch capacity on success and every returned failure. No `?`
+        // can bypass this cleanup after checkout, and no cache borrow spans a callback.
+        widgets.clear();
+        storage.dispatch_widgets.replace(widgets);
         storage.factory.state.dispatch_order_changed.set(true);
         result
     }
 
     /// Performs one guarded update; the outer operation releases weak dispatch snapshots.
-    fn run_update_cycle(&self, size: Size, dispatcher: Option<ComRef<'_, IApplicationDispatcherAbi>>) -> Result<(), NcStatus> {
+    fn run_update_cycle(&self, size: Size, dispatcher: Option<ComRef<'_, IApplicationDispatcherAbi>>, widgets: &mut DispatchWidgets) -> Result<(), NcStatus> {
         let storage = &self.storage;
         let dimensions = Dimensioni::new(size.width, size.height);
         {
@@ -420,7 +423,7 @@ impl Runtime {
         // All retained traversal ownership is back in storage before entering the
         // application. A handler can remove/create windows or edit ordinary topology.
         let mut remaining = EVENT_DISPATCH_LIMIT;
-        self.dispatch_boundary(dispatcher, dimensions, &mut remaining)?;
+        self.dispatch_boundary(dispatcher, dimensions, &mut remaining, widgets)?;
         let mut first = true;
         loop {
             let updated = {
@@ -435,7 +438,7 @@ impl Runtime {
             if !updated {
                 break;
             }
-            self.dispatch_boundary(dispatcher, dimensions, &mut remaining)?;
+            self.dispatch_boundary(dispatcher, dimensions, &mut remaining, widgets)?;
         }
         storage.context()?.window_manager.finish_update_cycle(dimensions);
         storage.dimensions.set(size);
@@ -450,6 +453,7 @@ impl Runtime {
         dispatcher: Option<ComRef<'_, IApplicationDispatcherAbi>>,
         dimensions: Dimensioni,
         remaining: &mut u32,
+        widgets: &mut DispatchWidgets,
     ) -> Result<(), NcStatus> {
         loop {
             // Exhaustion stops before another dequeue. Reaching the exact ceiling also
@@ -462,25 +466,15 @@ impl Runtime {
                 let mut context = self.storage.context()?;
                 context.reconcile_choice_menus()?
             };
-            self.storage.refresh_dispatch_widgets()?;
+            self.storage.refresh_dispatch_widgets(widgets)?;
             let mut progressed = reconciled;
             if reconciled {
                 spend_dispatch_budget(remaining)?;
             }
-            let mut index = 0;
-            loop {
-                // Retain only this call's widget; release snapshot access before
-                // its handler can edit other idle subtrees or post parent intent.
-                let widget = self.storage.dispatch_widgets.borrow().get(index).cloned();
-                let Some(mut widget) = widget else { break };
-                // One message per visit makes authorized topology edits visible
-                // before using another cached entry. Close intent alone is no edit.
-                let handled = widget.dispatch_next();
-                let handled = match handled {
-                    Ok(value) => value,
-                    Err(neocogi_com::NC_E_CLOSED) => { index += 1; continue; }
-                    Err(error) => return Err(error),
-                };
+            for mut widget in widgets.iter() {
+                // Selection checks the actual receiver's liveness. Every error
+                // from its behavior propagates, including errors from dependencies.
+                let handled = widget.dispatch_next()?;
                 if handled || self.storage.factory.state.dispatch_order_changed.get() {
                     progressed = true;
                     // Topology-changing callbacks must also count when they report no message.
@@ -491,7 +485,6 @@ impl Runtime {
                     break;
                 }
                 self.storage.open()?;
-                index += 1;
             }
             self.storage.phase_result()?;
             if progressed {
