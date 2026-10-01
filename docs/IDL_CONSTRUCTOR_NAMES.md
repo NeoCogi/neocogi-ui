@@ -149,3 +149,15 @@ executes a shared producer/queue application through the normal build script.
 Widget nodes, runtime, document loading, designer and the COM plugin example must
 also compile against regenerated contracts. This change does not alter the COM
 ABI, so it does not require a new compiler-version interoperability protocol.
+
+Validated on 2026-10-01 at implementation revisions `dbaefb83` and `73533cf2`:
+
+| Command | Result |
+| --- | --- |
+| `cargo test -p neocogi-idl` | 121 passed, including generated Rust and COM fixtures |
+| `cargo test -p cargo-neocogi --test modules` | 3 passed, including scaffolded queue execution |
+| `cargo check -p neocogi-ui-nodes -p neocogi-ui-runtime -p neocogi-ui-document -p neocogi-ui-designer -p neocogi-example-com-plugin -p cargo-neocogi` | Passed with regenerated contracts |
+
+The current open-only audit removes group 11; historical reports retain their
+original findings as evidence of the earlier state. Cargo artifacts, including
+nested generated-fixture targets, were cleaned before and after each commit.

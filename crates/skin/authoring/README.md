@@ -36,3 +36,9 @@ Colors contain exactly four byte channels and flat patches exactly nine colors.
 The only custom map visitor resolves a closed role-name domain and rejects
 duplicate identities before reading replacement values, bounding entries by the
 actual number of roles. Runtime COM serialization remains independent.
+
+Theme document clones share skin, appearance, font and icon sections through `Arc`.
+Use `skin_mut`, `appearances_mut`, `fonts_mut` and `icons_mut` on an unpublished
+candidate for copy-on-write changes. Published roots can remain immutable behind
+`Arc<ThemeDocument>`. Sharing is per section, not per map entry; JSON and COM
+contracts do not contain reference-counting state and their representation is unchanged.

@@ -36,6 +36,7 @@ use std::{
     fs::File,
     io::{self, Read},
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use serde::{Deserialize, Serialize};
@@ -366,6 +367,12 @@ impl CompiledTheme {
 /// The document deliberately has no parent link or overlay semantics. Optional fields mean
 /// "retain the built-in fallback" rather than "search another document," so every authored value
 /// has one source directory and one unambiguous effect.
+///
+/// Clones share immutable skin, appearance, font and icon sections. Candidate edits
+/// use the explicit `*_mut` methods to copy only a changed section; published
+/// versions can therefore remain behind `Arc<ThemeDocument>` without locks.
+/// This is Rust authoring storage, never COM layout. Serde preserves the existing
+/// JSON representation; no reference counts or sharing identities are persisted.
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ThemeDocument {
@@ -374,15 +381,15 @@ pub struct ThemeDocument {
     /// Human-readable selector label for the loaded theme.
     pub name: String,
     /// Optional complete semantic font recipe replacing the base atlas's semantic fonts.
-    pub fonts: Option<FontCatalogDocument>,
+    pub fonts: Option<Arc<FontCatalogDocument>>,
     /// Optional complete semantic icon recipe replacing the base atlas's semantic icons.
-    pub icons: Option<IconCatalogDocument>,
+    pub icons: Option<Arc<IconCatalogDocument>>,
     /// Sparse scalar and flat-color overrides applied to the built-in skin.
     #[serde(default)]
-    pub skin: ThemeSkinDocument,
+    pub skin: Arc<ThemeSkinDocument>,
     /// Sparse appearance overrides applied after flat fallback construction.
     #[serde(default)]
-    pub appearances: AppearanceCatalogDocument,
+    pub appearances: Arc<AppearanceCatalogDocument>,
 }
 
 /// Strict categorized appearance syntax for one source document.
@@ -482,6 +489,28 @@ impl AppearanceCatalogDocument {
 }
 
 impl ThemeDocument {
+    /// Mutates the small skin section on this candidate, copying it only when shared.
+    /// Other document versions retain their original palette, metrics and chrome.
+    pub fn skin_mut(&mut self) -> &mut ThemeSkinDocument {
+        Arc::make_mut(&mut self.skin)
+    }
+
+    /// Mutates appearance overrides without copying unchanged skin or resource recipes.
+    /// Sharing is section-granular: editing a role copies this catalog when shared.
+    pub fn appearances_mut(&mut self) -> &mut AppearanceCatalogDocument {
+        Arc::make_mut(&mut self.appearances)
+    }
+
+    /// Borrows an existing font recipe exclusively, preserving authored absence.
+    pub fn fonts_mut(&mut self) -> Option<&mut FontCatalogDocument> {
+        self.fonts.as_mut().map(Arc::make_mut)
+    }
+
+    /// Borrows an existing icon recipe exclusively, preserving authored absence.
+    pub fn icons_mut(&mut self) -> Option<&mut IconCatalogDocument> {
+        self.icons.as_mut().map(Arc::make_mut)
+    }
+
     /// Starts an editable theme with the built-in geometry, palette, and resource fallbacks.
     pub fn new(name: impl Into<String>) -> Self {
         // Resource catalogs remain absent until the author explicitly replaces them.
@@ -490,8 +519,8 @@ impl ThemeDocument {
             name: name.into(),
             fonts: None,
             icons: None,
-            skin: ThemeSkinDocument::default(),
-            appearances: AppearanceCatalogDocument::default(),
+            skin: Arc::default(),
+            appearances: Arc::default(),
         }
     }
 
@@ -499,12 +528,12 @@ impl ThemeDocument {
     /// Project Save As and browser transport use this concrete schema traversal rather than
     /// reconstructing paths from compiled atlas slots or maintaining another schema copy.
     pub fn visit_resource_paths_mut(&mut self, mut visit: impl FnMut(&mut PathBuf)) {
-        if let Some(fonts) = &mut self.fonts {
+        if let Some(fonts) = self.fonts_mut() {
             for font in [&mut fonts.body, &mut fonts.small, &mut fonts.title, &mut fonts.heading, &mut fonts.mono] {
                 visit(&mut font.path);
             }
         }
-        if let Some(icons) = &mut self.icons {
+        if let Some(icons) = self.icons_mut() {
             for icon in [
                 &mut icons.close,
                 &mut icons.expand,
@@ -518,7 +547,7 @@ impl ThemeDocument {
                 visit(&mut icon.path);
             }
         }
-        let appearances = &mut self.appearances;
+        let appearances = self.appearances_mut();
         // All state slots stay optional. This walk never creates a role or a visual.
         let surfaces = appearances.surface.values_mut().flat_map(|role| [&mut role.normal, &mut role.disabled]);
         let controls = appearances.control.values_mut().flat_map(|role| {
@@ -648,13 +677,13 @@ impl ThemeDocument {
     fn resolve_paths(&mut self, directory: &Path) {
         // Fonts, semantic icons, and appearance images share one source owner. No later compilation
         // stage needs to retain the definition filename or reinterpret a path.
-        if let Some(fonts) = &mut self.fonts {
+        if let Some(fonts) = self.fonts_mut() {
             fonts.resolve_paths(directory);
         }
-        if let Some(icons) = &mut self.icons {
+        if let Some(icons) = self.icons_mut() {
             icons.resolve_paths(directory);
         }
-        self.appearances.resolve_paths(directory);
+        self.appearances_mut().resolve_paths(directory);
     }
 
     /// Strictly parses one standalone source string for schema-focused unit tests.
@@ -679,7 +708,9 @@ impl ThemeDocument {
             appearances,
         } = self;
         let image_paths = appearances.image_paths();
-        let resources = ResourceRecipe::resolve(base, fonts, icons, image_paths)?;
+        let resources = ResourceRecipe::resolve(base, fonts.map(Arc::unwrap_or_clone), icons.map(Arc::unwrap_or_clone), image_paths)?;
+        let skin = Arc::unwrap_or_clone(skin);
+        let appearances = Arc::unwrap_or_clone(appearances);
         Ok(ThemeRecipe { name, resources, skin, appearances })
     }
 }
@@ -1798,3 +1829,6 @@ fn flat_patch(border: Color, center: Color) -> AssetPatch {
 
 #[cfg(all(test, feature = "builder"))]
 mod tests;
+
+#[cfg(test)]
+mod snapshots;

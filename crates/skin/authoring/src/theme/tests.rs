@@ -915,7 +915,7 @@ fn shipped_documents_round_trip_without_anchoring_authored_paths() {
 fn complete_visual_fields_round_trip_and_override_only_the_selected_state() {
     let mut document = ThemeDocument::new("All visual channels");
     let cells = core::array::from_fn(|index| Color { r: index as u8 + 1, g: 20, b: 30, a: 255 });
-    document.appearances.control.insert(
+    document.appearances_mut().control.insert(
         ControlRole::Button,
         ControlAppearanceDocument {
             insets: Some(Insets::uniform(2)),
@@ -1001,17 +1001,17 @@ fn live_compiler_reuses_resources_and_never_accumulates_generated_images() {
     let initial = compiler.compile(&document, &path, &mut source).unwrap();
     let reads = source.reads;
     assert!(reads > 0);
-    document.skin.metrics.padding += 1;
+    document.skin_mut().metrics.padding += 1;
     let appearance = compiler.compile(&document, &path, &mut source).unwrap();
     assert_eq!(source.reads, reads, "appearance edits must not reread PNGs/fonts");
-    assert_eq!(initial.image().unwrap().as_ptr(), appearance.image().unwrap().as_ptr());
+    assert_eq!(initial.image().unwrap().as_raw().object, appearance.image().unwrap().as_raw().object);
     assert_eq!(appearance.metrics().unwrap().padding, document.skin.metrics.padding);
     let icon_count = initial.info().unwrap().icons;
     for size in [11, 12, 11] {
-        document.fonts.as_mut().unwrap().body.size = size;
+        document.fonts_mut().unwrap().body.size = size;
         let rebuilt = compiler.compile(&document, &path, &mut source).unwrap();
         assert_eq!(rebuilt.info().unwrap().icons, icon_count);
-        assert_ne!(rebuilt.image().unwrap().as_ptr(), initial.image().unwrap().as_ptr());
+        assert_ne!(rebuilt.image().unwrap().as_raw().object, initial.image().unwrap().as_raw().object);
     }
     let previous = source.reads;
     compiler.invalidate_resources();
