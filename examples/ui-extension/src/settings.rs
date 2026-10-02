@@ -1,5 +1,5 @@
 //! Provider-owned NCB settings and editor. No application layout reflection is involved.
-use neocogi_com::{ComBox, ComRef, ComSerialize, ComDeserialize, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG};
+use neocogi_com::{ComBox, ComRef, ComSerialize, ComDeserialize, NcOutputWriter, NcStatus, NC_E_INVALID_ARG};
 use neocogi_ui::*;
 use neocogi_ui_document_contracts::{IDesignSettingsEditor, IDesignSettingsEditorAbi};
 
@@ -100,7 +100,7 @@ impl IDesignSettingsEditor for Editor {
         self.view.take().ok_or(neocogi_com::NC_E_NOT_FOUND)
     }
     /// Snapshot reads never modify the accepted product. Invalid drafts remain editable.
-    fn settings(&self, mut output: NcCopyToBufferOffset<'_, u8>) -> Result<u32, NcStatus> {
+    fn settings(&self, mut output: NcOutputWriter<'_, u8>) -> Result<u32, NcStatus> {
         if output.offset() != 0 {
             return Err(NC_E_INVALID_ARG);
         }
@@ -116,8 +116,8 @@ impl IDesignSettingsEditor for Editor {
             },
         };
         let bytes = settings.encode()?;
-        if output.len() >= bytes.len() {
-            output.as_mut_slice()[..bytes.len()].copy_from_slice(&bytes);
+        if output.capacity() >= bytes.len() {
+            output.extend_from_slice(&bytes)?;
         }
         Ok(bytes.len() as u32)
     }

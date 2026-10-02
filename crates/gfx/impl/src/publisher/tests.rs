@@ -1,7 +1,6 @@
 //! Appearance publication has no font/image-builder dependency.
 use super::*;
 use crate::test_support::{test_bundle, data};
-use neocogi_com::NcCopyToBufferOffset;
 
 /// Appearance publication preserves resources and rejects malformed bulk records inside GFX.
 #[test]
@@ -62,7 +61,7 @@ fn appearance_revision_is_a_validated_resource_preserving_transaction() {
     drop(rebuilt);
     drop(base);
     drop(publisher);
-    let mut bytes = vec![0; original.pixels.len()];
-    image.pixels(NcCopyToBufferOffset::new(0, &mut bytes)).unwrap();
-    assert_eq!(bytes, original.pixels.as_ref());
+    let mut bytes = neocogi_com::NcOutputBuffer::new();
+    image.pixels(bytes.output(0, original.pixels.len())).unwrap();
+    assert_eq!(bytes.as_slice(), original.pixels.as_ref());
 }

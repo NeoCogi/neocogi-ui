@@ -135,15 +135,15 @@ impl IRenderer for ImageFrameRenderer {
     }
     /// Resolves each texture only during the active stream, then immediately releases the projection.
     fn render(&self, info: RenderInfo, _: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        let mut batches = vec![RenderBatch::Atlas { first: 0, count: 0 }; info.batch_count as usize];
-        assert_eq!(stream.batches(info.invocation, NcCopyToBufferOffset::new(0, &mut batches))?, info.batch_count);
+        let mut batches = neocogi_com::NcOutputBuffer::<RenderBatch>::new();
+        assert_eq!(stream.batches(info.invocation, batches.output(0, info.batch_count as usize))?, info.batch_count);
         let mut quads = Vec::new();
-        for (index, batch) in batches.into_iter().enumerate() {
+        for (index, batch) in batches.into_vec().into_iter().enumerate() {
             if let RenderBatch::Texture { first } = batch {
                 let _texture = stream.texture(info.invocation, index as u32)?;
-                let mut vertices = [RenderVertex::default(); 4];
-                assert_eq!(stream.vertices(info.invocation, NcCopyToBufferOffset::new(first as u64, &mut vertices))?, 4);
-                quads.push(vertices);
+                let mut vertices = neocogi_com::NcOutputBuffer::<RenderVertex>::new();
+                assert_eq!(stream.vertices(info.invocation, vertices.output(first as u64, 4))?, 4);
+                quads.push(vertices.into_vec().try_into().unwrap());
             }
         }
         *self.quads.borrow_mut() = quads;

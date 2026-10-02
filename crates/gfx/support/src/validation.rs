@@ -9,12 +9,12 @@ impl AssetData {
         // header, then publish neither until metadata, pixel length and white-tile contents agree.
         let info = source.info()?;
         let tables = AssetTables::read_from(source, info)?;
-        let mut pixels = filled(info.rgba_bytes()?, 0)?;
+        let count = info.rgba_bytes()?;
         let image = source.image()?;
         if image.size()? != info.size {
             return Err(NC_E_INVALID_ARG);
         }
-        image.pixels(NcCopyToBufferOffset::new(0, &mut pixels))?;
+        let pixels = read_output(count, |output| image.pixels(output))?;
         let data = Self { pixels: pixels.into(), tables };
         data.validate()?;
         Ok(data)
@@ -49,30 +49,22 @@ impl AssetTables {
     /// Copies bounded metadata after the common header has fixed every allocation size.
     fn read_from(source: ComRef<'_, IAssetBundleAbi>, info: AssetInfo) -> Result<Self, NcStatus> {
         // Checking the complete header first rejects schema, dimension and count errors before any
-        // allocation. Each foreign copy writes an initialized local buffer which remains private
+        // allocation. Each foreign copy produces a fresh checked prefix which remains private
         // until every requested table has been returned successfully.
         info.rgba_bytes()?;
-        let mut tables = Self {
+        let tables = Self {
             size: info.size,
-            fonts: filled(info.fonts as usize, AssetFont::default())?.into(),
-            glyphs: filled(info.glyphs as usize, AssetGlyph::default())?.into(),
-            icons: filled(info.icons as usize, AssetIcon::default())?.into(),
-            names: filled(info.names as usize, 0)?.into(),
+            fonts: read_output(info.fonts as usize, |output| source.fonts(output))?.into(),
+            glyphs: read_output(info.glyphs as usize, |output| source.glyphs(output))?.into(),
+            icons: read_output(info.icons as usize, |output| source.icons(output))?.into(),
+            names: read_output(info.names as usize, |output| source.names(output))?.into(),
             metrics: source.metrics()?,
             chrome: source.chrome()?,
-            surfaces: filled(SurfaceRole::COUNT, transparent_surfaces())?.into(),
-            controls: filled(ControlRole::COUNT, transparent_controls())?.into(),
-            menus: filled(MenuRole::COUNT, transparent_menus())?.into(),
-            window_chrome: filled(ChromeRole::COUNT, transparent_chrome())?.into(),
+            surfaces: read_output(SurfaceRole::COUNT, |output| source.surface_visuals(output))?.into(),
+            controls: read_output(ControlRole::COUNT, |output| source.control_visuals(output))?.into(),
+            menus: read_output(MenuRole::COUNT, |output| source.menu_visuals(output))?.into(),
+            window_chrome: read_output(ChromeRole::COUNT, |output| source.chrome_visuals(output))?.into(),
         };
-        source.fonts(NcCopyToBufferOffset::new(0, tables.fonts.to_mut()))?;
-        source.glyphs(NcCopyToBufferOffset::new(0, tables.glyphs.to_mut()))?;
-        source.icons(NcCopyToBufferOffset::new(0, tables.icons.to_mut()))?;
-        source.names(NcCopyToBufferOffset::new(0, tables.names.to_mut()))?;
-        source.surface_visuals(NcCopyToBufferOffset::new(0, tables.surfaces.to_mut()))?;
-        source.control_visuals(NcCopyToBufferOffset::new(0, tables.controls.to_mut()))?;
-        source.menu_visuals(NcCopyToBufferOffset::new(0, tables.menus.to_mut()))?;
-        source.chrome_visuals(NcCopyToBufferOffset::new(0, tables.window_chrome.to_mut()))?;
         Ok(tables)
     }
 
@@ -266,11 +258,11 @@ impl AssetTables {
         }
         let rect = self.white_rect();
         let row_bytes = rect.width as usize * 4;
-        let mut row = filled(row_bytes, 0)?;
+        let mut row = neocogi_com::NcOutputBuffer::<u8>::new();
         for y in rect.y..rect.y + rect.height {
             let first = (y as usize * self.size.width as usize + rect.x as usize) * 4;
-            image.pixels(NcCopyToBufferOffset::new(first as u64, &mut row))?;
-            if row.iter().any(|channel| *channel != 255) {
+            image.pixels(row.output(first as u64, row_bytes))?;
+            if row.len() != row_bytes || row.as_slice().iter().any(|channel| *channel != 255) {
                 return Err(NC_E_INVALID_ARG);
             }
         }
@@ -312,77 +304,13 @@ fn validate_insets(insets: Insets) -> Result<(), NcStatus> {
     Ok(())
 }
 
-/// Allocates initialized output while reporting allocation failure through the COM status.
-fn filled<T: Clone>(count: usize, value: T) -> Result<Vec<T>, NcStatus> {
-    let mut values = Vec::new();
-    values.try_reserve_exact(count).map_err(|_| NC_E_OUT_OF_MEMORY)?;
-    values.resize(count, value);
-    Ok(values)
-}
 
-/// Initializes a tagged output slot with a valid, fully transparent visual.
-fn transparent() -> AssetVisual {
-    AssetVisual {
-        insets: Insets::default(),
-        center_visible: 0,
-        content_color: 0,
-        patch: AssetPatch::Flat {
-            top_left: 0,
-            top: 0,
-            top_right: 0,
-            left: 0,
-            center: 0,
-            right: 0,
-            bottom_left: 0,
-            bottom: 0,
-            bottom_right: 0,
-        },
-    }
-}
 
-/// Initializes both explicit surface branches with a valid transparent visual.
-fn transparent_surfaces() -> AssetSurfaceVisuals {
-    AssetSurfaceVisuals {
-        normal: transparent(),
-        disabled: transparent(),
-    }
-}
-
-/// Initializes the three pointer branches used by enabled and focused controls.
-fn transparent_pointer() -> AssetPointerVisuals {
-    AssetPointerVisuals {
-        normal: transparent(),
-        hovered: transparent(),
-        pressed: transparent(),
-    }
-}
-
-/// Initializes the complete nested control state record without flattening it.
-fn transparent_controls() -> AssetControlVisuals {
-    AssetControlVisuals {
-        disabled: transparent(),
-        enabled: transparent_pointer(),
-        focused: transparent_pointer(),
-    }
-}
-
-/// Initializes every named menu branch with a valid transparent visual.
-fn transparent_menus() -> AssetMenuVisuals {
-    AssetMenuVisuals {
-        normal: transparent(),
-        hovered: transparent(),
-        pressed: transparent(),
-        focused: transparent(),
-        open: transparent(),
-        disabled: transparent(),
-    }
-}
-
-/// Initializes every named chrome branch with a valid transparent visual.
-fn transparent_chrome() -> AssetChromeVisuals {
-    AssetChromeVisuals {
-        base: transparent(),
-        active: transparent(),
-        disabled: transparent(),
-    }
+/// Acquires an exact fresh table after its header bounded the requested capacity.
+/// A short successful foreign result is a protocol error, never default-filled data.
+fn read_output<T: neocogi_com::ComInlineValue>(count: usize, copy: impl FnOnce(neocogi_com::NcOutput<'_, T>) -> Result<(), NcStatus>) -> Result<Vec<T>, NcStatus> {
+    let mut output = neocogi_com::NcOutputBuffer::new();
+    copy(output.output(0, count))?;
+    if output.len() != count { return Err(NC_E_INVALID_ARG); }
+    Ok(output.into_vec())
 }

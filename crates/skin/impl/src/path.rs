@@ -1,6 +1,6 @@
 //! Private host-native conversion for immutable platform path capabilities.
 
-use neocogi_com::{ComRef, NC_E_INVALID_ARG, NC_E_OUT_OF_MEMORY, NcCopyToBufferOffset, NcStatus};
+use neocogi_com::{ComRef, NC_E_INVALID_ARG, NcStatus};
 use neocogi_platform_contracts::{INativePathAbi, PathEncoding};
 use std::path::PathBuf;
 
@@ -14,8 +14,10 @@ pub(crate) fn decode(path: ComRef<'_, INativePathAbi>) -> Result<PathBuf, NcStat
         if encoding != PathEncoding::WindowsUtf16 {
             return Err(NC_E_INVALID_ARG);
         }
-        let mut units = copy_buffer::<u16>(count)?;
-        path.windows_units(NcCopyToBufferOffset::new(0, &mut units))?;
+        let mut units = neocogi_com::NcOutputBuffer::<u16>::new();
+        path.windows_units(units.output(0, count))?;
+        if units.len() != count { return Err(NC_E_INVALID_ARG); }
+        let units = units.into_vec();
         Ok(std::ffi::OsString::from_wide(&units).into())
     }
     #[cfg(not(windows))]
@@ -23,8 +25,10 @@ pub(crate) fn decode(path: ComRef<'_, INativePathAbi>) -> Result<PathBuf, NcStat
         if encoding != PathEncoding::UnixBytes {
             return Err(NC_E_INVALID_ARG);
         }
-        let mut bytes = copy_buffer::<u8>(count)?;
-        path.unix_bytes(NcCopyToBufferOffset::new(0, &mut bytes))?;
+        let mut bytes = neocogi_com::NcOutputBuffer::<u8>::new();
+        path.unix_bytes(bytes.output(0, count))?;
+        if bytes.len() != count { return Err(NC_E_INVALID_ARG); }
+        let bytes = bytes.into_vec();
         #[cfg(unix)]
         {
             use std::os::unix::ffi::OsStringExt;
@@ -37,12 +41,4 @@ pub(crate) fn decode(path: ComRef<'_, INativePathAbi>) -> Result<PathBuf, NcStat
             Ok(String::from_utf8(bytes).map_err(|_| NC_E_INVALID_ARG)?.into())
         }
     }
-}
-
-/// Allocates initialized output while preserving allocation failure as a status.
-fn copy_buffer<T: Default + Clone>(count: usize) -> Result<Vec<T>, NcStatus> {
-    let mut buffer = Vec::new();
-    buffer.try_reserve_exact(count).map_err(|_| NC_E_OUT_OF_MEMORY)?;
-    buffer.resize(count, T::default());
-    Ok(buffer)
 }

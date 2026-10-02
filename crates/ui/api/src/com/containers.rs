@@ -1,6 +1,5 @@
 //! Concrete container conveniences hold no tree or edge metadata outside the plugin.
 use super::*;
-use neocogi_com::NcCopyToBufferOffset;
 
 /// Static convenience wrapper around the dynamically constructed Linear class projection.
 pub type LinearWidget = Widget<LinearAbi>;
@@ -225,7 +224,7 @@ enum Axis {
 }
 impl Axis {
     /// Executes the selected concrete copied-policy read.
-    fn copy(&self, grid: &neocogi_ui_nodes_contracts::GridClient<neocogi_com::ThreadLocal>, output: NcCopyToBufferOffset<'_, LayoutTrack>) -> Result<u32, NcStatus> {
+    fn copy(&self, grid: &neocogi_ui_nodes_contracts::GridClient<neocogi_com::ThreadLocal>, output: neocogi_com::NcOutput<'_, LayoutTrack>) -> Result<u32, NcStatus> {
         match self {
             Self::Columns => grid.columns(output),
             Self::Rows => grid.rows(output),
@@ -233,12 +232,12 @@ impl Axis {
     }
     /// Allocates an ordinary application snapshot without retaining plugin state.
     fn read(&self, grid: &neocogi_ui_nodes_contracts::GridClient<neocogi_com::ThreadLocal>) -> Result<Vec<LayoutTrack>, NcStatus> {
-        let count = self.copy(grid, NcCopyToBufferOffset::new(0, &mut []))?;
-        let mut values = vec![LayoutTrack::Content; count as usize];
-        if self.copy(grid, NcCopyToBufferOffset::new(0, &mut values))? != count {
+        let mut values = neocogi_com::NcOutputBuffer::new();
+        let count = self.copy(grid, values.output(0, 0))?;
+        if self.copy(grid, values.output(0, count as usize))? != count || values.len() != count as usize {
             return Err(UI_E_BUSY);
         }
-        Ok(values)
+        Ok(values.into_vec())
     }
 }
 impl<P> Widget<GridAbi, P>

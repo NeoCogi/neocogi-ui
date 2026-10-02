@@ -2,14 +2,15 @@
 use crate::{ResourceCatalog, SkinBundle};
 use crate::assets::ImportedAssets;
 use neocogi_ui_core_contracts::IAssetBundleAbi;
-use neocogi_com::{ComPtr, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG};
+use neocogi_com::{ComPtr, NcStatus, NC_E_INVALID_ARG};
 
 /// Copies pixels explicitly for a fixture revision instead of adding transfers to runtime import.
 pub fn export_imported_data(imported: &ImportedAssets, bundle: &SkinBundle) -> Result<neocogi_ui::assets::AssetData, NcStatus> {
     let mut data = export_bundle_data(bundle)?;
-    let mut pixels = vec![0; imported.source().info()?.rgba_bytes()?];
-    imported.image().pixels(NcCopyToBufferOffset::new(0, &mut pixels))?;
-    data.pixels = pixels.into();
+    let count = imported.source().info()?.rgba_bytes()?;
+    let mut pixels = neocogi_com::NcOutputBuffer::new();
+    imported.image().pixels(pixels.output(0, count))?;
+    data.pixels = pixels.into_vec().into();
     Ok(data)
 }
 

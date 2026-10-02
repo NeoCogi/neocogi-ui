@@ -16,11 +16,11 @@ impl IRgbaImage for Pixels {
         Ok(Size { width: 2, height: 2 })
     }
     /// Supplies only the requested bounded byte range.
-    fn pixels(&self, mut output: NcCopyToBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+    fn pixels(&self, mut output: NcOutputWriter<'_, u8>) -> Result<(), NcStatus> {
         self.reads.set(self.reads.get() + 1);
         let start = output.offset() as usize;
-        let end = start + output.as_mut_slice().len();
-        output.as_mut_slice().copy_from_slice(self.bytes.get(start..end).ok_or(NC_E_INVALID_ARG)?);
+        let end = start + output.capacity();
+        output.extend_from_slice(self.bytes.get(start..end).ok_or(NC_E_INVALID_ARG)?)?;
         Ok(())
     }
 }
@@ -37,13 +37,13 @@ struct SurfaceStream {
 }
 impl IRenderStream for SurfaceStream {
     /// Copies the complete geometry requested by the production preparer.
-    fn vertices(&self, _: u64, mut output: NcCopyToBufferOffset<'_, RenderVertex>) -> Result<u32, NcStatus> {
-        output.as_mut_slice().copy_from_slice(&self.vertices);
+    fn vertices(&self, _: u64, mut output: NcOutputWriter<'_, RenderVertex>) -> Result<u32, NcStatus> {
+        output.extend_from_slice(&self.vertices)?;
         Ok(self.vertices.len() as u32)
     }
     /// Copies the complete ordered batch list.
-    fn batches(&self, _: u64, mut output: NcCopyToBufferOffset<'_, RenderBatch>) -> Result<u32, NcStatus> {
-        output.as_mut_slice().copy_from_slice(&self.batches);
+    fn batches(&self, _: u64, mut output: NcOutputWriter<'_, RenderBatch>) -> Result<u32, NcStatus> {
+        output.extend_from_slice(&self.batches)?;
         Ok(self.batches.len() as u32)
     }
     /// Retains the texture selected by this exact batch.

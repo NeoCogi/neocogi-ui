@@ -1,7 +1,7 @@
 //! Production compositor tests use a small immutable atlas without optional builders.
 use super::*;
 use crate::test_support::{test_bundle, data};
-use neocogi_com::{com_object, NcCopyToBufferOffset};
+use neocogi_com::{com_object};
 use neocogi_renderer_contracts::{IRenderer, IRendererVtblFor};
 
 /// Renderer observations shared with the concrete COM mock after object publication.
@@ -37,15 +37,15 @@ impl IRenderer for CaptureRenderer {
         _atlas: neocogi_com::ComRef<'_, IRgbaImageAbi>,
         stream: neocogi_com::ComRef<'_, IRenderStreamAbi>,
     ) -> Result<(), NcStatus> {
-        let mut vertices = vec![RenderVertex::default(); info.vertex_count as usize];
-        let mut batches = vec![RenderBatch::Atlas { first: 0, count: 3 }; info.batch_count as usize];
+        let mut vertices = neocogi_com::NcOutputBuffer::<RenderVertex>::new();
+        let mut batches = neocogi_com::NcOutputBuffer::<RenderBatch>::new();
         assert_eq!(
-            stream.vertices(info.invocation, NcCopyToBufferOffset::new(0, &mut vertices))?,
+            stream.vertices(info.invocation, vertices.output(0, info.vertex_count as usize))?,
             info.vertex_count
         );
-        assert_eq!(stream.batches(info.invocation, NcCopyToBufferOffset::new(0, &mut batches))?, info.batch_count);
-        *self.capture.vertices.borrow_mut() = vertices;
-        *self.capture.batches.borrow_mut() = batches;
+        assert_eq!(stream.batches(info.invocation, batches.output(0, info.batch_count as usize))?, info.batch_count);
+        *self.capture.vertices.borrow_mut() = vertices.into_vec();
+        *self.capture.batches.borrow_mut() = batches.into_vec();
         *self.capture.retained.borrow_mut() = Some((info.invocation, stream.add_ref()));
         self.capture.calls.set(self.capture.calls.get() + 1);
         Ok(())
@@ -343,9 +343,9 @@ fn compositor_owns_final_geometry_batching_and_stream_scope() {
     assert_eq!(capture.vertices.borrow().len() % 3, 0);
     assert_eq!(capture.batches.borrow().len(), 1, "adjacent primary-atlas output must merge");
     let (invocation, stream) = capture.retained.borrow().as_ref().cloned().unwrap();
-    let mut vertex = [RenderVertex::default()];
+    let mut vertex = neocogi_com::NcOutputBuffer::<RenderVertex>::new();
     assert_eq!(
-        stream.vertices(invocation, NcCopyToBufferOffset::new(0, &mut vertex)),
+        stream.vertices(invocation, vertex.output(0, 1)),
         Err(NC_E_INVALID_ARG),
         "the renderer cannot reuse a stream after its synchronous call"
     );

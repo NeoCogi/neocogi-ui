@@ -3,7 +3,7 @@
 mod output_bench;
 
 use neocogi_ui::*;
-use neocogi_com::{ComPtr, ComRef, NcCopyToBufferOffset, NcStatus, com_object};
+use neocogi_com::{ComPtr, ComRef, NcStatus, com_object};
 use std::{
     cell::RefCell,
     error::Error,
@@ -31,18 +31,16 @@ pub extern "C" fn neocogi_bench_end() {
 #[derive(Default)]
 struct Buffers {
     /// Copied geometry remains observable after the stream scope expires.
-    vertices: Vec<RenderVertex>,
+    vertices: neocogi_com::NcOutputBuffer<RenderVertex>,
     /// Copied ordered batch records, using the canonical ABI representation.
-    batches: Vec<RenderBatch>,
+    batches: neocogi_com::NcOutputBuffer<RenderBatch>,
 }
 impl Buffers {
     /// Copies both complete tables; warmed capacity is retained between frames.
     fn copy(&mut self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        self.vertices.resize(info.vertex_count as usize, RenderVertex::default());
-        self.batches.resize(info.batch_count as usize, RenderBatch::Atlas { first: 0, count: 0 });
-        stream.vertices(info.invocation, NcCopyToBufferOffset::new(0, &mut self.vertices))?;
-        stream.batches(info.invocation, NcCopyToBufferOffset::new(0, &mut self.batches))?;
-        black_box((&self.vertices, &self.batches));
+        stream.vertices(info.invocation, self.vertices.output(0, info.vertex_count as usize))?;
+        stream.batches(info.invocation, self.batches.output(0, info.batch_count as usize))?;
+        black_box((self.vertices.as_slice(), self.batches.as_slice()));
         Ok(())
     }
 }

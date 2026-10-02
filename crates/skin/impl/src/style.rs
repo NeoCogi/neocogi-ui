@@ -1,20 +1,28 @@
 //! Typed Skin policy and composition over the narrow GFX publication capability.
 
 use crate::Diagnostic;
-use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, com_factory};
+use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, com_factory};
 use neocogi_gfx_contracts::*;
 use neocogi_skin_contracts::{ISkinDiagnostics, PaletteEdit, StyleCompiler};
 use neocogi_appearance::{AppearanceTables, rgba};
 
 /// Copies the current fixed appearance tables without importing fonts, icons, or pixels.
 fn read_appearance(base: ComRef<'_, IAssetBundleAbi>) -> Result<AppearanceTables, NcStatus> {
-    // A complete flat table provides initialized storage without inventing invalid enum or
-    // union representations. Exact-count COM copies replace every record before it is read.
-    let mut tables = AppearanceTables::flat(Insets::default(), &FlatPalette::default());
-    base.surface_visuals(NcCopyToBufferOffset::new(0, &mut tables.surfaces))?;
-    base.control_visuals(NcCopyToBufferOffset::new(0, &mut tables.controls))?;
-    base.menu_visuals(NcCopyToBufferOffset::new(0, &mut tables.menus))?;
-    base.chrome_visuals(NcCopyToBufferOffset::new(0, &mut tables.window_chrome))?;
+    // Each table is fresh output; no flat-palette placeholders cross COM.
+    let mut surfaces = neocogi_com::NcOutputBuffer::new();
+    let mut controls = neocogi_com::NcOutputBuffer::new();
+    let mut menus = neocogi_com::NcOutputBuffer::new();
+    let mut chrome = neocogi_com::NcOutputBuffer::new();
+    base.surface_visuals(surfaces.output(0, SurfaceRole::COUNT))?;
+    base.control_visuals(controls.output(0, ControlRole::COUNT))?;
+    base.menu_visuals(menus.output(0, MenuRole::COUNT))?;
+    base.chrome_visuals(chrome.output(0, ChromeRole::COUNT))?;
+    let tables = AppearanceTables {
+        surfaces: surfaces.into_vec().try_into().map_err(|_| neocogi_com::NC_E_INVALID_ARG)?,
+        controls: controls.into_vec().try_into().map_err(|_| neocogi_com::NC_E_INVALID_ARG)?,
+        menus: menus.into_vec().try_into().map_err(|_| neocogi_com::NC_E_INVALID_ARG)?,
+        window_chrome: chrome.into_vec().try_into().map_err(|_| neocogi_com::NC_E_INVALID_ARG)?,
+    };
     Ok(tables)
 }
 

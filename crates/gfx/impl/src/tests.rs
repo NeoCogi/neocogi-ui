@@ -27,12 +27,12 @@ impl INativePath for ReenterPath {
         self.path.as_interface().unit_count()
     }
     /// Forwards bytes without a lossy conversion through display text.
-    fn unix_bytes(&self, output: neocogi_com::NcCopyToBufferOffset<'_, u8>) -> Result<(), NcStatus> {
-        self.path.as_interface().unix_bytes(output)
+    fn unix_bytes(&self, output: neocogi_com::NcOutputWriter<'_, u8>) -> Result<(), NcStatus> {
+        self.path.as_interface().unix_bytes(output.forward()?)
     }
     /// Keeps the same test valid for native Windows UTF-16 paths.
-    fn windows_units(&self, output: neocogi_com::NcCopyToBufferOffset<'_, u16>) -> Result<(), NcStatus> {
-        self.path.as_interface().windows_units(output)
+    fn windows_units(&self, output: neocogi_com::NcOutputWriter<'_, u16>) -> Result<(), NcStatus> {
+        self.path.as_interface().windows_units(output.forward()?)
     }
     /// Display remains an independent human-readable snapshot.
     fn display(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {

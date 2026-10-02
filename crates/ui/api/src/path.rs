@@ -1,6 +1,6 @@
 //! Static native-path conversion preserves platform filename identity across COM.
 use crate::{INativePath, INativePathAbi, PathEncoding};
-use neocogi_com::{ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcCopyToBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_object};
+use neocogi_com::{ComPtr, ComRef, INcStringAbi, INcStringComPtrExt, NcOutputWriter, NcStatus, NcString, NC_E_INVALID_ARG, com_object};
 use std::path::{Path, PathBuf};
 
 /// Typed static client for an immutable native-path capability.
@@ -46,8 +46,10 @@ pub fn decode(path: ComRef<'_, INativePathAbi>) -> Result<PathBuf, NcStatus> {
         if encoding != PathEncoding::WindowsUtf16 {
             return Err(NC_E_INVALID_ARG);
         }
-        let mut units = copy_buffer::<u16>(count)?;
-        path.windows_units(NcCopyToBufferOffset::new(0, &mut units))?;
+        let mut units = neocogi_com::NcOutputBuffer::<u16>::new();
+        path.windows_units(units.output(0, count))?;
+        if units.len() != count { return Err(NC_E_INVALID_ARG); }
+        let units = units.into_vec();
         Ok(std::ffi::OsString::from_wide(&units).into())
     }
     #[cfg(not(windows))]
@@ -55,8 +57,10 @@ pub fn decode(path: ComRef<'_, INativePathAbi>) -> Result<PathBuf, NcStatus> {
         if encoding != PathEncoding::UnixBytes {
             return Err(NC_E_INVALID_ARG);
         }
-        let mut bytes = copy_buffer::<u8>(count)?;
-        path.unix_bytes(NcCopyToBufferOffset::new(0, &mut bytes))?;
+        let mut bytes = neocogi_com::NcOutputBuffer::<u8>::new();
+        path.unix_bytes(bytes.output(0, count))?;
+        if bytes.len() != count { return Err(NC_E_INVALID_ARG); }
+        let bytes = bytes.into_vec();
         #[cfg(unix)]
         {
             use std::os::unix::ffi::OsStringExt;
@@ -94,7 +98,7 @@ impl INativePath for PathValue {
         }
     }
     /// Rejects a mismatched encoding before inspecting or writing the caller's output.
-    fn unix_bytes(&self, output: NcCopyToBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+    fn unix_bytes(&self, output: NcOutputWriter<'_, u8>) -> Result<(), NcStatus> {
         #[cfg(windows)]
         {
             let _ = output;
@@ -106,7 +110,7 @@ impl INativePath for PathValue {
         }
     }
     /// Windows copies preserve unpaired UTF-16 surrogates rather than passing through a Rust String.
-    fn windows_units(&self, output: NcCopyToBufferOffset<'_, u16>) -> Result<(), NcStatus> {
+    fn windows_units(&self, output: NcOutputWriter<'_, u16>) -> Result<(), NcStatus> {
         #[cfg(windows)]
         {
             use std::os::windows::ffi::OsStrExt;
@@ -126,21 +130,15 @@ impl INativePath for PathValue {
 }
 
 /// Validates an entire typed range before writing any caller-owned output elements.
-fn copy_range<T: Copy>(source: &[T], mut output: NcCopyToBufferOffset<'_, T>) -> Result<(), NcStatus> {
+fn copy_range<T: neocogi_com::ComInlineValue>(source: &[T], mut output: NcOutputWriter<'_, T>) -> Result<(), NcStatus> {
     let start = usize::try_from(output.offset()).map_err(|_| NC_E_INVALID_ARG)?;
-    let end = start.checked_add(output.len()).ok_or(NC_E_INVALID_ARG)?;
+    let end = start.checked_add(output.capacity()).ok_or(NC_E_INVALID_ARG)?;
     let source = source.get(start..end).ok_or(NC_E_INVALID_ARG)?;
-    output.as_mut_slice().copy_from_slice(source);
+    output.extend_from_slice(source)?;
     Ok(())
 }
 
-/// Rejects impossible foreign lengths before allocation or output initialization can panic.
-fn copy_buffer<T: Default + Clone>(count: usize) -> Result<Vec<T>, NcStatus> {
-    let mut buffer = Vec::new();
-    buffer.try_reserve_exact(count).map_err(|_| neocogi_com::NC_E_OUT_OF_MEMORY)?;
-    buffer.resize(count, T::default());
-    Ok(buffer)
-}
+
 
 #[cfg(test)]
 mod tests {
@@ -156,24 +154,25 @@ mod tests {
         let interface = path.as_interface();
         #[cfg(not(windows))]
         {
-            let mut bytes = [0; 4];
-            interface.unix_bytes(NcCopyToBufferOffset::new(1, &mut bytes)).unwrap();
-            assert_eq!(&bytes, b"olde");
-            assert_eq!(interface.unix_bytes(NcCopyToBufferOffset::new(u64::MAX, &mut bytes)), Err(NC_E_INVALID_ARG));
-            assert_eq!(&bytes, b"olde");
-            let mut units = [7u16; 2];
-            assert_eq!(interface.windows_units(NcCopyToBufferOffset::new(0, &mut units)), Err(NC_E_INVALID_ARG));
-            assert_eq!(units, [7, 7]);
+            let mut bytes = neocogi_com::NcOutputBuffer::new();
+            interface.unix_bytes(bytes.output(1, 4)).unwrap();
+            assert_eq!(bytes.as_slice(), b"olde");
+            assert_eq!(interface.unix_bytes(bytes.output(u64::MAX, 4)), Err(NC_E_INVALID_ARG));
+            assert!(bytes.is_empty());
+            let mut units = neocogi_com::NcOutputBuffer::new();
+            assert_eq!(interface.windows_units(units.output(0, 2)), Err(NC_E_INVALID_ARG));
+            assert!(units.is_empty());
         }
         #[cfg(windows)]
         {
-            let mut units = [0; 4];
-            interface.windows_units(NcCopyToBufferOffset::new(1, &mut units)).unwrap();
-            assert_eq!(units, [111, 108, 100, 101]);
-            assert_eq!(interface.windows_units(NcCopyToBufferOffset::new(u64::MAX, &mut units)), Err(NC_E_INVALID_ARG));
-            assert_eq!(units, [111, 108, 100, 101]);
+            let mut units = neocogi_com::NcOutputBuffer::new();
+            interface.windows_units(units.output(1, 4)).unwrap();
+            assert_eq!(units.as_slice(), [111, 108, 100, 101]);
+            assert_eq!(interface.windows_units(units.output(u64::MAX, 4)), Err(NC_E_INVALID_ARG));
+            assert!(units.is_empty());
         }
-        assert_eq!(copy_buffer::<u16>(usize::MAX), Err(neocogi_com::NC_E_OUT_OF_MEMORY));
+        // Oversized capacity is rejected by the shared output preflight before dispatch.
+        assert_eq!(neocogi_com::NcOutputBuffer::<u16>::new().output(0, usize::MAX).prepare().err(), Some(neocogi_com::NC_E_OUT_OF_RANGE));
     }
 
     /// Different non-Unicode paths may share display text but must round-trip to distinct filesystem identities.

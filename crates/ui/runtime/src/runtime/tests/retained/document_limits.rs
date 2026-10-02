@@ -24,10 +24,10 @@ impl neocogi_ui_document::contracts::IDesignWidgetCatalog for BudgetCatalog {
     fn widget_count(&self) -> Result<u32, NcStatus> { Ok(1) }
 
     /// Copies the same stable descriptor on length query and subsequent read.
-    fn describe(&self, index: u32, mut output: neocogi_com::NcCopyToBufferOffset<'_, u8>) -> Result<u32, NcStatus> {
+    fn describe(&self, index: u32, mut output: neocogi_com::NcOutputWriter<'_, u8>) -> Result<u32, NcStatus> {
         if index != 0 || output.offset() != 0 { return Err(neocogi_com::NC_E_INVALID_ARG); }
-        if output.len() >= self.description.len() {
-            output.as_mut_slice()[..self.description.len()].copy_from_slice(&self.description);
+        if output.capacity() >= self.description.len() {
+            output.extend_from_slice(&self.description)?;
         }
         Ok(self.description.len() as u32)
     }

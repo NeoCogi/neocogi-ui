@@ -1,6 +1,6 @@
 //! Fixtures assemble real UI and GFX objects; only the final GPU consumer is replaced.
 
-use neocogi_com::{com_object, ComPtr, ComRef, NcCopyToBufferOffset, NcStatus};
+use neocogi_com::{com_object, ComPtr, ComRef, NcStatus};
 use neocogi_renderer_contracts::*;
 use neocogi_ui::{IAssetBundleAbi, Ui};
 use std::{cell::RefCell, rc::Rc};
@@ -30,19 +30,19 @@ impl IRenderer for CaptureRenderer {
 
     /// Reads complete arrays while the token is live, then publishes copied observations.
     fn render(&self, info: RenderInfo, _image: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        let mut vertices = vec![RenderVertex::default(); info.vertex_count as usize];
-        let mut records = vec![RenderBatch::Atlas { first: 0, count: 0 }; info.batch_count as usize];
+        let mut vertices = neocogi_com::NcOutputBuffer::<RenderVertex>::new();
+        let mut records = neocogi_com::NcOutputBuffer::<RenderBatch>::new();
         assert_eq!(
-            stream.vertices(info.invocation, NcCopyToBufferOffset::new(0, &mut vertices))?,
+            stream.vertices(info.invocation, vertices.output(0, info.vertex_count as usize))?,
             info.vertex_count
         );
-        assert_eq!(stream.batches(info.invocation, NcCopyToBufferOffset::new(0, &mut records))?, info.batch_count);
-        let batches = records;
+        assert_eq!(stream.batches(info.invocation, records.output(0, info.batch_count as usize))?, info.batch_count);
+        let batches = records.into_vec();
         // No observation borrow survives a foreign stream call. This also permits deliberately
         // reentrant renderer fixtures to be added without changing the production path.
         let mut frame = self.frame.borrow_mut();
         frame.calls += 1;
-        frame.vertices = vertices;
+        frame.vertices = vertices.into_vec();
         frame.batches = batches;
         Ok(())
     }

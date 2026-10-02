@@ -1,6 +1,6 @@
 //! End-to-end coverage for the deployable UI-to-GFX-to-renderer frame path.
 
-use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, NC_E_OUT_OF_MEMORY, com_object};
+use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, NC_E_OUT_OF_MEMORY, com_object};
 use neocogi_gfx_contracts::{AssetAppearanceRevision, AssetPublisherAbi, GfxPluginFactoryAbi, IAssetBundleAbi};
 use neocogi_renderer_contracts::{IRenderStreamAbi, IRenderer, IRendererAbi, IRendererVtblFor, IRgbaImageAbi, RenderBatch, RenderInfo, RenderVertex};
 use neocogi_ui::{Rect, Size, TextWrapping, Ui, UI_E_OWNER};
@@ -37,10 +37,10 @@ impl IRenderer for CaptureRenderer {
 
     /// Copies both bounded arrays while the invocation token is valid.
     fn render(&self, info: RenderInfo, atlas: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        let mut vertices = vec![RenderVertex::default(); info.vertex_count as usize];
-        let mut batches = vec![RenderBatch::Atlas { first: 0, count: 3 }; info.batch_count as usize];
-        let vertex_count = stream.vertices(info.invocation, NcCopyToBufferOffset::new(0, &mut vertices))?;
-        let batch_count = stream.batches(info.invocation, NcCopyToBufferOffset::new(0, &mut batches))?;
+        let mut vertices = neocogi_com::NcOutputBuffer::<RenderVertex>::new();
+        let mut batches = neocogi_com::NcOutputBuffer::<RenderBatch>::new();
+        let vertex_count = stream.vertices(info.invocation, vertices.output(0, info.vertex_count as usize))?;
+        let batch_count = stream.batches(info.invocation, batches.output(0, info.batch_count as usize))?;
         self.observation.vertices.set(vertex_count);
         self.observation.batches.set(batch_count);
         self.observation.calls.set(self.observation.calls.get() + 1);

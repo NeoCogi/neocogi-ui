@@ -6,7 +6,7 @@
 
 use super::Diagnostic;
 use neocogi_com::{
-    ComPtr, ComRef, INcStringAbi, NC_E_BUSY, NC_E_INVALID_ARG, NC_E_OUT_OF_MEMORY, NC_E_OUT_OF_RANGE, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus,
+    ComPtr, ComRef, INcStringAbi, NC_E_BUSY, NC_E_INVALID_ARG, NC_E_OUT_OF_MEMORY, NC_E_OUT_OF_RANGE, NcCopyFromBufferOffset, NcOutputWriter, NcStatus,
     com_factory, com_object,
 };
 use neocogi_gfx_contracts::*;
@@ -154,26 +154,24 @@ struct Stream {
 
 impl IRenderStream for Stream {
     /// Copies a bounded vertex suffix only while the supplied invocation remains active.
-    fn vertices(&self, invocation: u64, mut output: NcCopyToBufferOffset<'_, RenderVertex>) -> Result<u32, NcStatus> {
+    fn vertices(&self, invocation: u64, mut output: NcOutputWriter<'_, RenderVertex>) -> Result<u32, NcStatus> {
         self.storage.check(invocation)?;
         let first = usize::try_from(output.offset()).map_err(|_| NC_E_INVALID_ARG)?;
         let vertices = self.storage.vertices.try_borrow().map_err(|_| NC_E_BUSY)?;
         let source = vertices.get(first..).ok_or(NC_E_INVALID_ARG)?;
-        let count = source.len().min(output.len());
-        output.as_mut_slice()[..count].copy_from_slice(&source[..count]);
+        let count = source.len().min(output.capacity());
+        output.extend_from_slice(&source[..count])?;
         u32::try_from(count).map_err(|_| NC_E_OUT_OF_RANGE)
     }
 
     /// Copies pointer-free batch records without invoking retained resources under a borrow.
-    fn batches(&self, invocation: u64, mut output: NcCopyToBufferOffset<'_, RenderBatch>) -> Result<u32, NcStatus> {
+    fn batches(&self, invocation: u64, mut output: NcOutputWriter<'_, RenderBatch>) -> Result<u32, NcStatus> {
         self.storage.check(invocation)?;
         let first = usize::try_from(output.offset()).map_err(|_| NC_E_INVALID_ARG)?;
         let batches = self.storage.batches.try_borrow().map_err(|_| NC_E_BUSY)?;
         let source = batches.get(first..).ok_or(NC_E_INVALID_ARG)?;
-        let count = source.len().min(output.len());
-        for (target, batch) in output.as_mut_slice()[..count].iter_mut().zip(source) {
-            *target = batch.record();
-        }
+        let count = source.len().min(output.capacity());
+        for batch in &source[..count] { output.push(batch.record())?; }
         u32::try_from(count).map_err(|_| NC_E_OUT_OF_RANGE)
     }
 

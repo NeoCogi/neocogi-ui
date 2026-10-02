@@ -7,7 +7,7 @@
 
 use neocogi_gfx_contracts::*;
 use neocogi_renderer_contracts::{IRgbaImageAbi, IRgbaImageVtblFor};
-use neocogi_com::{ComPtr, ComRef, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
+use neocogi_com::{ComPtr, ComRef, NcOutputWriter, NcStatus, NC_E_INVALID_ARG, com_object};
 use std::borrow::Cow;
 
 mod validation;
@@ -170,19 +170,19 @@ impl IAssetBundle for Bundle {
         Ok(self.info)
     }
     /// Copies font metrics without exposing a borrowed Rust slice.
-    fn fonts(&self, output: NcCopyToBufferOffset<'_, AssetFont>) -> Result<(), NcStatus> {
+    fn fonts(&self, output: NcOutputWriter<'_, AssetFont>) -> Result<(), NcStatus> {
         copy(&self.tables.fonts, output)
     }
     /// Copies exact Unicode records in the producer's immutable order.
-    fn glyphs(&self, output: NcCopyToBufferOffset<'_, AssetGlyph>) -> Result<(), NcStatus> {
+    fn glyphs(&self, output: NcOutputWriter<'_, AssetGlyph>) -> Result<(), NcStatus> {
         copy(&self.tables.glyphs, output)
     }
     /// Copies named image rectangles in bundle-local table order.
-    fn icons(&self, output: NcCopyToBufferOffset<'_, AssetIcon>) -> Result<(), NcStatus> {
+    fn icons(&self, output: NcOutputWriter<'_, AssetIcon>) -> Result<(), NcStatus> {
         copy(&self.tables.icons, output)
     }
     /// Copies UTF-8 bytes, with byte offsets and no implicit terminator.
-    fn names(&self, output: NcCopyToBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+    fn names(&self, output: NcOutputWriter<'_, u8>) -> Result<(), NcStatus> {
         copy(&self.tables.names, output)
     }
     /// Returns complete geometry without parser-specific defaults.
@@ -194,19 +194,19 @@ impl IAssetBundle for Bundle {
         Ok(self.tables.chrome)
     }
     /// Copies complete named surface states without a family tag or flattened state axis.
-    fn surface_visuals(&self, output: NcCopyToBufferOffset<'_, AssetSurfaceVisuals>) -> Result<(), NcStatus> {
+    fn surface_visuals(&self, output: NcOutputWriter<'_, AssetSurfaceVisuals>) -> Result<(), NcStatus> {
         copy(&self.tables.surfaces, output)
     }
     /// Copies complete named control states, preserving enabled and focused pointer branches.
-    fn control_visuals(&self, output: NcCopyToBufferOffset<'_, AssetControlVisuals>) -> Result<(), NcStatus> {
+    fn control_visuals(&self, output: NcOutputWriter<'_, AssetControlVisuals>) -> Result<(), NcStatus> {
         copy(&self.tables.controls, output)
     }
     /// Copies complete named menu states without relying on numeric state offsets.
-    fn menu_visuals(&self, output: NcCopyToBufferOffset<'_, AssetMenuVisuals>) -> Result<(), NcStatus> {
+    fn menu_visuals(&self, output: NcOutputWriter<'_, AssetMenuVisuals>) -> Result<(), NcStatus> {
         copy(&self.tables.menus, output)
     }
     /// Copies complete named chrome states without relying on numeric state offsets.
-    fn chrome_visuals(&self, output: NcCopyToBufferOffset<'_, AssetChromeVisuals>) -> Result<(), NcStatus> {
+    fn chrome_visuals(&self, output: NcOutputWriter<'_, AssetChromeVisuals>) -> Result<(), NcStatus> {
         copy(&self.tables.window_chrome, output)
     }
 }
@@ -227,16 +227,16 @@ impl IRgbaImage for Image {
     }
 
     /// Copies tightly packed RGBA bytes after validating the complete requested range.
-    fn pixels(&self, output: NcCopyToBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+    fn pixels(&self, output: NcOutputWriter<'_, u8>) -> Result<(), NcStatus> {
         copy(&self.pixels, output)
     }
 }
 
 /// Rejects invalid whole ranges before changing any destination element.
-fn copy<T: Copy>(values: &[T], mut output: NcCopyToBufferOffset<'_, T>) -> Result<(), NcStatus> {
+fn copy<T: neocogi_com::ComInlineValue>(values: &[T], mut output: NcOutputWriter<'_, T>) -> Result<(), NcStatus> {
     let first = usize::try_from(output.offset()).map_err(|_| NC_E_INVALID_ARG)?;
-    let end = first.checked_add(output.len()).ok_or(NC_E_INVALID_ARG)?;
-    output.as_mut_slice().copy_from_slice(values.get(first..end).ok_or(NC_E_INVALID_ARG)?);
+    let end = first.checked_add(output.capacity()).ok_or(NC_E_INVALID_ARG)?;
+    output.extend_from_slice(values.get(first..end).ok_or(NC_E_INVALID_ARG)?)?;
     Ok(())
 }
 

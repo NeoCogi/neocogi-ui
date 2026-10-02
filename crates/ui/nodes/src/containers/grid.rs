@@ -239,7 +239,7 @@ impl super::ContainerAlgorithm for Grid {
 use crate::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
 use neocogi_ui_core_contracts::{IWidgetHostAbi};
 use neocogi_ui_nodes_contracts::{GridAbi, GridExtent, GridLimits, LayoutTrack};
-use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus};
+use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcOutputWriter, NcStatus};
 
 direct_widget_phase_impl!(Grid);
 direct_container_layout_impl!(Grid);
@@ -284,7 +284,7 @@ impl neocogi_ui_nodes_contracts::Grid for Grid {
     }
 
     /// Copies column policy from the one concrete Grid state.
-    fn columns(&self, output: NcCopyToBufferOffset<'_, LayoutTrack>) -> Result<u32, NcStatus> {
+    fn columns(&self, output: NcOutputWriter<'_, LayoutTrack>) -> Result<u32, NcStatus> {
         self.runtime().state.readable()?;
         copy_tracks(self.column_tracks(), output)
     }
@@ -303,7 +303,7 @@ impl neocogi_ui_nodes_contracts::Grid for Grid {
     }
 
     /// Copies row policy without exposing Grid's placement scratch.
-    fn rows(&self, output: NcCopyToBufferOffset<'_, LayoutTrack>) -> Result<u32, NcStatus> {
+    fn rows(&self, output: NcOutputWriter<'_, LayoutTrack>) -> Result<u32, NcStatus> {
         self.runtime().state.readable()?;
         copy_tracks(self.row_tracks(), output)
     }
@@ -341,12 +341,10 @@ fn local_tracks(tracks: NcCopyFromBufferOffset<'_, LayoutTrack>, maximum: u32) -
 }
 
 /// Copies a requested track range and returns the complete retained cardinality.
-fn copy_tracks(tracks: &[TrackSize], mut output: NcCopyToBufferOffset<'_, LayoutTrack>) -> Result<u32, NcStatus> {
+fn copy_tracks(tracks: &[TrackSize], mut output: NcOutputWriter<'_, LayoutTrack>) -> Result<u32, NcStatus> {
     let offset = usize::try_from(output.offset()).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
     let source = tracks.get(offset..).ok_or(neocogi_com::NC_E_INVALID_ARG)?;
-    for (target, track) in output.as_mut_slice().iter_mut().zip(source) {
-        *target = super::layout_track(*track);
-    }
+    for track in source.iter().take(output.capacity()) { output.push(super::layout_track(*track))?; }
     u32::try_from(tracks.len()).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)
 }
 

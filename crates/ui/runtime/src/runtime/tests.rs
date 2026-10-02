@@ -1,7 +1,7 @@
 //! Runtime boundary regressions use deliberately retaining and reentrant components.
 use super::*;
 use neocogi_ui_nodes_contracts::*;
-use neocogi_com::{ComBox, WeakComBox, INcStringComPtrExt, NC_E_BUSY, NcCopyToBufferOffset};
+use neocogi_com::{ComBox, WeakComBox, INcStringComPtrExt, NC_E_BUSY, NcOutputWriter};
 mod composite_fixture;
 mod containers;
 mod embedded_input;
@@ -94,24 +94,24 @@ impl IAssetBundle for CountingAssets {
         self.source.info()
     }
     /// Delegates the requested font range after recording the copy.
-    fn fonts(&self, output: NcCopyToBufferOffset<'_, AssetFont>) -> Result<(), NcStatus> {
+    fn fonts(&self, output: NcOutputWriter<'_, AssetFont>) -> Result<(), NcStatus> {
         self.called();
-        self.source.fonts(output)
+        self.source.fonts(output.forward()?)
     }
     /// Delegates the requested glyph range after recording the copy.
-    fn glyphs(&self, output: NcCopyToBufferOffset<'_, AssetGlyph>) -> Result<(), NcStatus> {
+    fn glyphs(&self, output: NcOutputWriter<'_, AssetGlyph>) -> Result<(), NcStatus> {
         self.called();
-        self.source.glyphs(output)
+        self.source.glyphs(output.forward()?)
     }
     /// Delegates the requested icon range after recording the copy.
-    fn icons(&self, output: NcCopyToBufferOffset<'_, AssetIcon>) -> Result<(), NcStatus> {
+    fn icons(&self, output: NcOutputWriter<'_, AssetIcon>) -> Result<(), NcStatus> {
         self.called();
-        self.source.icons(output)
+        self.source.icons(output.forward()?)
     }
     /// Delegates the requested UTF-8 name range after recording the copy.
-    fn names(&self, output: NcCopyToBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+    fn names(&self, output: NcOutputWriter<'_, u8>) -> Result<(), NcStatus> {
         self.called();
-        self.source.names(output)
+        self.source.names(output.forward()?)
     }
     /// Delegates scalar layout metrics after recording the lookup.
     fn metrics(&self) -> Result<AssetMetrics, NcStatus> {
@@ -124,24 +124,24 @@ impl IAssetBundle for CountingAssets {
         self.source.chrome()
     }
     /// Delegates complete surface-state records after recording the copy.
-    fn surface_visuals(&self, output: NcCopyToBufferOffset<'_, AssetSurfaceVisuals>) -> Result<(), NcStatus> {
+    fn surface_visuals(&self, output: NcOutputWriter<'_, AssetSurfaceVisuals>) -> Result<(), NcStatus> {
         self.called();
-        self.source.surface_visuals(output)
+        self.source.surface_visuals(output.forward()?)
     }
     /// Delegates complete control-state records after recording the copy.
-    fn control_visuals(&self, output: NcCopyToBufferOffset<'_, AssetControlVisuals>) -> Result<(), NcStatus> {
+    fn control_visuals(&self, output: NcOutputWriter<'_, AssetControlVisuals>) -> Result<(), NcStatus> {
         self.called();
-        self.source.control_visuals(output)
+        self.source.control_visuals(output.forward()?)
     }
     /// Delegates complete menu-state records after recording the copy.
-    fn menu_visuals(&self, output: NcCopyToBufferOffset<'_, AssetMenuVisuals>) -> Result<(), NcStatus> {
+    fn menu_visuals(&self, output: NcOutputWriter<'_, AssetMenuVisuals>) -> Result<(), NcStatus> {
         self.called();
-        self.source.menu_visuals(output)
+        self.source.menu_visuals(output.forward()?)
     }
     /// Delegates complete chrome-state records after recording the copy.
-    fn chrome_visuals(&self, output: NcCopyToBufferOffset<'_, AssetChromeVisuals>) -> Result<(), NcStatus> {
+    fn chrome_visuals(&self, output: NcOutputWriter<'_, AssetChromeVisuals>) -> Result<(), NcStatus> {
         self.called();
-        self.source.chrome_visuals(output)
+        self.source.chrome_visuals(output.forward()?)
     }
 }
 
@@ -278,13 +278,13 @@ impl IRenderer for Renderer {
     }
     /// Copies bulk geometry during its valid scope and retains authority for later rejection tests.
     fn render(&self, info: RenderInfo, _atlas: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        let mut vertices = vec![RenderVertex::default(); info.vertex_count as usize];
+        let mut vertices = neocogi_com::NcOutputBuffer::<RenderVertex>::new();
         assert_eq!(
-            stream.vertices(info.invocation, NcCopyToBufferOffset::new(0, &mut vertices))?,
+            stream.vertices(info.invocation, vertices.output(0, info.vertex_count as usize))?,
             info.vertex_count
         );
-        let mut batches = vec![RenderBatch::Atlas { first: 0, count: 0 }; info.batch_count as usize];
-        assert_eq!(stream.batches(info.invocation, NcCopyToBufferOffset::new(0, &mut batches))?, info.batch_count);
+        let mut batches = neocogi_com::NcOutputBuffer::<RenderBatch>::new();
+        assert_eq!(stream.batches(info.invocation, batches.output(0, info.batch_count as usize))?, info.batch_count);
         // These built-in fixtures use one coalesced atlas range regardless of glyph/primitive count.
         assert_eq!(batches.len(), 1);
         assert!(matches!(batches[0], RenderBatch::Atlas { first: 0, count } if count == info.vertex_count));
@@ -292,7 +292,7 @@ impl IRenderer for Renderer {
         assert_eq!(stream.item(info.invocation, 0).unwrap_err(), NC_E_INVALID_ARG);
         assert!(vertices.len() >= 6);
         assert!(vertices.iter().all(|v| v.x.is_finite() && v.y.is_finite()));
-        *self.probe.vertices.borrow_mut() = vertices;
+        *self.probe.vertices.borrow_mut() = vertices.into_vec();
         self.probe.calls.set(self.probe.calls.get() + 1);
         self.probe.streams.borrow_mut().push((stream.add_ref(), info.invocation));
         if self.probe.fail.get() { Err(UI_E_RENDER) } else { Ok(()) }
@@ -354,8 +354,8 @@ fn rendering_requires_synchronized_geometry_and_streams_expire_after_success_and
     probe.fail.set(true);
     assert_eq!(runtime.render(resized, renderer.as_com_ref()), Err(UI_E_RENDER));
     for (stream, scope) in probe.streams.borrow().iter() {
-        assert_eq!(stream.vertices(*scope, NcCopyToBufferOffset::new(0, &mut [])), Err(NC_E_INVALID_ARG));
-        assert_eq!(stream.batches(*scope, NcCopyToBufferOffset::new(0, &mut [])), Err(NC_E_INVALID_ARG));
+        assert_eq!(stream.vertices(*scope, neocogi_com::NcOutputBuffer::new().output(0, 0)), Err(NC_E_INVALID_ARG));
+        assert_eq!(stream.batches(*scope, neocogi_com::NcOutputBuffer::new().output(0, 0)), Err(NC_E_INVALID_ARG));
         assert_eq!(stream.texture(*scope, 0).unwrap_err(), NC_E_INVALID_ARG);
         assert_eq!(stream.item(*scope, 0).unwrap_err(), NC_E_INVALID_ARG);
     }

@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::{color, SliceInsets, Vec2i};
-use neocogi_com::{com_object, NcCopyToBufferOffset};
+use neocogi_com::{com_object};
 use neocogi_renderer_contracts::*;
 use std::{cell::RefCell, rc::Rc};
 
@@ -35,14 +35,14 @@ impl IRenderer for Recorder {
 
     /// Copies the live stream before borrowing assertion storage, keeping foreign calls reentrant.
     fn render(&self, info: RenderInfo, _: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        let mut vertices = vec![RenderVertex::default(); info.vertex_count as usize];
-        let mut records = vec![RenderBatch::Atlas { first: 0, count: 0 }; info.batch_count as usize];
+        let mut vertices = neocogi_com::NcOutputBuffer::<RenderVertex>::new();
+        let mut records = neocogi_com::NcOutputBuffer::<RenderBatch>::new();
         assert_eq!(
-            stream.vertices(info.invocation, NcCopyToBufferOffset::new(0, &mut vertices))?,
+            stream.vertices(info.invocation, vertices.output(0, info.vertex_count as usize))?,
             info.vertex_count
         );
-        assert_eq!(stream.batches(info.invocation, NcCopyToBufferOffset::new(0, &mut records))?, info.batch_count);
-        let batches = records;
+        assert_eq!(stream.batches(info.invocation, records.output(0, info.batch_count as usize))?, info.batch_count);
+        let batches = records.into_vec();
         // Resolve every resource during the active scope. No resource-type registry or erased
         // application payload participates in this renderer fixture.
         for (index, batch) in batches.iter().enumerate() {
@@ -58,7 +58,7 @@ impl IRenderer for Recorder {
         }
         let mut capture = self.capture.borrow_mut();
         capture.calls += 1;
-        capture.vertices = vertices;
+        capture.vertices = vertices.into_vec();
         capture.batches = batches;
         capture.stream = Some((stream.add_ref(), info.invocation));
         if capture.fail { Err(NC_E_INVALID_ARG) } else { Ok(()) }
@@ -286,7 +286,7 @@ fn frame_finish_failure_is_observable_and_the_next_frame_can_complete() {
     assert_eq!(fixture.submit(Size { width: 32, height: 32 }), Err(NC_E_INVALID_ARG));
     assert!(fixture.list.is_empty());
     let (stream, invocation) = fixture.capture.borrow().stream.clone().unwrap();
-    assert!(stream.vertices(invocation, NcCopyToBufferOffset::new(0, &mut [])).is_err());
+    assert!(stream.vertices(invocation, neocogi_com::NcOutputBuffer::new().output(0, 0)).is_err());
     fixture.capture.borrow_mut().fail = false;
     fixture.submit(Size { width: 32, height: 32 }).unwrap();
     assert_eq!(fixture.capture.borrow().calls, 2);

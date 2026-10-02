@@ -8,7 +8,7 @@ use neocogi_ui::com::widget::WidgetState;
 use neocogi_ui_core_contracts::*;
 use neocogi_demo_contracts::*;
 use neocogi_ui::{Painter, events::Activation};
-use neocogi_com::{ComBox, WeakComBox, ComPtr, ComRef, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG, com_factory, com_object};
+use neocogi_com::{ComBox, WeakComBox, ComPtr, ComRef, NcCopyFromBufferOffset, NcOutputWriter, NcStatus, NC_E_INVALID_ARG, com_factory, com_object};
 use neocogi_ui_design::DesignWidgetManifest;
 use neocogi_ui_document_contracts::IDesignWidgetCatalog;
 
@@ -329,15 +329,15 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
     }
 
     /// Copies generated Counter IDL metadata through the common COM catalog.
-    fn describe(&self, index: u32, mut output: NcCopyToBufferOffset<'_, u8>) -> Result<u32, NcStatus> {
+    fn describe(&self, index: u32, mut output: NcOutputWriter<'_, u8>) -> Result<u32, NcStatus> {
         if index != 0 || output.offset() != 0 {
             return Err(NC_E_INVALID_ARG);
         }
         let manifest = DesignWidgetManifest::from_idl("example.counter", settings::Settings::default().encode()?, &CounterAbi::IDL_INTERFACE).map_err(|_| NC_E_INVALID_ARG)?;
         let bytes = manifest.encode().map_err(|_| NC_E_INVALID_ARG)?;
         let required = u32::try_from(bytes.len()).map_err(|_| NC_E_INVALID_ARG)?;
-        if output.len() >= bytes.len() {
-            output.as_mut_slice()[..bytes.len()].copy_from_slice(&bytes);
+        if output.capacity() >= bytes.len() {
+            output.extend_from_slice(&bytes)?;
         }
         Ok(required)
     }

@@ -7,7 +7,7 @@ use neocogi_ui_core_contracts::IChoiceMenuEventQueueAbi;
 use crate::menu::{Menu, MenuEntry};
 use crate::window_manager::{PopupHandle, SurfaceMutationError, WindowManager};
 use neocogi_com::{
-    ComPtr, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_int_enum, com_interface,
+    ComPtr, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcOutputWriter, NcStatus, NcString, NC_E_INVALID_ARG, com_int_enum, com_interface,
     com_object,
 };
 use neocogi_ui_core_contracts::{
@@ -73,7 +73,7 @@ pub(crate) trait IChoiceMenuState {
     /// Copies the hierarchy's shared UTF-8 storage for rebuilding its menu projection.
     fn menu_text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
     /// Copies a requested preorder entry range and returns the complete entry count.
-    fn menu_entries(&self, output: NcCopyToBufferOffset<'_, ChoiceMenuEntry>) -> Result<u32, NcStatus>;
+    fn menu_entries(&self, output: NcOutputWriter<'_, ChoiceMenuEntry>) -> Result<u32, NcStatus>;
     /// Returns the number of retained display labels.
     fn choice_count(&self) -> Result<u64, NcStatus>;
     /// Copies one exact display label after strict range validation.
@@ -220,12 +220,11 @@ impl IChoiceMenuState for ChoiceMenuState {
     }
 
     /// Copies only the requested suffix while reporting complete preorder cardinality.
-    fn menu_entries(&self, mut output: NcCopyToBufferOffset<'_, ChoiceMenuEntry>) -> Result<u32, NcStatus> {
+    fn menu_entries(&self, mut output: NcOutputWriter<'_, ChoiceMenuEntry>) -> Result<u32, NcStatus> {
         let offset = usize::try_from(output.offset()).map_err(|_| NC_E_INVALID_ARG)?;
         let source = self.entries.get(offset..).ok_or(NC_E_INVALID_ARG)?;
-        for (target, entry) in output.as_mut_slice().iter_mut().zip(source) {
-            *target = *entry;
-        }
+        let count = source.len().min(output.capacity());
+        output.extend_from_slice(&source[..count])?;
         u32::try_from(self.entries.len()).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)
     }
 
@@ -390,17 +389,13 @@ impl IChoiceMenu for ChoiceMenuState {
 /// Builds one checked recursive choice-menu snapshot from the authoritative serialized model.
 pub(crate) fn choice_menu(state: &ComPtr<IChoiceMenuStateAbi>) -> Result<Menu, NcStatus> {
     let menu_text = state.menu_text()?.to_string()?;
-    let count = usize::try_from(state.menu_entries(NcCopyToBufferOffset::new(0, &mut []))?).map_err(|_| NC_E_INVALID_ARG)?;
-    let placeholder: ChoiceMenuEntry = ChoiceMenuEntry::Choice {
-        id: 0,
-        label: MenuTextRange { first: 0, count: 0 },
-    };
-    let mut entries = vec![placeholder; count];
-    let copied = state.menu_entries(NcCopyToBufferOffset::new(0, &mut entries))?;
-    if usize::try_from(copied).ok() != Some(count) {
+    let mut entries = neocogi_com::NcOutputBuffer::new();
+    let count = usize::try_from(state.menu_entries(entries.output(0, 0))?).map_err(|_| NC_E_INVALID_ARG)?;
+    let copied = state.menu_entries(entries.output(0, count))?;
+    if usize::try_from(copied).ok() != Some(count) || entries.len() != count {
         return Err(NC_E_INVALID_ARG);
     }
-    native_menu(&menu_text, &entries)
+    native_menu(&menu_text, entries.as_slice())
 }
 
 /// Runtime-owned association between private choice menu state and one shared menu popup handle.

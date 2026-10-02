@@ -7,7 +7,7 @@ use crate::test_support::assets::{export_bundle, export_bundle_data, export_impo
 use neocogi_gfx_contracts::AssetPublisherAbi;
 use neocogi_ui::assets::AssetData;
 use neocogi_skin_contracts::{PaletteEdit, StyleCompilerAbi};
-use neocogi_com::{com_object, ComPtr, ComRef, NcStatus, NcCopyFromBufferOffset, NcCopyToBufferOffset, NC_E_BUSY, NC_E_INVALID_ARG};
+use neocogi_com::{com_object, ComPtr, ComRef, NcStatus, NcCopyFromBufferOffset, NC_E_BUSY, NC_E_INVALID_ARG};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -94,14 +94,14 @@ fn round_trip_preserves_complete_resources_and_image_patches() {
     );
     assert_ne!(original.atlas().font_id("body"), imported.bundle().atlas().font_id("body"));
 
-    // Whole-range copy validation must preserve output even when only its final byte is invalid.
-    let mut output = [77; 2];
+    // An invalid source range must not publish any result, including a valid prefix.
+    let mut output = neocogi_com::NcOutputBuffer::new();
     let count = source.info().unwrap().rgba_bytes().unwrap();
     assert_eq!(
-        source.image().unwrap().pixels(NcCopyToBufferOffset::new(count as u64 - 1, &mut output)),
+        source.image().unwrap().pixels(output.output(count as u64 - 1, 2)),
         Err(NC_E_INVALID_ARG)
     );
-    assert_eq!(output, [77; 2]);
+    assert!(output.is_empty());
 }
 
 /// Catalog authentication precedes ID preservation, and missing original names cannot enter a runtime.
@@ -170,6 +170,7 @@ fn unknown_nested_asset_tag_is_rejected_at_the_output_boundary() {
         _offset: u64,
         count: u64,
         output: *mut <AssetControlVisuals as neocogi_com::ComValue>::Wire,
+        written: *mut u64,
     ) -> NcStatus {
         let data = export_bundle_data(&bundle()).unwrap();
         if count != data.tables.controls.len() as u64 { return NC_E_INVALID_ARG; }
@@ -179,6 +180,8 @@ fn unknown_nested_asset_tag_is_rejected_at_the_output_boundary() {
             // SAFETY: generated caller supplied count writable raw elements.
             unsafe { output.add(index).write(wire); }
         }
+        // SAFETY: raw ABI supplies a distinct writable prefix count.
+        unsafe { *written = count; }
         neocogi_com::NC_OK
     }
     let source = export_bundle(&bundle()).unwrap();
@@ -243,9 +246,9 @@ impl IRenderer for UploadRenderer {
     /// Final geometry must use the exact bundle prepared by the successful upload.
     fn render(&self, info: RenderInfo, source: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         assert_eq!(source.as_raw().object, self.0.current.borrow().as_raw().object);
-        let mut vertices = vec![RenderVertex::default(); info.vertex_count as usize];
+        let mut vertices = neocogi_com::NcOutputBuffer::<RenderVertex>::new();
         assert_eq!(
-            stream.vertices(info.invocation, NcCopyToBufferOffset::new(0, &mut vertices))?,
+            stream.vertices(info.invocation, vertices.output(0, info.vertex_count as usize))?,
             info.vertex_count
         );
         assert!(!vertices.is_empty());

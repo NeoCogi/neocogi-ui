@@ -2,7 +2,7 @@
 //! The same source records and iteration counts are used across the output migration.
 
 use super::{neocogi_bench_begin, neocogi_bench_end};
-use neocogi_com::{com_object, ComPtr, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG};
+use neocogi_com::{com_object, ComPtr, NcOutputWriter, NcStatus, NC_E_INVALID_ARG};
 use neocogi_ui::*;
 use std::{error::Error, hint::black_box, time::Instant};
 
@@ -16,16 +16,16 @@ struct Source {
 impl IRenderStream for Source {
     /// Prevents LTO from replacing the measured provider's work with a constant result.
     #[inline(never)]
-    fn batches(&self, _: u64, mut output: NcCopyToBufferOffset<'_, RenderBatch>) -> Result<u32, NcStatus> {
+    fn batches(&self, _: u64, mut output: NcOutputWriter<'_, RenderBatch>) -> Result<u32, NcStatus> {
         let first = usize::try_from(output.offset()).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)?;
         let source = self.records.get(first..).ok_or(neocogi_com::NC_E_INVALID_ARG)?;
-        let count = source.len().min(output.len());
-        output.as_mut_slice()[..count].copy_from_slice(&source[..count]);
+        let count = source.len().min(output.capacity());
+        output.extend_from_slice(&source[..count])?;
         Ok(count as u32)
     }
 
     /// The transport fixture contains records only; vertex access is unsupported.
-    fn vertices(&self, _: u64, _: NcCopyToBufferOffset<'_, RenderVertex>) -> Result<u32, NcStatus> { Err(NC_E_INVALID_ARG) }
+    fn vertices(&self, _: u64, _: NcOutputWriter<'_, RenderVertex>) -> Result<u32, NcStatus> { Err(NC_E_INVALID_ARG) }
     /// No resource capabilities are needed to measure copied record transport.
     fn texture(&self, _: u64, _: u32) -> Result<ComPtr<ITextureAbi>, NcStatus> { Err(NC_E_INVALID_ARG) }
     /// Custom records are structural fixtures and have no renderer-specific object.
@@ -46,9 +46,9 @@ fn record(index: usize) -> RenderBatch {
 
 /// Keeps the measured call opaque while still exercising the safe generated client.
 #[inline(never)]
-fn read(source: &ComPtr<IRenderStreamAbi>, destination: &mut [RenderBatch]) -> Result<(), NcStatus> {
-    black_box(source).batches(1, NcCopyToBufferOffset::new(0, destination))?;
-    black_box(destination);
+fn read(source: &ComPtr<IRenderStreamAbi>, destination: &mut neocogi_com::NcOutputBuffer<RenderBatch>, count: usize) -> Result<(), NcStatus> {
+    black_box(source).batches(1, destination.output(0, count))?;
+    black_box(destination.as_slice());
     Ok(())
 }
 
@@ -60,15 +60,15 @@ pub(super) fn run(counts: bool) -> Result<(), Box<dyn Error>> {
     };
     for count in [1, 1024, 8192] {
         let source = Source::from_value(Source { records: (0..count).map(record).collect() }).query::<IRenderStreamAbi>()?;
-        let mut destination = vec![RenderBatch::Atlas { first: 0, count: 0 }; count];
+        let mut destination = neocogi_com::NcOutputBuffer::new();
         let start = Instant::now();
-        read(&source, &mut destination)?;
+        read(&source, &mut destination, count)?;
         println!("{{\"operation\":\"bulk_output_cold\",\"count\":{count},\"ns\":{}}}", start.elapsed().as_nanos());
-        for _ in 0..4 { read(&source, &mut destination)?; }
+        for _ in 0..4 { read(&source, &mut destination, count)?; }
         for sample in 0..if counts { 1 } else { 7 } {
             neocogi_bench_begin(5);
             let start = Instant::now();
-            for _ in 0..iterations { read(&source, &mut destination)?; }
+            for _ in 0..iterations { read(&source, &mut destination, count)?; }
             let elapsed = start.elapsed();
             neocogi_bench_end();
             println!("{{\"operation\":\"bulk_output\",\"count\":{count},\"sample\":{sample},\"iterations\":{iterations},\"ns_per_iteration\":{}}}", elapsed.as_nanos() / u128::from(iterations));

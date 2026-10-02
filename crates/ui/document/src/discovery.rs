@@ -3,7 +3,7 @@ use crate::{
     CustomWidgetFactory, CustomWidgetRegistry,
     design::{DesignWidgetManifest, MAX_DESIGN_DESCRIPTOR_BYTES},
 };
-use neocogi_com::{IUnknown, NcValueRef, ComPtr, NcCopyFromBufferOffset, NcCopyToBufferOffset, NcStatus, NC_E_INVALID_ARG};
+use neocogi_com::{IUnknown, NcValueRef, ComPtr, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
 use neocogi_ui::{IWidgetAbi, Ui};
 use neocogi_ui_document_contracts::IDesignWidgetCatalogAbi;
 use std::rc::Rc;
@@ -69,15 +69,15 @@ impl CustomWidgetRegistry {
         }
         let mut candidate = self.clone();
         for index in 0..count {
+            let mut bytes = neocogi_com::NcOutputBuffer::<u8>::new();
             let required = catalog
-                .describe(index, NcCopyToBufferOffset::new(0, &mut []))
+                .describe(index, bytes.output(0, 0))
                 .map_err(|status| format!("Widget catalog description length failed: {status}"))? as usize;
             if required == 0 || required > MAX_DESIGN_DESCRIPTOR_BYTES {
                 return Err("Widget catalog returned an invalid description length".into());
             }
-            let mut bytes = vec![0; required];
             let written = catalog
-                .describe(index, NcCopyToBufferOffset::new(0, &mut bytes))
+                .describe(index, bytes.output(0, required))
                 .map_err(|status| format!("Widget catalog description failed: {status}"))? as usize;
             if written != required {
                 return Err("Widget catalog changed a description during discovery".into());
@@ -97,20 +97,21 @@ impl CustomWidgetRegistry {
 /// Copies a validated draft without allocating from an unchecked provider length.
 /// No UI input is dispatched between these calls; a changed size is a protocol error.
 pub fn editor_settings(editor: &neocogi_com::WeakComBox<neocogi_ui_document_contracts::IDesignSettingsEditorAbi>) -> Result<Vec<u8>, String> {
-    let required = editor.settings(NcCopyToBufferOffset::new(0, &mut [])).map_err(|status| format!("Invalid settings draft: {status}"))? as usize;
+    let mut bytes = neocogi_com::NcOutputBuffer::<u8>::new();
+    let required = editor.settings(bytes.output(0, 0)).map_err(|status| format!("Invalid settings draft: {status}"))? as usize;
     if required > neocogi_ui_design::MAX_SETTINGS_BYTES {
         return Err("Settings editor exceeded byte limit".into());
     }
-    let mut bytes = vec![0; required];
-    let written = editor.settings(NcCopyToBufferOffset::new(0, &mut bytes)).map_err(|status| format!("Settings snapshot failed: {status}"))? as usize;
-    if required != written {
+    let written = editor.settings(bytes.output(0, required)).map_err(|status| format!("Settings snapshot failed: {status}"))? as usize;
+    if required != written || bytes.len() != required {
         return Err("Settings editor changed its snapshot during copying".into());
     }
-    Ok(bytes)
+    Ok(bytes.into_vec())
 }
 
 #[cfg(test)]
 mod tests {
+    use neocogi_com::NcOutputWriter;
     use super::*;
     use neocogi_com::{ComBox, NC_E_OUT_OF_MEMORY};
     use neocogi_ui_document_contracts::{IDesignSettingsEditor, IDesignSettingsEditorAbi};
@@ -136,10 +137,10 @@ mod tests {
         /// Snapshot tests never mount controls.
         fn take_view(&mut self) -> Result<ComBox<IWidgetAbi>, NcStatus> { Err(neocogi_com::NC_E_NOT_FOUND) }
         /// Keeps responses deterministic without a call counter or interior mutability.
-        fn settings(&self, mut output: NcCopyToBufferOffset<'_, u8>) -> Result<u32, NcStatus> {
+        fn settings(&self, mut output: NcOutputWriter<'_, u8>) -> Result<u32, NcStatus> {
             match &self.response {
                 Reply::Bytes(bytes) => {
-                    if output.len() >= bytes.len() { output.as_mut_slice()[..bytes.len()].copy_from_slice(bytes); }
+                    if output.capacity() >= bytes.len() { output.extend_from_slice(bytes)?; }
                     Ok(bytes.len() as u32)
                 }
                 Reply::Oversized => {

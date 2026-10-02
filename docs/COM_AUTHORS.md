@@ -1031,7 +1031,7 @@ contract, its conservative enum limit, and failure-injection tests.
 Fresh private builders may deliberately discard returned candidates after a
 failed ABI call, provided those candidates cannot own an active receiver. There
 is no implicit tuple-to-status conversion that would hide that decision. See
-[ABI v16](../crates/com/docs/abi-v16.md) for wire slots, forwarding, multiple inputs
+[ABI v17](../crates/com/docs/abi-v17.md) for wire slots, forwarding, multiple inputs
 and the requirement to return valid output after accepting ownership.
 
 For construction code that deliberately abandons failed candidates, convert to
@@ -1042,3 +1042,14 @@ There is no reason to query a rejected owner back to Button, Linear, or another
 concrete interface merely to destroy it. Keep the typed facade operation when the
 caller needs the original typed owner for retry, and keep ownership-bearing errors
 through every forwarding provider.
+
+## Copied output getters
+
+An IDL `&mut [T]` or `&mut Slice<T>` produces fresh values; it is not a mutable
+input. Providers implement `NcOutputWriter<'_, T>`, write using `push` or
+`extend_from_slice`, and never read destination contents. Generated callers pass
+`NcOutputBuffer<T>::output(offset, capacity)` and read its published `as_slice()`
+after success. Short results expose only their initialized prefix. A true
+transformation takes a distinct `&[T]` input and output argument. See
+[the complete contract](COM_OUTPUT_BUFFERS.md) for forwarding, allocation-free
+identity storage, failure semantics, wire validation, and ABI generation 17.
