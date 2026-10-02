@@ -69,6 +69,10 @@ jobs:
       - run: rustup toolchain install nightly --profile minimal
       - name: Local ABI, compile cases, inspector and static runtime selection
         run: cargo test -p neocogi-com-core -p neocogi-com-macros -p neocogi-com-runtime -p neocogi-inspect -p neocogi-com --features neocogi-com/static-runtime
+      # A debug-only overflow assertion previously let optimized retain return
+      # uncounted owners. Exercise the boundary and real C entrypoints in release too.
+      - name: Strong-only ownership limits with debug assertions disabled
+        run: cargo test -p neocogi-com -p neocogi-com-runtime --lib --release -- --test-threads=1
       - name: IDL value lowering, malformed input and generated compile cases
         run: cargo test -p neocogi-idl
       - name: Driver rejects missing tests, artifacts and stale success evidence
