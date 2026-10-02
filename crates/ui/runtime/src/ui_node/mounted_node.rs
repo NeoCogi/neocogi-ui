@@ -29,7 +29,7 @@ pub(super) enum NodeLayoutKind {
 
 /// Node-owned COM capabilities; geometry caches remain in the surrounding node.
 pub(crate) struct ComNode {
-    /// Actual common widget capability, also retained by the application proxy.
+    /// Sole widget owner; application proxies and cached layout views hold weak observations.
     pub(super) widget: neocogi_com::ComBox<IWidgetAbi>,
     /// Runtime-returned changes persist until ancestor invalidation consumes them.
     pub(super) dirty: Cell<bool>,

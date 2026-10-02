@@ -20,10 +20,10 @@ guides cover architecture, authoring tools, integration, and repository workflow
 - COM crate consolidation measurements — five-crate ownership, verified linkage, and before/after Vulkan min-size sizes.
 - [IDL contract modules](IDL_MODULES.md) — Rust-like contract syntax, Cargo generation, explicit Rust locations, exact native linking, and factory-only activation.
 - [COM interface storage](COM_INTERFACE_STORAGE.md) — object/table handles, the explicit storage tradeoff, ownership, and linked-size evidence.
-- Shared COM lifetime measurements — one-pointer weak handles, common ownership code, runtime memory tradeoffs and verified min-size savings.
+- Shared COM lifetime measurements — historical one-pointer shared weak migration and measured savings; widgets now use exclusive ownership.
 - [Recursive value contract](RECURSIVE_VALUE_CONTRACT.md) — scalar and aggregate wire rules, explicit recursion, budgets, buffers, and COM inspection graphs.
 - [IDL source maps](IDL_SOURCE_MAPS.md) — generated Rust provenance, readable annotations, sidecar format and source lookup.
-- [Local COM implementation](../crates/com/README.md) and [ABI specification](../crates/com/docs/abi-v12.md).
+- [Local COM implementation](../crates/com/README.md) and [current ABI specification](../crates/com/docs/README.md).
 - [Accepted design](COM_DESIGN.md), [feature ownership](FEATURES.md), and [unreleased changes](CHANGELOG.md).
 
 ## UI implementation notes
@@ -39,7 +39,8 @@ start with [COM_AUTHORS.md](COM_AUTHORS.md) and the working [examples](EXAMPLES.
   retained mutation.
 - [Layout](../crates/ui/runtime/docs/LAYOUT.md) — measurement, tracks, placement, invalidation, and update/paint boundaries.
 - [Class event streams](CLASS_EVENT_STREAMS.md) — generic COM contracts, one lifetime consumer, generated forms, ownership and state diagrams.
-- Owned event controllers — persistent model ownership, validation, and dynamic/monolithic min-size comparison.
+- [Exclusive widget ownership](EXCLUSIVE_WIDGET_OWNERSHIP.md) — unique owners, weak observations, synchronous Drop and parent-controlled removal.
+- Owned event controllers — historical September 21 design and measurements; superseded scheduling and lifecycle are identified in the report.
 - [Application menus](../crates/ui/runtime/docs/MENUS.md) — concrete registered items, retained composition, popup
   coordination, and Windows-style keyboard/submenu navigation.
 - [Typography](../crates/ui/runtime/docs/TYPOGRAPHY.md) — semantic font roles, UTF-8 behavior, glyph coverage, and atlas setup.

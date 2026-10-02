@@ -1,168 +1,146 @@
 # NeoCogi component design
 
-A contract is a compile-time description of values and callable interfaces.
-An object is private Rust state implementing those interfaces. A factory is an
-interface with construction policy: it is the only role eligible for the
-runtime's zero-argument bootstrap. A plugin packages implementations and one
-root factory. A published event is concrete message data; generated port
-connections carry it across COM into a consumer-owned inbox.
+A contract describes values and callable interfaces at compile time. A `class`
+declares the projections of a concrete product; its private state and method
+bodies live in Rust. A `factory` is the callable role eligible for the runtime's
+zero-argument bootstrap. A plugin packages implementations and one root factory.
+Events are ordinary typed values passed to an application-supplied queue.
 
-## Ownership
+## Responsibilities
 
 ```text
 .ncidl + imported source graphs
-  -> build-time resolution and transitive SHA-256 signatures
-  -> generated Rust layouts, vtables, wrappers, and fixed signatures
-       -> compiled into each host/plugin that uses them
+  -> build-time resolution and transitive signatures
+  -> generated Rust layouts, checked codecs, vtables and fixed signatures
+  -> compiled independently into each host/plugin that uses the contract
 
-plugin: private Rust implementations + one factory descriptor
+plugin: private implementations + one factory descriptor
 COM runtime: plugin registry + loaded-library lifetime + checked root activation
              + caller-owned persistence contexts
-host: supplies paths/dependency order and calls typed factory methods
+host: supplies paths/dependency order, calls typed factories, owns application state
 ```
 
-Contracts produce no native shared libraries, static description archives,
-exported getters, runtime module inventories, or registration hooks. Their
-Cargo `links` metadata carries source graphs between build scripts. It is a
-build-time ownership/dependency mechanism, not a native linker requirement.
-`neocogi.com.events` follows this same rule; it needs no runtime seeding.
+Contracts produce ordinary Cargo libraries. Their Cargo `links` metadata carries
+source graphs between build scripts; it does not create a contract shared library
+or runtime contract-registration step. IDL parsing and macros run on the build
+machine. The runtime compares already-computed identities and signatures.
 
-`cargo-neocogi` remains an optional assembly driver. The executable example in
-[examples/com-plugin](../examples/com-plugin/README.md) builds its plugin and
-host with ordinary Cargo, including a monolith.
+Five production crates own COM: `core` supplies ABI and value support; `api`
+supplies object helpers, ordinary event contracts and runtime clients; `runtime`
+owns loading, registries and persistence execution; `macros` expands Rust object
+implementations; `idl` owns parsing through Cargo integration. Only the process
+runtime is deployed as the COM shared library (`libnc_com.so` on Linux). Contracts
+and facade helpers compile into their consumers. The optional `cargo-neocogi`
+driver assembles deployments; the [plain-Cargo sample](../examples/com-plugin/README.md)
+demonstrates both shared and monolithic builds without that driver.
 
-## Interfaces and construction
+## Construction and interface storage
 
-`interface` and `factory` use one callable model. Role, threading, required
-projections, ordered methods and named message outputs are contract inputs.
-The old IDL `trait` and `class` spellings are removed. Generated Rust still uses
-traits as its statically typed implementation surface.
+`interface`, `class` and `factory` share the callable ABI machinery, with distinct
+roles. In `class Button: IWidget + IActions`, the first required interface provides
+the physical vtable prefix; the others provide queryable sibling projections.
+Requirements are transitive and acyclic. IDL rejects weakening an inherited shared
+threading promise.
 
-In `interface Button: IWidget + IActions`, the first interface supplies the
-physical vtable prefix. Subsequent interfaces are required sibling projections
-reachable through signature-checked `QueryInterface`. Requirements are
-transitive. Interface cycles and weakening a required shared-threading promise
-are rejected during IDL resolution.
+A handle carries the object address and selected static interface table.
+Interfaces add no fields to each object allocation. The compiler deduplicates
+inherited projections, so a diamond does not duplicate object headers. Querying
+selects another table for the same allocation after exact identity checks. The
+[storage guide](COM_INTERFACE_STORAGE.md) explains why the two-word handle replaced
+recursive headers and records the measured tradeoffs of earlier attempts.
 
-`#[com_interface]` generates every callable projection, including the factory
-marker. `ComInterface` owns the IID, signature, vtable, and minimum threading
-promise. There is no second object identity, version constant, or description
-trait. `#[com_object(Interface)]` supplies shared private storage; use `from_value`
-with an explicitly initialized Rust value. `ownership = exclusive` selects unique
-storage and `into_box` instead. The same option applies to `com_class`; a concrete
-provider emits only its chosen constructor family. Ordinary unit objects have no
-generated `create()` shortcut. Shared calls use the borrow gate alone; exclusive
-calls additionally protect admitted execution against concurrent owner removal.
-This choice affects provider-local Rust helpers, not the C interface layout.
+`#[com_object(Interface)]` and `#[com_class(Class)]` associate private Rust state
+with its contract. Shared ownership generates `from_value` and `ComPtr` helpers;
+`ownership = exclusive` generates `into_box` and non-clonable `ComBox` helpers.
+A provider emits only its selected constructor family. `#[com_factory(Factory)]`
+also proves bootstrap eligibility. Unit factories get a default bootstrap;
+stateful roots implement that typed policy themselves. Factory methods accept
+ordinary typed constructor arguments and return explicit owners.
 
-`#[com_factory(Factory)]` additionally proves `ComFactoryInterface` and associates
-the implementation with its exact interface. Unit factories receive a default
-`ComFactoryBootstrap`; stateful roots implement this typed policy themselves.
-Factory methods accept the actual constructor parameters and return owned COM
-interfaces. No erased argument frame or runtime lookup by object ID is needed.
+Mutation uses `&mut self`. ABI dispatch obtains a checked borrow before creating
+a Rust reference; conflicting or reentrant access returns `NC_E_BUSY`. Shared
+objects keep their method borrow state separate from strong counting. Exclusive
+objects combine owner presence and reader/writer admission in one atomic word.
+The ABI implementation contains the necessary `UnsafeCell`; semantic state stays
+in ordinary fields. See the [current ABI](../crates/com/docs/README.md) for layouts,
+ownership transfer and the limits of concurrent Drop.
 
-Mutating methods use `&mut self`. The existing allocation-wide call gate rejects
-conflicting/reentrant access as `NC_E_BUSY`. Its internal `UnsafeCell` is the
-single audited bridge from ABI pointers to a guarded Rust borrow; ordinary
-implementation fields do not need `Cell` or `RefCell` for this purpose.
+## Events and UI ownership
 
-Named outputs carry concrete data through generated COM posting. A receiver
-copies and maps each emitted fact into an application message and sends it through
-`std::sync::mpsc`. A persistent `Controller<Model>` owns the receiver and ordinary
-application state through a borrowed `IApplicationDispatcher`. Composite models
-and receivers belong to the concrete widget, whose `IWidget::dispatch_next`
-shares its normal borrow gate and lifecycle. The retained runtime schedules
-widgets descendant-first. Removing an exclusive `ComBox` owner rejects new calls;
-Drop waits for admitted calls and destroys the value before returning. Widgets
-request self-removal for the runtime boundary after their callback returns.
-Dispatch snapshots use `WeakComBox`.
-The COM process runtime owns no event loop. `LocalBox` grants typed concrete
-access for exclusive widgets; `LocalCom` remains for shared services. Both use
-the same COM borrow gate. See [exclusive ownership](EXCLUSIVE_WIDGET_OWNERSHIP.md).
-No `Any`, erased event payload, borrowed callback or Rust trait object crosses
-the event ABI. See the [event guide](../crates/ui/runtime/docs/EVENTS.md).
+A factory receives the complete `EventBinding<Object, Event>` during construction.
+One concrete application queue can implement several closed `IEventQueue` traits.
+Its synchronous `post` acquires the event and weak origin, validates any domain
+rules, and posts an owned application message to an ordinary channel. Application
+behavior runs later under mutable access. There are no named-output connections,
+late subscriptions, receiver installation or generated application routing.
 
-## Compatibility at the call boundary
+For widgets, the owning parent/container holds `ComBox`; callers retain
+`WeakComBox` observations. A queue receives a borrowed origin and calls
+`downgrade_box()`. Removing the owner rejects new calls immediately, waits for
+admitted calls and destroys the widget and owned children before Drop returns.
+There is no independently closed live widget. Close intent is an ordinary event:
+the behavioral parent decides whether to remove its child after the call returns.
 
-The build helper computes a canonical module fingerprint including exact
-transitive dependency revisions. Each declaration signature is SHA-256 over a
-domain tag, that fingerprint, and its declaration ID. Thus changing a record or
-an imported module changes the root factory signature even if its IID remains
-unchanged. Comments, source-part names, and formatting do not affect signatures.
+The retained UI schedules composite `IWidget::dispatch_next` implementations
+descendant-first, using weak observations. A composite owns its own model and
+receiver. A top-level `Controller<Model>` supplies `IApplicationDispatcher` for
+application messages. COM's process runtime owns no event loop. The
+[UI event guide](../crates/ui/runtime/docs/EVENTS.md) links the executable Button
+walkthrough and defines dispatch and stale-message policy.
 
-Canonical module encoding v2 gives the unified callable representation its own
-hash domain, preventing any ambiguity with earlier encodings.
+Shared services still use `ComPtr`, `WeakComPtr` and, where appropriate, `EventPort`.
+A shared service may define its own close operation; its closed status is separate
+from allocation lifetime. These are different ownership contracts, not alternate
+widget paths. [Exclusive ownership](EXCLUSIVE_WIDGET_OWNERSHIP.md) and
+[lifetime errors](COM_LIFETIME_ERRORS.md) define the distinction.
 
-A plugin descriptor contains its name/ID/version, hard plugin dependencies,
-complete factory IID/signature, threading promise, and bootstrap pointer. The
-runtime validates and publishes this metadata atomically, then compares the
-host's complete factory identity **before invoking bootstrap**. A signature
-mismatch returns `NC_E_ABI_VERSION` without constructing an object. Returned
-projections and later COM pointer transfers are checked too.
+## Independent-build compatibility
 
-Different unconnected revisions may coexist in one process. They cannot be
-connected through a mismatched factory or interface. There is no process-wide
-one-revision-per-contract-module rule. This intentionally moves compatibility
-from global module registration to the actual typed connection boundary.
+The [IDL reference](IDL_MODULES.md) owns canonical fingerprint encoding and
+declaration version rules. Each exact declaration signature includes the module's
+transitive revision. Generic binder spelling is normalized by parameter position;
+authored members and policies remain contract inputs. Interface identity alone
+does not establish compatibility with a different revision.
 
-Plugin dependencies still determine registration order. They identify required
-providers; they do not discover paths or load code recursively. Library loading,
-getters, bootstrap calls, and diagnostics run outside the catalog write lock.
-Retained libraries keep borrowed descriptors and vtables alive for process life.
-Required live-load failures remain diagnosed and fatal; activation mismatches
-are returned as statuses.
+Plugin metadata publishes identity/version, hard dependencies, complete factory
+IID/signature, threading and a bootstrap pointer. Registration validates and
+publishes this metadata atomically. Activation compares the complete factory
+identity before invoking bootstrap; a mismatch returns `NC_E_ABI_VERSION`.
+Interface queries and pointer transfers also check their contracts.
 
-## Dynamic and static builds
+Unconnected revisions can coexist in one process. Plugin dependencies define
+registration order; the host supplies paths. Library loading, getters, bootstrap
+and diagnostics run outside the catalog write lock. Required live-load failures
+are diagnosed and fatal; typed activation mismatches return statuses. Successfully
+loaded libraries stay mapped for process lifetime, including retained weak storage.
 
-A plugin normally builds as an `rlib`. The final dynamic build overrides its
-crate type and enables `dynamic-plugin`, which gates the single
-`nc_get_factory_plugin_description_v1` export. A monolith links that same rlib,
-registers its Rust `factory_plugin_description()` result, and links one runtime
-with `static-runtime`. Both paths share factory activation and pointer checks.
+Dynamic and static assemblies use the same typed activation. Dynamic builds export
+`nc_get_factory_plugin_description_v1`; monoliths register the same provider's Rust
+descriptor and link the runtime statically. Independent compiler versions and
+build flags are supported when the target C ABI, core generation and exact contract
+signatures agree. The [compatibility matrix](../crates/com/docs/compatibility.md)
+records actual cross-build verification. The [current contract index](../crates/com/docs/README.md)
+separates core ABI generation from discovery versions and IDL hash encoding.
 
-Plugin descriptor and runtime table ABIs both remain v1 during pre-alpha; their
-exported getters and Rust table types use that version consistently. Core object
-ABI is v8. These version numbers are not a compatibility promise across
-pre-alpha revisions: build hosts, runtimes, and plugins from the same checkout.
-There is no compatibility adapter retaining the deleted mechanisms.
+Inspection exposes plugin and factory compatibility metadata. A custom widget
+catalog additionally transports the finite reachable value graph needed for
+authoring; [recursive inspection](RECURSIVE_VALUE_CONTRACT.md#com-inspection-graph)
+defines that graph. Build-time IDL inventories and runtime widget catalogs have
+different consumers and do not recreate a process-wide class registry.
 
-Inspection schema 9 contains plugin/dependency information and complete root
-factory compatibility data. Full module/declaration inventories remain available
-from IDL source tooling at build time. A widget catalog additionally transports
-the finite structural value graph needed to author independently built widgets;
-see [recursive values and inspection](RECURSIVE_VALUE_CONTRACT.md#com-inspection-graph).
+## Why earlier guides disagreed
 
-## Why the previous mechanisms existed
+Earlier revisions used recursive interface headers, registered class constructors,
+named event outputs and shared widget owners. Each had a concrete purpose at the
+time, but their removal did not consistently update introductory examples. In
+particular, `c2749802` introduced a then-valid shared Button origin;
+`2cb90ec9` migrated widget queues to exclusive weak origins without migrating its
+public walkthrough. A compile-only doctest could not detect the resulting runtime
+ownership error.
 
-The implementation history explains the guarantees retained here:
-
-| History | Original purpose | Current representation |
-|---|---|---|
-| `a557404b`, `3c2ed874` | Callable classes, then separation of contracts from private implementations | One interface contract plus private object storage |
-| `4b4428bb` | Require sibling capabilities beyond the physical base | Common interface requirements and recursive generated projections |
-| `58d854d0`, `e6b03b65`, `3795f0dc` | Separate descriptions from constructors, then make runtime activation factory-only | Factory role and typed zero-argument bootstrap; no object constructor metadata |
-| `ea6566b1`, `0aa02e32` | Give runtime registration exact native contract graphs | Complete transitive signatures checked at factory/interface boundaries |
-| `2498bb71`, `8be012fe`, `3418246a` | Try embedded graphs, revert them, then restore one shared descriptor per module | Delete runtime graphs entirely; no embedded replacement graph |
-| `57cd9101` | Precompute declaration signatures from transitive module fingerprints | Retained build-time signature derivation |
-| `7f42429b`, `9a812a9f`, `6698f944` | Typed event generation, builtin contract seeding, and typed registration connectors | Keep generated typed delivery/connectors; remove only runtime seeding |
-
-The revert of `2498bb71` records no detailed rationale. This change does not
-infer one: it removes the runtime inventory that both storage alternatives
-were trying to own.
-
-## COM crate and linkage boundaries
-
-Five production crates own COM: `core` supplies portable ABI/data support, `api`
-supplies object helpers, built-in event contracts/adapters, and runtime clients,
-`runtime` owns loading/registries/persistence execution, `macros` expands Rust
-objects, and `idl` owns parsing through Cargo integration. Runtime declarations
-are internal facade code, and event contracts are published from the facade's
-IDL source graph with the Rust path `neocogi_com::events`.
-
-Only the process runtime has a deployed COM shared-library form (`libnc_com.so`
-on Linux). The facade, contracts, and event adapters compile into their consumers.
-Shared runtime callers import its six C discovery functions; static/native and
-browser consumers link the `nc_com` rlib. Procedural macros and IDL generation run
-on the build machine and do not become target runtime dependencies. An rlib used
-as an intermediate when building a shared library does not imply static linkage
-of the runtime into the final host.
+Current examples therefore execute the exact source published in their guide:
+the Button walkthrough covers input delivery, removal and queued stale origins;
+the COM/IDL documentation test generates the marked language examples and executes
+the factory bootstrap. Package overviews link to one current ABI index, checked
+against the core version constant. Historical reports and measurements retain
+their evidence with dated follow-up status rather than serving as current API guides.

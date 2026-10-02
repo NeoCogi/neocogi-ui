@@ -67,7 +67,7 @@ use one atomic header word for owner presence and reader/writer access, followed
 by the weak count and class descriptor pointer. Their generated allocation is one
 common header plus `UnsafeCell<MaybeUninit<T>>`; there is no separate call gate or
 execution pin. Both kinds of provider-local lease occupy two words. Only C-shaped
-records cross plugin boundaries; see [core ABI v15](../crates/com/docs/abi-v15.md).
+records cross plugin boundaries; see [the current core ABI](../crates/com/docs/README.md).
 
 ## Cached weak calls and threading
 

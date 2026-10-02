@@ -53,8 +53,10 @@ geometry. Changes such as caret blinking may affect only paint.
 
 The runtime owns one actual COM node per attachment. Containers own child identities
 through IChildrenEditor and keep only parent-owned edge metadata such as tracks/spans.
-Attachments are exclusive and removal closes the subtree; an application COM reference
-can survive logical closure but cannot revive or reparent that widget.
+Attachments consume exclusive `ComBox` ownership. Removal drops the subtree
+synchronously; application `WeakComBox` observers then return `NC_E_DROPPED`.
+Observers cannot retain, revive or reparent the widget value. See
+[exclusive ownership](../../../../docs/EXCLUSIVE_WIDGET_OWNERSHIP.md).
 
 Parent-local allocations, child offsets and clips remain in private NodeRuntime state.
 Scoped child services expose only indexed geometry; neither native Nodes nor borrowed
