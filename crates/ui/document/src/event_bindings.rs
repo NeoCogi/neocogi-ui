@@ -46,7 +46,7 @@ impl EventBindings {
                 widget => {
                     let queue = widget.event_stream().ok_or(NC_E_INVALID_ARG)?;
                     // SAFETY: Built-in descriptors are generated static storage, not foreign input.
-                    let signature = unsafe { queue.abi.abi_signature.as_bytes() }?.try_into().map_err(|_| NC_E_INVALID_ARG)?;
+                    let signature = unsafe { queue.abi.abi_signature.as_digest() }.ok_or(NC_E_INVALID_ARG)?;
                     receiver.supports_interface_bytes(queue.abi.interface_id, signature)?;
                 }
             }

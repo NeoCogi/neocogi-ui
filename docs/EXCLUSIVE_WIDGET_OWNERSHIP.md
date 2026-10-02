@@ -164,7 +164,7 @@ caller can retry or drop it after the descendant returns. `ComBoxInput` is remov
 Facade insert/replace/window calls return the original typed widget in their error.
 `Mountable::with_mount` restores the concrete projection on failure; compiled forms
 also restore their unmounted root. No widget is detached after successful mounting.
-Bottom-up construction remains supported. See [ABI v15](../crates/com/docs/abi-v15.md)
+Bottom-up construction remains supported. See [ABI v16](../crates/com/docs/abi-v16.md)
 for multi-input calls and the invalid-success-output contract.
 
 Construction helpers that intentionally abandon rejected candidates need not

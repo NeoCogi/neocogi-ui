@@ -1031,7 +1031,7 @@ contract, its conservative enum limit, and failure-injection tests.
 Fresh private builders may deliberately discard returned candidates after a
 failed ABI call, provided those candidates cannot own an active receiver. There
 is no implicit tuple-to-status conversion that would hide that decision. See
-[ABI v15](../crates/com/docs/abi-v15.md) for wire slots, forwarding, multiple inputs
+[ABI v16](../crates/com/docs/abi-v16.md) for wire slots, forwarding, multiple inputs
 and the requirement to return valid output after accepting ownership.
 
 For construction code that deliberately abandons failed candidates, convert to

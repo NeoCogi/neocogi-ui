@@ -40,10 +40,7 @@ fn contracts(events: &[(usize, &Node, String)], custom: &CustomWidgetRegistry) -
                 let name = queue.rust_trait.rsplit("::").next().ok_or("Missing queue trait name")?;
                 let implementation = format!("neocogi_ui::nodes::{name}");
                 // SAFETY: built-in descriptor/signature storage is generated static data.
-                let signature = unsafe { queue.abi.abi_signature.as_bytes() }
-                    .map_err(|error| error.to_string())?
-                    .try_into()
-                    .map_err(|_| "Invalid built-in queue signature")?;
+                let signature = *unsafe { queue.abi.abi_signature.as_digest() }.ok_or("Missing built-in queue signature")?;
                 let validate = Some(format!(
                     "{}::validate",
                     payload.strip_suffix("::Event").ok_or("Missing built-in event binding")?

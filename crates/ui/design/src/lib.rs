@@ -251,10 +251,7 @@ impl DesignWidgetManifest {
             return Err("IDL interface has an inconsistent COM chain".into());
         }
         // SAFETY: the generated ABI signature points to immutable static bytes.
-        let digest: [u8; 32] = unsafe { source.abi.abi_signature.as_bytes() }
-            .map_err(|error| error.to_string())?
-            .try_into()
-            .map_err(|_| "IDL interface has a non-SHA-256 signature")?;
+        let digest = *unsafe { source.abi.abi_signature.as_digest() }.ok_or("IDL interface has no signature")?;
         let stream = source
             .event_queue
             .as_ref()
@@ -263,10 +260,7 @@ impl DesignWidgetManifest {
                     rust_trait: output.rust_trait.to_owned(),
                     iid: output.abi.interface_id.to_uuid_bytes(),
                     // SAFETY: IDL owns this immutable static descriptor.
-                    signature: unsafe { output.abi.abi_signature.as_bytes() }
-                        .map_err(|error| error.to_string())?
-                        .try_into()
-                        .map_err(|_| "Receiver signature is not SHA-256")?,
+                    signature: *unsafe { output.abi.abi_signature.as_digest() }.ok_or("Receiver has no signature")?,
                     message: output.message.qualified_name.to_owned(),
                 })
             })
