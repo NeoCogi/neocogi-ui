@@ -3,6 +3,7 @@
 //! The two concrete objects share only lifecycle plumbing. The counter owns its scalar value and
 //! event producer; the inset owns its padding and the host's sole authoritative child editor.
 #![deny(missing_docs)]
+mod settings;
 use neocogi_ui::com::widget::WidgetState;
 use neocogi_ui_core_contracts::*;
 use neocogi_demo_contracts::*;
@@ -108,16 +109,19 @@ struct CounterObject {
     common: Common,
     /// The one semantic counter value; labels are short-lived snapshots of it.
     count: u32,
+    /// Accepted provider-owned constructor policy, shared with the design editor.
+    settings: settings::Settings,
     /// Sole destination for the complete enum-valued event stream.
     event: Option<(ComPtr<CounterEventQueueAbi>, WeakComBox<CounterAbi>)>,
 }
 impl CounterObject {
     /// Validates runtime authority and publishes one fully initialized counter identity.
-    fn create(host: ComRef<'_, IWidgetHostAbi>, queue: Option<ComPtr<neocogi_demo_contracts::CounterEventQueueAbi>>) -> Result<ComBox<CounterAbi>, NcStatus> {
+    fn create(host: ComRef<'_, IWidgetHostAbi>, queue: Option<ComPtr<neocogi_demo_contracts::CounterEventQueueAbi>>, settings: settings::Settings) -> Result<ComBox<CounterAbi>, NcStatus> {
         host.check_mutation()?;
         Self::into_box_cyclic::<CounterAbi>(move |origin| Self {
             common: Common::new(host, WidgetOptions::FRAME),
-            count: 0,
+            count: settings.initial(),
+            settings,
             event: queue.map(|queue| (queue, origin)),
         })?
         .query().map_err(|(status, _unpublished)| status)
@@ -126,7 +130,7 @@ impl CounterObject {
     /// User activation commits before emission, capturing the matching label for deferred delivery.
     fn update_content(&mut self, state: WidgetUpdate) -> Result<GeometryChange, NcStatus> {
         if state.clicked || state.action == WidgetAction::Activate {
-            self.count = self.count.saturating_add(1);
+            self.count = self.settings.next(self.count);
             // A rejected foreign post cannot erase this already committed change.
             self.common.state.record_change(GeometryChange::Changed);
             self.post(&CounterEvent::Activated(Activation { label: self.count.to_string() }))?;
@@ -160,6 +164,7 @@ impl Counter for CounterObject {
     /// Silent programmatic edits invalidate only when the scalar actually changes.
     fn set_count(&mut self, value: u32) -> Result<(), NcStatus> {
         self.common.state.writable()?;
+        if !self.settings.accepts(value) { return Err(neocogi_com::NC_E_OUT_OF_RANGE); }
         if self.count != value {
             self.count = value;
             self.common.state.record_change(GeometryChange::Changed);
@@ -325,10 +330,10 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
 
     /// Copies generated Counter IDL metadata through the common COM catalog.
     fn describe(&self, index: u32, mut output: NcCopyToBufferOffset<'_, u8>) -> Result<u32, NcStatus> {
-        if index != 0 {
+        if index != 0 || output.offset() != 0 {
             return Err(NC_E_INVALID_ARG);
         }
-        let manifest = DesignWidgetManifest::from_idl("example.counter", vec![], &CounterAbi::IDL_INTERFACE).map_err(|_| NC_E_INVALID_ARG)?;
+        let manifest = DesignWidgetManifest::from_idl("example.counter", settings::Settings::default().encode()?, &CounterAbi::IDL_INTERFACE).map_err(|_| NC_E_INVALID_ARG)?;
         let bytes = manifest.encode().map_err(|_| NC_E_INVALID_ARG)?;
         let required = u32::try_from(bytes.len()).map_err(|_| NC_E_INVALID_ARG)?;
         if output.len() >= bytes.len() {
@@ -342,18 +347,13 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
         &self,
         index: u32,
         host: ComRef<'_, IWidgetHostAbi>,
-        properties: NcCopyFromBufferOffset<'_, u8>,
+        settings: NcCopyFromBufferOffset<'_, u8>,
         events: neocogi_com::NcValueRef<'_, neocogi_ui_document_contracts::WidgetEventBinding>,
     ) -> Result<ComBox<IWidgetAbi>, NcStatus> {
-        if index != 0 || properties.offset() != 0 {
+        if index != 0 || settings.offset() != 0 {
             return Err(NC_E_INVALID_ARG);
         }
-        // Independently built providers apply the host's same encoded-property
-        // ceiling before parsing, including calls that bypass document loading.
-        let values = neocogi_ui_design::decode_properties(properties.as_slice()).map_err(|_| NC_E_INVALID_ARG)?;
-        if !values.is_empty() {
-            return Err(NC_E_INVALID_ARG);
-        }
+        let settings = settings::Settings::decode(settings.as_slice())?;
         // Catalog transport carries a COM receiver, never an untyped event payload.
         // Validate the selected product's exact queue before allocating any widget.
         CounterObject::create(
@@ -362,9 +362,16 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
                 neocogi_ui_document_contracts::WidgetEventBinding::Unobserved => None,
                 neocogi_ui_document_contracts::WidgetEventBinding::Observed(queue) => Some(queue.query()?),
             },
+            settings,
         )?
         .query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)
     }
+    /// The draft uses the designer's control factory while configuration stays inside this plugin.
+    fn create_editor(&self, index: u32, widgets: ComRef<'_, neocogi_ui::UiFactoryAbi>, settings: NcCopyFromBufferOffset<'_, u8>) -> Result<ComBox<neocogi_ui_document_contracts::IDesignSettingsEditorAbi>, NcStatus> {
+        if index != 0 || settings.offset() != 0 { return Err(NC_E_INVALID_ARG); }
+        settings::create(widgets, settings.as_slice())
+    }
+
 }
 
 impl ExtensionProvider for ExtensionProviderObject {
@@ -374,7 +381,7 @@ impl ExtensionProvider for ExtensionProviderObject {
         host: ComRef<'_, IWidgetHostAbi>,
         events: neocogi_com::NcValueRef<'_, neocogi_demo_contracts::CounterEventBinding>,
     ) -> Result<ComBox<CounterAbi>, NcStatus> {
-        CounterObject::create(host, events.to_owned()?.into_queue())
+        CounterObject::create(host, events.to_owned()?.into_queue(), settings::Settings::default())
     }
 
     /// One empty editor is the only topology allocation; no native child list is created in this plugin.

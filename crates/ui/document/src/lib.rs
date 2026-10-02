@@ -13,7 +13,7 @@ pub use event_bindings::EventBindings;
 pub use neocogi_ui_design as design;
 mod custom;
 mod discovery;
-pub use discovery::MAX_CATALOG_WIDGETS;
+pub use discovery::{MAX_CATALOG_WIDGETS, editor_settings};
 pub use custom::{CustomWidgetFactory, CustomWidgetRegistry};
 mod build;
 mod rust_bindings;

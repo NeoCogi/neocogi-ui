@@ -1,4 +1,6 @@
 extern neocogi.ui.core;
+extern neocogi.ui.nodes;
+use neocogi.ui.nodes::UiFactory;
 use neocogi.ui.core::{IWidget, IWidgetHost};
 
 #[version(2)]
@@ -12,7 +14,7 @@ interface IUiComponent {
     fn widget(&self, name: &[u8]) -> Result<WeakComBox<IWidget>>;
 }
 
-#[version(1)]
+#[version(2)]
 /// Optional COM capability queried from an activated plugin root factory.
 /// It lets an independent designer enumerate constructible widgets without
 /// linking the plugin's Rust contract or implementation crate.
@@ -22,13 +24,29 @@ interface IDesignWidgetCatalog {
     /// Copies one versioned authoring descriptor into an initialized byte buffer.
     /// The return value is the required byte count; a short buffer is unchanged.
     fn describe(&self, index: u32, output: &mut [u8]) -> Result<u32>;
-    /// Constructs one widget through COM using its stable catalog index and
-    /// encoded, previously validated constructor properties. Before allocating any
-    /// widget, query an observed receiver for the selected product's exact queue.
-    /// Own that receiver until widget destruction; unobserved is permanent.
-    /// Properties use compact JSON with the shared 64 KiB ceiling from ui-design;
-    /// providers must check it before parsing, including direct calls outside the loader.
-    fn create_widget(&self, index: u32, host: &IWidgetHost, properties: &[u8], events: &WidgetEventBinding) -> Result<ComBox<IWidget>>;
+    /// Constructs a widget from bounded provider-owned NCB settings. The provider
+    /// validates its private schema/revision and receiver before allocating a widget.
+    /// Settings and editor snapshots share the 64 KiB ui-design NCB policy.
+    fn create_widget(&self, index: u32, host: &IWidgetHost, settings: &[u8], events: &WidgetEventBinding) -> Result<ComBox<IWidget>>;
+    /// Opens a fresh draft using the editor runtime's ordinary control factory.
+    /// Return NOINTERFACE only when this kind deliberately has no settings editor.
+    /// Other failures leave the host's accepted document and preview unchanged.
+    fn create_editor(&self, index: u32, widgets: &UiFactory, settings: &[u8]) -> Result<ComBox<IDesignSettingsEditor>>;
+}
+
+#[version(1)]
+/// Optional authoring session owned by the designer, separate from runtime widgets.
+/// The plugin owns typed draft validation; the host never invokes reflected setters.
+interface IDesignSettingsEditor {
+    /// Transfers the draft control tree exactly once; repeated calls return NOT_FOUND.
+    /// The receiving inspector owns its controls; this session holds only weak handles.
+    /// Dropping/replacing the inspector revokes those handles immediately.
+    fn take_view(&mut self) -> Result<ComBox<IWidget>>;
+    /// Validates the complete current draft and copies its NCB snapshot.
+    /// Return the required byte count; short output stays unchanged. Offset must be
+    /// zero. Reads must be stable while the host performs length and copy calls
+    /// without dispatching more UI input. No accepted runtime widget is modified.
+    fn settings(&self, output: &mut [u8]) -> Result<u32>;
 }
 
 #[version(1)]

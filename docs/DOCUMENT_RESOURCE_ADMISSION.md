@@ -47,7 +47,7 @@ attempt and before invoking the loader; its independently owned work is unchange
 flowchart TD
     D[Borrowed typed document] --> B[Measure inner binary encoding]
     B --> E[Check outer record including every state byte]
-    E --> S[Validate tree and all custom property payloads and schemas]
+    E --> S[Validate tree and all custom settings sizes and registered kinds]
     S --> C[Clone admitted recipe]
     C --> W[Construct and bind candidate widgets]
     W --> P[Publish replacement]
@@ -70,13 +70,13 @@ temporary buffer. Ordinary encoding and decoding remain responsible for enforcin
 the same budgets themselves. Measurement is not permission for later unchecked
 writes or for changing the input after validation.
 
-`Document::validate()` remains structural validation, including the custom-property
+`Document::validate()` remains structural validation, including the custom-settings
 transport bound. It does not imply binary saveability or available factories.
 `Document::from_json`/`to_json` preserve their separate source-format byte policy;
 a structurally valid JSON source can exceed binary persistence capacity. Compilation,
 binary export and the designer's accepted-edit path reject that source explicitly.
 
-## JSON, catalog descriptions and constructor properties
+## JSON, catalog descriptions and constructor settings
 
 `neocogi_ui_design::bounded_json` owns exact JSON byte counting and bounded output.
 Both use the ordinary serde JSON serializer with the selected compact or pretty
@@ -89,20 +89,19 @@ Bounded materialization repeats the check rather than trusting a previous pass.
 | --- | --- |
 | Editable document JSON | 16 MiB per input/output document; output uses pretty formatting |
 | Catalog description | 64 KiB compact JSON per widget-kind description |
-| Custom constructor properties | 64 KiB compact JSON for all properties of one widget |
+| Custom constructor settings | 64 KiB NCB snapshot per widget, with COM value/element/depth budgets |
 
-Metadata and property limits have separate names and responsibilities, even though
-both currently permit 64 KiB. A custom node's payload is checked before property-name
-indexing and before any widget in the candidate is constructed. Splitting text among
-several fields does not grant each field a fresh allowance. Static custom factories
-follow the same authored-property rule as COM-discovered factories.
+Metadata and settings have separate ceilings. A custom node's opaque settings
+length is checked before cloning or any provider call. Static custom factories
+follow the same size policy as COM-discovered factories. The host cannot interpret
+a private plugin schema; the provider validates revision and semantics before
+constructing the candidate widget.
 
-`encode_properties` and `decode_properties` share the property transport policy.
-The decoder checks incoming length before parsing. Independently built providers
-must apply it even to calls that bypass the document loader; the example extension
-does so and rejects nonzero offsets for its complete property payload. Providers
-still validate their own property names, kinds and event receiver. The transport
-helper does not replace those semantic checks.
+`encode_settings` and `decode_settings` use the same NCB limits. The decoder checks
+incoming size before parsing; providers apply it to direct COM calls as well as
+loader requests. Editor snapshots and construction share one typed provider codec.
+The constructor still checks the receiver independently. Settings are stored as
+`Vec<u8>` collections inside the document, not as an exempt binary blob.
 
 Counting includes field names, syntax, UTF-8, indentation and escaping. For example,
 a Rust newline occupies one byte, but its JSON escape occupies two. Summing string
@@ -122,7 +121,7 @@ uses a conservative upper bound on extra escaped bytes.
 existing string contents may grow by at most the supplied UTF-8 byte count. It does not
 cover new fields, nodes, variants or collections. Such changes require validating the
 new document. Reservation does not establish the semantic validity of future names
-or custom-property contents; the designer uses it only for portable image keys.
+or custom-settings contents; the designer uses it only for portable image keys.
 Overflow or insufficient inner/outer budget fails without copying it.
 
 Previously accepted oversized source is no longer accepted for construction or editor
@@ -147,7 +146,11 @@ needed.
 
 Regression coverage includes independent exact/one-short byte, value, element and
 depth boundaries; real envelope decoding; allocation fault injection during binary
-measurement/output; escaped and aggregate JSON; all-fields custom-property budgets;
+measurement/output; escaped and aggregate JSON; opaque settings byte budgets;
 real COM catalog constructor call counts; measured rejected-export/compile allocations;
 exact-boundary component saving; failed reload preservation; portable image-key growth;
-and independent-plugin calls at/beyond the property-byte boundary.
+and independent-plugin calls with malformed and oversized settings.
+
+The plugin-editor revision replaces the historical property JSON transport with
+opaque NCB snapshots. Earlier JSON-property tests cited in the history describe that retired
+representation; current regressions exercise symmetric NCB settings budgets.

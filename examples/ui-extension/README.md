@@ -59,7 +59,7 @@ for `CounterEventQueueAbi`, and only then constructs the counter. A wrong queue 
 rejected by the plugin even when a caller bypasses registry preflight.
 The unlinked native designer can load this library with `--plugin` and discover
 the counter without a Rust registration hook. A UI document stores only its kind
-and typed property values; it does not restate the event enum.
+and opaque NCB settings; it does not restate the event enum.
 
 The inset exclusively owns one `ComBox<IChildrenEditor>` and exposes its read-only view. It reads
 the authoritative child count instead of maintaining a second topology flag. Its
@@ -78,10 +78,20 @@ hidden-widget synchronization, observational layout/paint, event ownership and
 explicit redraw scheduling. The complete obligations and failure rules are in
 [COM_AUTHORS.md](../../docs/COM_AUTHORS.md).
 
-The catalog's constructor uses `neocogi_ui_design::decode_properties` to enforce
-the shared 64 KiB property-JSON ceiling before parsing, including direct COM calls
-that bypass the document loader. It rejects nonzero buffer offsets and then checks
-its own property schema and event queue. Catalog descriptions use the same bounded
-JSON implementation through `DesignWidgetManifest::encode`; neither producer builds
-an oversized buffer before checking it. See the
-[document admission contract](../../docs/DOCUMENT_RESOURCE_ADMISSION.md).
+The catalog and ordinary typed constructor share the same `Settings::default()`.
+[settings.rs](src/settings.rs) owns a versioned record with a positive increment
+and a nested `Mode::Unlimited | Mode::Bounded { minimum, maximum }` enum. Both the
+runtime constructor and draft editor use that same checked decoder. Activation
+increments by the configured step, clamps at the bound, and emits the existing
+typed event stream. Application setters reject values outside a configured range.
+
+The optional COM editor builds ordinary textboxes and a checkbox through the
+host's `UiFactory`; it links no node implementation. Controls keep their own draft
+text. Apply reads weak handles, parses all relevant fields, validates the complete
+record, then encodes NCB. Invalid text/ranges remain editable. No event queue,
+`RefCell`, dynamic property values or application-layout metadata is needed here.
+
+`encode_settings`/`decode_settings` enforce the same 64 KiB NCB policy. Direct COM
+calls reject nonzero offsets, unsupported revisions, malformed/trailing data and
+invalid semantics before construction. Catalog descriptions retain their separate
+bounded JSON encoding. See [PLUGIN_DESIGNER_SETTINGS.md](../../docs/PLUGIN_DESIGNER_SETTINGS.md).

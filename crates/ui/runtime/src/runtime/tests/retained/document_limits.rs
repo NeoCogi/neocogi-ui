@@ -1,6 +1,6 @@
 //! Admission tests use the real loader, generated catalog calls and allocation counters.
 use super::*;
-use neocogi_ui_document::{*, design::{CustomValue, DesignWidgetManifest}};
+use neocogi_ui_document::{*, design::DesignWidgetManifest};
 use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
 
 /// A real COM catalog whose constructor calls can be observed independently of
@@ -15,6 +15,11 @@ struct BudgetCatalog {
     calls: Arc<AtomicUsize>,
 }
 impl neocogi_ui_document::contracts::IDesignWidgetCatalog for BudgetCatalog {
+    /// This test provider offers construction/metadata only, without a settings editor.
+    fn create_editor(&self, _: u32, _: neocogi_com::ComRef<'_, neocogi_ui::UiFactoryAbi>, _: neocogi_com::NcCopyFromBufferOffset<'_, u8>) -> Result<neocogi_com::ComBox<neocogi_ui_document::contracts::IDesignSettingsEditorAbi>, neocogi_com::NcStatus> {
+        Err(neocogi_com::NC_E_NOINTERFACE)
+    }
+
     /// This fixture exposes exactly one independently discoverable kind.
     fn widget_count(&self) -> Result<u32, NcStatus> { Ok(1) }
 
@@ -30,35 +35,30 @@ impl neocogi_ui_document::contracts::IDesignWidgetCatalog for BudgetCatalog {
     /// Crosses real generated thunks; any entry is counted before validating input.
     fn create_widget(
         &self, index: u32, _host: neocogi_com::ComRef<'_, IWidgetHostAbi>,
-        properties: neocogi_com::NcCopyFromBufferOffset<'_, u8>,
+        settings: neocogi_com::NcCopyFromBufferOffset<'_, u8>,
         _events: neocogi_com::NcValueRef<'_, contracts::WidgetEventBinding>,
     ) -> Result<neocogi_com::ComBox<IWidgetAbi>, NcStatus> {
         self.calls.fetch_add(1, Ordering::Relaxed);
-        if index != 0 || properties.offset() != 0 { return Err(neocogi_com::NC_E_INVALID_ARG); }
-        let properties = design::decode_properties(properties.as_slice()).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
-        let Some(CustomProperty { value: CustomValue::Text(text), .. }) = properties.first() else {
-            return Err(neocogi_com::NC_E_INVALID_ARG);
-        };
-        self.ui.widgets().text_block(text, TextWrapping::None)?.into_interface()
+        if index != 0 || settings.offset() != 0 { return Err(neocogi_com::NC_E_INVALID_ARG); }
+        let text: String = design::decode_settings(settings.as_slice()).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
+        self.ui.widgets().text_block(&text, TextWrapping::None)?.into_interface()
             .query::<IWidgetAbi>().map_err(|(status, _owner)| status)
     }
 }
 
 /// Registers through COM discovery, retaining only the observer used for assertions.
 fn catalog_loader(ui: &Ui) -> (Loader, Document, Arc<AtomicUsize>) {
-    let properties = vec![
-        CustomProperty { name: "first".into(), value: CustomValue::Text(String::new()) },
-        CustomProperty { name: "second".into(), value: CustomValue::Text(String::new()) },
-    ];
-    let manifest = DesignWidgetManifest::from_idl("test.text", properties.clone(), &TextBlockAbi::IDL_INTERFACE).unwrap();
+    let settings = design::encode_settings("").unwrap();
+    let manifest = DesignWidgetManifest::from_idl("test.text", settings.clone(), &TextBlockAbi::IDL_INTERFACE).unwrap();
     let calls = Arc::new(AtomicUsize::new(0));
     let catalog = BudgetCatalog::from_value(BudgetCatalog { ui: ui.clone(), description: manifest.encode().unwrap(), calls: calls.clone() });
     let mut registry = CustomWidgetRegistry::new();
     registry.register_catalog(catalog.query().unwrap()).unwrap();
+    assert!(registry.create_editor("test.text", ui, &settings).unwrap().is_none());
     let loader = Loader::new_with_custom(ui.clone(), None, Resources::new(), registry, GridLimits { max_columns: 64, max_rows: 256 }).unwrap();
     let document = Document {
         version: VERSION, name: "catalog admission".into(), outputs: vec![],
-        root: Node::new("custom", WidgetSpec::Custom { kind: "test.text".into(), properties }),
+        root: Node::new("custom", WidgetSpec::Custom { kind: "test.text".into(), settings }),
     };
     (loader, document, calls)
 }
@@ -66,7 +66,7 @@ fn catalog_loader(ui: &Ui) -> (Loader, Document, Arc<AtomicUsize>) {
 /// Whole-document and custom-property admission must precede any provider entry,
 /// not just validate each node immediately before its own construction.
 #[test]
-fn oversized_typed_recipes_and_properties_never_enter_catalog_constructors() {
+fn oversized_typed_recipes_and_settings_never_enter_catalog_constructors() {
     let fixture = Headless::standard();
     let (loader, mut document, calls) = catalog_loader(&fixture.ui);
     let valid = loader.compile(&document).unwrap();
@@ -85,14 +85,14 @@ fn oversized_typed_recipes_and_properties_never_enter_catalog_constructors() {
     assert_eq!(calls.load(Ordering::Relaxed), 2);
 
     document.name.clear();
-    if let WidgetSpec::Custom { properties, .. } = &mut document.root.widget {
-        for property in properties { property.value = CustomValue::Text("x".repeat(40_000)); }
+    if let WidgetSpec::Custom { settings, .. } = &mut document.root.widget {
+        settings.resize(design::MAX_SETTINGS_BYTES + 1, 0);
     }
     let measured = crate::test_support::AllocationMeasurement::begin();
     let rejected = loader.compile(&document);
     let allocations = measured.finish();
     assert!(rejected.is_err());
-    assert!(allocations.bytes < 16 * 1024, "rejection encoded properties: {allocations:?}");
+    assert!(allocations.bytes < 16 * 1024, "rejection encoded settings: {allocations:?}");
     assert_eq!(calls.load(Ordering::Relaxed), 2);
 }
 

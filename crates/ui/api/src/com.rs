@@ -380,6 +380,12 @@ pub struct WidgetFactory {
 }
 
 impl WidgetFactory {
+    /// Lends this runtime's concrete construction capability to an independent plugin.
+    /// The call-scoped borrow cannot retain the facade or change its runtime binding.
+    pub fn as_com_ref(&self) -> ComRef<'_, UiFactoryAbi> {
+        self.interface.as_com_ref()
+    }
+
     /// Supplies runtime authority for an independent COM widget's inline WidgetState.
     pub fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
         self.interface.query::<IConstructionHostAbi>()?.host()

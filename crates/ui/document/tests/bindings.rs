@@ -47,13 +47,13 @@ fn empty_public_contract_generates_a_valid_module() {
 fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
     use neocogi_com::{NcStatus, NC_E_INVALID_ARG};
     use neocogi_ui::{IWidgetAbi, Ui, OwnedWidget};
-    use neocogi_ui_document::{Child, CustomProperty, CustomValue, CustomWidgetFactory, CustomWidgetRegistry, Edge, Node, Track, WidgetSpec};
+    use neocogi_ui_document::{Child, CustomWidgetFactory, CustomWidgetRegistry, Edge, Node, Track, WidgetSpec};
     use std::rc::Rc;
 
     /// Test provider names the IDL-generated COM description, not a duplicate event schema.
     struct CounterFactory {
         /// Designer-visible constructor defaults.
-        defaults: Vec<CustomProperty>,
+        defaults: Vec<u8>,
     }
     impl CustomWidgetFactory for CounterFactory {
         /// Copies the generated projection and typed constructor defaults.
@@ -65,17 +65,14 @@ fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
             )
         }
         /// Binding generation never constructs a live widget.
-        fn create(&self, _: &Ui, _: &[CustomProperty], _: Option<neocogi_com::ComPtr<neocogi_com::IUnknown>>) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
+        fn create(&self, _: &Ui, _: &[u8], _: Option<neocogi_com::ComPtr<neocogi_com::IUnknown>>) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
             Err(NC_E_INVALID_ARG)
         }
     }
     let mut registry = CustomWidgetRegistry::new();
     registry
         .register(Rc::new(CounterFactory {
-            defaults: vec![CustomProperty {
-                name: "label".into(),
-                value: CustomValue::Text("Custom".into()),
-            }],
+            defaults: neocogi_ui_document::design::encode_settings("Custom").unwrap(),
         }))
         .unwrap();
     let mut document = Document::new("custom");
@@ -97,11 +94,11 @@ fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
     assert_eq!(cases.iter().map(|case| case.name).collect::<Vec<_>>(), ["Activated", "Changed"]);
     assert_eq!(cases[1].fields[0].ty, neocogi_com::design::IdlValueType::Named("neocogi.demo.CounterChanged"));
     assert!(document.rust_bindings().unwrap_err().contains("not registered"));
-    let WidgetSpec::Custom { properties, .. } = &mut document.root.children.last_mut().unwrap().node.widget else {
+    let WidgetSpec::Custom { settings, .. } = &mut document.root.children.last_mut().unwrap().node.widget else {
         unreachable!()
     };
-    properties[0].value = CustomValue::Integer(2);
-    assert!(registry.validate_document(&document).unwrap_err().contains("schema mismatch"));
+    settings.resize(neocogi_ui_document::design::MAX_SETTINGS_BYTES + 1, 0);
+    assert!(registry.validate_document(&document).unwrap_err().contains("byte limit"));
 }
 
 /// Registry registration rejects a constructor event missing from its type graph.
@@ -109,7 +106,7 @@ fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
 fn custom_factory_cannot_omit_its_constructor_event_graph() {
     use neocogi_com::{NcStatus, NC_E_INVALID_ARG, design::IdlInterface};
     use neocogi_ui::{IWidgetAbi, Ui, OwnedWidget};
-    use neocogi_ui_document::{CustomProperty, CustomWidgetFactory, CustomWidgetRegistry};
+    use neocogi_ui_document::{CustomWidgetFactory, CustomWidgetRegistry};
     use std::rc::Rc;
 
     /// Fabricated metadata omits the reachable definitions for its real typed receiver.
@@ -132,7 +129,7 @@ fn custom_factory_cannot_omit_its_constructor_event_graph() {
             neocogi_ui_document::design::DesignWidgetManifest::from_idl("hidden.counter", vec![], &HIDDEN)
         }
         /// Registration rejects this provider before construction is possible.
-        fn create(&self, _: &Ui, _: &[CustomProperty], _: Option<neocogi_com::ComPtr<neocogi_com::IUnknown>>) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
+        fn create(&self, _: &Ui, _: &[u8], _: Option<neocogi_com::ComPtr<neocogi_com::IUnknown>>) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
             Err(NC_E_INVALID_ARG)
         }
     }
@@ -207,7 +204,7 @@ fn shared_queues_allow_rust_aliases_but_reject_conflicting_revisions() {
         fn create(
             &self,
             _: &neocogi_ui::Ui,
-            _: &[neocogi_ui_document::CustomProperty],
+            _: &[u8],
             _: Option<neocogi_com::ComPtr<neocogi_com::IUnknown>>,
         ) -> Result<neocogi_ui::OwnedWidget<neocogi_ui::IWidgetAbi>, neocogi_com::NcStatus> {
             Err(neocogi_com::NC_E_INVALID_ARG)
@@ -227,7 +224,7 @@ fn shared_queues_allow_rust_aliases_but_reject_conflicting_revisions() {
         "alias",
         WidgetSpec::Custom {
             kind: "alias.button".into(),
-            properties: vec![],
+            settings: vec![],
         },
     );
     let source = document.rust_bindings_with(&registry).unwrap();

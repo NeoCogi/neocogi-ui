@@ -2,11 +2,10 @@
 use neocogi_com::{ComSerialize, ComDeserialize};
 use serde::{Serialize, Deserialize};
 use std::collections::BTreeMap;
-pub use neocogi_ui_design::{CustomProperty, CustomValue};
 
-/// Persistent schema revision; revision six removes named command inputs.
+/// Persistent schema revision; revision seven stores opaque plugin-owned NCB settings.
 /// Getters and setters are widget methods. Earlier layouts are rejected, never migrated.
-pub const VERSION: u32 = 6;
+pub const VERSION: u32 = 7;
 /// Maximum authored nodes in one component.
 pub const MAX_NODES: usize = 4096;
 /// Maximum authored ownership depth.
@@ -310,8 +309,8 @@ pub enum WidgetSpec {
     Custom {
         /// Stable kind resolved only against the application's installed registry.
         kind: String,
-        /// Typed constructor values; their schema belongs to the installed factory.
-        properties: Vec<CustomProperty>,
+        /// Bounded NCB snapshot; its type, revision and validation belong to the provider.
+        settings: Vec<u8>,
     },
 }
 
@@ -600,15 +599,9 @@ fn validate_node<'a>(node: &'a Node, depth: usize, nodes: &mut BTreeMap<&'a str,
             ..
         } => *position >= 0 && *minimum_first >= 0 && *minimum_second >= 0 && *handle > 0 && node.children.len() <= 2,
         Form { width, height } => *width > 0 && *height > 0,
-        Custom { kind, properties } => {
-            // Bound the whole encoded payload before building a per-property
-            // name index. Splitting text across fields cannot evade this budget.
-            neocogi_ui_design::validate_properties_size(properties)?;
-            let mut names = std::collections::BTreeSet::new();
+        Custom { kind, settings } => {
+            neocogi_ui_design::validate_settings_size(settings)?;
             !kind.is_empty()
-                && properties
-                    .iter()
-                    .all(|property| !property.name.is_empty() && names.insert(&property.name) && property.value.valid())
         }
         Scroll { .. } => node.children.len() == 1,
         Linear { cross: Cross::Fixed { pixels }, .. } => *pixels >= 0,

@@ -3,7 +3,7 @@
 `neocogi-ui-document` reconstructs an authored widget tree through the existing
 COM widget factories. JSON is editable source; the NCB persistence envelope is
 suitable for embedding or deployment. The loader performs no file I/O. Both
-representations use schema revision 6, and earlier revisions are rejected.
+representations use schema revision 7, and earlier revisions are rejected.
 
 Binary save and load apply the same byte, collection, value, and nesting limits.
 `Document::to_binary` and `Component::save` reject over-budget initialization
@@ -21,12 +21,11 @@ inner encoding. Shape validation alone (`Document::validate`) does not promise b
 saveability; the current outer value budget permits at most 999,979 encoded state
 bytes. JSON source retains its independent 16 MiB policy.
 
-JSON output, catalog descriptions and constructor properties share exact bounded
-JSON writers/counters. Custom properties permit 64 KiB for the complete compact
-payload per widget, including escaping and field names. The entire candidate is
-checked before construction; COM providers must also enforce that limit before
-parsing direct calls. See [document resource admission](../../../docs/DOCUMENT_RESOURCE_ADMISSION.md)
-for accounting, history, failure ordering and the designer's portable-path reserve.
+Document JSON and catalog descriptions use bounded JSON writers/counters. Custom
+settings are opaque NCB bytes, with a separate 64 KiB snapshot ceiling. Providers
+use the same bounded NCB policy for encoding and decoding and validate their own
+typed schema/revision. The entire candidate's storage is checked before construction;
+providers also check direct calls. See [document resource admission](../../../docs/DOCUMENT_RESOURCE_ADMISSION.md).
 
 A `Document` contains a tree of built-in widget constructors, styles, resources,
 and parent-owned layout edges. Each node has a unique stable key. Its physical
@@ -242,28 +241,31 @@ may expose zero or one event port; multiple logical events belong in one
 
 An independently built plugin can expose `IDesignWidgetCatalog` on its root COM
 factory. The registry reads bounded, versioned descriptions through the catalog's
-`describe` method, copies the IDL struct/enum/message shape and typed property
-defaults into owned data, and retains the catalog for `create_widget` calls.
-Catalog revision 8 describes the constructor queue IID/signature and its public
-Rust implementation trait path. COM owns the shared path-validation policy. `create_widget`
-receives `WidgetEventBinding`; the plugin must query its exact typed queue before
-allocating the widget. Mismatched queues fail before publication.
-The shared `neocogi-ui-design` crate contains only this metadata and property
-codec, so plugin implementations do not link the document runtime or designer.
-`register_catalog` validates all kinds transactionally before publishing any.
-The COM catalog accepts one widget index, the runtime's `IWidgetHost`, and the
-validated property values encoded with the shared codec. The returned object's
-exact class and stream IIDs and ABI signatures are checked before the document owns it.
+`describe` method, copies the reachable IDL value graph and opaque NCB defaults,
+and retains the catalog for construction. Catalog revision 9 replaces the old
+four-scalar property language; no compatibility path remains. Receiver identities,
+Rust binding paths and event metadata still describe the generated application
+contract. `create_widget` receives `WidgetEventBinding` and queries the exact queue
+before allocating its product. The returned concrete interface identity is checked
+before publication. Registration validates all kinds before publishing any.
 
-The document stores only `Custom { kind, properties }`. It does not store Rust
-paths, event traits, message types, executable code, or a copy of the property
-schema. Loading resolves the kind against the installed registry, validates
-property names and types against its defaults, constructs the widget, and
-checks that the returned COM object implements the exact advertised interface
-identity and ABI signature before publishing it. Unknown kinds and mismatched
-properties fail preparation. The generic designer inspector can edit text,
-boolean, integer, and finite floating-point constructor values; providers may
-impose stricter domain bounds in `create`.
+The document stores `Custom { kind, settings: Vec<u8> }`. The plugin interprets its
+private NCB schema, including its version and semantic constraints. The host bounds
+storage and resolves kinds; it does not duplicate provider field validation.
+Malformed settings fail candidate construction, before replacing a live form.
+
+For editing, `create_editor` optionally returns an exclusive
+`IDesignSettingsEditor`. It receives the designer's ordinary `UiFactory`, creates
+controls, and transfers their tree once through `take_view`. The inspector owns
+that tree; the controller reads it through weak handles. `settings` validates a
+complete draft and copies a stable bounded snapshot. `NOINTERFACE` from
+`create_editor` means deliberate absence; other errors remain errors.
+
+Apply prepares history and successfully constructs the preview before accepting
+source. Failed drafts stay mounted; accepted snapshots support normal save/undo/
+redo. No generic reflected setter invocation or full IDL reconstruction is needed.
+See [the settings contract](../../../docs/PLUGIN_DESIGNER_SETTINGS.md) and the
+[independent example](../../../examples/ui-extension/src/settings.rs).
 
 `Document::rust_bindings_with(&registry)` generates custom form fields and
 required handler methods using the owned IDL interface and message metadata

@@ -167,7 +167,7 @@ impl Construction<'_> {
             WidgetSpec::Disclosure { text, tree, expanded } => {
                 root(factory.disclosure(text, if *tree { DisclosureStyle::Tree } else { DisclosureStyle::Header }, *expanded)?)?
             }
-            WidgetSpec::Custom { kind, properties, .. } => self.custom.create(kind, self.ui, properties, queue)?,
+            WidgetSpec::Custom { kind, settings, .. } => self.custom.create(kind, self.ui, settings, queue)?,
         };
         self.nodes.insert(node.key.clone(), widget.handle());
         for (index, (child, relationship)) in children.into_iter().zip(&node.children).enumerate() {

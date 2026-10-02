@@ -14,6 +14,7 @@ source = "idl/neocogi/ui/document"
 [dependencies]
 neocogi-com = { workspace = true, features = ["macros", "alloc"] }
 neocogi-ui-core-contracts.workspace = true
+neocogi-ui-nodes-contracts.workspace = true
 
 [build-dependencies]
 neocogi-idl.workspace = true

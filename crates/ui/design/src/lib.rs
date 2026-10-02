@@ -12,75 +12,40 @@ use neocogi_com::design::{IdlInterface, IdlShape};
 use serde::{Deserialize, Serialize};
 use neocogi_com::{ComSerialize, ComDeserialize};
 
-/// One named, typed custom constructor value.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ComSerialize, ComDeserialize)]
-#[serde(deny_unknown_fields)]
-pub struct CustomProperty {
-    /// Stable property identifier from the trusted widget contract.
-    pub name: String,
-    /// Strongly typed authored value.
-    pub value: CustomValue,
-}
-
-/// Closed scalar property kinds supported by the generic designer inspector.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ComSerialize, ComDeserialize)]
-#[serde(deny_unknown_fields)]
-pub enum CustomValue {
-    /// UTF-8 text copied into the custom factory at construction.
-    Text(String),
-    /// Boolean toggle.
-    Boolean(bool),
-    /// Signed integral value.
-    Integer(i32),
-    /// Finite single-precision numeric value.
-    Number(f32),
-}
-impl CustomValue {
-    /// Compares property kinds independently of their authored values.
-    pub fn same_kind(&self, other: &Self) -> bool {
-        matches!(
-            (self, other),
-            (Self::Text(_), Self::Text(_)) | (Self::Boolean(_), Self::Boolean(_)) | (Self::Integer(_), Self::Integer(_)) | (Self::Number(_), Self::Number(_))
-        )
-    }
-    /// Rejects nonfinite authored numeric values before calling a plugin factory.
-    pub fn valid(&self) -> bool {
-        match self {
-            Self::Number(value) => value.is_finite(),
-            Self::Text(_) | Self::Boolean(_) | Self::Integer(_) => true,
-        }
-    }
-}
-
 /// Maximum encoded bytes accepted for one plugin-provided widget description.
 pub const MAX_DESIGN_DESCRIPTOR_BYTES: usize = 64 * 1024;
-/// Maximum compact JSON bytes for one custom widget's complete constructor properties.
-/// Separate from catalog metadata, even though both currently permit 64 KiB.
-pub const MAX_CUSTOM_PROPERTY_BYTES: usize = 64 * 1024;
+/// Maximum NCB bytes for one plugin-owned settings snapshot. The plugin owns
+/// its persistent schema (including its revision) and semantic validation.
+pub const MAX_SETTINGS_BYTES: usize = 64 * 1024;
 
-/// Checks the transport size of all constructor properties without encoding a buffer.
-/// Schema/name/kind validation remains the registry or provider's responsibility.
-pub fn validate_properties_size(properties: &[CustomProperty]) -> Result<(), String> {
-    bounded_json::encoded_len(properties, MAX_CUSTOM_PROPERTY_BYTES, bounded_json::Format::Compact).map(|_| ())
-}
-
-/// Encodes a constructor payload under the same byte policy as decode_properties.
-pub fn encode_properties(properties: &[CustomProperty]) -> Result<Vec<u8>, String> {
-    bounded_json::to_vec(properties, MAX_CUSTOM_PROPERTY_BYTES, bounded_json::Format::Compact)
-}
-
-/// Rejects oversized transport before parsing; providers still validate their schema.
-pub fn decode_properties(bytes: &[u8]) -> Result<Vec<CustomProperty>, String> {
-    if bytes.len() > MAX_CUSTOM_PROPERTY_BYTES {
-        return Err("Custom widget properties exceed byte limit".into());
+/// Rejects excessive opaque settings before cloning, transport, or plugin calls.
+/// Only the provider can validate the concrete settings type and its revision.
+pub fn validate_settings_size(settings: &[u8]) -> Result<(), String> {
+    match settings.len() <= MAX_SETTINGS_BYTES {
+        true => Ok(()),
+        false => Err("Custom widget settings exceed byte limit".into()),
     }
-    serde_json::from_slice(bytes).map_err(|error| error.to_string())
 }
 
-/// Current authoring descriptor schema revision.
-/// Revision 8 adds the checked Rust implementation trait for shared application
-/// queues. The receiver remains separate from the product interface chain.
-pub const DESIGN_DESCRIPTOR_VERSION: u32 = 8;
+/// Shared symmetric NCB policy for plugin settings; other budgets retain COM defaults.
+fn settings_limits() -> neocogi_com::binary::Limits {
+    neocogi_com::binary::Limits { bytes: MAX_SETTINGS_BYTES, ..Default::default() }
+}
+
+/// Encodes a provider's concrete persistent settings without a reflective property model.
+pub fn encode_settings<T: ComSerialize + ?Sized>(settings: &T) -> Result<Vec<u8>, String> {
+    neocogi_com::binary::to_vec_with_limits(settings, settings_limits()).map_err(|error| error.to_string())
+}
+
+/// Decodes a provider's concrete settings with the encoder's exact limits.
+/// Providers must additionally reject unsupported revisions and invalid values.
+pub fn decode_settings<T: ComDeserialize>(bytes: &[u8]) -> Result<T, String> {
+    validate_settings_size(bytes)?;
+    neocogi_com::binary::from_slice_with_limits(bytes, settings_limits()).map_err(|error| error.to_string())
+}
+
+/// Revision 9 replaces scalar property lists with provider-owned NCB settings.
+pub const DESIGN_DESCRIPTOR_VERSION: u32 = 9;
 
 /// Owned structural field expression copied through the COM design catalog.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -264,7 +229,7 @@ impl DesignInterface {
     }
 }
 
-/// One constructible widget kind and its typed constructor defaults.
+/// One constructible widget kind and its provider-owned constructor defaults.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DesignWidgetManifest {
@@ -272,15 +237,15 @@ pub struct DesignWidgetManifest {
     pub version: u32,
     /// Stable kind used in authored UI documents.
     pub kind: String,
-    /// Typed constructor defaults in stable order.
-    pub defaults: Vec<CustomProperty>,
+    /// Opaque NCB defaults; only the provider knows their type and schema revision.
+    pub defaults: Vec<u8>,
     /// Exact COM and IDL metadata for the constructed widget.
     pub interface: DesignInterface,
 }
 
 impl DesignWidgetManifest {
     /// Copies generated static IDL metadata into an owned COM transport record.
-    pub fn from_idl(kind: impl Into<String>, defaults: Vec<CustomProperty>, source: &IdlInterface) -> Result<Self, String> {
+    pub fn from_idl(kind: impl Into<String>, defaults: Vec<u8>, source: &IdlInterface) -> Result<Self, String> {
         let primary = source.chain.first().ok_or("IDL interface has no COM chain")?;
         if primary.interface_id != source.abi.interface_id || primary.abi_signature != source.abi.abi_signature {
             return Err("IDL interface has an inconsistent COM chain".into());
@@ -330,14 +295,7 @@ impl DesignWidgetManifest {
             return Err("Invalid design widget descriptor identity or version".into());
         }
         neocogi_com::validate_rust_path(&self.interface.rust_abi).map_err(|error| format!("Widget {:?}, interface.rust_abi: {error}", self.kind))?;
-        let mut names = std::collections::BTreeSet::new();
-        if !self
-            .defaults
-            .iter()
-            .all(|property| !property.name.is_empty() && names.insert(&property.name) && property.value.valid())
-        {
-            return Err("Invalid design widget property defaults".into());
-        }
+        validate_settings_size(&self.defaults)?;
         if let Some(output) = &self.interface.event_queue {
             neocogi_com::validate_rust_path(&output.rust_trait).map_err(|error| format!("Invalid event queue Rust trait: {error}"))?;
             if output.iid == [0; 16] || !qualified_name(&output.message) {
@@ -506,10 +464,7 @@ mod tests {
         let mut manifest = DesignWidgetManifest {
             version: DESIGN_DESCRIPTOR_VERSION,
             kind: "example.counter".into(),
-            defaults: vec![CustomProperty {
-                name: "count".into(),
-                value: CustomValue::Integer(0),
-            }],
+            defaults: encode_settings(&0i32).unwrap(),
             interface: DesignInterface {
                 iid: [1; 16],
                 signature: [2; 32],
@@ -562,7 +517,7 @@ mod tests {
         invalid.interface.rust_abi = "example_contracts::CounterAbi; panic!()".into();
         assert!(invalid.encode().is_err());
         invalid = manifest.clone();
-        invalid.defaults[0].value = CustomValue::Number(f32::NAN);
+        invalid.defaults.resize(MAX_SETTINGS_BYTES + 1, 0);
         assert!(invalid.encode().is_err());
     }
     /// Producers and COM consumers must apply the same complete binding-path grammar.
@@ -684,40 +639,26 @@ mod tests {
         assert!(validate_value_graph(&[value]).unwrap_err().contains("duplicate enum case"));
     }
 
-    /// Constructor transports share exact byte limits; each field alone may fit
-    /// while their combined JSON exceeds the allowance. Escapes consume real bytes.
+    /// Both NCB directions admit exactly the same byte boundary and reject trailing data.
     #[test]
-    fn custom_property_encoding_and_decoding_share_the_exact_byte_boundary() {
-        let mut properties = vec![CustomProperty { name: "text".into(), value: CustomValue::Text(String::new()) }];
-        let base = encode_properties(&properties).unwrap().len();
-        let available = MAX_CUSTOM_PROPERTY_BYTES - base;
-        let mut text = "\n".repeat(available / 2);
-        if available % 2 != 0 { text.push('x'); }
-        properties[0].value = CustomValue::Text(text);
-        validate_properties_size(&properties).unwrap();
-        let exact = encode_properties(&properties).unwrap();
-        assert_eq!(exact.len(), MAX_CUSTOM_PROPERTY_BYTES);
-        assert_eq!(decode_properties(&exact).unwrap(), properties);
-        if let CustomValue::Text(text) = &mut properties[0].value { text.push('x'); }
-        assert!(validate_properties_size(&properties).is_err());
-        assert!(encode_properties(&properties).is_err());
-        let mut excessive = exact;
-        excessive.push(b' ');
-        assert!(decode_properties(&excessive).is_err());
-        let properties = vec![
-            CustomProperty { name: "first".into(), value: CustomValue::Text("a".repeat(40_000)) },
-            CustomProperty { name: "second".into(), value: CustomValue::Text("b".repeat(40_000)) },
-        ];
-        assert!(encode_properties(&properties[..1]).is_ok());
-        assert!(encode_properties(&properties[1..]).is_ok());
-        assert!(validate_properties_size(&properties).is_err());
+    fn settings_encoding_and_decoding_share_the_exact_byte_boundary() {
+        let overhead = encode_settings("").unwrap().len();
+        let text = "x".repeat(MAX_SETTINGS_BYTES - overhead);
+        let bytes = encode_settings(text.as_str()).unwrap();
+        assert_eq!(bytes.len(), MAX_SETTINGS_BYTES);
+        assert_eq!(decode_settings::<String>(&bytes).unwrap(), text);
+        assert!(encode_settings((text + "x").as_str()).is_err());
+        let mut excessive = bytes;
+        excessive.push(0);
+        assert!(decode_settings::<String>(&excessive).is_err());
+        assert!(decode_settings::<bool>(&[2]).is_err());
     }
 
-    /// Catalog descriptions use the same bounded writer as constructor properties.
+    /// Catalog JSON has its own output ceiling, including expansion of opaque bytes.
     #[test]
     fn oversized_descriptor_is_rejected_before_output_materialization() {
         let mut manifest = counter_manifest();
-        manifest.defaults = vec![CustomProperty { name: "text".into(), value: CustomValue::Text("x".repeat(MAX_DESIGN_DESCRIPTOR_BYTES)) }];
+        manifest.defaults = vec![255; MAX_DESIGN_DESCRIPTOR_BYTES];
         assert!(manifest.encode().is_err());
         assert!(DesignWidgetManifest::decode(&serde_json::to_vec(&manifest).unwrap()).is_err());
     }

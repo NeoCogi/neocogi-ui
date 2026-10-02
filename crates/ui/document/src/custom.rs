@@ -1,6 +1,6 @@
 //! Trusted construction authority for authored custom COM leaf widgets.
 use crate::{
-    CustomProperty, Document, Node, WidgetSpec,
+    Document, Node, WidgetSpec,
     design::{DesignInterface, DesignWidgetManifest},
 };
 use neocogi_com::{ComPtr, IUnknown, NcGuid, NcStatus, NC_E_INVALID_ARG};
@@ -13,16 +13,20 @@ use std::{collections::BTreeMap, rc::Rc};
 pub trait CustomWidgetFactory {
     /// Returns complete, versioned metadata for this constructible widget kind.
     fn manifest(&self) -> Result<DesignWidgetManifest, String>;
+    /// Optional plugin-owned editor. Absence leaves settings read-only in the designer.
+    fn create_editor(&self, _ui: &Ui, _settings: &[u8]) -> Result<Option<neocogi_com::ComBox<neocogi_ui_document_contracts::IDesignSettingsEditorAbi>>, NcStatus> {
+        Ok(None)
+    }
     /// Constructs one concrete COM identity using the runtime's widget host.
-    /// The provider validates properties and the supplied typed sink before returning.
+    /// The provider validates settings and the supplied typed sink before returning.
     /// `None` constructs a permanently unobserved widget; no later attachment is allowed.
-    fn create(&self, ui: &Ui, properties: &[CustomProperty], sink: Option<ComPtr<IUnknown>>) -> Result<neocogi_ui::OwnedWidget<IWidgetAbi>, NcStatus>;
+    fn create(&self, ui: &Ui, settings: &[u8], sink: Option<ComPtr<IUnknown>>) -> Result<neocogi_ui::OwnedWidget<IWidgetAbi>, NcStatus>;
 }
 
 /// One installed provider and the immutable metadata validated at registration.
 #[derive(Clone)]
 struct Entry {
-    /// Constructor used only after document property validation succeeds.
+    /// Constructor used after document admission; it owns semantic settings validation.
     factory: Rc<dyn CustomWidgetFactory>,
     /// Owned metadata copied from generated IDL or across the COM catalog.
     manifest: DesignWidgetManifest,
@@ -56,7 +60,7 @@ impl CustomWidgetRegistry {
         let entry = self.entries.get(kind)?;
         Some(WidgetSpec::Custom {
             kind: kind.to_owned(),
-            properties: entry.manifest.defaults.clone(),
+            settings: entry.manifest.defaults.clone(),
         })
     }
 
@@ -73,8 +77,8 @@ impl CustomWidgetRegistry {
             .ok_or_else(|| format!("Custom widget kind {kind} is not registered"))
     }
 
-    /// Admits the complete persistent recipe and every custom constructor schema.
-    /// Binary and property budgets are checked before recipe cloning or any provider
+    /// Admits the complete persistent recipe and checks custom provider availability.
+    /// Binary and settings budgets are checked before recipe cloning or any provider
     /// call; local and independently loaded factories follow the same policy.
     pub fn validate_document(&self, document: &Document) -> Result<(), String> {
         document.validate_binary()?;
@@ -83,17 +87,10 @@ impl CustomWidgetRegistry {
 
     /// Validates one subtree without rebuilding the document name index.
     fn validate_node(&self, node: &Node) -> Result<(), String> {
-        if let WidgetSpec::Custom { kind, properties } = &node.widget {
-            let entry = self.entries.get(kind).ok_or_else(|| format!("Custom widget kind {kind} is not registered"))?;
-            let defaults = &entry.manifest.defaults;
-            if properties.len() != defaults.len()
-                || !properties
-                    .iter()
-                    .zip(defaults)
-                    .all(|(value, expected)| value.name == expected.name && value.value.same_kind(&expected.value) && value.value.valid())
-            {
-                return Err(format!("Custom widget property schema mismatch on {}", node.key));
-            }
+        if let WidgetSpec::Custom { kind, .. } = &node.widget {
+            self.entries.get(kind).ok_or_else(|| format!("Custom widget kind {kind} is not registered"))?;
+            // Document admission already checked snapshot sizes. The provider
+            // performs semantic validation during construction and editor Apply.
         }
         for child in &node.children {
             self.validate_node(&child.node)?;
@@ -101,10 +98,16 @@ impl CustomWidgetRegistry {
         Ok(())
     }
 
+    /// Opens the provider's concrete draft editor; the caller owns its lifetime and view.
+    pub fn create_editor(&self, kind: &str, ui: &Ui, settings: &[u8]) -> Result<Option<neocogi_com::ComBox<neocogi_ui_document_contracts::IDesignSettingsEditorAbi>>, NcStatus> {
+        neocogi_ui_design::validate_settings_size(settings).map_err(|_| NC_E_INVALID_ARG)?;
+        self.entries.get(kind).ok_or(NC_E_INVALID_ARG)?.factory.create_editor(ui, settings)
+    }
+
     /// Calls the installed provider and verifies its advertised concrete identity.
-    pub(crate) fn create(&self, kind: &str, ui: &Ui, properties: &[CustomProperty], sink: Option<ComPtr<IUnknown>>) -> Result<neocogi_ui::OwnedWidget<IWidgetAbi>, NcStatus> {
+    pub(crate) fn create(&self, kind: &str, ui: &Ui, settings: &[u8], sink: Option<ComPtr<IUnknown>>) -> Result<neocogi_ui::OwnedWidget<IWidgetAbi>, NcStatus> {
         let entry = self.entries.get(kind).ok_or(NC_E_INVALID_ARG)?;
-        let widget = entry.factory.create(ui, properties, sink)?;
+        let widget = entry.factory.create(ui, settings, sink)?;
         let interface = &entry.manifest.interface;
         let iid = NcGuid::from_uuid_bytes(interface.iid);
         widget.as_interface().downgrade().supports_interface_bytes(iid, &interface.signature)?;
