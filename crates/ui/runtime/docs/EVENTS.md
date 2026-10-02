@@ -13,84 +13,28 @@ and implements `IWidget::dispatch_next` on the same concrete widget.
 
 ## Application construction and frames
 
-The application owns its model and receiver in one persistent controller. The
-host resolves its COM projection once and borrows it on each update:
+The application owns its model and receiver in one persistent controller. Resolve
+its `IApplicationDispatcher` projection once and borrow it for each
+`ui.update_with_events(size, dispatcher.as_com_ref())` call.
 
-```rust,no_run
-use neocogi_com::{ComRef, NcStatus, NcValueRef};
-use neocogi_ui::{events::{self, Controller, EventModel}, IApplicationDispatcherAbi, Size, Ui};
+The [complete Button walkthrough](../../api/docs/button_events.rs) is the exact
+source included in the facade's `events` rustdoc and compiled into the runtime
+regression. It mounts a real Button, routes Tab/Space input, dispatches its
+message, then removes the window while another activation waits in the inbox.
+The second fact still owns its payload, but its `WeakComBox<ButtonAbi>` origin
+has expired and the example model deliberately ignores it.
 
-/// Application commands stay in the host binary.
-enum Message { Activated(String) }
-#[neocogi_com::com_object(neocogi_ui::nodes::ButtonEventQueue)]
-/// One application receiver may serve all buttons posting this protocol.
-struct AppQueue { send: std::sync::mpsc::Sender<Message> }
-impl neocogi_ui::nodes::ButtonEventQueue for AppQueue {
-    /// This handler records a captured fact and does not need to retain its origin.
-    fn post(&mut self, _: ComRef<'_, neocogi_ui::ButtonAbi>, value: NcValueRef<'_, neocogi_ui::button::Event>) -> Result<(), NcStatus> {
-        let event = value.to_owned()?;
-        neocogi_ui::button::validate(&event)?;
-        let neocogi_ui::button::Event::Activated(value) = event;
-        let _ = self.send.send(Message::Activated(value.label));
-        Ok(())
-    }
-}
-/// Plain fields are mutated under the controller's existing COM gate.
-struct App { count: u32 }
-impl EventModel for App {
-    type Message = Message;
-    fn handle(&mut self, message: Message) -> Result<(), NcStatus> {
-        match message {
-            Message::Activated(label) => {
-                self.count += 1;
-                println!("{label}: {}", self.count);
-            }
-        }
-        Ok(())
-    }
-}
+Queue `post` receives `ComRef<'_, ButtonAbi>` and captures an exclusive observer
+with `origin.downgrade_box()?`. Shared services instead use `WeakComPtr` and
+`origin.downgrade()?`. Interface type alone does not select ownership policy;
+using shared downgrade for an exclusive Button returns `NC_E_INVALID_ARG`.
+A compile-only example cannot prove that runtime requirement.
 
-fn example(ui: &Ui, size: Size) -> Result<(), NcStatus> {
-    let (send, messages) = std::sync::mpsc::channel();
-    let queue = AppQueue::from_value(AppQueue { send }).query::<neocogi_ui::ButtonEventQueueAbi>()?;
-    let button = ui.widgets().button_with_queue("Count", Some(queue.as_com_ref()))?;
-    // Insert button into the application's ordinary widget tree before updating.
-    let app = Controller::into_local(Controller::new(App { count: 0 }, messages));
-    let owner = app.query::<IApplicationDispatcherAbi>()?;
+Run the exact walkthrough from the workspace root:
 
-    // Construction happens once; both handles survive every frame.
-    for _ in 0..2 {
-        ui.update_with_events(size, owner.as_com_ref())?;
-        println!("{} activations", app.try_borrow()?.model.count);
-    }
-    Ok(())
-}
+```sh
+cargo test -p neocogi-ui-runtime --lib documented_button_walkthrough
 ```
-
-`EventModel::handle(&mut self, message)` receives exclusive access to ordinary
-owned fields. `LocalCom` allows typed access between COM calls; it remembers the
-implementation type from construction and uses the same allocation-wide borrow
-gate as foreign calls. It does not downcast an interface. End local guards before
-calling an update that will dispatch that controller. A conflicting call returns
-`NC_E_BUSY` before receiving anything.
-
-`Controller::new` transfers the model and receiver into application ownership.
-It has no attachment or retirement phase. The runtime borrows its dispatcher
-for one update without retaining it, so the application may own a `Ui` without
-a runtime/controller reference cycle.
-The demo host wraps `AppState` with this controller automatically: `Host::run`
-still accepts an owned state and receiver. Frame/input/presentation hooks take
-short local guards; those guards end before event dispatch.
-
-A frame performs no controller allocation, revocation-state allocation, interface
-query, or root reference-count change in this adapter. It still crosses a COM
-method and polls the receiver. Channel blocks and owned message payloads may
-allocate. The repository applications and generated forms use unbounded `mpsc::channel`
-transport: dispatch work limits and per-value decode budgets do not bound total
-queued memory. An application needing a bound must implement its concrete queue
-with an explicit nonblocking overflow policy; `post` must not wait for the same
-UI thread to drain its inbox. An allocation regression compares 64 warmed ordinary updates with
-64 updates using an empty persistent root and checks for zero extra allocations.
 
 ## Widget methods and event notifications
 

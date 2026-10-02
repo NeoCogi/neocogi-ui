@@ -3,42 +3,12 @@
 //! Each constructor borrows the appropriate queue projection; one behavioral inbox
 //! can serve many widgets without allocating per-widget callback adapters.
 //!
-//! ```no_run
-//! use neocogi_com::{ComRef, NcStatus, NcValueRef, WeakComPtr};
-//! use neocogi_ui::{ButtonAbi, ButtonEventQueueAbi, IApplicationDispatcherAbi, Size, Ui,
-//!     button, events::{Controller, EventModel}};
-//! #[neocogi_com::com_object(neocogi_ui::nodes::ButtonEventQueue)]
-//! struct AppQueue { send: std::sync::mpsc::Sender<(WeakComPtr<ButtonAbi>, button::Event)> }
-//! impl neocogi_ui::nodes::ButtonEventQueue for AppQueue {
-//!     fn post(&mut self, origin: ComRef<'_, ButtonAbi>, event: NcValueRef<'_, button::Event>) -> Result<(), NcStatus> {
-//!         let event = event.to_owned()?;
-//!         button::validate(&event)?;
-//!         let _ = self.send.send((origin.downgrade()?, event));
-//!         Ok(())
-//!     }
-//! }
-//! struct Counter { count: u32 }
-//! impl EventModel for Counter {
-//!     type Message = (WeakComPtr<ButtonAbi>, button::Event);
-//!     fn handle(&mut self, (origin, event): Self::Message) -> Result<(), NcStatus> {
-//!         if origin.upgrade()?.is_some() {
-//!             match event { button::Event::Activated(_) => self.count += 1 }
-//!         }
-//!         Ok(())
-//!     }
-//! }
-//! fn example(ui: &Ui, size: Size) -> Result<u32, NcStatus> {
-//!     let (send, messages) = std::sync::mpsc::channel();
-//!     let queue = AppQueue::from_value(AppQueue { send }).query::<ButtonEventQueueAbi>()?;
-//!     let button = ui.widgets().button_with_queue("Count", Some(queue.as_com_ref()))?;
-//!     let app = Controller::into_local(Controller::new(Counter { count: 0 }, messages));
-//!     let dispatcher = app.query::<IApplicationDispatcherAbi>()?;
-//!     ui.update_with_events(size, dispatcher.as_com_ref())?;
-//!     ui.update_with_events(size, dispatcher.as_com_ref())?;
-//!     let count = app.try_borrow()?.model.count;
-//!     Ok(count)
-//! }
-//! ```
+//! The walkthrough below uses an initialized, otherwise empty UI. Its keyboard
+//! input exercises actual activation, then removal with an application event queued.
+//! The runtime regression compiles this exact source file and executes it against
+//! the production core and node providers.
+#![doc = concat!("```no_run\n", include_str!("../docs/button_events.rs"), "\n```")]
+
 /// Owned application fixtures for integration tests, without borrowed callback adapters.
 #[cfg(feature = "test-support")]
 pub mod testing;
