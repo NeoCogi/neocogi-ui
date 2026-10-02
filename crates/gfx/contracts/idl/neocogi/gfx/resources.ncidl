@@ -181,9 +181,8 @@ enum FontRole: u8 {
     Mono = 4,
 }
 
-#[version(1)]
+#[version(2)]
 /// Four nonnegative pixel insets used by resolved theme geometry.
-#[deserialize]
 struct Insets {
     /// Leading horizontal thickness.
     left: i32,
@@ -195,9 +194,9 @@ struct Insets {
     bottom: i32,
 }
 
-#[version(1)]
+#[version(2)]
 /// Complete scalar layout recipe; installation rejects negative dimensions.
-#[deserialize(default)]
+#[persistence(default)]
 struct AssetMetrics {
     /// Preferred width when a layout supplies none.
     default_cell_width: i32,
@@ -421,8 +420,8 @@ interface IAssetBundle {
 /// A palette is an authoring value, not retained runtime appearance state. Compiling it eagerly into
 /// complete resolved visual values avoids the former shadow color array that could disagree with
 /// what widgets actually painted.
-#[version(1)]
-#[deserialize(default)]
+#[version(2)]
+#[persistence(default)]
 struct FlatPalette {
     /// Ordinary control text and semantic glyph color.
     text: Color,
