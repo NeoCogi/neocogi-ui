@@ -147,7 +147,6 @@ impl UiRuntime {
         atlas: &crate::AtlasHandle,
         constraints: Constraints,
     ) -> Result<Dimensioni, neocogi_com::NcStatus> {
-        root.synchronize_measurement_invalidation()?;
         self.geometry.measure_node(root, style, atlas, constraints)
     }
 
@@ -160,7 +159,6 @@ impl UiRuntime {
         outer: Recti,
         viewport: Recti,
     ) -> Result<(), neocogi_com::NcStatus> {
-        root.synchronize_measurement_invalidation()?;
         // Root layout establishes the transform reused by subsequent routing, update, and paint.
         self.root_transform = Transform::root(viewport);
         self.geometry.layout_node_ref(root, style, &atlas, outer)?;

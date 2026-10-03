@@ -303,7 +303,7 @@ impl PaintService {
     }
 
     /// Uses neocogi-com's object-wide exclusive gate to access the recorder implementation it created.
-    fn with_recorder_mut<T>(&mut self, call: impl FnOnce(&mut Recorder) -> T) -> Result<T, NcStatus> {
+    fn with_recorder_mut<T>(&self, call: impl FnOnce(&mut Recorder) -> T) -> Result<T, NcStatus> {
         let object = self.painter.as_raw().object;
         // SAFETY: `painter` was created exclusively by `Recorder::from_value` in `new` and keeps
         // that allocation alive. Its generated interface header therefore carries the matching
@@ -314,7 +314,7 @@ impl PaintService {
     }
 
     /// Moves the frame list into the scoped context, calls a component, then restores the list.
-    pub(super) fn paint(&mut self, widget: &neocogi_com::ComBox<IWidgetAbi>, ctx: &mut crate::WidgetPaintCtx<'_>) -> Result<(), NcStatus> {
+    pub(super) fn paint(&self, widget: &neocogi_com::ComBox<IWidgetAbi>, ctx: &mut crate::WidgetPaintCtx<'_>) -> Result<(), NcStatus> {
         let invocation = self.with_recorder_mut(|recorder| {
             recorder.begin(PaintContext {
                 display_list: ctx.take_display_list(),

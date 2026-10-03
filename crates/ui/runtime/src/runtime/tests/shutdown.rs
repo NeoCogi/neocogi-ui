@@ -111,7 +111,7 @@ fn runtime_shutdown_is_silent_and_preserves_already_queued_facts() {
 
         ui.close().unwrap();
         assert!(views.iter().all(|view| !view.is_alive()));
-        for mut view in views {
+        for view in views {
             assert_eq!(view.properties(), Err(neocogi_com::NC_E_DROPPED));
         }
         let mut found: Vec<_> = drops.try_iter().collect();

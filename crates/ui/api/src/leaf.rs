@@ -21,8 +21,10 @@ pub trait LeafContent: 'static {
     fn update(&mut self, _state: WidgetUpdate, _event: WidgetEvent, _text: &str) -> Result<GeometryChange, NcStatus> {
         Ok(GeometryChange::NoChange)
     }
-    /// Records observational drawing through this invocation's checked painter capability.
-    fn paint(&self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus>;
+    /// Records drawing under the existing exclusive widget paint gate. Mutable access may
+    /// accept completed paint-only cache values; geometry and routing mutation remain forbidden
+    /// by host observation authority. Retained scope capabilities expire after this call.
+    fn paint(&mut self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus>;
 }
 
 #[com_object(interfaces(IWidget, ILeafLayout), ownership = exclusive)]
@@ -131,15 +133,25 @@ struct DispatchingLeafObject<Content: DispatchingLeafContent> {
     leaf: LeafObject<Content>,
 }
 impl<Content: DispatchingLeafContent> IWidget for DispatchingLeafObject<Content> {
+    /// Delegates directly to the inline leaf under this allocation's common admission gate.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> { self.leaf.host() }
+    /// Delegates directly to the inline leaf under this allocation's common admission gate.
     fn mount(&mut self) -> Result<(), NcStatus> { self.leaf.mount() }
+    /// Delegates directly to the inline leaf under this allocation's common admission gate.
     fn properties(&self) -> Result<WidgetProperties, NcStatus> { self.leaf.properties() }
+    /// Delegates directly to the inline leaf under this allocation's common admission gate.
     fn requested_flags(&self) -> Result<WidgetOptions, NcStatus> { self.leaf.requested_flags() }
+    /// Delegates directly to the inline leaf under this allocation's common admission gate.
     fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> { self.leaf.replace_flags(flags) }
+    /// Delegates directly to the inline leaf under this allocation's common admission gate.
     fn set_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> { self.leaf.set_flags(flags) }
+    /// Delegates directly to the inline leaf under this allocation's common admission gate.
     fn clear_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> { self.leaf.clear_flags(flags) }
+    /// Delegates directly to the inline leaf under this allocation's common admission gate.
     fn update(&mut self, state: WidgetUpdate, event: WidgetEvent, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> { self.leaf.update(state, event, text) }
+    /// Delegates directly to the inline leaf under this allocation's common admission gate.
     fn take_change(&mut self) -> Result<GeometryChange, NcStatus> { self.leaf.take_change() }
+    /// Delegates directly to the inline leaf under this allocation's common admission gate.
     fn paint(&mut self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> { self.leaf.paint(scope, state, painter) }
 }
 impl<Content: DispatchingLeafContent> ILeafLayout for DispatchingLeafObject<Content> {

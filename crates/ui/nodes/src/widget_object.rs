@@ -260,12 +260,10 @@ macro_rules! direct_widget_phase_impl {
 
             /// Drains sticky common and explicitly shared semantic geometry changes together.
             fn take_change(&mut self) -> Result<neocogi_ui_core_contracts::GeometryChange, neocogi_com::NcStatus> {
-                if crate::Widget::take_shared_change(self) {
-                    <$name as crate::widget_object::HostedWidget>::runtime_mut(self)
-                        .state
-                        .record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
-                }
-                <$name as crate::widget_object::HostedWidget>::runtime_mut(self).state.take_change()
+                let shared = crate::Widget::take_shared_change(self);
+                let common = <$name as crate::widget_object::HostedWidget>::runtime_mut(self).state.take_change()?;
+                // Collection consumes markers, it does not announce a new mutation.
+                Ok(if shared { neocogi_ui_core_contracts::GeometryChange::Changed } else { common })
             }
 
             /// Paints semantic fields directly into the runtime-owned scoped frame context.
@@ -428,6 +426,9 @@ macro_rules! direct_scrolling_impl {
             fn set_offset(&mut self, offset: neocogi_ui_core_contracts::Point) -> Result<(), neocogi_com::NcStatus> {
                 <$name as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
                 self.model.set_offset(crate::Vec2i::new(offset.x, offset.y));
+                <$name as crate::widget_object::HostedWidget>::runtime_mut(self)
+                    .state
+                    .record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
                 Ok(())
             }
 
@@ -435,6 +436,9 @@ macro_rules! direct_scrolling_impl {
             fn set_enabled(&mut self, enabled: bool) -> Result<(), neocogi_com::NcStatus> {
                 <$name as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
                 self.model.set_enabled(enabled);
+                <$name as crate::widget_object::HostedWidget>::runtime_mut(self)
+                    .state
+                    .record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
                 Ok(())
             }
 
@@ -442,6 +446,9 @@ macro_rules! direct_scrolling_impl {
             fn scroll_to_end(&mut self) -> Result<(), neocogi_com::NcStatus> {
                 <$name as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
                 self.model.scroll_to_end();
+                <$name as crate::widget_object::HostedWidget>::runtime_mut(self)
+                    .state
+                    .record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
                 Ok(())
             }
 
@@ -452,6 +459,9 @@ macro_rules! direct_scrolling_impl {
                     return Err(neocogi_com::NC_E_INVALID_ARG);
                 }
                 self.model.reveal(crate::boundary::local_rect(rect));
+                <$name as crate::widget_object::HostedWidget>::runtime_mut(self)
+                    .state
+                    .record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
                 Ok(())
             }
         }

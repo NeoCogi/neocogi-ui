@@ -213,6 +213,7 @@ impl IChildrenEditor for ChildEditor {
             .insert(index as usize, node)
             .unwrap_or_else(|_| unreachable!("validated index cannot change during an owned transaction"));
         self.store.dirty.set(true);
+        self.store.factory.state.changes_pending.set(true);
         Ok(())
     }
     /// Validates the entire replacement before committing removal of the old subtree.
@@ -235,6 +236,7 @@ impl IChildrenEditor for ChildEditor {
         let node = self.store.factory.mount_node(widget, Some(&self.store))?;
         let previous = std::mem::replace(nodes.get_mut(index as usize).expect("validated index"), node);
         self.store.dirty.set(true);
+        self.store.factory.state.changes_pending.set(true);
         drop(previous);
         Ok(())
     }
@@ -251,6 +253,7 @@ impl IChildrenEditor for ChildEditor {
             return Err(neocogi_com::NC_E_OUT_OF_RANGE);
         }
         self.store.dirty.set(true);
+        self.store.factory.state.changes_pending.set(true);
         Ok(())
     }
     /// Clears ordinary child ownership without closing the collection itself.
@@ -263,6 +266,7 @@ impl IChildrenEditor for ChildEditor {
         for node in nodes.iter() { node.data.ensure_idle()?; }
         if !nodes.is_empty() {
             self.store.dirty.set(true);
+        self.store.factory.state.changes_pending.set(true);
             nodes.clear();
         }
         Ok(())

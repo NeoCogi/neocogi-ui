@@ -72,7 +72,7 @@ impl LeafContent for Leaf {
         Ok(Size { width: 40, height: 24 })
     }
     /// Rendering has no role in this event-order fixture.
-    fn paint(&self, _: WidgetPaint, _: &mut Painter<'_>) -> Result<(), NcStatus> {
+    fn paint(&mut self, _: WidgetPaint, _: &mut Painter<'_>) -> Result<(), NcStatus> {
         Ok(())
     }
 

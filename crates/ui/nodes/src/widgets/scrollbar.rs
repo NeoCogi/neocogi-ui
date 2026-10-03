@@ -614,14 +614,21 @@ impl neocogi_ui_nodes_contracts::Scrollbar for Scrollbar {
         if viewport < 0 || content < 0 {
             return Err(NC_E_INVALID_ARG);
         }
+        let previous = self.axis_state.values.get();
         self.set_lengths(viewport, content);
+        if self.axis_state.values.get() != previous {
+            self.runtime_mut().state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
+        }
         Ok(())
     }
     /// Offset affects thumb paint only; the control's preferred size is fixed by its axis.
     fn set_offset(&mut self, offset: i32) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
         let offset = offset.clamp(0, self.max_offset());
-        self.set_offset(offset);
+        if self.offset() != offset {
+            self.set_offset(offset);
+            let _ = self.runtime().state.host().mark_geometry_changed();
+        }
         Ok(())
     }
 }

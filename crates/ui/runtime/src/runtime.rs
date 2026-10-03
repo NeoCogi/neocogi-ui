@@ -44,6 +44,7 @@ pub fn create_runtime_from_assets(
 pub(crate) fn create_storage(assets: crate::assets::ImportedAssets, compositor: ComPtr<neocogi_gfx_contracts::GfxCompositorAbi>) -> Rc<RuntimeStorage> {
     let bundle = assets.bundle().clone();
     let state = Rc::new(HostState::default());
+    state.changes_pending.set(true);
     let host: ComPtr<IWidgetHostAbi> = WidgetHost::from_value(WidgetHost { state: state.clone() }).query().expect("host interface");
     let resources = Rc::new(RefCell::new(assets));
     let metrics = Metrics::from_value(Metrics { resources: resources.clone() })
@@ -166,6 +167,7 @@ impl RuntimeStorage {
 
     /// Drains setter changes throughout the forest, including hidden subtrees.
     fn collect_changes(&self, context: &mut RuntimeContext) -> Result<(), NcStatus> {
+        if !self.factory.state.changes_pending.replace(false) { return Ok(()); }
         self.prune_mounts(&context.window_manager);
         let _phase = Observation::begin(&self.factory.state);
         self.factory.state.error.set(None);
@@ -173,11 +175,13 @@ impl RuntimeStorage {
             Ok(true) => self.pending.set(true),
             Ok(false) => {}
             Err(error) => {
+                self.factory.state.changes_pending.set(true);
                 self.pending.set(true);
                 return Err(error);
             }
         }
         if let Some(error) = self.factory.state.error.take() {
+            self.factory.state.changes_pending.set(true);
             self.pending.set(true);
             return Err(error);
         }
@@ -431,6 +435,7 @@ impl Runtime {
     /// Performs one guarded update; the outer operation releases weak dispatch snapshots.
     fn run_update_cycle(&self, size: Size, dispatcher: Option<ComRef<'_, IApplicationDispatcherAbi>>, widgets: &mut DispatchWidgets) -> Result<(), NcStatus> {
         let storage = &self.storage;
+        storage.factory.state.error.set(None);
         let dimensions = Dimensioni::new(size.width, size.height);
         {
             let mut context = storage.context()?;
@@ -527,7 +532,15 @@ impl Runtime {
             self.storage.phase_result()?;
             match delivered {
                 true => spend_dispatch_budget(remaining)?,
-                false => return Ok(()),
+                false => {
+                    // An empty-inbox callback may publish deferred geometry. Reconcile it
+                    // before routing later input, even when no message was consumed.
+                    let surface_changed = self.storage.context()?.window_manager.take_dispatch_order_changed();
+                    if surface_changed { self.storage.factory.state.dispatch_order_changed.set(true); }
+                    if surface_changed || self.storage.factory.state.changes_pending.get() || self.storage.factory.state.dispatch_order_changed.get() {
+                        spend_dispatch_budget(remaining)?;
+                    } else { return Ok(()); }
+                },
             }
         }
     }

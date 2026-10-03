@@ -67,6 +67,13 @@ interface IWidget {
     fn update(&mut self, state: WidgetUpdate, event: WidgetEvent, text: &[u8]) -> Result<GeometryChange>;
 
     /// Drains sticky geometry invalidation recorded by programmatic setters.
+    /// Every provider must also notify host.mark_geometry_changed for mutations of
+    /// measurement, placement or routing policy, including hidden and unmounted values.
+    /// Conservatively signal before a fallible commit or after an admitted commit;
+    /// a post-commit failure must retain both the sticky marker and notification.
+    /// Pre-commit rejection may leave a harmless notification but no sticky mutation.
+    /// NoChange must preserve earlier markers. A truthful Changed update result is
+    /// additionally notified by the runtime; independent setters cannot rely on polling.
     fn take_change(&mut self) -> Result<GeometryChange>;
     /// Records this widget's visual output within a validated paint invocation.
     fn paint(&mut self, scope: PaintScope, state: WidgetPaint, painter: &IPainter) -> Result<()>;
@@ -315,7 +322,7 @@ interface UiRuntime: IInputSink + IWindowManager + IMenus + IChoiceMenus {
     fn close(&self) -> Result<()>;
 }
 
-#[version(2)]
+#[version(3)]
 /// Runtime identity and mutation authority without a reference back to its tree.
 interface IWidgetHost {
     /// Returns the installed clipboard during ordinary mutation, or NotFound for headless hosts.
@@ -330,6 +337,13 @@ interface IWidgetHost {
     fn check_open(&self) -> Result<()>;
     /// Rejects closed runtimes and mutation during layout or painting.
     fn check_mutation(&self) -> Result<()>;
+    /// Conservatively announces possible geometry/routing changes without mutating a widget.
+    /// This is required in addition to sticky take_change, including independent C providers.
+    /// Legal during observation for failure recovery or marker collection. It rejects only
+    /// closed authority; after successful mutation admission it is otherwise infallible.
+    /// The runtime drains notifications before scanning all retained trees, including hidden
+    /// ones, and retains notifications raised during collection for a later boundary.
+    fn mark_geometry_changed(&self) -> Result<()>;
 }
 
 #[version(2)]

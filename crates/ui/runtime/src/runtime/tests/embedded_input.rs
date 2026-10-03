@@ -24,7 +24,7 @@ impl LeafContent for Scope {
         Ok(GeometryChange::NoChange)
     }
     /// No graphics are needed to observe manager keyboard ownership.
-    fn paint(&self, _: WidgetPaint, _: &mut Painter<'_>) -> Result<(), NcStatus> {
+    fn paint(&mut self, _: WidgetPaint, _: &mut Painter<'_>) -> Result<(), NcStatus> {
         Ok(())
     }
 }

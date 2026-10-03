@@ -45,7 +45,7 @@ impl LeafContent for PartialPaint {
         Ok(GeometryChange::NoChange)
     }
     /// Creates a resource inside the callback so any surviving owner belongs to recorded work.
-    fn paint(&self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
+    fn paint(&mut self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
         let texture: ComPtr<ITextureAbi> = TemporaryTexture::from_value(TemporaryTexture { attempt: self.attempt.clone() })
             .query()
             .unwrap();

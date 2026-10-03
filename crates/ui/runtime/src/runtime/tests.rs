@@ -1095,7 +1095,8 @@ fn builtin_numeric_and_scrollbar_facades_reject_invalid_inputs_without_losing_st
     assert_eq!(scrollbar.range().unwrap().offset, 10);
     scrollbar.set_offset(-1).unwrap();
     assert_eq!(scrollbar.range().unwrap().offset, 0);
-    assert_eq!(common.take_change().unwrap(), GeometryChange::NoChange);
+    // Range changes also change effective routing policy and conservatively invalidate geometry.
+    assert_eq!(common.take_change().unwrap(), GeometryChange::Changed);
     scrollbar.set_lengths(100, 100).unwrap();
     assert!(common.properties().unwrap().options.contains(WidgetOptions::NO_INTERACT));
     let mut swatch = ui.widgets().color_swatch(0xff102030, "RGBA").unwrap();
@@ -1457,7 +1458,7 @@ impl neocogi_ui::LeafContent for LocalContent {
         Ok(GeometryChange::NoChange)
     }
     /// Solid geometry reaches the ordinary display-list arena without an application UV lookup.
-    fn paint(&self, _: WidgetPaint, painter: &mut neocogi_ui::Painter<'_>) -> Result<(), NcStatus> {
+    fn paint(&mut self, _: WidgetPaint, painter: &mut neocogi_ui::Painter<'_>) -> Result<(), NcStatus> {
         let mut clipped = painter.clipped(Rect { x: 2, y: 2, width: 3, height: 3 })?;
         clipped.colored_triangles(&[
             ColoredVertex { x: 0.0, y: 0.0, rgba: 0xff030201 },
@@ -1594,7 +1595,7 @@ impl neocogi_ui::LeafContent for ReviewDispatchTrace {
     fn measure(&self, _: LayoutLimits, _: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
         Ok(Size { width: 20, height: 20 })
     }
-    fn paint(&self, _: WidgetPaint, _: &mut neocogi_ui::Painter<'_>) -> Result<(), NcStatus> { Ok(()) }
+    fn paint(&mut self, _: WidgetPaint, _: &mut neocogi_ui::Painter<'_>) -> Result<(), NcStatus> { Ok(()) }
 
 }
 
@@ -1636,4 +1637,123 @@ impl neocogi_ui::DispatchingLeafContent for ReviewDispatchTrace {
         self.trace.borrow_mut().push(self.name);
         Ok(false)
     }
+}
+
+#[com_object(interfaces(IWidget, ILeafLayout, ITextContent), ownership = exclusive)]
+struct ReviewStickyWidget {
+    state: neocogi_ui::com::widget::WidgetState,
+    text: String,
+    sticky: bool,
+    collections: Rc<Cell<usize>>,
+}
+impl IWidget for ReviewStickyWidget {
+    fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
+        Ok(self.state.host().add_ref())
+    }
+    fn mount(&mut self) -> Result<(), NcStatus> { self.state.mount() }
+    fn properties(&self) -> Result<WidgetProperties, NcStatus> {
+        Ok(WidgetProperties { options: self.state.requested_flags()?, keyboard: 0, frame: WidgetFrame::Generic })
+    }
+    fn requested_flags(&self) -> Result<WidgetOptions, NcStatus> { self.state.requested_flags() }
+    fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> { self.state.replace_flags(flags) }
+    fn set_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> { self.state.set_flags(flags) }
+    fn clear_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> { self.state.clear_flags(flags) }
+    fn update(&mut self, _: WidgetUpdate, _: WidgetEvent, _: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
+        Ok(GeometryChange::NoChange)
+    }
+    fn take_change(&mut self) -> Result<GeometryChange, NcStatus> {
+        self.collections.set(self.collections.get() + 1);
+        let own = std::mem::replace(&mut self.sticky, false);
+        let common = self.state.take_change()?;
+        Ok(if own || common == GeometryChange::Changed { GeometryChange::Changed } else { GeometryChange::NoChange })
+    }
+    fn paint(&mut self, _: PaintScope, _: WidgetPaint, _: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> { Ok(()) }
+}
+impl ILeafLayout for ReviewStickyWidget {
+    fn measure(&mut self, _: LayoutLimits, _: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
+        Ok(Size { width: self.text.len() as i32 * 10, height: 20 })
+    }
+}
+impl ITextContent for ReviewStickyWidget {
+    fn text(&self) -> Result<ComPtr<neocogi_com::INcStringAbi>, NcStatus> {
+        Ok(neocogi_com::NcString::from_utf8_str(&self.text))
+    }
+    fn set_text(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.state.writable()?;
+        if input.offset() != 0 { return Err(NC_E_INVALID_ARG); }
+        let text = std::str::from_utf8(input.as_slice()).map_err(|_| NC_E_INVALID_ARG)?;
+        if self.text != text {
+            self.text = text.to_owned();
+            // Independent providers retain their own marker AND conservatively notify authority.
+            self.sticky = true;
+            self.state.host().mark_geometry_changed()?;
+        }
+        Ok(())
+    }
+}
+fn review_sticky_widget(runtime: &ComPtr<UiRuntimeAbi>) -> (ComBox<IWidgetAbi>, WeakComBox<ITextContentAbi>, Rc<Cell<usize>>) {
+    let collections = Rc::new(Cell::new(0));
+    let host = runtime.construction_host().unwrap().host().unwrap();
+    let object = ReviewStickyWidget::into_box(ReviewStickyWidget {
+        state: neocogi_ui::com::widget::WidgetState::new(host, WidgetOptions::NONE),
+        text: "a".to_owned(), sticky: false, collections: collections.clone(),
+    });
+    let text = object.query_weak::<ITextContentAbi>().unwrap();
+    (object.query::<IWidgetAbi>().unwrap(), text, collections)
+}
+
+#[test]
+fn review_independent_sticky_setter_requires_update_before_render() {
+    let runtime = runtime();
+    let (widget, mut text, _) = review_sticky_widget(&runtime);
+    let _window = mount(&runtime, widget).unwrap();
+    runtime.update(SIZE).unwrap();
+    let (renderer, probe) = renderer();
+    runtime.render(SIZE, renderer.as_com_ref()).unwrap();
+    text.set_text(NcCopyFromBufferOffset::new(0, b"a much longer label")).unwrap();
+    assert_eq!(runtime.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(probe.calls.get(), 1);
+}
+
+#[test]
+fn review_idle_update_does_not_collect_any_widget_changes() {
+    let runtime = runtime();
+    let (widget, _, collections) = review_sticky_widget(&runtime);
+    let _window = mount(&runtime, widget).unwrap();
+    runtime.update(SIZE).unwrap();
+    runtime.update(SIZE).unwrap();
+    collections.set(0);
+    runtime.update(SIZE).unwrap();
+    assert_eq!(collections.get(), 0, "documented idle acceptance: no take_change COM calls");
+}
+
+/// A real optional receiver changes surface chronology without claiming a message.
+struct RaiseDuringDispatch {
+    target: Option<ComPtr<IWindowAbi>>,
+    trace: Rc<RefCell<Vec<&'static str>>>,
+}
+impl neocogi_ui::LeafContent for RaiseDuringDispatch {
+    fn measure(&self, _: LayoutLimits, _: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> { Ok(Size { width: 20, height: 20 }) }
+    fn paint(&mut self, _: WidgetPaint, _: &mut neocogi_ui::Painter<'_>) -> Result<(), NcStatus> { Ok(()) }
+}
+impl neocogi_ui::DispatchingLeafContent for RaiseDuringDispatch {
+    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
+        self.trace.borrow_mut().push("raising");
+        if let Some(target) = self.target.take() { target.raise()?; }
+        Ok(false)
+    }
+}
+/// A chronology edit inside a false-reporting handler invalidates the same-update snapshot.
+#[test]
+fn false_dispatch_callback_reconciles_raised_surface_before_next_receiver() {
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let trace = Rc::new(RefCell::new(Vec::new()));
+    let first = ui.widgets().dispatching_leaf(ReviewDispatchTrace { name: "first", trace: trace.clone() }, WidgetOptions::NONE).unwrap();
+    let first = ui.window("first", RECT, first).unwrap();
+    let later = ui.widgets().dispatching_leaf(ReviewDispatchTrace { name: "later", trace: trace.clone() }, WidgetOptions::NONE).unwrap();
+    let _later = ui.window("later", RECT, later).unwrap();
+    let raising = ui.widgets().dispatching_leaf(RaiseDuringDispatch { target: Some(first), trace: trace.clone() }, WidgetOptions::NONE).unwrap();
+    let _raising = ui.window("raising", RECT, raising).unwrap();
+    ui.update(SIZE).unwrap();
+    assert_eq!(&trace.borrow()[..4], &["raising", "first", "raising", "later"]);
 }

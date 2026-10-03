@@ -5,10 +5,14 @@ use neocogi_com::{NcStatus, com_object};
 use neocogi_ui_core_contracts::{IApplicationDispatcher, IApplicationDispatcherAbi, IApplicationDispatcherVtblFor};
 
 /// Application behavior with a concrete, binary-local message protocol.
-/// Composites instead own their inbox in the widget and implement IWidget dispatch.
+/// Composites instead own their inbox in the widget and implement optional IWidgetDispatcher.
 pub trait EventModel: 'static {
     /// Exact private message type; no Send bound or type erasure is required.
     type Message: 'static;
+    /// Settles deferred geometry after the inbox becomes empty, under the same mutable gate.
+    /// Return true only for a completed unit of work; the runtime also detects conservative
+    /// geometry/topology notification when false is returned. No renderer work belongs here.
+    fn settle(&mut self) -> Result<bool, NcStatus> { Ok(false) }
     /// Handles one message with exclusive model access and no retained traversal borrow.
     fn handle(&mut self, message: Self::Message) -> Result<(), NcStatus>;
 }
@@ -34,7 +38,7 @@ impl<Model: EventModel> IApplicationDispatcher for Controller<Model> {
     fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
         let message = match self.messages.try_recv() {
             Ok(message) => message,
-            Err(TryRecvError::Empty | TryRecvError::Disconnected) => return Ok(false),
+            Err(TryRecvError::Empty | TryRecvError::Disconnected) => return self.model.settle(),
         };
         self.model.handle(message)?;
         Ok(true)

@@ -39,7 +39,7 @@ mod tests {
     struct Probe;
     impl neocogi_ui::LeafContent for Probe {
         fn measure(&self, _: neocogi_ui::LayoutLimits, _: neocogi_com::ComRef<'_, neocogi_ui::ITextMetricsAbi>) -> Result<neocogi_ui::Size, NcStatus> { Ok(neocogi_ui::Size { width: 10, height: 10 }) }
-        fn paint(&self, _: neocogi_ui::WidgetPaint, _: &mut neocogi_ui::Painter<'_>) -> Result<(), NcStatus> { Ok(()) }
+        fn paint(&mut self, _: neocogi_ui::WidgetPaint, _: &mut neocogi_ui::Painter<'_>) -> Result<(), NcStatus> { Ok(()) }
     }
     impl neocogi_ui::DispatchingLeafContent for Probe {
         fn dispatch_next(&mut self) -> Result<bool, NcStatus> { Ok(false) }

@@ -104,7 +104,9 @@ impl WidgetState {
         self.host.check_mutation()
     }
 
-    /// Records an authorized, committed geometry change without a call out.
+    /// Records an authorized, committed geometry change and conservatively notifies the host.
+    /// Successful writable admission guarantees notification succeeds unless a callback closed
+    /// the runtime; such a runtime cannot publish any later frame. Local stickiness is retained.
     ///
     /// `NO_CHANGE` preserves an earlier setter's pending marker. Event-only or
     /// visual-only changes need no measurement invalidation. External state must
@@ -112,6 +114,7 @@ impl WidgetState {
     pub fn record_change(&mut self, change: GeometryChange) {
         if change == GeometryChange::Changed {
             self.dirty = true;
+            let _ = self.host.mark_geometry_changed();
         }
     }
 

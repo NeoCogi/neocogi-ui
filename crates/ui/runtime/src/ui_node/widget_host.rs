@@ -16,6 +16,8 @@ pub(crate) struct HostState {
     pub(crate) dispatch_order_changed: Cell<bool>,
     /// Conservative count of live dispatcher-bearing nodes, including unmounted roots.
     pub(crate) dispatcher_count: Cell<usize>,
+    /// Conservative uncollected geometry notification; mutation and observation may signal it.
+    pub(crate) changes_pending: Cell<bool>,
     /// Construction is reached weakly so widgets cannot keep the owning runtime alive.
     pub(crate) factory: RefCell<std::rc::Weak<super::node_factory::NodeFactory>>,
     /// Logical runtime lifetime, independent of reference counts.
@@ -30,6 +32,7 @@ impl HostState {
 
     /// Preserves the first failure so later callbacks cannot accidentally clear it.
     pub(crate) fn fail(&self, error: NcStatus) {
+        self.changes_pending.set(true);
         if self.error.get().is_none() {
             self.error.set(Some(error));
         }
@@ -44,6 +47,12 @@ pub(crate) struct WidgetHost {
 }
 
 impl IWidgetHost for WidgetHost {
+    /// Notification is not a widget mutation and remains legal during recovery/collection.
+    fn mark_geometry_changed(&self) -> Result<(), NcStatus> {
+        self.check_open()?;
+        self.state.changes_pending.set(true);
+        Ok(())
+    }
     /// Clones only the installed platform capability, without exposing retained runtime state.
     fn clipboard(&self) -> Result<ComPtr<neocogi_ui_core_contracts::ITextClipboardAbi>, NcStatus> {
         self.check_mutation()?;

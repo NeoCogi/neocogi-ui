@@ -297,7 +297,7 @@ impl neocogi_ui::LeafContent for TopologyEdit {
         Ok(Size { width: 10, height: 10 })
     }
     /// No drawing is needed to execute a real mounted leaf.
-    fn paint(&self, _: WidgetPaint, _: &mut neocogi_ui::Painter<'_>) -> Result<(), NcStatus> {
+    fn paint(&mut self, _: WidgetPaint, _: &mut neocogi_ui::Painter<'_>) -> Result<(), NcStatus> {
         Ok(())
     }
 
@@ -369,7 +369,7 @@ fn final_runtime_release_does_not_leak_a_borrowed_widget_or_its_private_inbox() 
         local.with_mut(|_| ()).unwrap();
         drop(ui);
         assert!(weak.upgrade().is_none(), "runtime Drop must destroy queued values before returning");
-        let mut widget = view.node_interface().unwrap();
+        let widget = view.node_interface().unwrap();
         assert_eq!(widget.properties(), Err(neocogi_com::NC_E_DROPPED));
         if explicit_close {
             assert_eq!(widget.properties(), Err(neocogi_com::NC_E_DROPPED));

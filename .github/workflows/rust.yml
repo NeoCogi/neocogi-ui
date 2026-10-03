@@ -60,6 +60,8 @@ jobs:
       # Optional benchmark clients must compile after every ownership/ABI migration.
       - name: Compile the real COM performance harness
         run: cargo check -p neocogi-demo-smoke --no-default-features --features benchmark,glow --bin neocogi-com-bench
+      - name: Build the independent provider before designer discovery
+        run: cargo rustc -p neocogi-example-ui-extension --lib --crate-type cdylib --features dynamic-plugin
       - name: Exercise the real designer and theme editor
         env:
           SDL_VIDEODRIVER: offscreen

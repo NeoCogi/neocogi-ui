@@ -146,3 +146,41 @@ Detailed menu navigation and ownership live in the [menu guide](MENUS.md).
 The source and its runtime tests are authoritative for surface transitions;
 [this overview's event walkthrough test](../src/runtime/tests/documentation.rs)
 covers the application-facing ownership boundary.
+
+## Geometry mutation notification
+
+IWidgetHost::mark_geometry_changed and IWidget::take_change form one protocol for
+all providers, including independently generated C plugins. Notify conservatively
+for measurement, placement and routing policy changes on hidden/unmounted widgets
+as well as visible ones. Keep local sticky changes until collection; return
+NoChange without clearing prior mutations. Post-commit failures retain the marker
+and notification. Pre-commit rejection may conservatively notify without mutation.
+Observation may notify for recovery but still cannot mutate widget state.
+
+RuntimeStorage owns forest synchronization. It takes the host notification before
+collecting every retained tree; errors restore it, and notifications during
+collection survive. Root measurement/placement consume the already synchronized
+state and do not poll again. Truthful Changed update results and topology edits
+notify internally. Unannounced external mutation is a provider contract violation.
+Idle updates perform zero take_change calls once collection settles.
+
+Each retained ComNode keeps one concrete factory service lease. Metrics, painter
+and nested layout services are borrowed within synchronous calls; no per-node
+service copies exist. The factory's child registry is weak and owns no forest.
+Retained scope tokens still expire and nested foreign layout uses the same service
+stack. This reduces ownership handles without imposing a node-size target.
+
+The surface forest's types/index/chronology remain in roots.rs. Its lifecycle module
+owns validated membership and visibility changes; interaction owns cross-surface
+input/focus/menu policy; traversal owns committed geometry and paint; synchronization
+owns forest marker collection and public copied policy. All derive from the same
+forest; the split adds no secondary surface owner or lifecycle representation.
+
+Application Controller calls EventModel::settle when its inbox is empty. The demo
+host invokes AppState::synchronize at that boundary for deferred publication. The
+runtime reconciles geometry/topology signaled even by false-returning callbacks
+before routing more input. Such work charges the existing bounded budget. Outer
+editor geometry changes occur there; after_update renders independent previews
+and mutable leaf paint accepts completed images under existing scope authority.
+The outer editor needs one update. Release gesture grouping ends only after every
+command from the release frame has been consumed.

@@ -11,31 +11,42 @@ use std::{
 };
 
 /// A fixture supplies plain owned state and a captureless handler, never a borrowed callback.
-pub struct TestApp<State: 'static, Message: 'static> {
+pub struct TestApp<State: 'static, Message: 'static, Context: 'static = ()> {
     /// Exact typed allocation used for direct assertions and ordinary model edits.
-    local: LocalCom<Controller<Model<State, Message>>>,
+    local: LocalCom<Controller<Model<State, Message, Context>>>,
     /// Runtime projection resolved once and reused for every tested frame.
     owner: ComPtr<IApplicationDispatcherAbi>,
 }
 
 /// Concrete fixture behavior; its state and protocol remain private to the test binary.
-struct Model<State, Message> {
+struct Model<State, Message, Context> {
     /// Authoritative mutable assertions, controls and expected outcomes.
     state: State,
     /// Captureless behavior receives exclusive state after the COM gate succeeds.
     handle: fn(&mut State, Message) -> Result<(), NcStatus>,
+    /// Immutable concrete services used by the empty-inbox hook.
+    context: Context,
+    /// Captureless hook exercises production deferred publication under controller admission.
+    settle: fn(&mut State, &Context) -> Result<bool, NcStatus>,
 }
-impl<State: 'static, Message: 'static> EventModel for Model<State, Message> {
+impl<State: 'static, Message: 'static, Context: 'static> EventModel for Model<State, Message, Context> {
     type Message = Message;
+    fn settle(&mut self) -> Result<bool, NcStatus> { (self.settle)(&mut self.state, &self.context) }
     /// Delegates one dequeued value without introducing another borrow boundary.
     fn handle(&mut self, message: Message) -> Result<(), NcStatus> {
         (self.handle)(&mut self.state, message)
     }
 }
 impl<State: 'static, Message: 'static> TestApp<State, Message> {
-    /// Moves the receiver and complete test model into one persistent COM allocation.
+    /// Moves the receiver and test state into one production controller.
     pub fn new(state: State, messages: Receiver<Message>, handle: fn(&mut State, Message) -> Result<(), NcStatus>) -> Self {
-        let local = Controller::into_local(Controller::new(Model { state, handle }, messages));
+        Self::with_context(state, messages, handle, (), |_, _| Ok(false))
+    }
+}
+impl<State: 'static, Message: 'static, Context: 'static> TestApp<State, Message, Context> {
+    /// Supplies explicit concrete services for the same empty-inbox hook used by real hosts.
+    pub fn with_context(state: State, messages: Receiver<Message>, handle: fn(&mut State, Message) -> Result<(), NcStatus>, context: Context, settle: fn(&mut State, &Context) -> Result<bool, NcStatus>) -> Self {
+        let local = Controller::into_local(Controller::new(Model { state, handle, context, settle }, messages));
         let owner = local.query().expect("Controller declares IApplicationDispatcher");
         Self { local, owner }
     }
@@ -54,15 +65,15 @@ impl<State: 'static, Message: 'static> TestApp<State, Message> {
 }
 
 /// Maps a typed local guard to fixture state without an erased pointer or separate cell.
-struct StateGuard<'a, State: 'static, Message: 'static>(LocalMut<'a, Controller<Model<State, Message>>>);
-impl<State, Message> Deref for StateGuard<'_, State, Message> {
+struct StateGuard<'a, State: 'static, Message: 'static, Context: 'static>(LocalMut<'a, Controller<Model<State, Message, Context>>>);
+impl<State, Message, Context> Deref for StateGuard<'_, State, Message, Context> {
     type Target = State;
     /// The underlying COM lease keeps this exact allocation alive and exclusively borrowed.
     fn deref(&self) -> &State {
         &self.0.model.state
     }
 }
-impl<State, Message> DerefMut for StateGuard<'_, State, Message> {
+impl<State, Message, Context> DerefMut for StateGuard<'_, State, Message, Context> {
     /// Reborrowing the lease cannot overlap another local or foreign mutation.
     fn deref_mut(&mut self) -> &mut State {
         &mut self.0.model.state

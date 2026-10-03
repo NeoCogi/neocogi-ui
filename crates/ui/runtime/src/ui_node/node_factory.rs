@@ -36,7 +36,7 @@ pub(crate) struct NodeFactory {
 
 impl NodeFactory {
     /// Validates every fallible capability query before claiming the sole attachment.
-    pub(crate) fn mount_node(&self, mount: neocogi_com::ComBox<IWidgetAbi>, parent: Option<&Rc<ChildStore>>) -> Result<crate::Node, (NcStatus, neocogi_com::ComBox<IWidgetAbi>)> {
+    pub(crate) fn mount_node(self: &Rc<Self>, mount: neocogi_com::ComBox<IWidgetAbi>, parent: Option<&Rc<ChildStore>>) -> Result<crate::Node, (NcStatus, neocogi_com::ComBox<IWidgetAbi>)> {
         let prepared = (|| {
             self.check_edit()?;
             self.attaching.set(true);
@@ -98,16 +98,14 @@ impl NodeFactory {
         // Read after mount callbacks so their legitimate drops are not overwritten.
         self.state.dispatcher_count.set(self.state.dispatcher_count.get().checked_add(usize::from(dispatcher.is_some())).expect("attachment prevented count increases"));
         self.state.dispatch_order_changed.set(true);
+        self.state.changes_pending.set(true);
         Ok(crate::Node::com_widget(ComNode {
             widget: mount,
             dispatcher,
             dirty: Cell::new(false),
             layout,
             properties,
-            metrics: self.metrics.clone(),
-            painter: self.painter.clone(),
-            layout_service: self.layout.clone(),
-            host: self.state.clone(),
+            services: self.clone(),
         }))
     }
 

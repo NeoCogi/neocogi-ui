@@ -56,7 +56,7 @@ impl<const KEYBOARD: u16> LeafContent for Probe<KEYBOARD> {
         })
     }
     /// Records the checked paint snapshot without introducing another rendering implementation.
-    fn paint(&self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
+    fn paint(&mut self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
         let mut observations = self.observations.borrow_mut();
         observations.paints.push(state);
         if let Some(color) = observations.color {

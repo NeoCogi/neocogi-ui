@@ -106,6 +106,10 @@ pub trait AppState: 'static {
         Ok(true)
     }
 
+    /// Settles deferred geometry/publication at an empty-inbox boundary during guarded dispatch.
+    /// The host/runtime borrows no tree here. Native rendering belongs in after_update.
+    fn synchronize(&mut self, _host: &Host, _size: Size) -> Result<(), NcStatus> { Ok(()) }
+
     /// Runs after input dispatch returns and before painting. Embedded renderers may
     /// safely install resources, render previews, and synchronize paint-only content here.
     fn after_update(&mut self, _host: &Host, _size: Size) -> Result<(), NcStatus> {
@@ -185,10 +189,11 @@ impl Host {
     pub fn run<State: AppState>(self, state: State, events: std::sync::mpsc::Receiver<State::Message>) -> Result<(), HostError> {
         // Both local frame hooks and foreign dispatch use this allocation's
         // existing COM borrow gate. Resolve its owner projection only once.
-        let state = neocogi_ui::events::Controller::into_local(neocogi_ui::events::Controller::new(Application { state }, events));
+        let host = std::rc::Rc::new(self);
+        let state = neocogi_ui::events::Controller::into_local(neocogi_ui::events::Controller::new(Application { state, host: host.clone(), size: Size::default() }, events));
         let owner = state.query()?;
         let driver = Driver {
-            host: self,
+            host,
             state,
             owner,
             remaining: frame_limit()?,
@@ -277,9 +282,18 @@ impl IInputSink for PollInput {
 struct Application<State: AppState> {
     /// Ordinary authoritative application fields, owned by the persistent controller.
     state: State,
+    /// Shared immutable host services own no application controller and cannot form a cycle.
+    host: std::rc::Rc<Host>,
+    /// Current positive drawable size installed before entering the UI update.
+    size: Size,
 }
 impl<State: AppState> neocogi_ui::events::EventModel for Application<State> {
     type Message = State::Message;
+    /// Uses the real application gate while the outer UI has released traversal ownership.
+    fn settle(&mut self) -> Result<bool, NcStatus> {
+        self.state.synchronize(&self.host, self.size)?;
+        Ok(false)
+    }
     /// Runtime delivery holds exclusive controller access before receiving a message.
     fn handle(&mut self, message: Self::Message) -> Result<(), NcStatus> {
         self.state.update(message)
@@ -300,7 +314,7 @@ enum FrameOutcome {
 /// Concrete loop ownership is shared by the native iteration and browser scheduling adapter.
 struct Driver<State: AppState> {
     /// Owns exactly one UI/renderer pair for this application.
-    host: Host,
+    host: std::rc::Rc<Host>,
     /// Persistent owned state; short local guards end before entering UI dispatch.
     state: neocogi_com::LocalCom<neocogi_ui::events::Controller<Application<State>>>,
     /// Checked once at construction and borrowed for every frame without querying.
@@ -352,6 +366,7 @@ impl<State: AppState> Driver<State> {
         }
         // Apply frame edits before consuming the input just polled. Handlers can prepare work for
         // the next frame callback; this frame's direct edits and nested events settle in one update.
+        self.state.try_borrow_mut()?.model.size = size;
         if !self.state.try_borrow_mut()?.model.state.frame(host, size, seconds)? {
             return Ok(FrameOutcome::Stopped);
         }

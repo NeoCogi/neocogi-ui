@@ -1,15 +1,13 @@
 //! Concrete COM ownership at the retained node boundary.
 use crate::boundary::{copied_rect, local_rect};
-use super::{HostState, Observation};
+use super::Observation;
 use neocogi_ui_core_contracts::*;
 use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
 use std::{cell::Cell, rc::Rc};
-use super::paint_service::PaintService;
 use crate::{AtlasHandle, Dimensioni, WidgetOption, KeyboardBehavior, WidgetUpdateCtx, WidgetPaintCtx, UiInputEvent, Constraints, Skin};
 use crate::Change;
 use super::{
     child_store::{ChildStore, ChildTransaction},
-    layout_service::LayoutService,
 };
 
 /// Exactly one cached geometry capability per mounted widget, with one authoritative child store for branches.
@@ -39,14 +37,10 @@ pub(crate) struct ComNode {
     pub(super) layout: NodeLayoutKind,
     /// Validated policy refreshed only at mutable synchronization boundaries.
     pub(super) properties: WidgetProperties,
-    /// Owned immutable resource metrics.
-    pub(super) metrics: ComPtr<ITextMetricsAbi>,
-    /// Owned scope-checked recorder, never a wrapper around WidgetPaintCtx.
-    pub(super) painter: PaintService,
-    /// Shared owned service supports nested container calls and rejects retained stale tokens.
-    pub(super) layout_service: LayoutService,
-    /// Error/phase state without a pointer back into the retained tree.
-    pub(super) host: Rc<HostState>,
+    /// One concrete service lease; borrows metrics, painter and layout for each synchronous call.
+    /// The factory owns no tree (its child registry is weak), so this cannot form an ownership cycle.
+    /// Retained foreign scope capabilities still expire through their original service tokens.
+    pub(super) services: Rc<super::node_factory::NodeFactory>,
 }
 
 impl ComNode {
@@ -77,7 +71,7 @@ impl ComNode {
         let refreshed = {
             // Restrict observational authority to the external call. Releasing
             // it before mutation lets the copied slot remain an ordinary field.
-            let _phase = Observation::begin(&self.host);
+            let _phase = Observation::begin(&self.services.state);
             self.widget.properties().and_then(|properties| {
                 properties.validate()?;
                 Ok(properties)
@@ -88,6 +82,7 @@ impl ComNode {
                 let previous = std::mem::replace(&mut self.properties, properties);
                 if previous.options != properties.options || previous.frame != properties.frame {
                     self.dirty.set(true);
+                    self.services.state.changes_pending.set(true);
                 }
             }
             Err(error) => {
@@ -122,22 +117,22 @@ impl ComNode {
     }
     /// Starts an observational scope and gives the widget direct scoped frame recording access.
     pub(crate) fn paint(&mut self, ctx: &mut WidgetPaintCtx<'_>) -> Result<(), NcStatus> {
-        let _phase = Observation::begin(&self.host);
-        self.painter.paint(&self.widget, ctx)
+        let _phase = Observation::begin(&self.services.state);
+        self.services.painter.paint(&self.widget, ctx)
     }
 }
 
 impl ComNode {
     /// Preserves finite/unbounded constraints across the temporary ABI conversion.
     pub(crate) fn measure(&self, _skin: &Skin, _atlas: &AtlasHandle, constraints: Constraints) -> Result<Dimensioni, NcStatus> {
-        let _phase = Observation::begin(&self.host);
+        let _phase = Observation::begin(&self.services.state);
         let bounds = super::layout_service::limits(constraints);
         let result = match &self.layout {
             NodeLayoutKind::Leaf(layout) => {
                 let mut layout = layout.clone();
-                layout.measure(bounds, self.metrics.as_com_ref())
+                layout.measure(bounds, self.services.metrics.as_com_ref())
             }
-            NodeLayoutKind::Branch { policy, children, .. } => self.layout_service.measure(children, policy, bounds),
+            NodeLayoutKind::Branch { policy, children, .. } => self.services.layout.measure(children, policy, bounds),
         };
         match result {
             Ok(size) if size.width >= 0 && size.height >= 0 => Ok(Dimensioni::new(size.width, size.height)),
@@ -145,7 +140,7 @@ impl ComNode {
                 let error = result.err().unwrap_or(NC_E_INVALID_ARG);
                 // Foreign container policy may ignore this returned failure; preserve the
                 // boundary guard as well as returning it through ordinary traversal.
-                self.host.fail(error);
+                self.services.state.fail(error);
                 // Keep the ancestor path dirty until a successful retry. A
                 // failed measurement must never become a cached zero preference.
                 self.dirty.set(true);
@@ -166,8 +161,8 @@ impl ComNode {
         let NodeLayoutKind::Branch { policy, children, .. } = &self.layout else {
             return Ok(());
         };
-        let _phase = Observation::begin(&self.host);
-        match self.layout_service.place(children, policy, traversal, copied_rect(rect)) {
+        let _phase = Observation::begin(&self.services.state);
+        match self.services.layout.place(children, policy, traversal, copied_rect(rect)) {
             Ok(output) => {
                 current.layout.content_size = Dimensioni::new(output.content.width, output.content.height);
                 current.layout.children.clip = local_rect(output.viewport);
@@ -177,7 +172,7 @@ impl ComNode {
             }
             Err(error) => {
                 // Retain the guard for external policy that discards a child Result.
-                self.host.fail(error);
+                self.services.state.fail(error);
                 self.dirty.set(true);
                 current.invalidate_measurement();
                 Err(error)
@@ -193,7 +188,7 @@ impl ComNode {
         match children.take() {
             Ok(children) => Some(children),
             Err(error) => {
-                self.host.fail(error);
+                self.services.state.fail(error);
                 self.dirty.set(true);
                 None
             }
@@ -210,12 +205,12 @@ impl ComNode {
         let NodeLayoutKind::Branch { policy, .. } = &self.layout else {
             return true;
         };
-        let _phase = Observation::begin(&self.host);
+        let _phase = Observation::begin(&self.services.state);
         let (event, bytes) = super::input_contract::event(Some(input));
         match policy.accepts_event(event, NcCopyFromBufferOffset::new(0, bytes)) {
             Ok(accepts) => accepts,
             Err(error) => {
-                self.host.fail(error);
+                self.services.state.fail(error);
                 false
             }
         }
@@ -236,7 +231,7 @@ impl ComNode {
             self.dirty.set(true);
         }
         let change = {
-            let _phase = Observation::begin(&self.host);
+            let _phase = Observation::begin(&self.services.state);
             self.widget.take_change()
         };
         match change {
@@ -261,6 +256,7 @@ impl ComNode {
     /// Records the geometry result of an update until traversal propagates it.
     pub(crate) fn mark_measurement_dirty(&self) {
         self.dirty.set(true);
+        self.services.state.changes_pending.set(true);
     }
 }
 
@@ -268,9 +264,10 @@ impl Drop for ComNode {
     /// Removing the node releases its unique widget owner through normal field
     /// destruction. Weak dispatch snapshots cannot prolong its resource lifetime.
     fn drop(&mut self) {
-        self.host.dispatch_order_changed.set(true);
+        self.services.state.dispatch_order_changed.set(true);
+        self.services.state.changes_pending.set(true);
         if self.dispatcher.is_some() {
-            self.host.dispatcher_count.set(self.host.dispatcher_count.get().checked_sub(1).expect("counted dispatcher node"));
+            self.services.state.dispatcher_count.set(self.services.state.dispatcher_count.get().checked_sub(1).expect("counted dispatcher node"));
         }
     }
 }

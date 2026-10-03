@@ -205,7 +205,10 @@ impl Widget for DisclosureHeader {
             Some(crate::KeyboardAction::Decrease | crate::KeyboardAction::Increase) | None => {}
         }
 
-        // The header size is fixed; the parent independently collects the shared expansion marker.
+        // The header's size is fixed, but its parent must observe the shared expansion change.
+        if self.model.dirty.get() {
+            self.runtime.state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
+        }
         crate::Change::NoChange
     }
 
@@ -471,6 +474,7 @@ impl neocogi_ui_nodes_contracts::Disclosure for Disclosure {
         } else {
             self.collapse();
         }
+        self.runtime_mut().state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
         Ok(())
     }
 

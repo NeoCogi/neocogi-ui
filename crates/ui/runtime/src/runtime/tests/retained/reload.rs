@@ -650,7 +650,7 @@ fn application_handles_real_click_and_closed_form_retires() {
     .unwrap();
     let component = slot.component().unwrap();
     let mut button = component.widget::<ButtonAbi>("button").unwrap();
-    let mut root = component.root().unwrap().node_interface().unwrap();
+    let root = component.root().unwrap().node_interface().unwrap();
     fixture.frame(VIEW).unwrap();
     pointer(&fixture.ui, Point { x: 30, y: 30 }, true);
     pointer(&fixture.ui, Point { x: 30, y: 30 }, false);
