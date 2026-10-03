@@ -440,9 +440,6 @@ macro_rules! direct_scrolling_impl {
             fn set_offset(&mut self, offset: neocogi_ui_core_contracts::Point) -> Result<(), neocogi_com::NcStatus> {
                 <$name as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
                 self.model.set_offset(crate::Vec2i::new(offset.x, offset.y));
-                <$name as crate::widget_object::HostedWidget>::runtime_mut(self)
-                    .state
-                    .record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
                 Ok(())
             }
 
@@ -450,9 +447,6 @@ macro_rules! direct_scrolling_impl {
             fn set_enabled(&mut self, enabled: bool) -> Result<(), neocogi_com::NcStatus> {
                 <$name as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
                 self.model.set_enabled(enabled);
-                <$name as crate::widget_object::HostedWidget>::runtime_mut(self)
-                    .state
-                    .record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
                 Ok(())
             }
 
@@ -460,9 +454,6 @@ macro_rules! direct_scrolling_impl {
             fn scroll_to_end(&mut self) -> Result<(), neocogi_com::NcStatus> {
                 <$name as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
                 self.model.scroll_to_end();
-                <$name as crate::widget_object::HostedWidget>::runtime_mut(self)
-                    .state
-                    .record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
                 Ok(())
             }
 
@@ -473,9 +464,6 @@ macro_rules! direct_scrolling_impl {
                     return Err(neocogi_com::NC_E_INVALID_ARG);
                 }
                 self.model.reveal(crate::boundary::local_rect(rect));
-                <$name as crate::widget_object::HostedWidget>::runtime_mut(self)
-                    .state
-                    .record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
                 Ok(())
             }
         }

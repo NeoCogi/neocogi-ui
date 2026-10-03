@@ -73,7 +73,6 @@ pub(crate) fn create_storage(assets: crate::assets::ImportedAssets, compositor: 
         updating: Cell::new(false),
         menus: RefCell::new(Vec::new()),
         dispatch_widgets: RefCell::new(DispatchWidgets::default()),
-        last_synced_generation: Cell::new(0),
     })
 }
 
@@ -123,8 +122,6 @@ pub(crate) struct RuntimeStorage {
     /// The shared runtime needs interior mutability only for checkout/return;
     /// scheduling uses a local collection and &mut access, without a callback-spanning borrow.
     dispatch_widgets: RefCell<DispatchWidgets>,
-    /// Last synchronized widget mutation epoch; avoids redundant forest walks when idle.
-    last_synced_generation: Cell<u64>,
 }
 
 /// Temporary association between an actual COM widget and an existing retained root.
@@ -163,10 +160,6 @@ impl RuntimeStorage {
 
     /// Drains setter changes throughout the forest, including hidden subtrees.
     fn collect_changes(&self, context: &mut RuntimeContext) -> Result<(), NcStatus> {
-        let current_gen = self.factory.state.dirty_generation.get();
-        if current_gen == self.last_synced_generation.get() {
-            return Ok(());
-        }
         self.prune_mounts(&context.window_manager);
         let _phase = Observation::begin(&self.factory.state);
         self.factory.state.error.set(None);
@@ -182,7 +175,6 @@ impl RuntimeStorage {
             self.pending.set(true);
             return Err(error);
         }
-        self.last_synced_generation.set(current_gen);
         Ok(())
     }
 }
@@ -432,7 +424,6 @@ impl Runtime {
     /// Performs one guarded update; the outer operation releases weak dispatch snapshots.
     fn run_update_cycle(&self, size: Size, dispatcher: Option<ComRef<'_, IApplicationDispatcherAbi>>, widgets: &mut DispatchWidgets) -> Result<(), NcStatus> {
         let storage = &self.storage;
-        storage.factory.state.error.set(None);
         let dimensions = Dimensioni::new(size.width, size.height);
         {
             let mut context = storage.context()?;

@@ -13,8 +13,6 @@ pub(crate) struct HostState {
     pub(crate) clipboard: RefCell<Option<ComPtr<neocogi_ui_core_contracts::ITextClipboardAbi>>>,
     /// Topology edits invalidate the runtime's reusable descendant-first widget snapshot.
     pub(crate) dispatch_order_changed: Cell<bool>,
-    /// Monotonically increasing epoch counter incremented whenever any widget or topology changes geometry.
-    pub(crate) dirty_generation: Cell<u64>,
     /// Construction is reached weakly so widgets cannot keep the owning runtime alive.
     pub(crate) factory: RefCell<std::rc::Weak<super::node_factory::NodeFactory>>,
     /// Logical runtime lifetime, independent of reference counts.
@@ -30,7 +28,6 @@ impl Default for HostState {
         Self {
             clipboard: RefCell::default(),
             dispatch_order_changed: Cell::new(true),
-            dirty_generation: Cell::new(1),
             factory: RefCell::default(),
             closed: Cell::new(false),
             observing: Cell::new(false),
@@ -40,17 +37,12 @@ impl Default for HostState {
 }
 
 impl HostState {
-    /// Bumps the dirty generation counter when a component mutates or topology changes.
-    pub(crate) fn mark_dirty(&self) {
-        self.dirty_generation.set(self.dirty_generation.get().wrapping_add(1));
-    }
 
     /// Preserves the first failure so later callbacks cannot accidentally clear it.
     pub(crate) fn fail(&self, error: NcStatus) {
         if self.error.get().is_none() {
             self.error.set(Some(error));
         }
-        self.mark_dirty();
     }
 }
 
@@ -96,12 +88,6 @@ impl IWidgetHost for WidgetHost {
         } else {
             Ok(())
         }
-    }
-    /// Signals to the host that a mounted component has committed a geometry or layout change.
-    fn mark_dirty(&self) -> Result<(), NcStatus> {
-        self.check_open()?;
-        self.state.mark_dirty();
-        Ok(())
     }
 }
 

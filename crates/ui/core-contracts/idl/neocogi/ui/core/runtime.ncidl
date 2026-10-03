@@ -324,8 +324,6 @@ interface IWidgetHost {
     fn check_open(&self) -> Result<()>;
     /// Rejects closed runtimes and mutation during layout or painting.
     fn check_mutation(&self) -> Result<()>;
-    /// Signals to the host that a mounted component has committed a geometry or layout change.
-    fn mark_dirty(&self) -> Result<()>;
 }
 
 #[version(2)]
