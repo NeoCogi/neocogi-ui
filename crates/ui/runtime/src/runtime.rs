@@ -3,7 +3,7 @@
 use crate::boundary::{local_rect, text};
 use crate::ui_node::{HostState, Observation, WidgetHost};
 use neocogi_ui_core_contracts::*;
-use neocogi_com::{ComPtr, ComRef, IUnknown, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
+use neocogi_com::{ComPtr, ComRef, IUnknown, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, NC_E_INVALID_TAG, com_object};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -541,9 +541,9 @@ impl Runtime {
                         spend_dispatch_budget(remaining)?;
                     } else { return Ok(()); }
                 },
-                // Fieldless wire enums preserve raw values for ABI compatibility. A foreign
-                // result outside this version's three outcomes cannot authorize continued input.
-                _ => return Err(NC_E_INVALID_ARG),
+                // Raw enum constructors admit unknown values; match the generated ABI's
+                // invalid-tag rejection rather than authorizing continued input.
+                _ => return Err(NC_E_INVALID_TAG),
             }
         }
     }

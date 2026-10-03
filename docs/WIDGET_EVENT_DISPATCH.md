@@ -130,6 +130,7 @@ enum: `MessageHandled`, `PendingChangesApplied`, or `Idle`. Both work outcomes
 charge the shared budget and revisit child dispatch/layout before later input,
 even when applying changes only posts a private message without a geometry edit.
 `Idle` ends the boundary only when geometry/topology notifications are quiet too.
+Unknown wire values are rejected with `NC_E_INVALID_TAG` before later input.
 Busy admission cannot consume a message or enter the pending-change hook; errors
 stop the update, preserve committed edits, and leave retry policy with the model.
 Geometry edits still require their normal sticky markers and host notifications.
