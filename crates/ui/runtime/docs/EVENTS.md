@@ -9,7 +9,7 @@ component consumes its children's messages and emits its own public results
 upward. The application consumes the final public messages. A concrete application queue
 can implement several `*EventQueue` traits and share one allocation across widgets
 through `*_with_queue`. Applications may use `Controller<Model>`; a behavioral composite owns its inbox
-and implements `IWidget::dispatch_next` on the same concrete widget.
+and implements `IWidgetDispatcher::dispatch_next` on the same concrete widget.
 
 ## Application construction and frames
 
@@ -128,11 +128,18 @@ dispatching queued facts. See
 ## Composite ownership
 
 A behavioral composite owns its model, receiver and child handles inside its
-concrete widget allocation. It implements `IWidget::dispatch_next(&mut self)`;
-ordinary controls and structural containers return `Ok(false)` and own no inbox.
-The built-in `HostedWidget` and application `LeafContent` helpers supply that
-no-op default. IDL methods remain declarations; independent plugins implement
-the common method explicitly.
+concrete widget allocation. It implements `IWidgetDispatcher::dispatch_next(&mut self)`;
+ordinary controls and structural containers expose no dispatcher and own no inbox.
+Application content opts in with `DispatchingLeafContent` and
+`WidgetFactory::dispatching_leaf`; passive content uses `LeafContent` and `leaf`.
+Independent plugins advertise the optional interface on their same exclusive
+allocation. Only an actual NOINTERFACE response means the capability is absent.
+
+Node ownership retains the typed weak projection. Each update collects a temporary
+postorder snapshot from actual widget/surface parent edges, using reverse chronology
+between siblings. Surface raising and callback topology changes invalidate that
+selection before another receiver runs. Every returned exit clears its weak entries;
+queue-free hosts skip collection entirely. No runtime or tree borrow spans a handler.
 
 Construct child controls with projections of the composite's concrete queue. The
 composite emits declared public results into its enclosing behavioral parent's

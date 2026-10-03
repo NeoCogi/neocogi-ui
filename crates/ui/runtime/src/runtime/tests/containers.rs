@@ -59,10 +59,7 @@ impl TestContainer {
 }
 impl IWidget for TestContainer {
     /// This widget forwards outputs and has no private inbox.
-    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
-        self.state.writable()?;
-        Ok(false)
-    }
+
 
     /// Common authority carries no runtime tree pointer.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {

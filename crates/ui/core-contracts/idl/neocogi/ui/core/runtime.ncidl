@@ -32,7 +32,7 @@ interface IPainter {
     fn text_run(&mut self, scope: PaintScope, font: PaintFont, position: Point, rgba: u32, text: &[u8]) -> Result<()>;
 }
 
-#[version(2)]
+#[version(3)]
 /// Common widget capability; factories return one ComBox owner, containers consume it,
 /// and application observers use WeakComBox. Owner removal rejects new calls;
 /// admitted calls finish before provider destruction. There is no widget close method.
@@ -41,13 +41,6 @@ interface IWidget {
     fn host(&self) -> Result<ComPtr<IWidgetHost>>;
     /// Claims the only tree attachment; a second call fails without changing state.
     fn mount(&mut self) -> Result<()>;
-
-    /// Handles at most one private message outside input, layout and paint traversal.
-    /// Widgets without an inbox return false. A handler error consumes only the
-    /// attempted message. Owner destruction disconnects private delivery permanently.
-    /// A handler may request its own removal; terminal cleanup must wait until
-    /// this mutable call returns, and no successor may run after removal.
-    fn dispatch_next(&mut self) -> Result<bool>;
 
     /// Returns effective frame, focus and input policy, including behavior-derived flags.
     /// This observation is not requested configuration and must not be written back as such.
@@ -77,6 +70,19 @@ interface IWidget {
     fn take_change(&mut self) -> Result<GeometryChange>;
     /// Records this widget's visual output within a validated paint invocation.
     fn paint(&mut self, scope: PaintScope, state: WidgetPaint, painter: &IPainter) -> Result<()>;
+}
+
+#[version(1)]
+/// Optional private receiver/model behavior on the same exclusive widget allocation.
+/// Passive widgets must not expose this capability. Its weak projection shares the widget's
+/// lifetime and mutable gate. The runtime retains projections only on owned nodes and in
+/// transient descendant-first update snapshots; no callback runs under a traversal borrow.
+interface IWidgetDispatcher {
+    /// Attempts at most one private message. False means idle; true charges the shared
+    /// bounded update budget and reconsiders descendant work. Handler errors propagate
+    /// unchanged and leave later messages queued. Topology changes require recollection
+    /// even when the handler reports false. Removed receivers are never entered.
+    fn dispatch_next(&mut self) -> Result<bool>;
 }
 
 #[version(1)]

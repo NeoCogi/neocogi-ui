@@ -108,12 +108,6 @@ pub(crate) trait HostedWidget: WidgetAlgorithm {
     fn runtime(&self) -> &WidgetRuntime;
     /// Borrows common state exclusively for mutation, resource refresh, or rendering.
     fn runtime_mut(&mut self) -> &mut WidgetRuntime;
-    /// Handles one private message when this concrete widget owns an inbox.
-    /// Ordinary controls send to their behavioral parent and have nothing to drain.
-    fn dispatch_message(&mut self) -> Result<bool, NcStatus> {
-        Ok(false)
-    }
-
 }
 
 /// Commits one validated semantic font role on a concrete widget allocation.
@@ -184,12 +178,6 @@ macro_rules! direct_widget_phase_impl {
             /// Claims this concrete allocation's only attachment after host validation.
             fn mount(&mut self) -> Result<(), neocogi_com::NcStatus> {
                 <$name as crate::widget_object::HostedWidget>::runtime_mut(self).state.mount()
-            }
-
-            /// Enters private behavior only with ordinary exclusive widget access.
-            fn dispatch_next(&mut self) -> Result<bool, neocogi_com::NcStatus> {
-                <$name as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
-                <$name as crate::widget_object::HostedWidget>::dispatch_message(self)
             }
 
             /// Copies routing and frame policy from the concrete widget and its common options.

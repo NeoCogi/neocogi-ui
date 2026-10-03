@@ -72,6 +72,13 @@ impl NodeFactory {
                 (Err(error), _) if error != neocogi_com::NC_E_NOINTERFACE => return Err(error),
                 (_, Err(error)) | (Err(error), Ok(_)) => return Err(error),
             };
+            let dispatcher = match mount.query_weak::<IWidgetDispatcherAbi>() {
+                Ok(dispatcher) => Some(dispatcher),
+                Err(neocogi_com::NC_E_NOINTERFACE) => None,
+                Err(status) => return Err(status),
+            };
+            // Attachment forbids new node creation; callbacks may still destroy unrelated unmounted nodes.
+            self.state.dispatcher_count.get().checked_add(usize::from(dispatcher.is_some())).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
             let properties = widget.properties()?;
             properties.validate()?;
             // All capability and topology checks precede the widget's sole attachment claim.
@@ -81,16 +88,19 @@ impl NodeFactory {
                 // capability/cycle validation and this one-way collection claim.
                 children.claimed.set(true);
             }
-            Ok((layout, properties))
+            Ok((layout, properties, dispatcher))
         })();
-        let (layout, properties) = match prepared {
+        let (layout, properties, dispatcher) = match prepared {
             Ok(prepared) => prepared,
             Err(status) => return Err((status, mount)),
         };
         // No fallible operation follows the mount-once claim.
+        // Read after mount callbacks so their legitimate drops are not overwritten.
+        self.state.dispatcher_count.set(self.state.dispatcher_count.get().checked_add(usize::from(dispatcher.is_some())).expect("attachment prevented count increases"));
         self.state.dispatch_order_changed.set(true);
         Ok(crate::Node::com_widget(ComNode {
             widget: mount,
+            dispatcher,
             dirty: Cell::new(false),
             layout,
             properties,

@@ -31,6 +31,8 @@ pub(super) enum NodeLayoutKind {
 pub(crate) struct ComNode {
     /// Sole widget owner; application proxies and cached layout views hold weak observations.
     pub(super) widget: neocogi_com::ComBox<IWidgetAbi>,
+    /// Cached optional capability owned only as long as this authoritative node.
+    pub(super) dispatcher: Option<neocogi_com::WeakComBox<IWidgetDispatcherAbi>>,
     /// Runtime-returned changes persist until ancestor invalidation consumes them.
     pub(super) dirty: Cell<bool>,
     /// Cached leaf or branch policy with runtime-owned geometry access.
@@ -265,7 +267,12 @@ impl ComNode {
 impl Drop for ComNode {
     /// Removing the node releases its unique widget owner through normal field
     /// destruction. Weak dispatch snapshots cannot prolong its resource lifetime.
-    fn drop(&mut self) { self.host.dispatch_order_changed.set(true); }
+    fn drop(&mut self) {
+        self.host.dispatch_order_changed.set(true);
+        if self.dispatcher.is_some() {
+            self.host.dispatcher_count.set(self.host.dispatcher_count.get().checked_sub(1).expect("counted dispatcher node"));
+        }
+    }
 }
 
 pub(crate) use neocogi_ui_support::frame::local_frame;

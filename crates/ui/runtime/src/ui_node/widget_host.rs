@@ -14,6 +14,8 @@ pub(crate) struct HostState {
     pub(crate) clipboard: RefCell<Option<ComPtr<neocogi_ui_core_contracts::ITextClipboardAbi>>>,
     /// Topology edits invalidate the runtime's reusable descendant-first widget snapshot.
     pub(crate) dispatch_order_changed: Cell<bool>,
+    /// Conservative count of live dispatcher-bearing nodes, including unmounted roots.
+    pub(crate) dispatcher_count: Cell<usize>,
     /// Construction is reached weakly so widgets cannot keep the owning runtime alive.
     pub(crate) factory: RefCell<std::rc::Weak<super::node_factory::NodeFactory>>,
     /// Logical runtime lifetime, independent of reference counts.

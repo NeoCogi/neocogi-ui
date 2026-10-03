@@ -4,9 +4,9 @@ use super::*;
 use neocogi_ui::events::EventModel;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
-#[com_object(interfaces(IWidget, IContainerLayout), ownership = exclusive)]
+#[com_object(interfaces(IWidget, IContainerLayout, IWidgetDispatcher), ownership = exclusive)]
 /// A private inbox and model belong to the mounted widget itself.
-/// The fixture delegates geometry to a real Linear; no dispatcher capability exists.
+/// The fixture delegates geometry to a real Linear; its optional dispatcher shares the composite gate.
 pub(super) struct Composite<Model: EventModel> {
     /// Actual widget policy and child writer supplied by the production provider.
     shell: neocogi_ui::OwnedWidget<neocogi_ui::LinearAbi>,
@@ -42,16 +42,7 @@ impl<Model: EventModel> IWidget for Composite<Model> {
         self.shell.node_interface()?.mount()
     }
     /// Attempts one message with the same mutable COM gate used by editing.
-    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
-        self.shell.node_interface()?.properties()?;
-        match self.messages.try_recv() {
-            Ok(message) => {
-                self.model.handle(message)?;
-                Ok(true)
-            }
-            Err(TryRecvError::Empty | TryRecvError::Disconnected) => Ok(false),
-        }
-    }
+
     /// Geometry policy remains the production layout's policy.
     fn properties(&self) -> Result<WidgetProperties, NcStatus> {
         self.shell.node_interface()?.properties()
@@ -101,5 +92,18 @@ impl<Model: EventModel> IContainerLayout for Composite<Model> {
     /// Retains ordinary filtering behavior for the real input traversal.
     fn accepts_event(&self, event: WidgetEvent, text: NcCopyFromBufferOffset<'_, u8>) -> Result<bool, NcStatus> {
         self.layout.accepts_event(event, text)
+    }
+}
+
+impl<Model: EventModel> IWidgetDispatcher for Composite<Model> {
+    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
+        self.shell.node_interface()?.properties()?;
+        match self.messages.try_recv() {
+            Ok(message) => {
+                self.model.handle(message)?;
+                Ok(true)
+            }
+            Err(TryRecvError::Empty | TryRecvError::Disconnected) => Ok(false),
+        }
     }
 }

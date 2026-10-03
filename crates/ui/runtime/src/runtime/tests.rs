@@ -439,9 +439,7 @@ impl Drop for RetainingWidget {
 }
 impl IWidget for RetainingWidget {
     /// This widget forwards outputs and has no private inbox.
-    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
-        self.button.dispatch_next()
-    }
+
 
     /// Returns the shared owner without exposing runtime storage.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
@@ -1586,4 +1584,56 @@ fn update_failure_stops_later_roots_without_losing_retry_invalidation() {
     assert_eq!(first.updates.get(), before.0 + 2);
     assert_eq!(later.updates.get(), before.1 + 1);
     assert!(first.measures.get() > before.2);
+}
+
+struct ReviewDispatchTrace {
+    name: &'static str,
+    trace: Rc<RefCell<Vec<&'static str>>>,
+}
+impl neocogi_ui::LeafContent for ReviewDispatchTrace {
+    fn measure(&self, _: LayoutLimits, _: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
+        Ok(Size { width: 20, height: 20 })
+    }
+    fn paint(&self, _: WidgetPaint, _: &mut neocogi_ui::Painter<'_>) -> Result<(), NcStatus> { Ok(()) }
+
+}
+
+#[test]
+fn review_dispatch_cache_follows_raised_root_chronology() {
+    let runtime = runtime();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
+    let trace = Rc::new(RefCell::new(Vec::new()));
+    let first = ui.widgets().dispatching_leaf(ReviewDispatchTrace { name: "first", trace: trace.clone() }, WidgetOptions::NONE).unwrap();
+    let first = ui.window("first", RECT, first).unwrap();
+    let second = ui.widgets().dispatching_leaf(ReviewDispatchTrace { name: "second", trace: trace.clone() }, WidgetOptions::NONE).unwrap();
+    let _second = ui.window("second", RECT, second).unwrap();
+    ui.update(SIZE).unwrap();
+    assert_eq!(&trace.borrow()[..2], &["second", "first"]);
+    trace.borrow_mut().clear();
+    first.raise().unwrap();
+    ui.update(SIZE).unwrap();
+    assert_eq!(&trace.borrow()[..2], &["first", "second"], "a fresh authoritative reverse-chronology snapshot follows raise");
+}
+
+#[test]
+fn review_dispatch_child_surface_precedes_raised_parent() {
+    let runtime = runtime();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
+    let manager: ComPtr<IWindowManagerAbi> = runtime.query().unwrap();
+    let trace = Rc::new(RefCell::new(Vec::new()));
+    let parent = ui.widgets().dispatching_leaf(ReviewDispatchTrace { name: "parent", trace: trace.clone() }, WidgetOptions::NONE).unwrap();
+    let parent = ui.window("parent", RECT, parent).unwrap();
+    let child = ui.widgets().dispatching_leaf(ReviewDispatchTrace { name: "child", trace: trace.clone() }, WidgetOptions::NONE).unwrap();
+    let _child = manager.create_child(parent.as_com_ref(), NcCopyFromBufferOffset::new(0, b"child"), RECT,
+        child.into_interface(), neocogi_com::NcValueRef::new(&IWindowEventBinding::Unobserved).unwrap()).unwrap();
+    parent.raise().unwrap();
+    ui.update(SIZE).unwrap();
+    assert_eq!(&trace.borrow()[..2], &["child", "parent"], "documented descendant-first delivery survives ancestor raising");
+}
+
+impl neocogi_ui::DispatchingLeafContent for ReviewDispatchTrace {
+    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
+        self.trace.borrow_mut().push(self.name);
+        Ok(false)
+    }
 }

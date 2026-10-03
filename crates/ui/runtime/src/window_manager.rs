@@ -250,6 +250,8 @@ pub(crate) struct WindowManager {
     input: Input,
     /// Dimensions of the most recent complete update/layout commit.
     ui_commit: Option<Dimensioni>,
+    /// Conservative surface mutation marker consumed by transient private dispatch selection.
+    dispatch_order_changed: bool,
 }
 
 impl WindowManager {
@@ -285,6 +287,7 @@ impl WindowManager {
             window_cycle_key_down: false,
             input: Input::default(),
             ui_commit: None,
+            dispatch_order_changed: true,
         }
     }
 
@@ -292,7 +295,11 @@ impl WindowManager {
     pub(crate) fn invalidate_ui_commit(&mut self) {
         // Every semantic or input mutation must be followed by an update before paint.
         self.ui_commit = None;
+        self.dispatch_order_changed = true;
     }
+
+    /// Consumes surface changes only after selection can be rebuilt; node edits have their own marker.
+    pub(crate) fn take_dispatch_order_changed(&mut self) -> bool { std::mem::take(&mut self.dispatch_order_changed) }
 
     /// Borrows the atomic resolved skin and atlas installed in this manager.
     pub(crate) fn skin_bundle(&self) -> &SkinBundle {

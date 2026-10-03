@@ -33,12 +33,6 @@ impl Common {
 macro_rules! widget {
     ($name:ident, $keyboard:expr, $frame:expr) => {
         impl IWidget for $name {
-            /// This widget forwards outputs and has no private inbox.
-            fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
-                self.common.state.writable()?;
-                Ok(false)
-            }
-
             /// Borrowing the host is explicit; returning it owns one ordinary COM reference.
             fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
                 Ok(self.common.state.host().add_ref())

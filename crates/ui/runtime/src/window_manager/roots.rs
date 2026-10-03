@@ -888,6 +888,14 @@ pub(super) struct SurfaceForest {
 }
 
 impl SurfaceForest {
+    /// Walks one authoritative subtree in postorder without callbacks or new adjacency storage.
+    fn collect_dispatch_tree(&self, key: SurfaceKey, drivers: &mut Vec<neocogi_com::WeakComBox<neocogi_ui_core_contracts::IWidgetDispatcherAbi>>) -> Result<(), neocogi_com::NcStatus> {
+        let entry = &self.index[&key];
+        for child in entry.children.iter().rev() { self.collect_dispatch_tree(*child, drivers)?; }
+        if let SurfaceBody::Widgets { root, .. } = &self.nodes[entry.position].surface.body { root.collect_dispatch_widgets(drivers)?; }
+        Ok(())
+    }
+
     /// Preflights exactly the requested surface family using the existing index.
     /// The UI is thread-local, so no other thread can enter between validation
     /// and removal; no foreign callbacks occur during this recursive inspection.
@@ -1299,19 +1307,14 @@ impl WindowManager {
         Ok(())
     }
 
-    /// Captures each actual widget for dispatch after retained traversal and
-    /// before callback delivery. Parent edges point to earlier forest nodes, so
-    /// reverse order visits child surfaces first; each widget tree contributes
-    /// its own handles in descendant-first order.
+    /// Derives private delivery order from real ancestry, including hidden surfaces.
+    /// Child adjacency follows global chronology; reversed siblings run newest first.
     pub(crate) fn collect_dispatch_widgets(
         &self,
-        drivers: &mut Vec<neocogi_com::WeakComBox<neocogi_ui_core_contracts::IWidgetAbi>>,
+        drivers: &mut Vec<neocogi_com::WeakComBox<neocogi_ui_core_contracts::IWidgetDispatcherAbi>>,
     ) -> Result<(), neocogi_com::NcStatus> {
-        for surface in self.surfaces.nodes.iter().rev() {
-            match &surface.surface.body {
-                SurfaceBody::Widgets { root, .. } => root.collect_dispatch_widgets(drivers)?,
-                SurfaceBody::Menu(_) => {}
-            }
+        for node in self.surfaces.nodes.iter().rev().filter(|node| node.parent.is_none()) {
+            self.surfaces.collect_dispatch_tree(node.key, drivers)?;
         }
         Ok(())
     }

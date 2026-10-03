@@ -135,8 +135,14 @@ struct SurfaceMount {
 impl RuntimeStorage {
     /// Rebuilds this update's delivery order after topology changes, reusing scratch capacity.
     fn refresh_dispatch_widgets(&self, widgets: &mut DispatchWidgets) -> Result<(), NcStatus> {
+        let mut context = self.context()?;
+        if context.window_manager.take_dispatch_order_changed() { self.factory.state.dispatch_order_changed.set(true); }
+        if self.factory.state.dispatcher_count.get() == 0 {
+            widgets.clear();
+            self.factory.state.dispatch_order_changed.set(false);
+            return Ok(());
+        }
         if self.factory.state.dispatch_order_changed.get() {
-            let context = self.context()?;
             widgets.rebuild(&context.window_manager)?;
             self.factory.state.dispatch_order_changed.set(false);
         }
@@ -491,6 +497,10 @@ impl Runtime {
                 // Selection checks the actual receiver's liveness. Every error
                 // from its behavior propagates, including errors from dependencies.
                 let handled = widget.dispatch_next()?;
+                self.storage.open()?;
+                if self.storage.context()?.window_manager.take_dispatch_order_changed() {
+                    self.storage.factory.state.dispatch_order_changed.set(true);
+                }
                 if handled || self.storage.factory.state.dispatch_order_changed.get() {
                     progressed = true;
                     // Topology-changing callbacks must also count when they report no message.

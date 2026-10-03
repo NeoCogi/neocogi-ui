@@ -75,16 +75,7 @@ impl LeafContent for Leaf {
     fn paint(&self, _: WidgetPaint, _: &mut Painter<'_>) -> Result<(), NcStatus> {
         Ok(())
     }
-    /// Dequeue exactly once: a failed attempted message is consumed, successors are not.
-    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
-        match self.messages.try_recv() {
-            Ok(command) => {
-                self.behavior.handle(command)?;
-                Ok(true)
-            }
-            Err(TryRecvError::Empty | TryRecvError::Disconnected) => Ok(false),
-        }
-    }
+
 }
 
 /// Mounts one real widget and retains only its weak observation and logical window.
@@ -98,7 +89,7 @@ fn mount_probe(
     let behavior = Behavior { trace };
     match kind {
         Kind::Leaf => {
-            let root = ui.widgets().leaf(Leaf { behavior, messages }, WidgetOptions::NONE).unwrap();
+            let root = ui.widgets().dispatching_leaf(Leaf { behavior, messages }, WidgetOptions::NONE).unwrap();
             let observer = root.node_interface().unwrap();
             (ui.window(name, RECT, root).unwrap(), observer)
         }
@@ -230,4 +221,16 @@ fn failed_widget_dispatch_preserves_later_raw_text_input() {
     assert_eq!(observed.try_iter().collect::<Vec<_>>(), ["failed"]);
     ui.update(SIZE).unwrap();
     assert_eq!(retained.text().unwrap(), "before!");
+}
+
+impl neocogi_ui::DispatchingLeafContent for Leaf {
+    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
+        match self.messages.try_recv() {
+            Ok(command) => {
+                self.behavior.handle(command)?;
+                Ok(true)
+            }
+            Err(TryRecvError::Empty | TryRecvError::Disconnected) => Ok(false),
+        }
+    }
 }

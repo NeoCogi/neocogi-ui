@@ -23,12 +23,6 @@ pub trait LeafContent: 'static {
     }
     /// Records observational drawing through this invocation's checked painter capability.
     fn paint(&self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus>;
-    /// Handles at most one private message after traversal releases the widget.
-    /// Passive content uses this no-op and allocates no event queue.
-    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
-        Ok(false)
-    }
-
 }
 
 #[com_object(interfaces(IWidget, ILeafLayout), ownership = exclusive)]
@@ -48,12 +42,6 @@ impl<Content: LeafContent> IWidget for LeafObject<Content> {
     fn mount(&mut self) -> Result<(), NcStatus> {
         self.state.mount()
     }
-    /// Shares the widget's COM borrow gate and lifecycle with its private behavior.
-    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
-        self.state.writable()?;
-        self.content.dispatch_next()
-    }
-
     /// Common observations read only lifecycle state and remain safe during shared content calls.
     fn properties(&self) -> Result<WidgetProperties, NcStatus> {
         Ok(WidgetProperties {
@@ -125,5 +113,53 @@ impl WidgetFactory {
             content,
         });
         Ok(OwnedWidget::from_interface(object.query().expect("LeafObject declares IWidget")))
+    }
+}
+
+/// Private behavior for a leaf whose concrete allocation also owns its receiver/model.
+/// Passive content implements only `LeafContent` and never advertises a dispatcher.
+pub trait DispatchingLeafContent: LeafContent {
+    /// Attempts at most one private message. A failed attempt is consumed; successors remain queued.
+    /// Return false only when idle. Geometry edits use ordinary notified setters.
+    fn dispatch_next(&mut self) -> Result<bool, NcStatus>;
+}
+
+#[com_object(interfaces(IWidget, ILeafLayout, IWidgetDispatcher), ownership = exclusive)]
+/// Optional behavior shares the leaf's ownership and generated exclusive borrow gate.
+struct DispatchingLeafObject<Content: DispatchingLeafContent> {
+    /// Inline lifecycle/content value, never a separately callable COM allocation.
+    leaf: LeafObject<Content>,
+}
+impl<Content: DispatchingLeafContent> IWidget for DispatchingLeafObject<Content> {
+    fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> { self.leaf.host() }
+    fn mount(&mut self) -> Result<(), NcStatus> { self.leaf.mount() }
+    fn properties(&self) -> Result<WidgetProperties, NcStatus> { self.leaf.properties() }
+    fn requested_flags(&self) -> Result<WidgetOptions, NcStatus> { self.leaf.requested_flags() }
+    fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> { self.leaf.replace_flags(flags) }
+    fn set_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> { self.leaf.set_flags(flags) }
+    fn clear_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> { self.leaf.clear_flags(flags) }
+    fn update(&mut self, state: WidgetUpdate, event: WidgetEvent, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> { self.leaf.update(state, event, text) }
+    fn take_change(&mut self) -> Result<GeometryChange, NcStatus> { self.leaf.take_change() }
+    fn paint(&mut self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> { self.leaf.paint(scope, state, painter) }
+}
+impl<Content: DispatchingLeafContent> ILeafLayout for DispatchingLeafObject<Content> {
+    /// Uses the same validated observational content call as passive leaves.
+    fn measure(&mut self, bounds: LayoutLimits, metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> { self.leaf.measure(bounds, metrics) }
+}
+impl<Content: DispatchingLeafContent> IWidgetDispatcher for DispatchingLeafObject<Content> {
+    /// Admission uses common runtime authority before entering concrete private behavior.
+    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
+        self.leaf.state.writable()?;
+        self.leaf.content.dispatch_next()
+    }
+}
+impl WidgetFactory {
+    /// Creates one dispatching leaf; its optional projection owns no second state or receiver.
+    pub fn dispatching_leaf<Content: DispatchingLeafContent>(&self, content: Content, options: WidgetOptions) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
+        options.validate()?;
+        let object = DispatchingLeafObject::into_box(DispatchingLeafObject {
+            leaf: LeafObject { state: WidgetState::new(self.host()?, options), content },
+        });
+        Ok(OwnedWidget::from_interface(object.query().expect("dispatching leaf declares IWidget")))
     }
 }

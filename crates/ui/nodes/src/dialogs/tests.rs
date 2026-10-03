@@ -542,7 +542,7 @@ fn shared_child_queue_discards_events_from_replaced_directory_rows() {
     fixture.widget.with_mut(|dialog| {
         let listing = dialog.model.candidate(replacement.path()).unwrap();
         dialog.model.install(replacement.path().to_owned(), listing, true).unwrap();
-        while IWidget::dispatch_next(&mut *dialog).unwrap() {}
+        while IWidgetDispatcher::dispatch_next(&mut *dialog).unwrap() {}
         assert!(dialog.model.selected.is_none());
         assert_eq!(dialog.model.filename.text().unwrap(), "");
     }).unwrap();

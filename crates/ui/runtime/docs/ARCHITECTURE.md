@@ -96,7 +96,7 @@ An empty input queue still performs an eventless update.
 A producer posts its typed event to the constructor-supplied application queue
 synchronously. That queue acquires an owned payload and, when needed, a
 `WeakComBox` origin, then sends a private application message. Behavior runs later.
-Composite widgets own their receiver and model and implement `IWidget::dispatch_next`;
+Composite widgets own their receiver and model and implement `IWidgetDispatcher::dispatch_next`;
 the runtime schedules them descendant-first. A top-level `Controller<Model>`
 implements the application's dispatcher. There is no separate event-owner
 mount/retire lifecycle. The [event guide](EVENTS.md) defines ordering, errors and

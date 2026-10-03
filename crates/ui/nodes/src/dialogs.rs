@@ -661,7 +661,7 @@ impl Model {
         Ok(())
     }
 }
-#[com_object(interfaces(IFileDialog, IWidget, IContainerLayout), ownership = exclusive)]
+#[com_object(interfaces(IFileDialog, IWidget, IContainerLayout, IWidgetDispatcher), ownership = exclusive)]
 /// One concrete composite owns its layout, model and inbox under one COM borrow gate.
 struct FileDialog {
     /// Inline root layout: direct Rust delegation does not reenter a COM projection.
@@ -672,15 +672,8 @@ struct FileDialog {
     messages: Receiver<Message>,
 }
 
-impl IWidget for FileDialog {
-    /// Returns the allocating runtime without retaining its tree.
-    fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
-        IWidget::host(&self.shell)
-    }
-    /// The inline layout carries the composite's one attachment state.
-    fn mount(&mut self) -> Result<(), NcStatus> {
-        IWidget::mount(&mut self.shell)
-    }
+/// Optional dispatch delegates directly to the same object, with no COM reentry.
+impl IWidgetDispatcher for FileDialog {
     /// Receives one child fact with ordinary exclusive access to the model.
     fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
         IWidget::properties(&self.shell)?;
@@ -692,6 +685,17 @@ impl IWidget for FileDialog {
             }
             Err(TryRecvError::Empty | TryRecvError::Disconnected) => Ok(false),
         }
+    }
+}
+
+impl IWidget for FileDialog {
+    /// Returns the allocating runtime without retaining its tree.
+    fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
+        IWidget::host(&self.shell)
+    }
+    /// The inline layout carries the composite's one attachment state.
+    fn mount(&mut self) -> Result<(), NcStatus> {
+        IWidget::mount(&mut self.shell)
     }
     /// Uses the root layout's authoritative options and interaction policy.
     fn properties(&self) -> Result<WidgetProperties, NcStatus> {

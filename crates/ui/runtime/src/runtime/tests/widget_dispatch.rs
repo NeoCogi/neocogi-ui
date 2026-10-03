@@ -47,7 +47,7 @@ fn parent_decides_removal_after_child_returns_even_when_the_child_fails() {
         let (requests, decisions) = std::sync::mpsc::channel();
         let (send, messages) = std::sync::mpsc::channel();
         let (local, _) = Composite::build(&ui, Removal { requests: Some(requests.clone()), trace: trace.clone(), fail }, messages);
-        let mut events = local.query::<IWidgetAbi>().unwrap();
+        let mut events = local.query::<IWidgetDispatcherAbi>().unwrap();
         let window = ui.window("owned behavior", RECT, local.into_interface::<IWidgetAbi>().unwrap()).unwrap();
         let app = neocogi_ui_support::test_support::events::TestApp::new(
             (window.clone(), false), decisions, |(window, approve), ()| {
@@ -134,17 +134,16 @@ fn owner_removal_rejects_active_borrows_then_destroys_before_returning() {
     }
 }
 
-/// The new common ABI method is idle for ordinary widgets and respects closure.
+/// Ordinary controls do not advertise private behavior; removal expires common observations.
 #[test]
-fn ordinary_widgets_have_no_private_queue_and_reject_dispatch_after_removal() {
+fn ordinary_widgets_have_no_private_queue_and_reject_observation_after_removal() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let button = ui.widgets().button_unobserved("ordinary").unwrap();
-    let mut widget = button.node_interface().unwrap();
-    assert_eq!(widget.dispatch_next(), Ok(false));
+    let widget = button.node_interface().unwrap();
+    assert!(matches!(widget.query::<IWidgetDispatcherAbi>(), Err(neocogi_com::NC_E_NOINTERFACE)));
     let window = ui.window("ordinary", RECT, button).unwrap();
-    assert_eq!(widget.dispatch_next(), Ok(false));
     window.close().unwrap();
-    assert_eq!(widget.dispatch_next(), Err(neocogi_com::NC_E_DROPPED));
+    assert_eq!(widget.properties(), Err(neocogi_com::NC_E_DROPPED));
 }
 
 /// Private commands distinguish subtree removal from work which must be discarded.
@@ -230,15 +229,15 @@ fn descendant_removal_request_drops_the_complete_tree_after_handler_return() {
         child_send.send(OrderedMessage::Remove(window)).unwrap();
         child_send.send(OrderedMessage::Record).unwrap();
         parent_send.send(OrderedMessage::Record).unwrap();
-        assert_eq!(child.query::<IWidgetAbi>().unwrap().dispatch_next(), if fail { Err(NC_E_INVALID_ARG) } else { Ok(true) });
+        assert_eq!(child.query::<IWidgetDispatcherAbi>().unwrap().dispatch_next(), if fail { Err(NC_E_INVALID_ARG) } else { Ok(true) });
         assert_eq!(&*trace.borrow(), &["handled"], "requesting child has returned without destruction");
         assert_eq!(app.as_interface().dispatch_next(), Ok(true));
         assert_eq!(&*trace.borrow(), &["handled", "child", "parent"]);
         assert!(child_send.send(OrderedMessage::Record).is_err());
         assert!(parent_send.send(OrderedMessage::Record).is_err());
         // Retained projections neither reactivate nor repeat terminal cleanup.
-        assert_eq!(child.query::<IWidgetAbi>().unwrap().dispatch_next(), Err(neocogi_com::NC_E_DROPPED));
-        assert_eq!(parent.query::<IWidgetAbi>().unwrap().dispatch_next(), Err(neocogi_com::NC_E_DROPPED));
+        assert_eq!(child.query::<IWidgetDispatcherAbi>().unwrap().dispatch_next(), Err(neocogi_com::NC_E_DROPPED));
+        assert_eq!(parent.query::<IWidgetDispatcherAbi>().unwrap().dispatch_next(), Err(neocogi_com::NC_E_DROPPED));
         assert_eq!(trace.borrow().len(), 3);
     }
 }
@@ -301,16 +300,7 @@ impl neocogi_ui::LeafContent for TopologyEdit {
     fn paint(&self, _: WidgetPaint, _: &mut neocogi_ui::Painter<'_>) -> Result<(), NcStatus> {
         Ok(())
     }
-    /// Removal invalidates the tree independently of the reported work flag.
-    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
-        match self.target.take() {
-            Some(window) => {
-                window.close()?;
-                Ok(self.report_message)
-            }
-            None => Ok(false),
-        }
-    }
+
 }
 
 /// A removed later entry must never be called from the pre-removal snapshot.
@@ -336,7 +326,7 @@ fn topology_changes_refresh_dispatch_even_when_the_widget_reports_no_message() {
         send.send(OrderedMessage::Record).unwrap();
         let editor = ui
             .widgets()
-            .leaf(
+            .dispatching_leaf(
                 TopologyEdit {
                     target: Some(older_window),
                     report_message,
@@ -380,9 +370,9 @@ fn final_runtime_release_does_not_leak_a_borrowed_widget_or_its_private_inbox() 
         drop(ui);
         assert!(weak.upgrade().is_none(), "runtime Drop must destroy queued values before returning");
         let mut widget = view.node_interface().unwrap();
-        assert_eq!(widget.dispatch_next(), Err(neocogi_com::NC_E_DROPPED));
+        assert_eq!(widget.properties(), Err(neocogi_com::NC_E_DROPPED));
         if explicit_close {
-            assert_eq!(widget.dispatch_next(), Err(neocogi_com::NC_E_DROPPED));
+            assert_eq!(widget.properties(), Err(neocogi_com::NC_E_DROPPED));
         }
         drop(widget);
         drop(view);
@@ -390,5 +380,17 @@ fn final_runtime_release_does_not_leak_a_borrowed_widget_or_its_private_inbox() 
         drop(window);
         assert!(weak.upgrade().is_none(), "pending cleanup must not form an ownership cycle");
         assert!(send.send(Rc::new(())).is_err());
+    }
+}
+
+impl neocogi_ui::DispatchingLeafContent for TopologyEdit {
+    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
+        match self.target.take() {
+            Some(window) => {
+                window.close()?;
+                Ok(self.report_message)
+            }
+            None => Ok(false),
+        }
     }
 }
