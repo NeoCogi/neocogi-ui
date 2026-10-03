@@ -8,6 +8,7 @@ use std::{
 };
 
 /// Phase state contains no tree or application references, so widget retention cannot cycle.
+#[derive(Default)]
 pub(crate) struct HostState {
     /// Replaceable host service shared by independent COM widgets; no borrow spans a request.
     pub(crate) clipboard: RefCell<Option<ComPtr<neocogi_ui_core_contracts::ITextClipboardAbi>>>,
@@ -21,19 +22,6 @@ pub(crate) struct HostState {
     pub(crate) observing: Cell<bool>,
     /// First component failure in the current legacy traversal; never submitted as a valid frame.
     pub(crate) error: Cell<Option<NcStatus>>,
-}
-
-impl Default for HostState {
-    fn default() -> Self {
-        Self {
-            clipboard: RefCell::default(),
-            dispatch_order_changed: Cell::new(true),
-            factory: RefCell::default(),
-            closed: Cell::new(false),
-            observing: Cell::new(false),
-            error: Cell::new(None),
-        }
-    }
 }
 
 impl HostState {

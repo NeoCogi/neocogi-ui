@@ -414,10 +414,11 @@ impl Runtime {
         let _guard = UpdateGuard(&storage.updating);
         let mut widgets = storage.dispatch_widgets.take();
         let result = self.run_update_cycle(size, dispatcher, &mut widgets);
-        // Restore retained dispatch widgets on success and every returned failure.
-        // Weak tokens do not prolong widget lifetimes; order is rebuilt only when
-        // topology actually mutates.
+        // Restore scratch capacity on success and every returned failure. No `?`
+        // can bypass this cleanup after checkout, and no cache borrow spans a callback.
+        widgets.clear();
         storage.dispatch_widgets.replace(widgets);
+        storage.factory.state.dispatch_order_changed.set(true);
         result
     }
 
