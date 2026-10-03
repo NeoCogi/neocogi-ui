@@ -224,7 +224,7 @@ fn failed_widget_dispatch_preserves_later_raw_text_input() {
 }
 
 impl neocogi_ui::DispatchingLeafContent for Leaf {
-    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
+    fn dispatch_next(&mut self, _: &mut neocogi_ui::LeafDispatchContext<'_>) -> Result<bool, NcStatus> {
         match self.messages.try_recv() {
             Ok(command) => {
                 self.behavior.handle(command)?;

@@ -81,7 +81,7 @@ admitted calls and destroys the widget and owned children before Drop returns.
 There is no independently closed live widget. Close intent is an ordinary event:
 the behavioral parent decides whether to remove its child after the call returns.
 
-The retained UI schedules composite `IWidget::dispatch_next` implementations
+The retained UI schedules composite `IWidgetDispatcher::dispatch_next` implementations
 descendant-first, using weak observations. A composite owns its own model and
 receiver. A top-level `Controller<Model>` supplies `IApplicationDispatcher` for
 application messages. COM's process runtime owns no event loop. The

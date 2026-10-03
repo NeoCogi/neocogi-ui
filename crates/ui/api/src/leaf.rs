@@ -118,12 +118,30 @@ impl WidgetFactory {
     }
 }
 
+/// Borrowed geometry publication authority for one admitted private leaf handler.
+/// It refers to the owning allocation's existing sticky state; it creates no
+/// independent receiver, COM object or retained lifetime. Publish immediately after
+/// committing a measurement input, including before a later fallible operation.
+pub struct LeafDispatchContext<'a> {
+    /// Existing inline widget state, borrowed only for this exclusive callback.
+    state: &'a mut WidgetState,
+}
+impl LeafDispatchContext<'_> {
+    /// Makes committed content geometry visible before the next queued UI input.
+    /// Visual-only changes need no notification. Earlier notifications remain sticky.
+    pub fn geometry_changed(&mut self) {
+        self.state.record_change(GeometryChange::Changed);
+    }
+}
+
 /// Private behavior for a leaf whose concrete allocation also owns its receiver/model.
 /// Passive content implements only `LeafContent` and never advertises a dispatcher.
 pub trait DispatchingLeafContent: LeafContent {
     /// Attempts at most one private message. A failed attempt is consumed; successors remain queued.
-    /// Return false only when idle. Geometry edits use ordinary notified setters.
-    fn dispatch_next(&mut self) -> Result<bool, NcStatus>;
+    /// Return false only when idle. Publish committed geometry through `context`
+    /// before returning, even when the handler subsequently fails. A failed call
+    /// also retains conservative invalidation for partially committed behavior.
+    fn dispatch_next(&mut self, context: &mut LeafDispatchContext<'_>) -> Result<bool, NcStatus>;
 }
 
 #[com_object(interfaces(IWidget, ILeafLayout, IWidgetDispatcher), ownership = exclusive)]
@@ -162,7 +180,11 @@ impl<Content: DispatchingLeafContent> IWidgetDispatcher for DispatchingLeafObjec
     /// Admission uses common runtime authority before entering concrete private behavior.
     fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
         self.leaf.state.writable()?;
-        self.leaf.content.dispatch_next()
+        let result = self.leaf.content.dispatch_next(&mut LeafDispatchContext { state: &mut self.leaf.state });
+        if result.is_err() {
+            self.leaf.state.record_change(GeometryChange::Changed);
+        }
+        result
     }
 }
 impl WidgetFactory {

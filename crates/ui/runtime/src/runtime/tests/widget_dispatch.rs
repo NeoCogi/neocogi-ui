@@ -384,7 +384,7 @@ fn final_runtime_release_does_not_leak_a_borrowed_widget_or_its_private_inbox() 
 }
 
 impl neocogi_ui::DispatchingLeafContent for TopologyEdit {
-    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
+    fn dispatch_next(&mut self, _: &mut neocogi_ui::LeafDispatchContext<'_>) -> Result<bool, NcStatus> {
         match self.target.take() {
             Some(window) => {
                 window.close()?;

@@ -39,7 +39,7 @@ pub use appearance::{ChromeState, ControlState, MenuState, PointerState, Surface
 
 /// Static application leaf behavior stored inline in one concrete COM object.
 pub mod leaf;
-pub use leaf::{LeafContent, DispatchingLeafContent};
+pub use leaf::{LeafContent, DispatchingLeafContent, LeafDispatchContext};
 
 /// Owned immutable renderer images with cached measurement dimensions.
 pub mod image;

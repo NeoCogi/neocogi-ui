@@ -212,3 +212,19 @@ additional scheduler tests were added. These checks cover the changed status
 consumers; they do not claim a new multi-compiler compatibility matrix, sanitizer
 run, or binary-size result. Cargo artifacts were cleaned before and after each
 commit.
+
+## Inline leaf geometry publication
+
+`DispatchingLeafContent::dispatch_next` receives a borrowed `LeafDispatchContext`
+for the owning leaf's existing `WidgetState`. Call `geometry_changed()` immediately
+when private behavior commits a preferred-size input. This retains the local
+sticky change and notifies the host, allowing layout to settle before the next
+queued input. Returning `true` describes private work, not geometry. A callback
+returning `false` after a geometry edit still owes publication; returned errors
+also retain conservative invalidation. A later ordinary update is not a substitute
+for publication before hit testing. The context cannot outlive the admitted call.
+
+Runtime-owned invalidation uses the same scheduling invariant: whenever a callback
+failure marks a retained node dirty, it schedules the host collector. Pre-commit
+provider failures owe no semantic mutation notification, but must still recover
+on a later successful update without an unrelated setter or notification.

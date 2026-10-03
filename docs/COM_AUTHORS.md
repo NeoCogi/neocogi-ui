@@ -164,10 +164,11 @@ the committed state change and do not roll it back. See the
 
 Behavioral composites bind their children to queues targeting a private typed
 channel, then own the receiver and model as fields of the concrete widget.
-Implement `IWidget::dispatch_next(&mut self)` and mount that actual widget.
+Advertise optional `IWidgetDispatcher` on the same exclusive allocation, implement
+its `dispatch_next(&mut self)`, and mount the actual widget.
 There is no separate event-owner identity or second mount/retire lifecycle.
 Mutate local fields through `&mut self`; call distinct children through COM.
-Structural containers such as `ScrollArea` use the no-op dispatch implementation
+Passive structural containers such as `ScrollArea` omit `IWidgetDispatcher`
 and need no inbox merely because they have children. Removing a subtree drops its exclusive owner and stops new dispatch. An admitted
 call returns before its own value is destroyed; no close retry queue is needed.
 
@@ -241,7 +242,7 @@ rendering machinery; it cannot store a semantic widget implementation. `WidgetSt
 owns the host authority, common options, mount-once claim and
 sticky geometry flag. Neither helper owns a runtime tree, application callback, or
 additional widget allocation. Concrete class contracts require `IWidget`, whose
-protocol includes host/mount and dispatch, effective properties, requested flag mutations,
+protocol includes host/mount, effective properties, requested flag mutations,
 update, take_change, and paint. Leaf measurement remains the shared `ILeafLayout` protocol. Button
 activation and button-specific styling live directly on `Button`; no
 activation-only, style-only, or lifetime interface is required for that class.
@@ -767,7 +768,7 @@ replacement-character labels and must remain distinct selections.
 The native picker is a UI-owned COM component containing actual COM buttons,
 textboxes, list rows, Linear containers and scrolling composites. Its internal
 private inbox owns child messages and its ordinary mutable model consumes them
-through `IWidget::dispatch_next`. Its public `IFileDialog`, widget and layout
+through optional `IWidgetDispatcher::dispatch_next`. Its public `IFileDialog`, widget and layout
 projections share one COM allocation and borrow gate; the root Linear value is
 embedded directly. Dropping client handles leaves a mounted picker alive.
 Removing its owner disconnects its private inbox after admitted calls return; it
@@ -1053,3 +1054,11 @@ after success. Short results expose only their initialized prefix. A true
 transformation takes a distinct `&[T]` input and output argument. See
 [the complete contract](COM_OUTPUT_BUFFERS.md) for forwarding, allocation-free
 identity storage, failure semantics, wire validation, and ABI generation 17.
+
+Private content created by `WidgetFactory::dispatching_leaf` receives a borrowed
+`LeafDispatchContext` in `DispatchingLeafContent::dispatch_next`. After committing
+any preferred-size input, call `context.geometry_changed()` before a later fallible
+operation or return. This updates the inline wrapper's sticky marker and notifies
+its host in one operation. A later `LeafContent::update` result is too late to
+repair hit testing for the next already queued input. Failed helper callbacks
+also retain conservative invalidation; passive leaves advertise no dispatcher.

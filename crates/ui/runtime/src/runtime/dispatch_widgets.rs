@@ -42,7 +42,7 @@ mod tests {
         fn paint(&mut self, _: neocogi_ui::WidgetPaint, _: &mut neocogi_ui::Painter<'_>) -> Result<(), NcStatus> { Ok(()) }
     }
     impl neocogi_ui::DispatchingLeafContent for Probe {
-        fn dispatch_next(&mut self) -> Result<bool, NcStatus> { Ok(false) }
+        fn dispatch_next(&mut self, _: &mut neocogi_ui::LeafDispatchContext<'_>) -> Result<bool, NcStatus> { Ok(false) }
     }
     /// Expiry before or during a pass is skipped without disturbing live order.
     /// Yielded entries remain weak even after the scratch buffer is cleared.

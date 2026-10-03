@@ -7,6 +7,8 @@ mod containers;
 mod embedded_input;
 mod widget_flags;
 mod dispatch_errors;
+mod recovery;
+mod dispatch_geometry;
 mod shutdown;
 mod documentation;
 
@@ -1633,7 +1635,7 @@ fn review_dispatch_child_surface_precedes_raised_parent() {
 }
 
 impl neocogi_ui::DispatchingLeafContent for ReviewDispatchTrace {
-    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
+    fn dispatch_next(&mut self, _: &mut neocogi_ui::LeafDispatchContext<'_>) -> Result<bool, NcStatus> {
         self.trace.borrow_mut().push(self.name);
         Ok(false)
     }
@@ -1737,7 +1739,7 @@ impl neocogi_ui::LeafContent for RaiseDuringDispatch {
     fn paint(&mut self, _: WidgetPaint, _: &mut neocogi_ui::Painter<'_>) -> Result<(), NcStatus> { Ok(()) }
 }
 impl neocogi_ui::DispatchingLeafContent for RaiseDuringDispatch {
-    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
+    fn dispatch_next(&mut self, _: &mut neocogi_ui::LeafDispatchContext<'_>) -> Result<bool, NcStatus> {
         self.trace.borrow_mut().push("raising");
         if let Some(target) = self.target.take() { target.raise()?; }
         Ok(false)

@@ -81,12 +81,11 @@ impl ComNode {
             Ok(properties) => {
                 let previous = std::mem::replace(&mut self.properties, properties);
                 if previous.options != properties.options || previous.frame != properties.frame {
-                    self.dirty.set(true);
-                    self.services.state.changes_pending.set(true);
+                    self.mark_measurement_dirty();
                 }
             }
             Err(error) => {
-                self.dirty.set(true);
+                self.mark_measurement_dirty();
                 return Err(error);
             }
         }
@@ -104,7 +103,7 @@ impl ComNode {
             invalid => {
                 // A foreign callback may have mutated before failing. Preserve invalidation for
                 // recovery without allowing later nodes to observe an apparently successful pass.
-                self.dirty.set(true);
+                self.mark_measurement_dirty();
                 return Err(match invalid {
                     Err(error) => error,
                     Ok(_) => NC_E_INVALID_ARG,
@@ -143,7 +142,7 @@ impl ComNode {
                 self.services.state.fail(error);
                 // Keep the ancestor path dirty until a successful retry. A
                 // failed measurement must never become a cached zero preference.
-                self.dirty.set(true);
+                self.mark_measurement_dirty();
                 Err(error)
             }
         }
@@ -173,7 +172,7 @@ impl ComNode {
             Err(error) => {
                 // Retain the guard for external policy that discards a child Result.
                 self.services.state.fail(error);
-                self.dirty.set(true);
+                self.mark_measurement_dirty();
                 current.invalidate_measurement();
                 Err(error)
             }
@@ -189,7 +188,7 @@ impl ComNode {
             Ok(children) => Some(children),
             Err(error) => {
                 self.services.state.fail(error);
-                self.dirty.set(true);
+                self.mark_measurement_dirty();
                 None
             }
         }

@@ -131,7 +131,9 @@ A behavioral composite owns its model, receiver and child handles inside its
 concrete widget allocation. It implements `IWidgetDispatcher::dispatch_next(&mut self)`;
 ordinary controls and structural containers expose no dispatcher and own no inbox.
 Application content opts in with `DispatchingLeafContent` and
-`WidgetFactory::dispatching_leaf`; passive content uses `LeafContent` and `leaf`.
+`WidgetFactory::dispatching_leaf`. Private content publishes committed geometry
+through the callback's borrowed `LeafDispatchContext::geometry_changed`; it must
+not wait until a later ordinary update to affect the next queued input. Passive content uses `LeafContent` and `leaf`.
 Independent plugins advertise the optional interface on their same exclusive
 allocation. Only an actual NOINTERFACE response means the capability is absent.
 
