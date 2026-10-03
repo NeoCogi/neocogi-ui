@@ -621,7 +621,10 @@ impl neocogi_ui_nodes_contracts::Scrollbar for Scrollbar {
     fn set_offset(&mut self, offset: i32) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
         let offset = offset.clamp(0, self.max_offset());
-        self.set_offset(offset);
+        if self.offset() != offset {
+            self.set_offset(offset);
+            let _ = self.runtime().state.host().mark_dirty();
+        }
         Ok(())
     }
 }

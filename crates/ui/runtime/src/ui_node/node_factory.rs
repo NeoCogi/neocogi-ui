@@ -89,6 +89,7 @@ impl NodeFactory {
         };
         // No fallible operation follows the mount-once claim.
         self.state.dispatch_order_changed.set(true);
+        self.state.mark_dirty();
         Ok(crate::Node::com_widget(ComNode {
             widget: mount,
             dirty: Cell::new(false),

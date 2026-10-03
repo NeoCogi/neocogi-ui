@@ -471,6 +471,7 @@ impl neocogi_ui_nodes_contracts::Disclosure for Disclosure {
         } else {
             self.collapse();
         }
+        self.runtime_mut().state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
         Ok(())
     }
 

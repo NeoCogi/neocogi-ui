@@ -1587,3 +1587,61 @@ fn update_failure_stops_later_roots_without_losing_retry_invalidation() {
     assert_eq!(later.updates.get(), before.1 + 1);
     assert!(first.measures.get() > before.2);
 }
+
+/// Verifies that HostState dirty_generation increments on widget mutations and node mount/drop,
+/// and that collect_changes skips forest scans when dirty_generation matches last_synced_generation.
+#[test]
+fn host_dirty_generation_tracks_widget_mutations_and_skips_idle_scans() {
+    let bundle = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
+    let assets = crate::assets::ImportedAssets::read(bundle.as_com_ref(), None).unwrap();
+    let gfx = neocogi_ui_support::test_support::gfx_factory();
+    let compositor = gfx.create_compositor(bundle.as_com_ref()).unwrap();
+    let storage = crate::runtime::create_storage(assets, compositor);
+    let runtime = crate::runtime::Runtime { storage: storage.clone() };
+    let runtime_com: ComPtr<UiRuntimeAbi> = crate::runtime::Runtime::from_value(runtime).query().unwrap();
+
+    let initial_gen = storage.factory.state.dirty_generation.get();
+    assert!(initial_gen > 0);
+    assert_eq!(storage.last_synced_generation.get(), 0);
+
+    // Mount button into window
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime_com.clone()).unwrap();
+    let button = ui.widgets().button_unobserved("initial label").unwrap();
+    let mut handle = button.handle();
+    let manager: ComPtr<IWindowManagerAbi> = runtime_com.query().unwrap();
+    let window = manager.create_window(
+        NcCopyFromBufferOffset::new(0, b"Window"),
+        Rect { x: 0, y: 0, width: 300, height: 200 },
+        button.into_interface().query().unwrap(),
+        neocogi_com::NcValueRef::new(&IWindowEventBinding::Unobserved).unwrap(),
+    ).unwrap();
+
+    // First update synchronizes changes and records current generation
+    runtime_com.update(SIZE).unwrap();
+    let synced_gen = storage.last_synced_generation.get();
+    assert_eq!(synced_gen, storage.factory.state.dirty_generation.get());
+
+    // Subsequent updates without mutations keep dirty_generation identical
+    runtime_com.update(SIZE).unwrap();
+    assert_eq!(storage.factory.state.dirty_generation.get(), synced_gen);
+    assert_eq!(storage.last_synced_generation.get(), synced_gen);
+
+    // Calling a setter that changes geometry (e.g. set_label) marks the host dirty!
+    handle.set_label("updated label").unwrap();
+    let mutated_gen = storage.factory.state.dirty_generation.get();
+    assert!(mutated_gen > synced_gen, "widget mutation must advance dirty_generation");
+
+    // Next update collects changes and advances last_synced_generation
+    runtime_com.update(SIZE).unwrap();
+    assert_eq!(storage.last_synced_generation.get(), mutated_gen);
+    assert_eq!(storage.factory.state.dirty_generation.get(), mutated_gen);
+
+    // Closing the window unmounts the node, advancing dirty_generation again!
+    window.close().unwrap();
+    let closed_gen = storage.factory.state.dirty_generation.get();
+    assert!(closed_gen > mutated_gen, "unmounting node must advance dirty_generation");
+
+    runtime_com.update(SIZE).unwrap();
+    assert_eq!(storage.last_synced_generation.get(), closed_gen);
+}
+

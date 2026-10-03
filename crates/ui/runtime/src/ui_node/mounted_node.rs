@@ -107,7 +107,7 @@ impl ComNode {
             invalid => {
                 // A foreign callback may have mutated before failing. Preserve invalidation for
                 // recovery without allowing later nodes to observe an apparently successful pass.
-                self.dirty.set(true);
+                self.mark_measurement_dirty();
                 return Err(match invalid {
                     Err(error) => error,
                     Ok(_) => NC_E_INVALID_ARG,
@@ -146,7 +146,7 @@ impl ComNode {
                 self.host.fail(error);
                 // Keep the ancestor path dirty until a successful retry. A
                 // failed measurement must never become a cached zero preference.
-                self.dirty.set(true);
+                self.mark_measurement_dirty();
                 Err(error)
             }
         }
@@ -176,7 +176,7 @@ impl ComNode {
             Err(error) => {
                 // Retain the guard for external policy that discards a child Result.
                 self.host.fail(error);
-                self.dirty.set(true);
+                self.mark_measurement_dirty();
                 current.invalidate_measurement();
                 Err(error)
             }
@@ -192,7 +192,7 @@ impl ComNode {
             Ok(children) => Some(children),
             Err(error) => {
                 self.host.fail(error);
-                self.dirty.set(true);
+                self.mark_measurement_dirty();
                 None
             }
         }
@@ -259,13 +259,17 @@ impl ComNode {
     /// Records the geometry result of an update until traversal propagates it.
     pub(crate) fn mark_measurement_dirty(&self) {
         self.dirty.set(true);
+        self.host.mark_dirty();
     }
 }
 
 impl Drop for ComNode {
     /// Removing the node releases its unique widget owner through normal field
     /// destruction. Weak dispatch snapshots cannot prolong its resource lifetime.
-    fn drop(&mut self) { self.host.dispatch_order_changed.set(true); }
+    fn drop(&mut self) {
+        self.host.dispatch_order_changed.set(true);
+        self.host.mark_dirty();
+    }
 }
 
 pub(crate) use neocogi_ui_support::frame::local_frame;

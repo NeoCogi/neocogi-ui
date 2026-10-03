@@ -112,6 +112,7 @@ impl WidgetState {
     pub fn record_change(&mut self, change: GeometryChange) {
         if change == GeometryChange::Changed {
             self.dirty = true;
+            let _ = self.host.mark_dirty();
         }
     }
 
