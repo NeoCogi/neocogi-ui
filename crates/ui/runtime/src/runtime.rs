@@ -525,14 +525,14 @@ impl Runtime {
             // application visit; callbacks never retain a traversal borrow.
             let delivered = match dispatcher {
                 Some(mut dispatcher) => dispatcher.dispatch_next(),
-                None => Ok(false),
+                None => Ok(ApplicationDispatch::Idle),
             };
             let delivered = delivered?;
             self.storage.open()?;
             self.storage.phase_result()?;
             match delivered {
-                true => spend_dispatch_budget(remaining)?,
-                false => {
+                ApplicationDispatch::MessageHandled | ApplicationDispatch::PendingChangesApplied => spend_dispatch_budget(remaining)?,
+                ApplicationDispatch::Idle => {
                     // An empty-inbox callback may publish deferred geometry. Reconcile it
                     // before routing later input, even when no message was consumed.
                     let surface_changed = self.storage.context()?.window_manager.take_dispatch_order_changed();
@@ -541,6 +541,9 @@ impl Runtime {
                         spend_dispatch_budget(remaining)?;
                     } else { return Ok(()); }
                 },
+                // Fieldless wire enums preserve raw values for ABI compatibility. A foreign
+                // result outside this version's three outcomes cannot authorize continued input.
+                _ => return Err(NC_E_INVALID_ARG),
             }
         }
     }

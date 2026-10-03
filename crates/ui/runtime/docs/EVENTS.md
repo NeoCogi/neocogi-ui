@@ -174,7 +174,11 @@ application dispatcher:
 2. Visit optional private dispatchers in actual ancestry order, child first. After one message, settle topology and geometry
    before reconsidering descendants.
 3. When widget work is quiet, call the optional `IApplicationDispatcher` once.
-   Settle newly posted private work before its next application message.
+   Its version 2 result distinguishes `MessageHandled`, `PendingChangesApplied`,
+   and `Idle`. The controller handles one message, or calls the model's pending-change
+   hook when no message is available. Both work outcomes consume budget and revisit
+   private work/layout before another application visit or later raw input. `Idle`
+   also requires quiet geometry/topology notifications before the boundary ends.
 4. Route one queued raw input and repeat the boundary before later input.
 5. Commit a renderable frame only after successful settlement.
 
@@ -202,7 +206,10 @@ Passive widgets advertise no private dispatcher and receive no empty COM calls.
 Nodes own typed weak capability projections, while a conservative zero-dispatcher
 count skips collection. Dispatch entries remain transient; no ready-inbox system
 or second lifetime registry exists. Application controllers can synchronize outer
-geometry in `EventModel::settle`, called at their empty-inbox boundary. Independent
+geometry in `EventModel::apply_pending_changes`, called when their inbox is empty
+or disconnected. `ApplyOutcome::ChangesApplied` reports a consumed request;
+`NothingPending` reports an idle invocation. The hook can run several times in one
+update, including before the first input. Independent
 providers must retain sticky changes and conservatively notify
 `IWidgetHost::mark_geometry_changed` on committed geometry edits. The runtime is
 the sole sticky-collection owner, including retries and render admission.

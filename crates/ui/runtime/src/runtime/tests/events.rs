@@ -131,7 +131,7 @@ fn consumer_preserves_emission_order_snapshot_values_and_bounded_progress() {
     let (renderer, _) = renderer();
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
     window.close().unwrap();
-    assert_eq!(app.as_interface().dispatch_next(), Ok(false));
+    assert_eq!(app.as_interface().dispatch_next(), Ok(ApplicationDispatch::Idle));
 }
 
 /// One application protocol combines activation and lifecycle facts without per-event handler types.
@@ -575,7 +575,7 @@ fn real_lifecycle_cascade_is_deferred_until_each_consumer_returns() {
     });
     app.update(&ui, SIZE).unwrap();
     assert_eq!(app.state().0, 3);
-    assert_eq!(app.as_interface().dispatch_next(), Ok(false));
+    assert_eq!(app.as_interface().dispatch_next(), Ok(ApplicationDispatch::Idle));
     window.close().unwrap();
 }
 
@@ -584,7 +584,7 @@ fn real_lifecycle_cascade_is_deferred_until_each_consumer_returns() {
 struct FailingOwner;
 impl IApplicationDispatcher for FailingOwner {
     /// Propagates the consumer failure through the actual COM dispatcher boundary.
-    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
+    fn dispatch_next(&mut self) -> Result<ApplicationDispatch, NcStatus> {
         Err(NC_E_INVALID_ARG)
     }
 }
@@ -636,7 +636,7 @@ fn boundary_budget_stops_a_cascade_and_preserves_the_unattempted_message() {
         assert_eq!(app.state().0, 2);
         app.state().2 = false;
         let mut pending = 0;
-        while app.as_interface().dispatch_next().unwrap() {
+        while app.as_interface().dispatch_next().unwrap() == ApplicationDispatch::MessageHandled {
             pending += 1;
         }
         assert_eq!(pending, if repeat { 2 } else { 0 });

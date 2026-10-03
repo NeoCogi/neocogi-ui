@@ -109,6 +109,20 @@ without an interface query or a second mutable state container. Frame dispatch
 borrows an existing capability and creates no callback/revocation adapter.
 The demo host performs this setup automatically for `Host::run(state, receiver)`.
 
+For coalesced publication, implement `EventModel::apply_pending_changes` (or the
+host's `AppState::apply_pending_changes`) and return `ApplyOutcome::ChangesApplied`
+only after consuming pending work. Return `NothingPending` on an idle call. The
+hook runs when no message is available, including after sender disconnection,
+and can run several times per update. It runs under the same mutable gate with no
+traversal borrow. Geometry edits still need ordinary notifications; renderer work
+belongs after the completed update. An error preserves already committed edits;
+the model decides whether an uncompleted request remains available for retry.
+
+The generated `IApplicationDispatcher` version 2 returns `ApplicationDispatch`:
+`MessageHandled`, `PendingChangesApplied`, or `Idle`. Applied pending changes
+request another private-dispatch/layout pass even without a geometry notification.
+This distinction avoids treating a newly posted child message as an idle boundary.
+
 Separate dialogs can bind their same protocol to different application destinations.
 When reusing one dialog across requests, request identity remains application/domain
 policy; binding does not manufacture an invocation ID absent from the protocol.

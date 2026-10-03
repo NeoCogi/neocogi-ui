@@ -3,7 +3,7 @@
 use neocogi_com::{ComPtr, ComRef, LocalCom, LocalMut, NcStatus};
 use crate::{
     IApplicationDispatcherAbi, Size, Ui,
-    events::{Controller, EventModel},
+    events::{ApplyOutcome, Controller, EventModel},
 };
 use std::{
     ops::{Deref, DerefMut},
@@ -27,11 +27,12 @@ struct Model<State, Message, Context> {
     /// Immutable concrete services used by the empty-inbox hook.
     context: Context,
     /// Captureless hook exercises production deferred publication under controller admission.
-    settle: fn(&mut State, &Context) -> Result<bool, NcStatus>,
+    apply_pending_changes: fn(&mut State, &Context) -> Result<ApplyOutcome, NcStatus>,
 }
 impl<State: 'static, Message: 'static, Context: 'static> EventModel for Model<State, Message, Context> {
     type Message = Message;
-    fn settle(&mut self) -> Result<bool, NcStatus> { (self.settle)(&mut self.state, &self.context) }
+    /// Applies fixture-owned pending work under the production controller gate.
+    fn apply_pending_changes(&mut self) -> Result<ApplyOutcome, NcStatus> { (self.apply_pending_changes)(&mut self.state, &self.context) }
     /// Delegates one dequeued value without introducing another borrow boundary.
     fn handle(&mut self, message: Message) -> Result<(), NcStatus> {
         (self.handle)(&mut self.state, message)
@@ -40,13 +41,13 @@ impl<State: 'static, Message: 'static, Context: 'static> EventModel for Model<St
 impl<State: 'static, Message: 'static> TestApp<State, Message> {
     /// Moves the receiver and test state into one production controller.
     pub fn new(state: State, messages: Receiver<Message>, handle: fn(&mut State, Message) -> Result<(), NcStatus>) -> Self {
-        Self::with_context(state, messages, handle, (), |_, _| Ok(false))
+        Self::with_context(state, messages, handle, (), |_, _| Ok(ApplyOutcome::NothingPending))
     }
 }
 impl<State: 'static, Message: 'static, Context: 'static> TestApp<State, Message, Context> {
     /// Supplies explicit concrete services for the same empty-inbox hook used by real hosts.
-    pub fn with_context(state: State, messages: Receiver<Message>, handle: fn(&mut State, Message) -> Result<(), NcStatus>, context: Context, settle: fn(&mut State, &Context) -> Result<bool, NcStatus>) -> Self {
-        let local = Controller::into_local(Controller::new(Model { state, handle, context, settle }, messages));
+    pub fn with_context(state: State, messages: Receiver<Message>, handle: fn(&mut State, Message) -> Result<(), NcStatus>, context: Context, apply_pending_changes: fn(&mut State, &Context) -> Result<ApplyOutcome, NcStatus>) -> Self {
+        let local = Controller::into_local(Controller::new(Model { state, handle, context, apply_pending_changes }, messages));
         let owner = local.query().expect("Controller declares IApplicationDispatcher");
         Self { local, owner }
     }

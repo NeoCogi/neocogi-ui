@@ -83,7 +83,7 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
     combo.replace_items::<&str>(&[], ChoiceSelection::None).unwrap();
     assert_eq!(combo.selection(), Ok(ChoiceSelection::None));
     assert_eq!(combo.display_text().unwrap(), "Choose a value");
-    assert_eq!(app.as_interface().dispatch_next(), Ok(false));
+    assert_eq!(app.as_interface().dispatch_next(), Ok(ApplicationDispatch::Idle));
     let (renderer, _) = renderer();
     assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
     ui.update_with_events(SIZE, app.as_interface()).unwrap();

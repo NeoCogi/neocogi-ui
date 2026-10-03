@@ -118,10 +118,23 @@ pre-commit notification is harmless. The runtime alone collects sticky changes
 when notified, including render admission and retries. Notifications during a
 collection remain pending for the following collection.
 
-Application controllers run `EventModel::settle` when their inbox becomes empty.
-Tools prepare geometry/publication there under the existing application mutable
-gate; the runtime settles notified work before routing more input or committing
-the frame. The demo host calls one outer update. Its `after_update` hook performs
+Application controllers call `EventModel::apply_pending_changes` when no message
+is available, including after sender disconnection. The default returns
+`ApplyOutcome::NothingPending`; consuming coalesced publication or other pending
+work returns `ApplyOutcome::ChangesApplied`. This is an empty-inbox operation,
+not a once-per-frame callback: it can run before the first raw input and after
+each input, several times per update. Repeated idle calls must not create work.
+
+`IApplicationDispatcher` version 2 returns the generated `ApplicationDispatch`
+enum: `MessageHandled`, `PendingChangesApplied`, or `Idle`. Both work outcomes
+charge the shared budget and revisit child dispatch/layout before later input,
+even when applying changes only posts a private message without a geometry edit.
+`Idle` ends the boundary only when geometry/topology notifications are quiet too.
+Busy admission cannot consume a message or enter the pending-change hook; errors
+stop the update, preserve committed edits, and leave retry policy with the model.
+Geometry edits still require their normal sticky markers and host notifications.
+Tools apply publication under the existing application mutable gate. The demo host
+calls one outer update. Its `after_update` hook performs
 independent preview rendering and paint-only cache publication. `LeafContent::paint`
 receives `&mut self` for these caches; host observation still rejects geometry edits.
 

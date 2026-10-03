@@ -1,10 +1,23 @@
 #[version(1)]
+/// Result of one application dispatch visit; pending changes count as work without a message.
+enum ApplicationDispatch: u8 {
+    /// No message or pending changes were processed during this visit.
+    Idle = 0,
+    /// One message was consumed and its handler completed successfully.
+    MessageHandled = 1,
+    /// The empty-inbox hook applied pending changes; revisit child work and layout.
+    PendingChangesApplied = 2,
+}
+
+#[version(2)]
 /// Application-owned message execution, borrowed for one UI update only.
 /// The application is not a widget. Its inbox may span several windows and
 /// is never mounted, retained, or closed by the widget tree.
 interface IApplicationDispatcher {
-    /// Attempts one application message outside traversal; false means idle.
+    /// Handles one message, or applies pending changes if the inbox is empty/disconnected.
+    /// Idle ends the boundary only when geometry and topology notifications are also quiet.
+    /// Both successful work variants charge the shared update budget before revisiting children.
     /// A handler error consumes only that message. The caller owns the inbox
     /// lifetime and must release any local mutable guard before entering UI update.
-    fn dispatch_next(&mut self) -> Result<bool>;
+    fn dispatch_next(&mut self) -> Result<ApplicationDispatch>;
 }

@@ -176,10 +176,14 @@ input/focus/menu policy; traversal owns committed geometry and paint; synchroniz
 owns forest marker collection and public copied policy. All derive from the same
 forest; the split adds no secondary surface owner or lifecycle representation.
 
-Application Controller calls EventModel::settle when its inbox is empty. The demo
-host invokes AppState::synchronize at that boundary for deferred publication. The
-runtime reconciles geometry/topology signaled even by false-returning callbacks
-before routing more input. Such work charges the existing bounded budget. Outer
+Application Controller calls EventModel::apply_pending_changes when its inbox is
+empty or disconnected. The demo host forwards AppState::apply_pending_changes
+and its ApplyOutcome without suppressing progress. Controller maps a consumed
+message to ApplicationDispatch::MessageHandled, applied pending changes to
+PendingChangesApplied, and an idle visit to Idle. Both work outcomes charge the
+existing bounded budget and revisit child work/layout before routing more input.
+The runtime also reconciles geometry/topology notifications from an Idle visit.
+The hook can run several times per update; an idle invocation must create no work. Outer
 editor geometry changes occur there; after_update renders independent previews
 and mutable leaf paint accepts completed images under existing scope authority.
 The outer editor needs one update. Release gesture grouping ends only after every

@@ -4,6 +4,7 @@
 //! are reached only through their checked COM interfaces. Native packages are executable-relative.
 #![deny(missing_docs)]
 use neocogi_ui::*;
+use neocogi_ui::events::ApplyOutcome;
 use neocogi_com::{com_object, ComPtr, NcCopyFromBufferOffset, NcStatus};
 use std::fmt;
 
@@ -100,15 +101,19 @@ pub trait AppState: 'static {
     }
 
     /// Runs after platform polling and before this frame's single UI update. Return false to stop.
-    /// Input handlers run afterward; work they defer here is applied on the next frame. The host
-    /// serializes frame edits and message consumption through ordinary mutable borrows.
+    /// UI input handlers run afterward. Apply deferred publication through apply_pending_changes
+    /// within the same update. The host serializes frame edits and message consumption through
+    /// ordinary mutable borrows.
     fn frame(&mut self, _host: &Host, _size: Size, _seconds: f64) -> Result<bool, NcStatus> {
         Ok(true)
     }
 
-    /// Settles deferred geometry/publication at an empty-inbox boundary during guarded dispatch.
-    /// The host/runtime borrows no tree here. Native rendering belongs in after_update.
-    fn synchronize(&mut self, _host: &Host, _size: Size) -> Result<(), NcStatus> { Ok(()) }
+    /// Applies coalesced pending changes when the application inbox is empty or disconnected.
+    /// May run several times per update, including before the first queued input. An idle call
+    /// returns NothingPending; consuming work returns ChangesApplied so child work is revisited.
+    /// The host/runtime retains no traversal borrow here. Geometry edits still need their ordinary
+    /// notifications. Errors preserve committed edits; native rendering belongs in after_update.
+    fn apply_pending_changes(&mut self, _host: &Host, _size: Size) -> Result<ApplyOutcome, NcStatus> { Ok(ApplyOutcome::NothingPending) }
 
     /// Runs after input dispatch returns and before painting. Embedded renderers may
     /// safely install resources, render previews, and synchronize paint-only content here.
@@ -290,9 +295,8 @@ struct Application<State: AppState> {
 impl<State: AppState> neocogi_ui::events::EventModel for Application<State> {
     type Message = State::Message;
     /// Uses the real application gate while the outer UI has released traversal ownership.
-    fn settle(&mut self) -> Result<bool, NcStatus> {
-        self.state.synchronize(&self.host, self.size)?;
-        Ok(false)
+    fn apply_pending_changes(&mut self) -> Result<ApplyOutcome, NcStatus> {
+        self.state.apply_pending_changes(&self.host, self.size)
     }
     /// Runtime delivery holds exclusive controller access before receiving a message.
     fn handle(&mut self, message: Self::Message) -> Result<(), NcStatus> {

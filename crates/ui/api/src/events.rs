@@ -14,7 +14,7 @@
 pub mod testing;
 
 mod controller;
-pub use controller::{Controller, EventModel};
+pub use controller::{ApplyOutcome, Controller, EventModel};
 
 use crate::com::*;
 use neocogi_com::{NC_E_INVALID_ARG, NcStatus};

@@ -283,7 +283,7 @@ fn application_shutdown_stops_the_update_and_leaves_later_application_work_queue
     assert_eq!(window.snapshot(), Err(UI_E_CLOSED));
     assert_eq!(app.state().1, 0);
     // The application may deliberately process its own inbox without the closed UI.
-    assert_eq!(app.as_interface().dispatch_next(), Ok(true));
+    assert_eq!(app.as_interface().dispatch_next(), Ok(ApplicationDispatch::MessageHandled));
     assert_eq!(app.state().1, 1);
     ui.close().unwrap();
 }

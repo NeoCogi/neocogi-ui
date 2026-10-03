@@ -58,13 +58,13 @@ fn parent_decides_removal_after_child_returns_even_when_the_child_fails() {
         assert_eq!(ui.update(SIZE), if fail { Err(NC_E_INVALID_ARG) } else { Ok(()) });
         assert_eq!(&*trace.borrow(), &["handler entered", "handler returned"]);
         assert!(window.snapshot().is_ok(), "a request or handler error cannot approve removal");
-        assert_eq!(app.as_interface().dispatch_next(), Ok(true)); // Parent declines.
+        assert_eq!(app.as_interface().dispatch_next(), Ok(ApplicationDispatch::MessageHandled)); // Parent declines.
         assert!(window.snapshot().is_ok());
         assert!(events.is_alive());
         app.state().1 = true;
         requests.send(()).unwrap();
         send.send(()).unwrap(); // Must be discarded, not dispatched, after approval.
-        assert_eq!(app.as_interface().dispatch_next(), Ok(true));
+        assert_eq!(app.as_interface().dispatch_next(), Ok(ApplicationDispatch::MessageHandled));
         assert_eq!(&*trace.borrow(), &["handler entered", "handler returned", "closed"]);
         assert_eq!(window.snapshot(), Err(UI_E_CLOSED));
         assert!(send.send(()).is_err());
@@ -231,7 +231,7 @@ fn descendant_removal_request_drops_the_complete_tree_after_handler_return() {
         parent_send.send(OrderedMessage::Record).unwrap();
         assert_eq!(child.query::<IWidgetDispatcherAbi>().unwrap().dispatch_next(), if fail { Err(NC_E_INVALID_ARG) } else { Ok(true) });
         assert_eq!(&*trace.borrow(), &["handled"], "requesting child has returned without destruction");
-        assert_eq!(app.as_interface().dispatch_next(), Ok(true));
+        assert_eq!(app.as_interface().dispatch_next(), Ok(ApplicationDispatch::MessageHandled));
         assert_eq!(&*trace.borrow(), &["handled", "child", "parent"]);
         assert!(child_send.send(OrderedMessage::Record).is_err());
         assert!(parent_send.send(OrderedMessage::Record).is_err());
