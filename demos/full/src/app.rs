@@ -543,7 +543,7 @@ impl LeafContent for Triangle {
         Ok(GeometryChange::NoChange)
     }
     /// Rotates three colored points around the committed viewport center.
-    fn paint(&self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
+    fn paint(&mut self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
         let area = state.rect;
         let radius = area.width.min(area.height) as f32 * 0.4;
         let vertices = [(0., 0xff0000ff), (1., 0xff00ff00), (2., 0xffff0000)].map(|(index, rgba)| {

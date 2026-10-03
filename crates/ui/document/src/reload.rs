@@ -119,6 +119,11 @@ impl ReloadSlot {
     pub fn component(&self) -> Option<&Component> {
         self.active.as_ref().map(|(_, component)| component)
     }
+    /// Borrows the current component for explicit authored-metadata publication.
+    /// This changes no slot/attempt identity and cannot replace the mounted subtree.
+    pub fn component_mut(&mut self) -> Option<&mut Component> {
+        self.active.as_mut().map(|(_, component)| component)
+    }
     /// Checks both slot identity and published attempt before applying message effects.
     /// The sender and this slot must share one ReloadIds domain. Rejected attempts,
     /// previous forms and other slots in that domain cannot match the active pair.

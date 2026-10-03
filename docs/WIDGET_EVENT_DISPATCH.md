@@ -1,17 +1,19 @@
 # Widget-owned event dispatch
 
-`IWidget::dispatch_next(&mut self) -> Result<bool>` is the common private-message
-operation. A composite owns its model and receiving endpoint directly. Each call
+`IWidgetDispatcher::dispatch_next(&mut self) -> Result<bool>` is the optional private-message
+operation queried on the widget's same concrete allocation. A composite owns its
+model and receiving endpoint directly. Each call
 attempts at most one message; `true` means one message was handled and `false`
 means no work was available. A handler error consumes the attempted message and
 leaves its successors queued. The COM mutable borrow gate protects the same
 allocation used for widget editing and rendering.
 
-Ordinary controls forward their constructor-queued events to their behavioral
-parent. They do not acquire private queues merely by implementing this method.
-The built-in `HostedWidget` helper and application `LeafContent` helper provide
-no-op defaults. Independent COM implementations return `Ok(false)` when they
-have no inbox; IDL methods remain declarations, without implementation bodies.
+Ordinary controls forward constructor-queued events to their behavioral parent.
+Passive controls, `HostedWidget` and `LeafContent` do not advertise a dispatcher.
+A custom `DispatchingLeafContent` uses `WidgetFactory::dispatching_leaf`; its
+controller shares the leaf's existing exclusive COM gate. Independent composites
+advertise `IWidgetDispatcher` on their widget allocation only when they own private
+behavior. IDL methods remain declarations, without implementation bodies.
 
 Dispatch belongs outside input, layout and paint traversal. A handler can edit
 other widgets through COM while using ordinary `&mut self` for its own state.
@@ -34,7 +36,8 @@ Required request completion precedes shutdown; see the
 ## Ownership and publication
 
 A composite is the mounted widget. FileDialog embeds its Linear root, model and
-receiver in one allocation and exposes IWidget, IContainerLayout and IFileDialog.
+receiver in one allocation and exposes IWidget, IWidgetDispatcher,
+IContainerLayout and IFileDialog.
 It mutates its own fields directly and calls distinct children through COM.
 `IEventOwner`, its mount/retire methods, `Mount`, and the separate view/controller
 wrapper no longer exist. The existing widget mount claim still rejects movement
@@ -52,7 +55,8 @@ automatically, including when validation retained weak handles.
 
 ## Scheduling and cost
 
-The runtime visits actual widgets descendant-first outside traversal and settles
+The runtime follows actual surface ancestry, visiting dispatcher descendants before
+parents and reverse forest chronology between unrelated siblings. It settles
 private work before the next application message or raw input event. Topology
 changes invalidate the snapshot before its next entry, regardless of the
 callback's reported message flag. Its widget references are cleared after each
@@ -70,7 +74,7 @@ through scheduling with `&mut`. No `RefCell` borrow spans a callback. On success
 or any returned error, the update clears all weak entries, restores the buffer for
 capacity reuse and marks the next update for a fresh tree collection.
 
-For a yielded receiver the scheduler executes `widget.dispatch_next()?`. Every
+For a yielded receiver the scheduler executes `dispatcher.dispatch_next()?`. Every
 handler error stops the update, including `NC_E_DROPPED` from an expired dependency
 and `NC_E_CLOSED` from a closed service. Neither status identifies which object
 failed. A dequeued message remains consumed; its successors, later widgets,
@@ -100,10 +104,26 @@ The diagram describes a pass while entries remain. Exhausting the iterator follo
 the ordinary outer scheduling rule: settle any reconciliation work, otherwise
 attempt the next application message.
 
-Every ordinary leaf therefore incurs a no-op COM dispatch call during a sweep.
-This is an explicit simplicity tradeoff: there is no second capability query,
-registration table, per-widget delivery ticket or readiness-notification system.
-Binary size and frame-time improvements are not claimed without measurement.
+Nodes cache a typed weak dispatcher projection at construction. A conservative
+host-owned count includes unmounted dispatchers and permits a zero-count fast path;
+a positive count always selects from the authoritative mounted forest. This is
+capability discovery, not a ready-inbox protocol. No delivery tickets or second
+lifetime registry are introduced. Passive trees perform no private dispatch calls.
+
+Geometry mutation has a separate conservative notification contract. Independent
+providers keep their sticky `take_change` marker and also call
+`IWidgetHost::mark_geometry_changed` after committed geometry edits, including
+hidden and unmounted widgets. Notify even when later work fails after commit; a
+pre-commit notification is harmless. The runtime alone collects sticky changes
+when notified, including render admission and retries. Notifications during a
+collection remain pending for the following collection.
+
+Application controllers run `EventModel::settle` when their inbox becomes empty.
+Tools prepare geometry/publication there under the existing application mutable
+gate; the runtime settles notified work before routing more input or committing
+the frame. The demo host calls one outer update. Its `after_update` hook performs
+independent preview rendering and paint-only cache publication. `LeafContent::paint`
+receives `&mut self` for these caches; host observation still rejects geometry edits.
 
 Runtime dispatch snapshots contain weak handles and cannot retain removed values.
 Owner Drop rejects new calls and destroys the complete owned value before returning.

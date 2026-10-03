@@ -105,7 +105,7 @@ impl LeafContent for PainterDemo {
     }
 
     /// Records ordered lines and concave fills through the shared painter and narrowed clips.
-    fn paint(&self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
+    fn paint(&mut self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
         let bounds = local_rect(state.rect);
         let local_width = bounds.width.max(0) as f32;
         let local_height = bounds.height.max(0) as f32;

@@ -109,6 +109,8 @@ struct Atlas {
     icon_name_order: Vec<usize>,
     /// Canonical glyph slots, sorted by scalar inside each font's unchanged glyph partition.
     glyph_order: Vec<usize>,
+    /// Bounded exact ASCII slots belonging to this same imported immutable revision.
+    glyph_ascii: Vec<neocogi_ui::assets::AsciiGlyphIndex>,
     /// Required opaque-white rendering tile resolved once during index construction.
     white_icon: IconId,
     /// Font identities resolved once for the dense semantic role domain.

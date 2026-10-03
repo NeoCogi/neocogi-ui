@@ -11,6 +11,8 @@ use neocogi_com::{ComPtr, ComRef, NcOutputWriter, NcStatus, NC_E_INVALID_ARG, co
 use std::borrow::Cow;
 
 mod validation;
+mod glyph_index;
+pub use glyph_index::AsciiGlyphIndex;
 
 /// Concrete appearance states used while compiling and resolving complete records.
 pub mod appearance;

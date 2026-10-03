@@ -59,3 +59,14 @@ enum WidgetEventBinding {
     /// Application receiver whose required typed interface is checked by the factory.
     Observed(ComPtr<IUnknown>),
 }
+
+#[version(1)]
+/// Optional atomic metadata publication for a constructed component's authored snapshot.
+/// Live widget construction, bindings and resources remain under normal reload ownership.
+interface IUiComponentMetadata {
+    /// Accepts a complete bounded component recipe only when schema and root constructor tree
+    /// exactly match the current authored snapshot. Only name/output display aliases can change.
+    /// Validate before publication; failure preserves source and all live widgets. No generation
+    /// changes and no setters rewrite interactive state. Offset must be zero; layout/paint reject.
+    fn replace_metadata(&mut self, document: &[u8]) -> Result<()>;
+}

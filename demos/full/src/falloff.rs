@@ -413,7 +413,7 @@ impl LeafContent for FalloffEditor {
     }
 
     /// Records the graph, curve and explicit control markers under a narrowed graph clip.
-    fn paint(&self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
+    fn paint(&mut self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
         let bounds = local_rect(state.rect);
         let graph = Self::graph_rect(bounds);
         if graph.width <= 0 || graph.height <= 0 {

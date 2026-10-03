@@ -154,6 +154,14 @@ pub struct Component {
     interface: ComPtr<contracts::IUiComponentAbi>,
 }
 impl Component {
+    /// Atomically replaces name/output aliases without reconstructing live state.
+    /// Independently supplied components may decline this optional capability. Callers must
+    /// prove resources/bindings are unchanged; this validates the exact authored constructor tree.
+    pub fn replace_metadata(&mut self, document: &Document) -> Result<(), NcStatus> {
+        let bytes = document.to_binary().map_err(|_| NC_E_INVALID_ARG)?;
+        self.object.query::<contracts::IUiComponentMetadataAbi>()?
+            .replace_metadata(NcCopyFromBufferOffset::new(0, &bytes))
+    }
     /// Transfers the root into a window/container; repeated transfers fail.
     /// A rejected insertion returns it; the caller decides whether to retry or drop it.
     pub fn take_root(&mut self) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
@@ -207,7 +215,7 @@ impl Mountable for &mut Component {
 /// This metadata only observes widgets. Component owns an unmounted root separately;
 /// transfer into the tree makes recipe lifetime independent. Failed construction
 /// or publication destroys the candidate owner even when observers were retained.
-#[neocogi_com::com_object(interfaces(contracts::IUiComponent, neocogi_com::persistence::IPersistable))]
+#[neocogi_com::com_object(interfaces(contracts::IUiComponent, contracts::IUiComponentMetadata, neocogi_com::persistence::IPersistable))]
 struct Loaded {
     /// Exact authored values; intentionally independent of live interactive state.
     document: Document,
@@ -215,6 +223,21 @@ struct Loaded {
     root: Widget<IWidgetAbi>,
     /// Authored widget keys cache weak projections for checked application queries.
     nodes: BTreeMap<String, Widget<IWidgetAbi>>,
+}
+impl contracts::IUiComponentMetadata for Loaded {
+    /// Complete validation precedes the single source assignment and never edits the live tree.
+    fn replace_metadata(&mut self, bytes: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        if bytes.offset() != 0 {
+            return Err(NC_E_INVALID_ARG);
+        }
+        self.root.node_interface()?.host()?.check_mutation()?;
+        let document = Document::from_binary(bytes.as_slice()).map_err(|_| NC_E_INVALID_ARG)?;
+        if document.version != self.document.version || document.root != self.document.root {
+            return Err(NC_E_INVALID_ARG);
+        }
+        self.document = document;
+        Ok(())
+    }
 }
 impl contracts::IUiComponent for Loaded {
     /// Shares the mountable widget identity without copying its state.

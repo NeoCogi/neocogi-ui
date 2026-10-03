@@ -152,7 +152,7 @@ second mount/retire state machine. The runtime validates host, layout and topolo
 before calling the widget's one-way `mount` operation. Reattachment remains an
 error, including after removal.
 
-`FileDialog` implements `IFileDialog`, `IWidget` and `IContainerLayout` on one COM
+`FileDialog` implements `IFileDialog`, `IWidgetDispatcher`, `IWidget` and `IContainerLayout` on one COM
 allocation. It embeds its Linear root as an ordinary Rust value, so layout
 reuse needs no second root object. Its model and receiver are ordinary fields.
 Handlers mutate local state through `&mut self` and call distinct child widgets
@@ -169,7 +169,7 @@ Mounted widget dispatch also runs during ordinary `Ui::update`, without any
 application dispatcher:
 
 1. Synchronize geometry outside traversal.
-2. Visit widgets descendant-first. After one message, settle topology and geometry
+2. Visit optional private dispatchers in actual ancestry order, child first. After one message, settle topology and geometry
    before reconsidering descendants.
 3. When widget work is quiet, call the optional `IApplicationDispatcher` once.
    Settle newly posted private work before its next application message.
@@ -196,9 +196,14 @@ raw input remain queued. Completed handler edits are not rolled back. Retry
 rebuilds the current tree. See the [dispatch and iterator contract](../../../../docs/WIDGET_EVENT_DISPATCH.md)
 and [status meanings](../../../../docs/COM_LIFETIME_ERRORS.md).
 
-This simple protocol polls ordinary widgets' no-op methods too. It avoids an
-additional discovery/registration contract, but is not a ready-inbox notification
-system. No frame-time or binary-size improvement is claimed without measurement.
+Passive widgets advertise no private dispatcher and receive no empty COM calls.
+Nodes own typed weak capability projections, while a conservative zero-dispatcher
+count skips collection. Dispatch entries remain transient; no ready-inbox system
+or second lifetime registry exists. Application controllers can synchronize outer
+geometry in `EventModel::settle`, called at their empty-inbox boundary. Independent
+providers must retain sticky changes and conservatively notify
+`IWidgetHost::mark_geometry_changed` on committed geometry edits. The runtime is
+the sole sticky-collection owner, including retries and render admission.
 
 Owner Drop rejects new calls and destroys the value and owned descendants before
 returning. Concurrent admitted COM calls finish first; their borrow guards only

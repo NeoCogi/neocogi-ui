@@ -10,7 +10,7 @@ use neocogi_com::{
     com_factory, com_object,
 };
 use neocogi_gfx_contracts::*;
-use neocogi_gfx_support::AssetTables;
+use neocogi_gfx_support::{AssetTables, AsciiGlyphIndex};
 use neocogi_renderer_contracts::{
     IRenderItemAbi, IRenderStream, IRenderStreamAbi, IRenderStreamVtblFor, IRgbaImageAbi, IRendererAbi, ITextureAbi, MAX_RENDER_BATCHES,
     MAX_RENDER_VERTICES, RenderBatch, RenderInfo, RenderVertex,
@@ -26,6 +26,8 @@ struct Resources {
     catalog: ComPtr<IAssetCatalogAbi>,
     /// Validated metadata used for font, icon, and UV lookup.
     tables: AssetTables,
+    /// Bounded exact ASCII slots, replaced atomically with their immutable font revision.
+    glyph_ascii: Vec<AsciiGlyphIndex>,
     /// Cached authenticated white tile used by solid triangles and flat patch cells.
     white: Rect,
     /// Narrow image projection supplied to the renderer for its already prepared atlas.
@@ -50,9 +52,11 @@ impl Resources {
         // Validation already proved this named tile exists and is opaque. Cache its rectangle once
         // per installed immutable revision instead of scanning icon names for every solid shape.
         let white = tables.white_rect();
+        let glyph_ascii = AsciiGlyphIndex::build(&tables)?;
         Ok(Self {
             catalog: source.catalog()?,
             tables,
+            glyph_ascii,
             white,
             image: source.image()?,
         })
@@ -503,7 +507,12 @@ impl GfxCompositorObject {
     }
 
     /// Finds one glyph in the sorted private partition, falling back to underscore when absent.
-    fn glyph(&self, font: AssetFont, scalar: u32) -> Result<AssetGlyph, NcStatus> {
+    fn glyph(&self, font_slot: usize, font: AssetFont, scalar: u32) -> Result<AssetGlyph, NcStatus> {
+        if scalar < 128 {
+            let index = &self.resources.glyph_ascii[font_slot];
+            let slot = index.get(scalar).or_else(|| index.get(u32::from('_'))).ok_or(NC_E_INVALID_ARG)?;
+            return Ok(self.resources.tables.glyphs[slot]);
+        }
         let end = font.glyphs.first.checked_add(font.glyphs.count).ok_or(NC_E_INVALID_ARG)?;
         let glyphs = self
             .resources
@@ -609,7 +618,8 @@ impl GfxCompositor for GfxCompositorObject {
             return Err(NC_E_INVALID_ARG);
         }
         let text = std::str::from_utf8(text.as_slice()).map_err(|_| NC_E_INVALID_ARG)?;
-        let font = *self.resources.tables.fonts.get(font as usize).ok_or(NC_E_OUT_OF_RANGE)?;
+        let font_slot = font as usize;
+        let font = *self.resources.tables.fonts.get(font_slot).ok_or(NC_E_OUT_OF_RANGE)?;
         // Every glyph shares one frame/operation intersection. Retain its Result until the first
         // drawable glyph so empty and zero-area text keep their existing clip-validation behavior.
         let clip = self.effective_clip(clip);
@@ -625,7 +635,7 @@ impl GfxCompositor for GfxCompositorObject {
                 baseline_y += i128::from(font.line_size);
                 continue;
             }
-            let glyph = self.glyph(font, u32::from(character))?;
+            let glyph = self.glyph(font_slot, font, u32::from(character))?;
             let destination = Rect {
                 x: clamp_i128(i128::from(origin.x) + pen_x + i128::from(glyph.offset_x)),
                 y: clamp_i128(i128::from(origin.y) + baseline_y - i128::from(glyph.offset_y) - i128::from(glyph.rect.height)),

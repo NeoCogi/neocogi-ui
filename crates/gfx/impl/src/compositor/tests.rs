@@ -409,3 +409,47 @@ fn compositor_intake_limits_apply_before_expansion_and_reset_with_frames() {
     let invalid = Rect { width: -1, ..clip };
     assert_eq!(compositor.solid_triangles(invalid, NcCopyFromBufferOffset::new(0, &[])), Err(NC_E_INVALID_ARG));
 }
+
+/// Actual COM text expansion retains missing-ASCII/Unicode fallback and replaces revision indices.
+#[test]
+fn glyph_acceleration_preserves_unicode_fallback_and_revision_publication() {
+    let original = test_bundle();
+    let mut fixture = data(&original);
+    for glyph in fixture.tables.glyphs.to_mut() {
+        match char::from_u32(glyph.scalar).unwrap() {
+            'A' => glyph.advance_x = 3,
+            '_' => glyph.advance_x = 5,
+            'B' => { glyph.scalar = u32::from('Ω'); glyph.advance_x = 7; },
+            _ => {}
+        }
+    }
+    // Foreign producers may publish unsorted font partitions; lookup semantics are identical.
+    fixture.tables.glyphs.to_mut().reverse();
+    let source = fixture.clone().into_bundle().unwrap();
+    let mut compositor = GfxCompositorObject::create(source.as_com_ref()).unwrap();
+    let capture = std::rc::Rc::new(RenderCapture::default());
+    let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { capture: capture.clone() }).query().unwrap();
+    let size = Size { width: 128, height: 32 };
+    let clip = Rect { x: 0, y: 0, width: 128, height: 32 };
+    for (replacement, expected) in [(false, [0., 3., 8., 15.]), (true, [0., 11., 16., 33.])] {
+        if replacement {
+            for glyph in fixture.tables.glyphs.to_mut() {
+                match char::from_u32(glyph.scalar).unwrap() {
+                    'A' => glyph.advance_x = 11,
+                    'Ω' => glyph.advance_x = 17,
+                    _ => {}
+                }
+            }
+            let revision = fixture.clone().into_revision(source.as_com_ref()).unwrap();
+            compositor.install_assets(revision.as_com_ref()).unwrap();
+        }
+        compositor.begin(size, 0).unwrap();
+        compositor.text(clip, 0, DrawPoint { x: 0, y: 0 }, 0xffffffff,
+            NcCopyFromBufferOffset::new(0, "ABΩ€".as_bytes())).unwrap();
+        compositor.submit(renderer.as_com_ref()).unwrap();
+        let vertices = capture.vertices.borrow();
+        assert_eq!(vertices.len(), 24);
+        let positions = vertices.chunks_exact(6).map(|quad| quad[0].x).collect::<Vec<_>>();
+        assert_eq!(positions, expected, "both missing characters use the underscore advance");
+    }
+}

@@ -58,6 +58,7 @@ impl AtlasHandle {
             left.cmp(right)
         });
 
+        let glyph_ascii = neocogi_ui::assets::AsciiGlyphIndex::build(&tables)?;
         let mut glyph_order = index_slots(tables.glyphs.len())?;
         for font in tables.fonts.iter() {
             glyph_order[table_range(font.glyphs)].sort_unstable_by_key(|slot| tables.glyphs[*slot].scalar);
@@ -85,6 +86,7 @@ impl AtlasHandle {
             icon_ids,
             icon_name_order,
             glyph_order,
+            glyph_ascii,
             white_icon,
             font_roles,
             icon_roles,
@@ -284,6 +286,9 @@ impl AtlasHandle {
 
     /// Searches the pre-sorted glyph index inside one canonical font partition.
     fn glyph(&self, font_slot: usize, character: char) -> Option<&AssetGlyph> {
+        if u32::from(character) < 128 {
+            return self.0.glyph_ascii[font_slot].get(u32::from(character)).map(|slot| &self.0.tables.glyphs[slot]);
+        }
         let font = self.0.tables.fonts[font_slot];
         let order = &self.0.glyph_order[table_range(font.glyphs)];
         order
@@ -440,6 +445,29 @@ mod tests {
         assert!(first_clone.contains_icon(first_icon));
         assert!(!second.contains_font(first_font));
         assert!(!second.contains_icon(first_icon));
+    }
+
+    /// Exact ASCII and Unicode metrics stay distinct from fallback across immutable revision import.
+    #[test]
+    fn glyph_indices_preserve_unicode_missing_ascii_and_derived_revisions() {
+        let mut data = crate::test_support::test_asset_data_with_font_sizes(&[("body", 10)]);
+        let glyphs = data.tables.glyphs.to_mut();
+        glyphs[0].advance_x = 5;
+        glyphs[1].advance_x = 3;
+        glyphs[2].scalar = u32::from('Ω');
+        glyphs[2].advance_x = 7;
+        let atlas = AtlasHandle::from_validated_data(data.clone(), None).unwrap();
+        let font = atlas.font_id("body").unwrap();
+        assert_eq!(atlas.get_char_entry(font, 'a').unwrap().advance_x, 3);
+        assert!(atlas.get_char_entry(font, 'b').is_none());
+        assert_eq!(atlas.get_char_entry(font, 'Ω').unwrap().advance_x, 7);
+        assert!(atlas.get_char_entry(font, '€').is_none());
+        assert_eq!(atlas.get_text_size(font, "abΩ€").width, 20);
+        data.tables.glyphs.to_mut()[1].advance_x = 11;
+        let changed = AtlasHandle::from_validated_data(data, Some(&atlas)).unwrap();
+        assert_eq!(changed.font_id("body"), Some(font));
+        assert_eq!(changed.get_text_size(font, "abΩ€").width, 28);
+        assert_eq!(atlas.get_text_size(font, "abΩ€").width, 20);
     }
 
     /// Verifies direct lookup rejects a same-position identity from another catalog.

@@ -129,7 +129,7 @@ impl LeafContent for GridWidget {
         Ok(GeometryChange::NoChange)
     }
     /// Reuses owned geometry without holding model or cache borrows across painter calls.
-    fn paint(&self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
+    fn paint(&mut self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
         let (pvm, minor_lines, background) = {
             let grid = self.data.borrow();
             (grid.view.pvm(), grid.minor_lines, grid.background)

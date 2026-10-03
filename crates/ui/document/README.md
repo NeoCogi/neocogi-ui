@@ -77,6 +77,16 @@ behavioral parent's mapped messages. Getters and ordinary state setters do not
 publish user-interaction events. Application code decides when a state change
 should also trigger application behavior.
 
+A component can advertise optional `IUiComponentMetadata`. Its
+`replace_metadata` operation accepts a complete bounded recipe whose schema and
+root constructor tree exactly match the authored snapshot, then atomically
+publishes document name/output aliases. It changes no live widgets, event bindings,
+resources or reload generation. The UI Designer uses this path only when texture
+identities are unchanged and no opaque custom nodes are involved. Constructor,
+resource and plugin settings edits use normal transactional reload. Publication
+must run under normal host mutation admission; layout/paint reject it. Persistence
+advances to the new authored metadata while interactive state remains independent.
+
 A compiled component retains the recipe, weak lookup handles and one unmounted
 root owner. `take_root()` moves that owner once; `root()` only observes it.
 Mounting consumes the same root. Dropping metadata after transfer cannot remove

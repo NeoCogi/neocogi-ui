@@ -148,7 +148,7 @@ impl LeafContent for Suzanne {
         Ok(GeometryChange::NoChange)
     }
     /// Rendering observes the scene without a native callback, native handle or borrowed GPU frame.
-    fn paint(&self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
+    fn paint(&mut self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
         painter.item(state.rect, self.item.as_com_ref())
     }
 }
