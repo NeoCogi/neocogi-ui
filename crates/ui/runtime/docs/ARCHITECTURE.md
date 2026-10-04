@@ -1,5 +1,8 @@
 # UI runtime architecture
 
+For an overview of ownership, typed queues and behavioral scheduling, start with
+the [widget and event model](../../../../docs/architecture/WIDGET_EVENT_MODEL.md).
+
 The core UI provider owns the retained tree, layout traversal, input routing and
 surface policy. The nodes provider owns concrete controls, containers and standard
 compositions. Both built-in and independently compiled widgets use the same COM

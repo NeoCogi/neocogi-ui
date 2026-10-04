@@ -1,5 +1,7 @@
 # Architecture
 
+- [Widget and event model](WIDGET_EVENT_MODEL.md) — retained ownership, typed
+  queues, composite/application inboxes, update scheduling and callback boundaries.
 - [Component design](COM_DESIGN.md) — compile-time contracts, runtime activation,
   application behavior and deployment responsibilities.
 - [Component/plugin boundaries](COMPONENTS.md) — ownership, dependency graph,

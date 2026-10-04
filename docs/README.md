@@ -24,6 +24,8 @@ purpose; this directory contains only the main index.
 
 ## Common starting points
 
+- [Widget and event architecture](architecture/WIDGET_EVENT_MODEL.md) explains
+  ownership, message flow and how an update reaches a renderable state.
 - [COM author contracts](contracts/COM_AUTHORS.md),
   [IDL language](contracts/IDL_MODULES.md), and
   [current COM ABI](../crates/com/docs/README.md).
