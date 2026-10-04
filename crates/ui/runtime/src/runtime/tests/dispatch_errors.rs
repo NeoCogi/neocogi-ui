@@ -1,7 +1,7 @@
 //! Real generated widget calls distinguish receiver expiry from behavior errors.
 use super::*;
 use super::composite_fixture::Composite;
-use neocogi_ui::{LeafContent, Painter, events::EventModel};
+use neocogi_ui::{LeafContent, Painter, events::MessageProcessor};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 
 /// Both supported private-behavior entry points must obey the same scheduler contract.
@@ -30,7 +30,7 @@ struct Behavior {
     /// The test owns the receiver; no observation retains application/widget owners.
     trace: Sender<&'static str>,
 }
-impl EventModel for Behavior {
+impl MessageProcessor for Behavior {
     /// Commands are dequeued once by the leaf or composite's own receiver.
     type Message = Command;
 

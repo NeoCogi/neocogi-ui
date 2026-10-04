@@ -195,7 +195,7 @@ impl Host {
         // Both local frame hooks and foreign dispatch use this allocation's
         // existing COM borrow gate. Resolve its owner projection only once.
         let host = std::rc::Rc::new(self);
-        let state = neocogi_ui::events::Controller::into_local(neocogi_ui::events::Controller::new(Application { state, host: host.clone(), size: Size::default() }, events));
+        let state = neocogi_ui::events::Dispatcher::into_local(neocogi_ui::events::Dispatcher::new(Application { state, host: host.clone(), size: Size::default() }, events));
         let owner = state.query()?;
         let driver = Driver {
             host,
@@ -283,22 +283,22 @@ impl IInputSink for PollInput {
     }
 }
 
-/// Adapts the host's frame-capable application to the same model used by composites.
+/// Adapts the host's frame-capable application to synchronous message-processing behavior.
 struct Application<State: AppState> {
-    /// Ordinary authoritative application fields, owned by the persistent controller.
+    /// Ordinary authoritative application fields, owned by the persistent dispatcher.
     state: State,
-    /// Shared immutable host services own no application controller and cannot form a cycle.
+    /// Shared immutable host services own no application dispatcher and cannot form a cycle.
     host: std::rc::Rc<Host>,
     /// Current positive drawable size installed before entering the UI update.
     size: Size,
 }
-impl<State: AppState> neocogi_ui::events::EventModel for Application<State> {
+impl<State: AppState> neocogi_ui::events::MessageProcessor for Application<State> {
     type Message = State::Message;
     /// Uses the real application gate while the outer UI has released traversal ownership.
     fn apply_pending_changes(&mut self) -> Result<ApplyOutcome, NcStatus> {
         self.state.apply_pending_changes(&self.host, self.size)
     }
-    /// Runtime delivery holds exclusive controller access before receiving a message.
+    /// Runtime delivery holds exclusive dispatcher access before receiving a message.
     fn handle(&mut self, message: Self::Message) -> Result<(), NcStatus> {
         self.state.update(message)
     }
@@ -320,7 +320,7 @@ struct Driver<State: AppState> {
     /// Owns exactly one UI/renderer pair for this application.
     host: std::rc::Rc<Host>,
     /// Persistent owned state; short local guards end before entering UI dispatch.
-    state: neocogi_com::LocalCom<neocogi_ui::events::Controller<Application<State>>>,
+    state: neocogi_com::LocalCom<neocogi_ui::events::Dispatcher<Application<State>>>,
     /// Checked once at construction and borrowed for every frame without querying.
     owner: ComPtr<neocogi_ui::IApplicationDispatcherAbi>,
     /// Optional finite run counts successfully rendered frames, including the final frame.
@@ -341,14 +341,14 @@ impl<State: AppState> Driver<State> {
                     // End host gestures and reset UI held state once. Events
                     // received while minimized have no drawable target and are
                     // discarded instead of accumulating behind a skipped update.
-                    self.state.try_borrow_mut()?.model.state.input(UiInput::Cancel, "")?;
+                    self.state.try_borrow_mut()?.processor.state.input(UiInput::Cancel, "")?;
                     host.ui.input(UiInput::Cancel, "")?;
                 }
                 for _ in host.observations.try_iter() {}
             } else {
                 self.suspended = false;
                 for observation in host.observations.try_iter() {
-                    self.state.try_borrow_mut()?.model.state.input(observation.event, &observation.text)?;
+                    self.state.try_borrow_mut()?.processor.state.input(observation.event, &observation.text)?;
                     host.ui.input(observation.event, &observation.text)?;
                 }
             }
@@ -356,7 +356,7 @@ impl<State: AppState> Driver<State> {
                 PollStatus::Event => continue,
                 PollStatus::Idle => break,
                 PollStatus::Close => {
-                    if self.state.try_borrow_mut()?.model.state.close_requested()? {
+                    if self.state.try_borrow_mut()?.processor.state.close_requested()? {
                         return Ok(FrameOutcome::Stopped);
                     }
                     break;
@@ -370,18 +370,18 @@ impl<State: AppState> Driver<State> {
         }
         // Apply frame edits before consuming the input just polled. Handlers can prepare work for
         // the next frame callback; this frame's direct edits and nested events settle in one update.
-        self.state.try_borrow_mut()?.model.size = size;
-        if !self.state.try_borrow_mut()?.model.state.frame(host, size, seconds)? {
+        self.state.try_borrow_mut()?.processor.size = size;
+        if !self.state.try_borrow_mut()?.processor.state.frame(host, size, seconds)? {
             return Ok(FrameOutcome::Stopped);
         }
         host.ui.update_with_events(size, self.owner.as_com_ref())?;
         self.state
             .try_borrow_mut()?
-            .model
+            .processor
             .state
             .after_update(host, size)
             .map_err(|status| host.render_error("application frame update", status))?;
-        host.window.text_input(self.state.try_borrow()?.model.state.text_input_area(host)?)?;
+        host.window.text_input(self.state.try_borrow()?.processor.state.text_input_area(host)?)?;
         host.ui
             .render(size, host.renderer.as_com_ref())
             .map_err(|status| host.render_error("frame", status))?;

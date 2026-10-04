@@ -27,7 +27,7 @@ struct Model {
     /// Typed extension interface acquired once during construction.
     counter: neocogi_com::WeakComBox<CounterAbi>,
 }
-impl events::EventModel for Model {
+impl events::MessageProcessor for Model {
     type Message = Message;
     /// Handles the independent plugin's concrete public event protocol.
     fn handle(&mut self, message: Message) -> Result<(), NcStatus> {
@@ -95,7 +95,7 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let root = neocogi_ui::OwnedWidget::from_interface(inset_owner);
     // Capability discovery happens once while wiring the application, never during UI phases.
     let window = ui.window("Independent extension", Rect { x: 10, y: 10, width: 400, height: 200 }, root).map_err(|(status, _candidate)| status)?;
-    let app = events::Controller::into_local(events::Controller::new(
+    let app = events::Dispatcher::into_local(events::Dispatcher::new(
         Model {
             labels: Vec::new(),
             counter: counter.clone(),
@@ -121,7 +121,7 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     key(ui, KeyCode::Tab)?;
     key(ui, KeyCode::Space)?;
     ui.update_with_events(size, owner.as_com_ref())?;
-    assert_eq!(&app.try_borrow()?.model.labels, &["1".to_owned(), "count=1".to_owned()]);
+    assert_eq!(&app.try_borrow()?.processor.labels, &["1".to_owned(), "count=1".to_owned()]);
     assert_eq!(counter.count()?, 100);
     ui.render(size, renderer)?;
     let activated = probe.calls()?;

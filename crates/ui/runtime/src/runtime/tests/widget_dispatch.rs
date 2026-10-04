@@ -1,7 +1,7 @@
 //! Widget-owned behavior, lifetime and attachment regressions through the real runtime.
 
 use super::*;
-use neocogi_ui::events::EventModel;
+use neocogi_ui::events::MessageProcessor;
 use super::composite_fixture::Composite;
 
 /// Child behavior reports close intent to its parent without deciding ownership.
@@ -14,7 +14,7 @@ struct Removal {
     fail: bool,
 }
 
-impl EventModel for Removal {
+impl MessageProcessor for Removal {
     type Message = ();
     /// Records entry and return around posting intent; the parent acts afterward.
     fn handle(&mut self, _: ()) -> Result<(), NcStatus> {
@@ -165,7 +165,7 @@ struct OrderedModel {
     /// Failure after posting must not make intent an automatic removal decision.
     fail: bool,
 }
-impl EventModel for OrderedModel {
+impl MessageProcessor for OrderedModel {
     type Message = OrderedMessage;
     /// A child posts intent; only its external parent later destroys the tree.
     fn handle(&mut self, message: OrderedMessage) -> Result<(), NcStatus> {
@@ -343,7 +343,7 @@ fn topology_changes_refresh_dispatch_even_when_the_widget_reports_no_message() {
 
 /// A queued non-Send value lets the test observe receiver destruction without raw pointers.
 struct DropModel;
-impl EventModel for DropModel {
+impl MessageProcessor for DropModel {
     type Message = Rc<()>;
     /// This fixture's pending value should be discarded rather than dispatched.
     fn handle(&mut self, _: Rc<()>) -> Result<(), NcStatus> {

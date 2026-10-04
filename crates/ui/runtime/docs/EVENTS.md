@@ -8,12 +8,12 @@ Widgets post typed facts to their constructor-selected application COM queue. A 
 component consumes its children's messages and emits its own public results
 upward. The application consumes the final public messages. A concrete application queue
 can implement several `*EventQueue` traits and share one allocation across widgets
-through `*_with_queue`. Applications may use `Controller<Model>`; a behavioral composite owns its inbox
+through `*_with_queue`. Applications may use `Dispatcher<Processor>`; a behavioral composite owns its inbox
 and implements `IWidgetDispatcher::dispatch_next` on the same concrete widget.
 
 ## Application construction and frames
 
-The application owns its model and receiver in one persistent controller. Resolve
+The application owns its processor and receiver in one persistent dispatcher. Resolve
 its `IApplicationDispatcher` projection once and borrow it for each
 `ui.update_with_events(size, dispatcher.as_com_ref())` call.
 
@@ -86,7 +86,7 @@ widget commits state
   → queue captures a weak origin when later identity is needed
   → Sender::send queues the owned private message
   → runtime invokes the application's dispatch_next at a safe boundary
-  → Controller receives one value and calls model.handle(&mut self, value)
+  → Dispatcher receives one value and calls processor.handle(&mut self, value)
 ```
 
 `post` runs synchronously inside the producer's call. It acquires input facts;
@@ -175,7 +175,7 @@ application dispatcher:
    before reconsidering descendants.
 3. When widget work is quiet, call the optional `IApplicationDispatcher` once.
    Its version 2 result distinguishes `MessageHandled`, `PendingChangesApplied`,
-   and `Idle`. The controller handles one message, or calls the model's pending-change
+   and `Idle`. The dispatcher handles one message, or calls the processor's pending-change
    hook when no message is available. Both work outcomes consume budget and revisit
    private work/layout before another application visit or later raw input. `Idle`
    also requires quiet geometry/topology notifications before the boundary ends.
@@ -205,8 +205,8 @@ and [status meanings](../../../../docs/COM_LIFETIME_ERRORS.md).
 Passive widgets advertise no private dispatcher and receive no empty COM calls.
 Nodes own typed weak capability projections, while a conservative zero-dispatcher
 count skips collection. Dispatch entries remain transient; no ready-inbox system
-or second lifetime registry exists. Application controllers can synchronize outer
-geometry in `EventModel::apply_pending_changes`, called when their inbox is empty
+or second lifetime registry exists. Application dispatchers can synchronize outer
+geometry in `MessageProcessor::apply_pending_changes`, called when their inbox is empty
 or disconnected. `ApplyOutcome::ChangesApplied` reports a consumed request;
 `NothingPending` reports an idle invocation. The hook can run several times in one
 update, including before the first input. Independent

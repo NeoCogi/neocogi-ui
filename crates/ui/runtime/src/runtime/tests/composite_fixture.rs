@@ -1,38 +1,38 @@
 //! Typed composite fixture exercising the same IWidget gate for behavior and bounded destruction.
 
 use super::*;
-use neocogi_ui::events::EventModel;
+use neocogi_ui::events::MessageProcessor;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
 #[com_object(interfaces(IWidget, IContainerLayout, IWidgetDispatcher), ownership = exclusive)]
-/// A private inbox and model belong to the mounted widget itself.
+/// A private inbox and processor belong to the mounted widget itself.
 /// The fixture delegates geometry to a real Linear; its optional dispatcher shares the composite gate.
-pub(super) struct Composite<Model: EventModel> {
+pub(super) struct Composite<Processor: MessageProcessor> {
     /// Actual widget policy and child writer supplied by the production provider.
     shell: neocogi_ui::OwnedWidget<neocogi_ui::LinearAbi>,
     /// Cached layout projection of that same test geometry implementation.
     layout: WeakComBox<IContainerLayoutAbi>,
-    /// Owned receiver disconnects before the model's destructor reports finalization.
-    messages: Receiver<Model::Message>,
-    /// Concrete mutable model; fields above release child owners and the inbox first.
-    pub(super) model: Model,
+    /// Owned receiver disconnects before the processor's destructor reports finalization.
+    messages: Receiver<Processor::Message>,
+    /// Concrete mutable processor; fields above release child owners and the inbox first.
+    pub(super) processor: Processor,
 }
-impl<Model: EventModel> Composite<Model> {
+impl<Processor: MessageProcessor> Composite<Processor> {
     /// Builds an unmounted composite and exposes its ordinary child-editing capability.
-    pub(super) fn build(ui: &neocogi_ui::Ui, model: Model, messages: Receiver<Model::Message>) -> (neocogi_com::LocalBox<Self>, neocogi_ui::LinearWidget) {
+    pub(super) fn build(ui: &neocogi_ui::Ui, processor: Processor, messages: Receiver<Processor::Message>) -> (neocogi_com::LocalBox<Self>, neocogi_ui::LinearWidget) {
         let shell = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
         let layout = shell.node_interface().unwrap().query().unwrap();
         let handle = shell.handle();
         let local = Self::into_local_box(Self {
             shell,
             layout,
-            model,
+            processor,
             messages,
         });
         (local, handle)
     }
 }
-impl<Model: EventModel> IWidget for Composite<Model> {
+impl<Processor: MessageProcessor> IWidget for Composite<Processor> {
     /// Shares the actual runtime authority with its test geometry.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
         self.shell.node_interface()?.host()
@@ -76,7 +76,7 @@ impl<Model: EventModel> IWidget for Composite<Model> {
         self.shell.node_interface()?.paint(scope, state, painter)
     }
 }
-impl<Model: EventModel> IContainerLayout for Composite<Model> {
+impl<Processor: MessageProcessor> IContainerLayout for Composite<Processor> {
     /// Publishes the exact collection edited through the fixture's shell handle.
     fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
         self.layout.children()
@@ -95,12 +95,12 @@ impl<Model: EventModel> IContainerLayout for Composite<Model> {
     }
 }
 
-impl<Model: EventModel> IWidgetDispatcher for Composite<Model> {
+impl<Processor: MessageProcessor> IWidgetDispatcher for Composite<Processor> {
     fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
         self.shell.node_interface()?.properties()?;
         match self.messages.try_recv() {
             Ok(message) => {
-                self.model.handle(message)?;
+                self.processor.handle(message)?;
                 Ok(true)
             }
             Err(TryRecvError::Empty | TryRecvError::Disconnected) => Ok(false),

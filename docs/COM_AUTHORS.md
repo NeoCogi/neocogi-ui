@@ -78,12 +78,17 @@ field comment must name that constraint.
 
 ## Typed events and application state
 
-A persistent `events::Controller<Model>` owns ordinary application state and a
-standard `std::sync::mpsc::Receiver<Model::Message>`. Implement the concrete queue
+A persistent `events::Dispatcher<Processor>` owns ordinary application state and a
+standard `std::sync::mpsc::Receiver<Processor::Message>`. Implement the concrete queue
 traits on one COM object containing the sender, and pass its typed projections
-when constructing observed widgets. Implement `EventModel::handle(&mut self, message)`
-with ordinary matching and retain the controller's checked `IApplicationDispatcher`
-projection across frames:
+when constructing observed widgets. Implement `MessageProcessor::handle(&mut self, message)`
+with ordinary matching and retain the dispatcher's checked `IApplicationDispatcher`
+projection across frames.
+
+`MessageProcessor` defines the behavior and owns its ordinary state; `Dispatcher`
+owns that processor and its mailbox. The UI runtime schedules synchronous delivery
+through the existing mutable gate. These names describe message processing and
+ownership without imposing model/view/controller roles.
 
 ```rust
 let (send, messages) = std::sync::mpsc::channel();
@@ -93,8 +98,8 @@ let buttons = queue.query::<ButtonEventQueueAbi>()?;
 let dialogs = queue.query::<IFileDialogEventQueueAbi>()?;
 let button = ui.widgets().button_with_queue("Open", Some(buttons.as_com_ref()))?;
 let picker = ui.file_dialog_with_queue(window.as_com_ref(), Some(dialogs.as_com_ref()))?;
-let app = neocogi_ui::events::Controller::into_local(
-    neocogi_ui::events::Controller::new(model, messages),
+let app = neocogi_ui::events::Dispatcher::into_local(
+    neocogi_ui::events::Dispatcher::new(processor, messages),
 );
 let owner = app.query::<IApplicationDispatcherAbi>()?;
 // Repeat these two calls each frame, retaining app and owner.
@@ -102,21 +107,21 @@ ui.update_with_events(drawable_size, owner.as_com_ref())?;
 ui.render(drawable_size, renderer.as_com_ref())?;
 ```
 
-The model owns everything its deferred behavior needs. Use `app.try_borrow()` or
+The processor owns everything its deferred behavior needs. Use `app.try_borrow()` or
 `try_borrow_mut()` for typed local access between updates; release those guards
 before dispatch. They use the same COM borrow gate as foreign interface calls,
 without an interface query or a second mutable state container. Frame dispatch
 borrows an existing capability and creates no callback/revocation adapter.
 The demo host performs this setup automatically for `Host::run(state, receiver)`.
 
-For coalesced publication, implement `EventModel::apply_pending_changes` (or the
+For coalesced publication, implement `MessageProcessor::apply_pending_changes` (or the
 host's `AppState::apply_pending_changes`) and return `ApplyOutcome::ChangesApplied`
 only after consuming pending work. Return `NothingPending` on an idle call. The
 hook runs when no message is available, including after sender disconnection,
 and can run several times per update. It runs under the same mutable gate with no
 traversal borrow. Geometry edits still need ordinary notifications; renderer work
 belongs after the completed update. An error preserves already committed edits;
-the model decides whether an uncompleted request remains available for retry.
+the processor decides whether an uncompleted request remains available for retry.
 
 The generated `IApplicationDispatcher` version 2 returns `ApplicationDispatch`:
 `MessageHandled`, `PendingChangesApplied`, or `Idle`. Applied pending changes
@@ -152,8 +157,8 @@ Queue `post` runs synchronously and should only acquire data and a weak origin;
 UI behavior belongs in the later consumer. Receivers acquire the checked borrowed
 event with `to_owned()` and invoke the event module's `validate` function before
 posting. COM checks wire validity; this domain validation checks restrictions such
-as finite numeric values and text cursor boundaries. The later controller owns
-its ordinary mutable model.
+as finite numeric values and text cursor boundaries. The later processor owns
+its ordinary mutable state.
 
 A custom class intended for authored forms has at most one constructor receiver.
 IDL-generated `*Abi::IDL_INTERFACE.event_queue` records that queue's exact identity
@@ -845,7 +850,7 @@ new visible request. Hiding an active modal or its owner queues lifecycle cancel
 runtime disconnects the picker without synthesizing a cancellation event.
 
 Each completion is already a committed request outcome in the consumer's inbox.
-Controller/runtime destruction or remapping cannot erase those outcomes.
+Dispatcher/runtime destruction or remapping cannot erase those outcomes.
 An active request is abandoned during owner destruction; explicit cancellation
 settles it while still alive. An already completed request is not completed again. Failed consumers consume the attempted outcome and preserve
 unattempted successors. This is the same ownership rule as every other output;

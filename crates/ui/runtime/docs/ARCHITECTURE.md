@@ -9,7 +9,7 @@ protocols at the retained-node boundary.
 
 | Owner | Responsibility |
 | --- | --- |
-| `neocogi-ui` | Application facade, concrete handles and application event controllers. |
+| `neocogi-ui` | Application facade, concrete handles and application message dispatchers. |
 | `neocogi-ui-core-contracts` | Shared widget, layout, surface, menu and window protocols. |
 | `neocogi-ui-nodes-contracts` | Built-in classes, their event values and constructor factory. |
 | `neocogi-ui-runtime` | Retained topology, authoritative child stores, traversal, scopes and surfaces. |
@@ -97,7 +97,7 @@ A producer posts its typed event to the constructor-supplied application queue
 synchronously. That queue acquires an owned payload and, when needed, a
 `WeakComBox` origin, then sends a private application message. Behavior runs later.
 Composite widgets own their receiver and model and implement `IWidgetDispatcher::dispatch_next`;
-the runtime schedules them descendant-first. A top-level `Controller<Model>`
+the runtime schedules them descendant-first. A top-level `Dispatcher<Processor>`
 implements the application's dispatcher. There is no separate event-owner
 mount/retire lifecycle. The [event guide](EVENTS.md) defines ordering, errors and
 application-specific stale-message policy.
@@ -176,9 +176,9 @@ input/focus/menu policy; traversal owns committed geometry and paint; synchroniz
 owns forest marker collection and public copied policy. All derive from the same
 forest; the split adds no secondary surface owner or lifecycle representation.
 
-Application Controller calls EventModel::apply_pending_changes when its inbox is
+Application Dispatcher calls MessageProcessor::apply_pending_changes when its inbox is
 empty or disconnected. The demo host forwards AppState::apply_pending_changes
-and its ApplyOutcome without suppressing progress. Controller maps a consumed
+and its ApplyOutcome without suppressing progress. Dispatcher maps a consumed
 message to ApplicationDispatch::MessageHandled, applied pending changes to
 PendingChangesApplied, and an idle visit to Idle. Both work outcomes charge the
 existing bounded budget and revisit child work/layout before routing more input.

@@ -80,7 +80,7 @@ struct Consumer {
     /// Shared component access requires one checked mutable boundary.
     record: PrivateRecord,
 }
-impl neocogi_ui::events::EventModel for Consumer {
+impl neocogi_ui::events::MessageProcessor for Consumer {
     type Message = Activation;
     /// Handles one message; framework code owns all queue traversal and timing.
     fn handle(&mut self, _: Activation) -> Result<(), NcStatus> {

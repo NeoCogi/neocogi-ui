@@ -13,8 +13,8 @@
 #[cfg(feature = "test-support")]
 pub mod testing;
 
-mod controller;
-pub use controller::{ApplyOutcome, Controller, EventModel};
+mod dispatcher;
+pub use dispatcher::{ApplyOutcome, Dispatcher, MessageProcessor};
 
 use crate::com::*;
 use neocogi_com::{NC_E_INVALID_ARG, NcStatus};

@@ -2,6 +2,11 @@
 
 ## 0.0.0 (unreleased)
 
+- Rename application message behavior from `EventModel` to `MessageProcessor`
+  and its inbox owner from `Controller` to `Dispatcher`. Typed local access uses
+  `dispatcher.processor`; delivery remains synchronous and exclusively borrowed.
+  `apply_pending_changes` retains its explicit `ApplyOutcome` contract.
+
 - Share COM lifetime operations through one allocation control header. Remove
   per-class weak operation tables and generated counting forwarders. Weak handles
   are one pointer, strong handles remain two; typed destruction and deallocation

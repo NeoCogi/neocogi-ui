@@ -1,9 +1,9 @@
-//! Owned test applications exercise production controller gating and runtime scheduling.
+//! Owned test applications exercise production dispatcher gating and runtime scheduling.
 
 use neocogi_com::{ComPtr, ComRef, LocalCom, LocalMut, NcStatus};
 use crate::{
     IApplicationDispatcherAbi, Size, Ui,
-    events::{ApplyOutcome, Controller, EventModel},
+    events::{ApplyOutcome, Dispatcher, MessageProcessor},
 };
 use std::{
     ops::{Deref, DerefMut},
@@ -12,26 +12,26 @@ use std::{
 
 /// A fixture supplies plain owned state and a captureless handler, never a borrowed callback.
 pub struct TestApp<State: 'static, Message: 'static, Context: 'static = ()> {
-    /// Exact typed allocation used for direct assertions and ordinary model edits.
-    local: LocalCom<Controller<Model<State, Message, Context>>>,
+    /// Exact typed allocation used for direct assertions and ordinary state edits.
+    local: LocalCom<Dispatcher<Processor<State, Message, Context>>>,
     /// Runtime projection resolved once and reused for every tested frame.
     owner: ComPtr<IApplicationDispatcherAbi>,
 }
 
 /// Concrete fixture behavior; its state and protocol remain private to the test binary.
-struct Model<State, Message, Context> {
+struct Processor<State, Message, Context> {
     /// Authoritative mutable assertions, controls and expected outcomes.
     state: State,
     /// Captureless behavior receives exclusive state after the COM gate succeeds.
     handle: fn(&mut State, Message) -> Result<(), NcStatus>,
     /// Immutable concrete services used by the empty-inbox hook.
     context: Context,
-    /// Captureless hook exercises production deferred publication under controller admission.
+    /// Captureless hook exercises production deferred publication under dispatcher admission.
     apply_pending_changes: fn(&mut State, &Context) -> Result<ApplyOutcome, NcStatus>,
 }
-impl<State: 'static, Message: 'static, Context: 'static> EventModel for Model<State, Message, Context> {
+impl<State: 'static, Message: 'static, Context: 'static> MessageProcessor for Processor<State, Message, Context> {
     type Message = Message;
-    /// Applies fixture-owned pending work under the production controller gate.
+    /// Applies fixture-owned pending work under the production dispatcher gate.
     fn apply_pending_changes(&mut self) -> Result<ApplyOutcome, NcStatus> { (self.apply_pending_changes)(&mut self.state, &self.context) }
     /// Delegates one dequeued value without introducing another borrow boundary.
     fn handle(&mut self, message: Message) -> Result<(), NcStatus> {
@@ -39,7 +39,7 @@ impl<State: 'static, Message: 'static, Context: 'static> EventModel for Model<St
     }
 }
 impl<State: 'static, Message: 'static> TestApp<State, Message> {
-    /// Moves the receiver and test state into one production controller.
+    /// Moves the receiver and test state into one production dispatcher.
     pub fn new(state: State, messages: Receiver<Message>, handle: fn(&mut State, Message) -> Result<(), NcStatus>) -> Self {
         Self::with_context(state, messages, handle, (), |_, _| Ok(ApplyOutcome::NothingPending))
     }
@@ -47,8 +47,8 @@ impl<State: 'static, Message: 'static> TestApp<State, Message> {
 impl<State: 'static, Message: 'static, Context: 'static> TestApp<State, Message, Context> {
     /// Supplies explicit concrete services for the same empty-inbox hook used by real hosts.
     pub fn with_context(state: State, messages: Receiver<Message>, handle: fn(&mut State, Message) -> Result<(), NcStatus>, context: Context, apply_pending_changes: fn(&mut State, &Context) -> Result<ApplyOutcome, NcStatus>) -> Self {
-        let local = Controller::into_local(Controller::new(Model { state, handle, context, apply_pending_changes }, messages));
-        let owner = local.query().expect("Controller declares IApplicationDispatcher");
+        let local = Dispatcher::into_local(Dispatcher::new(Processor { state, handle, context, apply_pending_changes }, messages));
+        let owner = local.query().expect("Dispatcher declares IApplicationDispatcher");
         Self { local, owner }
     }
     /// Borrows the cached projection without querying or incrementing its reference count.
@@ -61,23 +61,23 @@ impl<State: 'static, Message: 'static, Context: 'static> TestApp<State, Message,
     }
     /// Grants a short assertion/edit guard; callers release it before event dispatch.
     pub fn state(&self) -> impl DerefMut<Target = State> + '_ {
-        StateGuard(self.local.try_borrow_mut().expect("test model is idle outside dispatch"))
+        StateGuard(self.local.try_borrow_mut().expect("test processor is idle outside dispatch"))
     }
 }
 
 /// Maps a typed local guard to fixture state without an erased pointer or separate cell.
-struct StateGuard<'a, State: 'static, Message: 'static, Context: 'static>(LocalMut<'a, Controller<Model<State, Message, Context>>>);
+struct StateGuard<'a, State: 'static, Message: 'static, Context: 'static>(LocalMut<'a, Dispatcher<Processor<State, Message, Context>>>);
 impl<State, Message, Context> Deref for StateGuard<'_, State, Message, Context> {
     type Target = State;
     /// The underlying COM lease keeps this exact allocation alive and exclusively borrowed.
     fn deref(&self) -> &State {
-        &self.0.model.state
+        &self.0.processor.state
     }
 }
 impl<State, Message, Context> DerefMut for StateGuard<'_, State, Message, Context> {
     /// Reborrowing the lease cannot overlap another local or foreign mutation.
     fn deref_mut(&mut self) -> &mut State {
-        &mut self.0.model.state
+        &mut self.0.processor.state
     }
 }
 

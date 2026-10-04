@@ -1,7 +1,7 @@
 use neocogi_com::{ComRef, NcStatus, NcValueRef, WeakComBox};
 use neocogi_ui::{
     ButtonAbi, ButtonEventQueueAbi, IApplicationDispatcherAbi, KeyCode, KeyStroke, Rect, Size, Ui, UiInput, button,
-    events::{Controller, EventModel},
+    events::{Dispatcher, MessageProcessor},
 };
 
 /// Application messages own their payload but only observe the emitting widget.
@@ -33,7 +33,7 @@ struct Counter {
     /// Records discarded stale events so the walkthrough can verify that path.
     ignored: u32,
 }
-impl EventModel for Counter {
+impl MessageProcessor for Counter {
     type Message = Message;
     /// This UI-thread policy ignores work from removed buttons. Dialog results
     /// may require a different policy: expiration does not erase captured facts.
@@ -77,13 +77,13 @@ pub fn walkthrough(ui: &Ui, size: Size) -> Result<(), NcStatus> {
     let window = ui
         .window("Counter", Rect { x: 20, y: 20, width: 400, height: 200 }, button)
         .map_err(|(status, _unmounted)| status)?;
-    let app = Controller::into_local(Controller::new(Counter { count: 0, ignored: 0 }, messages));
+    let app = Dispatcher::into_local(Dispatcher::new(Counter { count: 0, ignored: 0 }, messages));
     let dispatcher = app.query::<IApplicationDispatcherAbi>()?;
 
     press(ui, KeyCode::Tab)?;
     press(ui, KeyCode::Space)?;
     ui.update_with_events(size, dispatcher.as_com_ref())?;
-    assert_eq!(app.try_borrow()?.model.count, 1);
+    assert_eq!(app.try_borrow()?.processor.count, 1);
 
     // Ordinary update routes input but does not dispatch this application inbox.
     press(ui, KeyCode::Space)?;
@@ -94,7 +94,7 @@ pub fn walkthrough(ui: &Ui, size: Size) -> Result<(), NcStatus> {
 
     ui.update_with_events(size, dispatcher.as_com_ref())?;
     let state = app.try_borrow()?;
-    assert_eq!(state.model.count, 1);
-    assert_eq!(state.model.ignored, 1);
+    assert_eq!(state.processor.count, 1);
+    assert_eq!(state.processor.ignored, 1);
     Ok(())
 }

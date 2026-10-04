@@ -2,7 +2,7 @@
 use super::*;
 use super::composite_fixture::Composite;
 use neocogi_com::NcValueRef;
-use neocogi_ui::events::EventModel;
+use neocogi_ui::events::MessageProcessor;
 use std::sync::mpsc::{self, Sender};
 
 #[com_object(interfaces(IWindowEventQueue))]
@@ -47,7 +47,7 @@ impl Drop for Lifetime {
         let _ = self.dropped.send(self.name);
     }
 }
-impl EventModel for Lifetime {
+impl MessageProcessor for Lifetime {
     /// Owned pending values must be dropped without dispatch during shutdown.
     type Message = Lifetime;
     /// A shutdown request never authorizes running remaining private application work.

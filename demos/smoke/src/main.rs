@@ -14,7 +14,7 @@ struct ClickModel {
     /// Ordinary view capability; no stack callback is lent through COM.
     button: ButtonWidget,
 }
-impl events::EventModel for ClickModel {
+impl events::MessageProcessor for ClickModel {
     type Message = (neocogi_com::WeakComBox<ButtonAbi>, events::Activation);
     /// Uses the captured label and commits the next presentation before later input.
     fn handle(&mut self, (origin, event): Self::Message) -> Result<(), NcStatus> {
@@ -208,7 +208,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let button_handle = button.handle();
     let window = ui.window("Dynamic UI", Rect { x: 40, y: 40, width: 500, height: 200 }, button).map_err(|(status, _candidate)| status)?;
     let mut button = button_handle;
-    let app = events::Controller::into_local(events::Controller::new(ClickModel { count: 0, button: button.clone() }, session));
+    let app = events::Dispatcher::into_local(events::Dispatcher::new(ClickModel { count: 0, button: button.clone() }, session));
     let owner = app.query::<IApplicationDispatcherAbi>()?;
     let size = native.size()?;
     ui.update_with_events(size, owner.as_com_ref())?;
@@ -219,7 +219,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         ui.update_with_events(size, owner.as_com_ref())?;
         key(&ui, KeyCode::Enter)?;
         ui.update_with_events(size, owner.as_com_ref())?;
-        assert_eq!(app.try_borrow()?.model.count, 1);
+        assert_eq!(app.try_borrow()?.processor.count, 1);
         button.set_label("A longer label changes preferred measurement across the plugin boundary")?;
         assert_eq!(ui.render(size, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
         ui.update_with_events(size, owner.as_com_ref())?;
@@ -406,7 +406,7 @@ struct ComponentModel {
     /// Expected exact native identity, retained independently of display text.
     expected_path: std::path::PathBuf,
 }
-impl events::EventModel for ComponentModel {
+impl events::MessageProcessor for ComponentModel {
     type Message = ComponentMessage;
     /// Checks the captured fact and mutates ordinary host state after traversal.
     fn handle(&mut self, message: ComponentMessage) -> Result<(), NcStatus> {
@@ -448,7 +448,7 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
         .submenu("File")?
         .item_with_queue("Menu command", Some(queue.query::<IMenuItemEventQueueAbi>()?.as_com_ref()))?;
     menus.attach_bar(window.as_com_ref(), &bar)?;
-    let app = events::Controller::into_local(events::Controller::new(
+    let app = events::Dispatcher::into_local(events::Dispatcher::new(
         ComponentModel {
             count: 0,
             expected_path: directory.0.join(" native file "),
@@ -462,7 +462,7 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
         smoke_key(ui, key, value)?;
     }
     ui.update_with_events(size, owner.as_com_ref())?;
-    assert_eq!(app.try_borrow()?.model.count, 1);
+    assert_eq!(app.try_borrow()?.processor.count, 1);
     let mut picker = ui.file_dialog_with_queue(window.as_com_ref(), Some(queue.query::<IFileDialogEventQueueAbi>()?.as_com_ref()))?;
     let mut request = FileDialogRequest::new(&directory.0);
     request.rect = Rect { x: 10, y: 10, width: 620, height: 370 };
@@ -478,7 +478,7 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     }
     smoke_key(ui, KeyCode::Space, 0)?;
     ui.update_with_events(size, owner.as_com_ref())?;
-    assert_eq!(app.try_borrow()?.model.count, 2);
+    assert_eq!(app.try_borrow()?.processor.count, 2);
     assert_eq!(picker.active(), Ok(false));
     ui.render(size, renderer)?;
     picker.close()?;

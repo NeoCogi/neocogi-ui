@@ -11,7 +11,7 @@ allocation used for widget editing and rendering.
 Ordinary controls forward constructor-queued events to their behavioral parent.
 Passive controls, `HostedWidget` and `LeafContent` do not advertise a dispatcher.
 A custom `DispatchingLeafContent` uses `WidgetFactory::dispatching_leaf`; its
-controller shares the leaf's existing exclusive COM gate. Independent composites
+message handling shares the leaf's existing exclusive COM gate. Independent composites
 advertise `IWidgetDispatcher` on their widget allocation only when they own private
 behavior. IDL methods remain declarations, without implementation bodies.
 
@@ -45,7 +45,7 @@ or second attachment.
 
 The application is not required to be a widget. `IApplicationDispatcher` has
 only `dispatch_next`; the runtime borrows it for one update and retains nothing.
-The application-owned Controller has ordinary model/receiver fields and no
+The application-owned Dispatcher has ordinary processor/receiver fields and no
 attachment/retirement phases.
 
 `Loader::compile` constructs a document recipe, weak lookups and one unmounted
@@ -118,7 +118,7 @@ pre-commit notification is harmless. The runtime alone collects sticky changes
 when notified, including render admission and retries. Notifications during a
 collection remain pending for the following collection.
 
-Application controllers call `EventModel::apply_pending_changes` when no message
+Application dispatchers call `MessageProcessor::apply_pending_changes` when no message
 is available, including after sender disconnection. The default returns
 `ApplyOutcome::NothingPending`; consuming coalesced publication or other pending
 work returns `ApplyOutcome::ChangesApplied`. This is an empty-inbox operation,

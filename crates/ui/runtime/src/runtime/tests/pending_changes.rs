@@ -1,7 +1,7 @@
 //! Pending-change outcomes control real private dispatch, input ordering and update admission.
 use super::*;
 use super::composite_fixture::Composite;
-use neocogi_ui::{ButtonWidget, events::{ApplyOutcome, EventModel}};
+use neocogi_ui::{ButtonWidget, events::{ApplyOutcome, MessageProcessor}};
 use neocogi_ui_support::test_support::events::TestApp;
 use std::sync::mpsc;
 
@@ -15,7 +15,7 @@ struct RenameButton {
     /// Weak editing handle; the composite shell owns the button allocation.
     button: ButtonWidget,
 }
-impl EventModel for RenameButton {
+impl MessageProcessor for RenameButton {
     type Message = ();
     /// Committing the new label publishes ordinary geometry notifications.
     fn handle(&mut self, (): ()) -> Result<(), NcStatus> {

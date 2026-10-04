@@ -83,8 +83,8 @@ the behavioral parent decides whether to remove its child after the call returns
 
 The retained UI schedules composite `IWidgetDispatcher::dispatch_next` implementations
 descendant-first, using weak observations. A composite owns its own model and
-receiver. A top-level `Controller<Model>` supplies `IApplicationDispatcher` for
-application messages and empty-inbox `EventModel::apply_pending_changes` visits.
+receiver. A top-level `Dispatcher<Processor>` supplies `IApplicationDispatcher` for
+application messages and empty-inbox `MessageProcessor::apply_pending_changes` visits.
 The generated `ApplicationDispatch` outcome distinguishes message handling,
 applied pending changes, and idle visits; both kinds of work revisit child
 behavior and layout before later input. COM's process runtime owns no event loop. The
