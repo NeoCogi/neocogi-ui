@@ -44,9 +44,9 @@ pub fn decode_settings<T: ComDeserialize>(bytes: &[u8]) -> Result<T, String> {
     neocogi_com::binary::from_slice_with_limits(bytes, settings_limits()).map_err(|error| error.to_string())
 }
 
-/// Revision 10 preserves shared weak ownership in structural value metadata.
-/// Provider-owned NCB settings from revision 9 retain their existing contract.
-pub const DESIGN_DESCRIPTOR_VERSION: u32 = 10;
+/// Revision 11 distinguishes observers of exclusive owners in value metadata.
+/// Provider-owned NCB settings retain their existing contract.
+pub const DESIGN_DESCRIPTOR_VERSION: u32 = 11;
 
 /// Owned structural field expression copied through the COM design catalog.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -64,6 +64,8 @@ pub enum DesignValueType {
     Object(String),
     /// Shared weak capability; displaying or copying it must not imply a strong owner.
     WeakObject(String),
+    /// Exclusive weak capability; does not retain the widget or hold a borrow.
+    WeakBoxObject(String),
     /// Explicitly indirect sequence of recursive values.
     Sequence(Box<DesignValueType>),
     /// Inline fixed-size array.
@@ -80,6 +82,7 @@ impl From<&neocogi_com::design::IdlValueType> for DesignValueType {
             I::Named(name) => Self::Named((*name).into()),
             I::Object(name) => Self::Object((*name).into()),
             I::WeakObject(name) => Self::WeakObject((*name).into()),
+            I::WeakBoxObject(name) => Self::WeakBoxObject((*name).into()),
             I::Sequence(value) => Self::Sequence(Box::new((*value).into())),
             I::Array(value, len) => Self::Array(Box::new((*value).into()), *len),
         }
@@ -93,6 +96,7 @@ impl std::fmt::Display for DesignValueType {
             Self::Text => formatter.write_str("String"),
             Self::Scalar(name) | Self::Named(name) | Self::Object(name) => formatter.write_str(name),
             Self::WeakObject(name) => write!(formatter, "WeakComPtr<{name}>"),
+            Self::WeakBoxObject(name) => write!(formatter, "WeakComBox<{name}>"),
             Self::Sequence(value) => write!(formatter, "Vec<{value}>"),
             Self::Array(value, len) => write!(formatter, "[{value}; {len}]"),
         }
@@ -366,7 +370,7 @@ fn validate_value_graph(values: &[DesignType]) -> Result<(), String> {
                     return Err("Unknown scalar definition".into());
                 }
             }
-            DesignValueType::Object(name) | DesignValueType::WeakObject(name) => {
+            DesignValueType::Object(name) | DesignValueType::WeakObject(name) | DesignValueType::WeakBoxObject(name) => {
                 if !qualified_name(name) {
                     return Err("Invalid object identity".into());
                 }
@@ -466,12 +470,18 @@ mod tests {
         assert_ne!(weak, DesignValueType::Object("example.Service".into()));
         let json = serde_json::to_string(&weak).unwrap();
         assert_eq!(serde_json::from_str::<DesignValueType>(&json).unwrap(), weak);
+        let widget = DesignValueType::from(&neocogi_com::design::IdlValueType::WeakBoxObject("example.Widget"));
+        assert_eq!(widget.to_string(), "WeakComBox<example.Widget>");
+        assert_ne!(widget, DesignValueType::WeakObject("example.Widget".into()));
+        let json = serde_json::to_string(&widget).unwrap();
+        assert_eq!(serde_json::from_str::<DesignValueType>(&json).unwrap(), widget);
         let mut manifest = counter_manifest();
         let DesignShape::Enum(variants) = &mut manifest.interface.values[0].shape else { panic!("event enum") };
         variants[0].fields.push(DesignField { name: "source".into(), ty: weak });
+        variants[0].fields.push(DesignField { name: "widget".into(), ty: widget });
         manifest.validate().unwrap();
-        manifest.version = 9;
-        assert!(manifest.validate().is_err(), "the old catalog cannot describe weak ownership");
+        manifest.version = 10;
+        assert!(manifest.validate().is_err(), "the old catalog cannot describe exclusive weak ownership");
     }
 
     /// Supplies one complete stream for validation-boundary tests.

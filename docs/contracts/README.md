@@ -23,6 +23,7 @@ These guides define current behavior. For component responsibilities see
 
 ## Events and UI ownership
 
+- [Exclusive COM event objects and the common receiver](COM_EVENT_INTERFACES.md).
 - [Typed event queues and weak origins](CLASS_EVENT_STREAMS.md).
 - [Widget/application dispatch](WIDGET_EVENT_DISPATCH.md).
 - [Exclusive widget ownership](EXCLUSIVE_WIDGET_OWNERSHIP.md).
