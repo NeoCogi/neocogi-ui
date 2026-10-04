@@ -30,7 +30,7 @@ latch. `dialogs.rs` owns the standard file picker and its private event receiver
 
 The support crate owns no retained tree, runtime, host authority or concrete widget.
 Installed resources retain the generated asset records plus process-local lookup
-data. The [asset guide](../../../../docs/COM_ASSETS.md) defines resource ownership
+data. The [asset guide](../../../../docs/contracts/COM_ASSETS.md) defines resource ownership
 and validation.
 
 ## Typed construction and attachment
@@ -41,7 +41,7 @@ Core exposes `IConstructionHost` through `construction_host()`. The facade's
 
 Applications call typed factory methods returning `ComBox` widgets. Construction
 accepts the final event queue; initialization policy belongs to the provider.
-[Constructor defaults](../../../../docs/WIDGET_CONSTRUCTOR_DEFAULTS.md) defines
+[Constructor defaults](../../../../docs/contracts/WIDGET_CONSTRUCTOR_DEFAULTS.md) defines
 how the document loader and designer preserve that policy. There is no class
 registry or erased constructor argument frame.
 
@@ -65,7 +65,7 @@ Containers' authoritative child stores own descendant nodes and their boxes.
 Applications hold `WeakComBox` editing observations. Removing a subtree drops its
 unique owner, children and private resources synchronously. New calls fail with
 `NC_E_DROPPED`; weak storage cannot keep the widget value alive or upgrade into
-an owner. The [exclusive ownership contract](../../../../docs/EXCLUSIVE_WIDGET_OWNERSHIP.md)
+an owner. The [exclusive ownership contract](../../../../docs/contracts/EXCLUSIVE_WIDGET_OWNERSHIP.md)
 defines admission, synchronous destruction and weak allocation storage.
 
 A widget cannot remove its own active ancestor. Thread-local topology edits check
@@ -77,13 +77,13 @@ operation, described in the [event guide](EVENTS.md).
 
 Insertion and replacement prepare validation and fallible storage before accepting
 the incoming owner. Failure returns that same `ComBox`; success transfers it.
-The [Grid contract](../../../../docs/GRID_PLACEMENT.md) documents bounded placement
-and metadata preparation. The [COM output contract](../../../../docs/COM_OUTPUT_COMPLETION.md)
+The [Grid contract](../../../../docs/contracts/GRID_PLACEMENT.md) documents bounded placement
+and metadata preparation. The [COM output contract](../../../../docs/contracts/COM_OUTPUT_COMPLETION.md)
 defines the generated consuming-call boundary, including result publication.
 
 `NC_E_DROPPED` and `NC_E_CLOSED` can also come from a live handler's dependencies.
 The dispatch iterator determines whether its receiver still exists; it propagates
-errors from live receivers. The [lifetime error contract](../../../../docs/COM_LIFETIME_ERRORS.md)
+errors from live receivers. The [lifetime error contract](../../../../docs/contracts/COM_LIFETIME_ERRORS.md)
 prevents interpreting any returned status as proof that the receiver died.
 
 ## Frame and event phases
@@ -110,7 +110,7 @@ It demonstrates the required ownership behavior rather than only compiling a que
 Changed setters, reported update changes, topology edits, child changes, resize
 and resource revisions invalidate geometry. Paint rejects missing or stale layout
 before GPU acquisition. Animation and external-state scheduling remain explicit
-author responsibilities; see [author guidance](../../../../docs/COM_AUTHORS.md)
+author responsibilities; see [author guidance](../../../../docs/contracts/COM_AUTHORS.md)
 and [layout](LAYOUT.md).
 
 ## Scoped layout and rendering
@@ -126,7 +126,7 @@ GFX expands complete typed nine-patch operations, clips and batches their geomet
 The renderer validates resource ownership before acquiring a frame. Immutable
 bundle installation prepares and validates its candidate before publication.
 See [rendering](RENDER.md), [backend ownership](BACKENDS.md) and
-[asset installation](../../../../docs/COM_ASSETS.md).
+[asset installation](../../../../docs/contracts/COM_ASSETS.md).
 
 ## Surface policy
 

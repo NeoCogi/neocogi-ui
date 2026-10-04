@@ -43,7 +43,7 @@ column edit prepares a complete non-overlapping plan and fallible storage before
 changing child ownership. Rejection returns the incoming owner unchanged; after
 host acceptance, metadata publication cannot fail. Linear and Form use the same
 prepare/commit ordering with only an index check and vector reservation. See the
-[Grid placement contract](../../../docs/GRID_PLACEMENT.md) for numeric policy,
+[Grid placement contract](../../../docs/contracts/GRID_PLACEMENT.md) for numeric policy,
 right-edge clamping, removal reflow, and the regression matrix.
 
 ## Constructor configuration
@@ -61,6 +61,6 @@ The requested getter obeys the same readable-lifetime checks as other properties
 Custom providers must implement it from the same state their flag setters edit.
 The IDL only describes these ordinary methods: it contains no widget-default policy.
 
-See the [provider-owned configuration contract](../../../docs/WIDGET_CONSTRUCTOR_DEFAULTS.md)
+See the [provider-owned configuration contract](../../../docs/contracts/WIDGET_CONSTRUCTOR_DEFAULTS.md)
 for document absence versus explicit zero, designer inspection, custom plugins,
 and the history of the removed duplicate default policy.

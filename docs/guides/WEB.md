@@ -119,7 +119,7 @@ Set `NEOCOGI_WEB_APP=theme-editor` when running `scripts/web-demo.sh build` or
 preview surfaces. Browser-specific code owns only file selection, bounded byte
 storage, downloads, and dirty-tab close handling. Open files/folder and Add resources
 feed the same theme schema/compiler as native projects. Saves download JSON;
-resources remain separate files. See the [editor guide](../tools/theme-editor/README.md)
+resources remain separate files. See the [editor guide](../../tools/theme-editor/README.md)
 for exact path, size, missing-file, and Save As behavior.
 
 `./scripts/test-browser-input.sh theme-editor` exercises actual WebGL and DOM file,

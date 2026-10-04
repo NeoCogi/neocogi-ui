@@ -1,70 +1,48 @@
 # NeoCogi UI documentation
 
-NeoCogi UI was formerly **microui-redux**. Version **0.0.0** is a
-pre-alpha workspace covering COM components and IDL tooling, shared-library and
-plugin deployment, retained UI and rendering, the
-[theme editor](../tools/theme-editor/README.md), and the experimental
-[UI designer](../tools/ui-designer/README.md).
+NeoCogi UI, formerly microui-redux, is a pre-alpha workspace for COM and
+IDL, plugins, retained UI, rendering and authoring tools. Start with the
+[project README](../README.md) for setup and examples.
 
-The root [README](../README.md) gives the project history and quick start. These
-guides cover architecture, authoring tools, integration, and repository workflows.
+## Find documentation by purpose
 
-## COM authors and deployment
+| Folder | Contents |
+| --- | --- |
+| [Issues](issues/README.md) | Unresolved correctness findings and incomplete contracts |
+| [Optimization opportunities](optimizations/README.md) | Performance investigations and optional simplifications, with evidence and acceptance criteria |
+| [Contracts](contracts/README.md) | Current API, ABI, ownership, event, document and resource rules |
+| [Experiments](experiments/README.md) | Prototype reports, hypotheses, outcomes and implementation status |
+| Measurements | Historical performance/size results, raw data, fixtures and reproduction commands |
+| [Architecture](architecture/README.md) | Component boundaries and implementation structure |
+| [Guides](guides/README.md) | Authoring, deployment, examples and tooling instructions |
+| [Validation](validation/README.md) | Coverage, compatibility and maintained acceptance checks |
+| [Project](project/README.md) | Changelog, support policy, attribution and licenses |
 
-- [Author contracts](COM_AUTHORS.md) — change reporting, external state, phase limits, scopes, ownership and error recovery.
-- [Native packaging](COM_NATIVE.md) — shared component builds, startup order and actual renderer tests.
-- [cargo neocogi](../tools/cargo-neocogi/README.md) — installable assembly command, typed TOML configuration, local/registry components, and build policies.
-- [Assets](COM_ASSETS.md) — immutable catalogs, generated resources and transactional installation.
-- Measured deployment and performance — complete package sizes, memory, startup, tree costs and external counters.
-- Assembly build performance — compiler reuse, shared-library LTO, and measured build times.
-- COM crate consolidation measurements — five-crate ownership, verified linkage, and before/after Vulkan min-size sizes.
-- [IDL contract modules](IDL_MODULES.md) — Rust-like contract syntax, Cargo generation, explicit Rust locations, exact native linking, and factory-only activation.
-- [COM interface storage](COM_INTERFACE_STORAGE.md) — object/table handles, the explicit storage tradeoff, ownership, and linked-size evidence.
-- Shared COM lifetime measurements — historical one-pointer shared weak migration and measured savings; widgets now use exclusive ownership.
-- [Recursive value contract](RECURSIVE_VALUE_CONTRACT.md) — scalar and aggregate wire rules, explicit recursion, budgets, buffers, and COM inspection graphs.
-- [IDL source maps](IDL_SOURCE_MAPS.md) — generated Rust provenance, readable annotations, sidecar format and source lookup.
-- [Local COM implementation](../crates/com/README.md) and [current ABI specification](../crates/com/docs/README.md).
-- [Accepted design](COM_DESIGN.md), [feature ownership](FEATURES.md), and [unreleased changes](CHANGELOG.md).
+Crate-specific documentation stays beside its implementation and is linked from
+these indexes. Repository-wide documents belong in the folder matching their
+purpose; this directory contains only the main index.
 
-## UI implementation notes
+## Common starting points
 
-The guides below describe the UI plugin's internal algorithms and native behavior
-fixtures. Their native node/context examples are implementation references, not the
-current application facade API. Application and independent plugin authors should
-start with [COM_AUTHORS.md](COM_AUTHORS.md) and the working [examples](EXAMPLES.md).
+- [COM author contracts](contracts/COM_AUTHORS.md),
+  [IDL language](contracts/IDL_MODULES.md), and
+  [current COM ABI](../crates/com/docs/README.md).
+- [Application and widget dispatch](contracts/WIDGET_EVENT_DISPATCH.md),
+  [typed event queues](contracts/CLASS_EVENT_STREAMS.md), and
+  [exclusive widget ownership](contracts/EXCLUSIVE_WIDGET_OWNERSHIP.md).
+- [Native deployment](guides/COM_NATIVE.md), [examples](guides/EXAMPLES.md),
+  [WebGL](guides/WEB.md), and [cargo neocogi](../tools/cargo-neocogi/README.md).
+- [Theme editor](../tools/theme-editor/README.md) and
+  [UI designer](../tools/ui-designer/README.md).
 
-- [Architecture](../crates/ui/runtime/docs/ARCHITECTURE.md) — retained trees, concrete surfaces, ownership, and stable identity.
-- [Events](../crates/ui/runtime/docs/EVENTS.md) — typed widget events, dispatch ordering, roots, and retained services.
-- [Built-in widgets](../crates/ui/nodes/docs/WIDGETS.md) — control and container selection, typed events, ownership, and
-  retained mutation.
-- [Layout](../crates/ui/runtime/docs/LAYOUT.md) — measurement, tracks, placement, invalidation, and update/paint boundaries.
-- [Class event streams](CLASS_EVENT_STREAMS.md) — generic COM contracts, one lifetime consumer, generated forms, ownership and state diagrams.
-- [Exclusive widget ownership](EXCLUSIVE_WIDGET_OWNERSHIP.md) — unique owners, weak observations, synchronous Drop and parent-controlled removal.
-- Owned event controllers — historical September 21 design and measurements; superseded scheduling and lifecycle are identified in the report.
-- [Application menus](../crates/ui/runtime/docs/MENUS.md) — concrete registered items, retained composition, popup
-  coordination, and Windows-style keyboard/submenu navigation.
-- [Typography](../crates/ui/runtime/docs/TYPOGRAPHY.md) — semantic font roles, UTF-8 behavior, glyph coverage, and atlas setup.
-- [Skin architecture](../crates/ui/runtime/docs/SKINNING.md) — concrete roles and states, stable resources, atomic bundles,
-  one installed bundle revision, and cache identity.
-- [JSON themes](../crates/ui/runtime/docs/THEMES.md) — typed appearance roles and states, PNG nine-patches, flat fallbacks,
-  bundled classic themes, and window chrome recipes.
+## Keeping the categories current
 
-## Rendering and integration
+Issues and optimization opportunities each have one maintained register. Fixes
+update their owning contracts/tests and remove the resolved entry. Experiment
+reports record the revision actually tested and distinguish prototypes from
+applied changes. Measurements retain their workload, artifacts and limits.
 
-- [Rendering](../crates/ui/runtime/docs/RENDER.md) — painter and display-list architecture, clipping, textures, backend
-  implementation, and performance validation.
-- [Backend ownership and typed application rendering](../crates/ui/runtime/docs/BACKENDS.md) — plugin-local backend frames,
-  ordered COM render items, resource authentication and explicit device lifetimes.
-- [Examples](EXAMPLES.md) — running the demos, backend selection, asset loading, and size-focused
-  builds.
-- [WebGL demo](WEB.md) — building, serving, and publishing the HTML canvas demo.
-- [Cargo features](FEATURES.md) — crate features and atlas-loading combinations.
-
-## Project information
-
-- [COM/UI adversarial review (2026-09-26)](COM_UI_ADVERSARIAL_REVIEW_2026-09-26.md) — full COM and widget/event findings, reproduced cases, contract decisions, and the persistence-limit fix follow-up.
-- [Whole-repository adversarial review (2026-09-25)](ADVERSARIAL_REVIEW_2026-09-25.md) — 16 source-based findings, diagrams, contract decisions, and acceptance tests.
-- [Changelog](CHANGELOG.md)
-- [Support and compatibility](SUPPORT.md) — Rust toolchain, platform, renderer, and API stability
-  expectations.
-- [Bundled asset attribution and licenses](ASSETS.md)
+New reviews go in `reviews/`. Once reconciled, move unresolved findings into the
+appropriate register and retire the report; preserve useful reproduction data
+under `external run artifacts`. Completed plans and duplicate historical review ledgers
+do not remain as competing descriptions of current behavior.

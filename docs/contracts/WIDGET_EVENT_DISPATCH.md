@@ -150,10 +150,10 @@ The runtime has no special removal-request queue. Weak local construction
 access uses scoped closures instead of escaping guards. ThreadSafe COM Drop waits
 for concurrent admitted calls, then destroys on the dropping thread.
 
-See the [event guide](../crates/ui/runtime/docs/EVENTS.md) for error semantics,
-work budgets, compiled-form lifetime, and application examples, and
-[finding 09](COM_UI_ADVERSARIAL_REVIEW_2026-09-26.md#09-ieventowner-means-both-behavior-and-a-lifetime-holder--fixed)
-for the superseded design and its history.
+See the [event guide](../../crates/ui/runtime/docs/EVENTS.md) for error semantics,
+work budgets, compiled-form lifetime, and application examples. The superseded
+`IEventOwner` and separate mount/retire design remains in Git history (`6078b286`
+replaced it with behavior on the mounted widget).
 
 ## Verification on 2026-09-29
 

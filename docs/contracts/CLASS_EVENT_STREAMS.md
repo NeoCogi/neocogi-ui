@@ -111,7 +111,7 @@ Dropping the sole owner rejects new calls immediately; Drop waits for admitted c
 an ABI argument for one lexical call, and each generated method independently
 checks admission. Empty allocation storage survives until the last weak token.
 See [exclusive ownership](EXCLUSIVE_WIDGET_OWNERSHIP.md) and
-[current ABI specification](../crates/com/docs/README.md) for threading and provider obligations.
+[current ABI specification](../../crates/com/docs/README.md) for threading and provider obligations.
 
 There is no `IWidget::close` or independently closed live widget. Widget queues
 and private inboxes are ordinary fields destroyed with the value. Generated forms

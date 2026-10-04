@@ -44,17 +44,17 @@ After resolving its closed appearance records, Skin calls GFX once to validate
 and publish the immutable revision. Native applications can therefore ship GFX
 services without a JSON/schema surface, while a JSON-enabled Skin deployment
 selects GFX as its one resource owner. Browser assemblies register the same
-selected descriptors statically. The [GFX decoder implementation](../crates/gfx/impl/src/png.rs)
+selected descriptors statically. The [GFX decoder implementation](../../crates/gfx/impl/src/png.rs)
 produces packed RGBA directly. Neither plugin links the UI runtime implementation.
 
 The JSON feature uses the concrete schema in `neocogi-skin-authoring`.
-[Theme decoding](../crates/skin/authoring/src/theme.rs) and
-[record codecs](../crates/skin/authoring/src/encoding.rs) translate Serde input
+[Theme decoding](../../crates/skin/authoring/src/theme.rs) and
+[record codecs](../../crates/skin/authoring/src/encoding.rs) translate Serde input
 into generated GFX records using explicit field and enum definitions. GFX
 contracts themselves have no Serde dependency. The former generic Serde-to-COM
 visitor bridge is removed; COM's local persistence protocol is independent of
 the theme-file format. Unknown and duplicate fields and
-[typed role keys](../crates/skin/authoring/src/role_keys.rs) are rejected during decoding.
+[typed role keys](../../crates/skin/authoring/src/role_keys.rs) are rejected during decoding.
 
 Applications supply one `IAssetBundle` through the typed `UiRuntime` factory and
 pass `bundle.image()` to `Platform::create_window`. Neither implementation
@@ -87,7 +87,7 @@ plugin roots. The small `neocogi-appearance` package contains only pure typed
 appearance compilation used by Skin/offline resource construction and canonical test fixtures.
 The objects expose ordinary typed interfaces and keep
 all native builder/path/decoder state in their owning binary. The
-[JSON compiler](../crates/skin/authoring/src/theme.rs) submits declared resources to
+[JSON compiler](../../crates/skin/authoring/src/theme.rs) submits declared resources to
 GFX and compiles complete appearance tables without copying the bundle into a runtime skin model.
 GFX owns bundle transfer, validation, and publication through the format-neutral
 `AssetPublisher::revise_appearance` transaction. Skin resolves one private typed `ThemeRecipe`
@@ -262,7 +262,7 @@ The receiving GPU may impose a smaller texture dimension limit than the portable
 ## Optional construction and themes
 
 `AssetLoader::create_builder(size, white_path)` starts a native builder.
-Its [implementation](../crates/gfx/impl/src/atlas.rs) packs RGBA pixels and font
+Its [implementation](../../crates/gfx/impl/src/atlas.rs) packs RGBA pixels and font
 records directly into `AssetData`; it constructs no UI atlas handles or skins.
 `add_icon(name, path)` and `add_font(name, path, pixels)` add distinct names;
 duplicates are rejected. `add_icon_bytes` and `add_font_bytes` provide the same

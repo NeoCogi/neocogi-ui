@@ -76,7 +76,7 @@ not a second widget state model or a required toolkit interface.
 Authors remain responsible for truthful `CHANGED` results, external-state updates,
 hidden-widget synchronization, observational layout/paint, event ownership and
 explicit redraw scheduling. The complete obligations and failure rules are in
-[COM_AUTHORS.md](../../docs/COM_AUTHORS.md).
+[COM_AUTHORS.md](../../docs/contracts/COM_AUTHORS.md).
 
 The catalog and ordinary typed constructor share the same `Settings::default()`.
 [settings.rs](src/settings.rs) owns a versioned record with a positive increment
@@ -94,4 +94,4 @@ record, then encodes NCB. Invalid text/ranges remain editable. No event queue,
 `encode_settings`/`decode_settings` enforce the same 64 KiB NCB policy. Direct COM
 calls reject nonzero offsets, unsupported revisions, malformed/trailing data and
 invalid semantics before construction. Catalog descriptions retain their separate
-bounded JSON encoding. See [PLUGIN_DESIGNER_SETTINGS.md](../../docs/PLUGIN_DESIGNER_SETTINGS.md).
+bounded JSON encoding. See [PLUGIN_DESIGNER_SETTINGS.md](../../docs/contracts/PLUGIN_DESIGNER_SETTINGS.md).

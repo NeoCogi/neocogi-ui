@@ -11,7 +11,7 @@ The crate uses Rust 2024 edition but does not publish a minimum supported Rust v
 Development and CI target the current stable Rust toolchain. Dependency updates or a pre-1.0 minor
 release may therefore require a newer stable compiler.
 
-The [cargo-neocogi command](../tools/cargo-neocogi/README.md) builds ordinary native
+The [cargo-neocogi command](../../tools/cargo-neocogi/README.md) builds ordinary native
 assemblies with stable or explicitly selected nightly Cargo. Its bundled `min-size`
 preset requires nightly plus `rust-src` and currently targets x86_64 Linux GNU.
 Foreign-target assembly is rejected because descriptor validation loads native
@@ -31,8 +31,8 @@ browser assembly using WebGL2 and DOM input/IME. Linux CI runs the real packaged
 full-demo and independent-extension tests for all three native renderers. Browser
 CI checks actual Chromium input and lifecycle behavior. macOS/Windows packaging
 jobs are configured, but local Linux results do not establish those OSes' runtime
-behavior. The [native guide](COM_NATIVE.md) records dependencies and driver limits;
-the [browser guide](WEB.md) records text input and native-filesystem restrictions.
+behavior. The [native guide](../guides/COM_NATIVE.md) records dependencies and driver limits;
+the [browser guide](../guides/WEB.md) records text input and native-filesystem restrictions.
 GitHub Pages publication is a separate trusted deployment workflow.
 
 ## API compatibility

@@ -50,7 +50,7 @@ Paint is observational. Widget setters, topology edits, event production and rec
 updates are prohibited during paint and layout. Scope checks reject calls made with a
 retained expired painter/layout token; the runtime also rejects recursive update/render.
 Private rendering caches may change without affecting authored state or geometry.
-See [author obligations](../../../../docs/COM_AUTHORS.md) for error and partial-commit rules.
+See [author obligations](../../../../docs/contracts/COM_AUTHORS.md) for error and partial-commit rules.
 
 ## Coordinates and clipping
 

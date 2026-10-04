@@ -170,7 +170,7 @@ This resolves A28 findings 03–04 and consolidated audit group 02.
 - Document/runtime tests: typed and binary construction, JSON-round-tripped
   rejected recipes, host-dependent capacity, and failed reload preservation.
 
-Sources: [placement and preparation](../crates/ui/nodes/src/containers/grid.rs),
-[shared edit boundary](../crates/ui/nodes/src/containers.rs),
-[COM regressions](../crates/ui/runtime/src/runtime/tests/containers/grid.rs),
-[loader regressions](../crates/ui/runtime/src/runtime/tests/retained/reload.rs).
+Sources: [placement and preparation](../../crates/ui/nodes/src/containers/grid.rs),
+[shared edit boundary](../../crates/ui/nodes/src/containers.rs),
+[COM regressions](../../crates/ui/runtime/src/runtime/tests/containers/grid.rs),
+[loader regressions](../../crates/ui/runtime/src/runtime/tests/retained/reload.rs).

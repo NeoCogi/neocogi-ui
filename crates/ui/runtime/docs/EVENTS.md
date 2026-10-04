@@ -1,4 +1,4 @@
-> Current origin/lifetime contract: [typed event queues and weak origins](../../../../docs/CLASS_EVENT_STREAMS.md).
+> Current origin/lifetime contract: [typed event queues and weak origins](../../../../docs/contracts/CLASS_EVENT_STREAMS.md).
 > A receiver borrows the typed emitting object and event, then queues an owned
 > snapshot with a weak origin. One application COM queue can serve many widgets.
 
@@ -123,7 +123,7 @@ then query the completed component's concrete widget fields. The loader supplies
 no intermediate receiver and performs no visual actions. The application
 implements required handler methods and checks reload generations before
 dispatching queued facts. See
-[class event streams](../../../../docs/CLASS_EVENT_STREAMS.md).
+[class event streams](../../../../docs/contracts/CLASS_EVENT_STREAMS.md).
 
 ## Composite ownership
 
@@ -199,8 +199,8 @@ from another object the handler tried to use; `NC_E_CLOSED` can come from a clos
 service. Neither is a scheduler instruction to skip the receiver. The attempted
 message stays consumed, while successors, later widget/application work and later
 raw input remain queued. Completed handler edits are not rolled back. Retry
-rebuilds the current tree. See the [dispatch and iterator contract](../../../../docs/WIDGET_EVENT_DISPATCH.md)
-and [status meanings](../../../../docs/COM_LIFETIME_ERRORS.md).
+rebuilds the current tree. See the [dispatch and iterator contract](../../../../docs/contracts/WIDGET_EVENT_DISPATCH.md)
+and [status meanings](../../../../docs/contracts/COM_LIFETIME_ERRORS.md).
 
 Passive widgets advertise no private dispatcher and receive no empty COM calls.
 Nodes own typed weak capability projections, while a conservative zero-dispatcher
@@ -264,9 +264,9 @@ contracts. Closed queue specializations belong alongside their event types.
 The COM process runtime has no UI event loop. Hosts and plugins use the same
 contracts and must be rebuilt together after this ABI change.
 
-[Widget dispatch](../../../../docs/WIDGET_EVENT_DISPATCH.md) records the design
+[Widget dispatch](../../../../docs/contracts/WIDGET_EVENT_DISPATCH.md) records the design
 and ownership rules. Owned-event measurements
-and the [channel experiment](../../../../docs/EVENT_CHANNEL_EXPERIMENT.md) describe
+and the [channel experiment](../../../../docs/experiments/EVENT_CHANNEL_EXPERIMENT.md) describe
 superseded implementations; their measurements are not results for this change.
 
 ## Caption intent and parent policy
@@ -311,5 +311,5 @@ remain application-owned; widget-private inboxes and pending raw input are dropp
 with their owners. Repeated shutdown succeeds without additional work.
 
 Ordinary `IWindow::close()` still publishes its terminal facts and reports posting
-failures after complete removal. See the [shutdown contract](../../../../docs/UI_RUNTIME_SHUTDOWN.md)
+failures after complete removal. See the [shutdown contract](../../../../docs/contracts/UI_RUNTIME_SHUTDOWN.md)
 for the ownership boundary, callback behavior, history and regression coverage.

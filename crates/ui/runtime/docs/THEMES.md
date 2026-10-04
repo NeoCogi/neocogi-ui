@@ -248,7 +248,7 @@ when a selector needs to restore the initial theme.
 For programmatic changes, copy the current AssetMetrics, edit explicit fields, derive a
 revision with the skin plugin's `StyleCompiler::derive_style`, then install it. Stable named font/icon identities belong
 to the bundle catalog; a derived revision cannot reinterpret existing resource meanings.
-See [asset authoring and export](../../../../docs/COM_ASSETS.md) and the full demo style editor.
+See [asset authoring and export](../../../../docs/contracts/COM_ASSETS.md) and the full demo style editor.
 The palette editor is enabled only for the flat theme, while image-backed themes retain
 metric editing; multicolor image pixels are not inferred to be named palette fields.
 
@@ -373,7 +373,7 @@ The UI preserves typed local IDs for original application resources. Theme-priva
 artwork may disappear when another theme is selected; application references or
 cached UVs for that artwork must change with its owning revision. Installation
 protects the original catalog and does not inspect arbitrary application fields
-to discover private dependencies. See [COM assets](../../../../docs/COM_ASSETS.md) for
+to discover private dependencies. See [COM assets](../../../../docs/contracts/COM_ASSETS.md) for
 the complete validation and publication contract.
 
 ## Editing and saving

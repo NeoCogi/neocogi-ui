@@ -24,8 +24,8 @@ object and state.
 The project is **NeoCogi UI**, hosted at
 [`NeoCogi/ui`](https://github.com/NeoCogi/neocogi-ui). Cargo packages keep
 descriptive `neocogi-*` names, while deployed libraries use the short `nc_*`
-targets (`nc` means NeoCogi). See the [shared-library mapping](docs/COM_NATIVE.md#profiles-and-output)
-and [executable mapping](docs/EXAMPLES.md) for exact outputs. The assembly command
+targets (`nc` means NeoCogi). See the [shared-library mapping](docs/guides/COM_NATIVE.md#profiles-and-output)
+and [executable mapping](docs/guides/EXAMPLES.md) for exact outputs. The assembly command
 remains `cargo neocogi`.
 
 | Windows 3.11 | Mac OS 9 |
@@ -51,7 +51,7 @@ variant for an explicit embedded deployment. Assembly definitions live in
 `[workspace.metadata.neocogi]` in [Cargo.toml](Cargo.toml).
 The [tool reference](tools/cargo-neocogi/README.md) documents configuration,
 versioned crates.io components, standalone TOML, and lockfiles.
-The [package guide](docs/COM_NATIVE.md) covers dependencies, nightly min-size builds,
+The [package guide](docs/guides/COM_NATIVE.md) covers dependencies, nightly min-size builds,
 optional assets, actual GPU tests and executable-relative loading. A native demo
 needs its adjacent runtime and plugin manifest; direct `cargo run` on the demo
 package does not assemble those files.
@@ -120,7 +120,7 @@ independently compiled leaf and container. A COM object is not automatically a
 deployment plugin: the complete built-in family shares one nodes provider, while logical windows,
 generic menus, and popup policy share one core runtime provider.
 
-See [component and plugin boundaries](docs/COMPONENTS.md) for the complete
+See [component and plugin boundaries](docs/architecture/COMPONENTS.md) for the complete
 dependency graph, ownership rationale, resource policy, and frame-cost invariants.
 
 For the browser:
@@ -130,7 +130,7 @@ scripts/web-demo.sh serve
 ```
 
 The WebGL renderer plugin owns its canvas and DOM input/IME bridge. All four demo themes,
-images and custom drawing examples remain available. See [WEB.md](docs/WEB.md) for
+images and custom drawing examples remain available. See [WEB.md](docs/guides/WEB.md) for
 input limitations and the native-filesystem picker's browser restriction.
 
 ## Typed application code
@@ -153,8 +153,10 @@ use neocogi_com::{ComPtr, NcStatus};
 fn install(ui: &Ui) -> Result<ComPtr<IWindowAbi>, NcStatus> {
     let hello = ui.widgets().button_unobserved("Hello, world!")?;
     let mut content = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
-    content.insert(0, &hello, LinearEdge::new(LayoutTrack::Content))?.finish()?;
-    ui.window("Hello", Rect { x: 40, y: 40, width: 300, height: 120 }, &content)
+    content.insert(0, hello, LinearEdge::new(LayoutTrack::Content))
+        .map_err(|(status, _returned_widget)| status)?;
+    ui.window("Hello", Rect { x: 40, y: 40, width: 300, height: 120 }, content)
+        .map_err(|(status, _returned_root)| status)
 }
 ```
 
@@ -171,29 +173,31 @@ example `ui.widgets().textbox_with_queue("", Some(texts.as_com_ref()))`. Widgets
 can share that queue allocation; each posts its typed event and public origin.
 The queue validates the event and can capture a typed weak origin without retaining
 the widget. Application behavior runs later when its inbox drains.
-`textbox_unobserved` chooses permanent non-delivery. See [the event architecture](docs/CLASS_EVENT_STREAMS.md). A persistent
+`textbox_unobserved` chooses permanent non-delivery. See [the event architecture](docs/contracts/CLASS_EVENT_STREAMS.md). A persistent
 `events::Dispatcher<Processor>` owns a `MessageProcessor` and its standard channel
 receiver. Resolve `IApplicationDispatcher` once, then call
 `ui.update_with_events(size, owner.as_com_ref())` each frame. Nested components
 own their inbox inside the widget and implement `IWidgetDispatcher::dispatch_next`; the
 runtime settles descendants before application messages and later raw input.
-The host then synchronizes text-input geometry and renders.
+The host then synchronizes text-input geometry and renders. Deferred application
+publication uses `MessageProcessor::apply_pending_changes` with an explicit
+`ApplyOutcome`; it runs at the guarded application boundary.
 Setters retain invalidation; custom widget updates report `GeometryChange::Changed`
 when measurement or placement inputs change. Resize invalidation is independent.
 
 External shared state, hidden/skipped updates and observational painting remain
-explicit widget/app responsibilities. Read [COM_AUTHORS.md](docs/COM_AUTHORS.md)
+explicit widget/app responsibilities. Read [COM_AUTHORS.md](docs/contracts/COM_AUTHORS.md)
 for the complete requirements and examples. Local custom leaves implement
 `LeafContent`; GPU scenes expose concrete interfaces such as `IMeshScene: IRenderItem`.
 Backend-owned Rust GPU types stay inside their renderer plugin.
 
 The [documentation index](docs/README.md) links authoring, assets, deployment and
-implementation references. [Examples](docs/EXAMPLES.md) maps each feature to working
-source. [FEATURES.md](docs/FEATURES.md) defines current feature ownership, while
-[COM_DESIGN.md](docs/COM_DESIGN.md) defines the accepted component architecture.
+implementation references. [Examples](docs/guides/EXAMPLES.md) maps each feature to working
+source. [FEATURES.md](docs/guides/FEATURES.md) defines current feature ownership, while
+[COM_DESIGN.md](docs/architecture/COM_DESIGN.md) defines the accepted component architecture.
 
 ## License
 
 Project-authored code uses the [BSD 3-Clause License](LICENSE). Imported neocogi-com and
 portions derived from rxi/microui retain their MIT terms. Bundled assets retain the
-licenses recorded in [asset attribution](docs/ASSETS.md).
+licenses recorded in [asset attribution](docs/project/ASSETS.md).

@@ -97,8 +97,8 @@ The browser platform owns canvas, text-input DOM state, IME and event normalizat
 
 ## Validation and packaging
 
-[Native deployment](../../../../docs/COM_NATIVE.md) documents separate builds, plugin staging,
-load order, feature choices and smoke commands. [Author obligations](../../../../docs/COM_AUTHORS.md)
+[Native deployment](../../../../docs/guides/COM_NATIVE.md) documents separate builds, plugin staging,
+load order, feature choices and smoke commands. [Author obligations](../../../../docs/contracts/COM_AUTHORS.md)
 cover phase authority, callback reentrancy, lifecycle and geometry invalidation.
 Run `scripts/test-demo.sh BACKEND` for the full application and
 `scripts/test-extension.sh BACKEND` for a separately built widget/container plugin.

@@ -1,7 +1,7 @@
 # COM widget and application contracts
 
 These are the author-facing rules for the component architecture defined in
-[COM_DESIGN.md](COM_DESIGN.md). The contract crate contains fixed interfaces and
+[COM_DESIGN.md](../architecture/COM_DESIGN.md). The contract crate contains fixed interfaces and
 values; the application-facing Rust facade contains typed conveniences. Neither
 exposes implementation state through `Any`, untyped properties, or native Rust GPU
 objects.
@@ -114,6 +114,13 @@ without an interface query or a second mutable state container. Frame dispatch
 borrows an existing capability and creates no callback/revocation adapter.
 The demo host performs this setup automatically for `Host::run(state, receiver)`.
 
+Use `app.downgrade()?` when another local owner needs a non-owning link to the
+processor. It returns `WeakLocalCom<Dispatcher<Processor>>`; `upgrade()?` returns
+an optional strong local owner without borrowing the value. The promoted owner's
+`try_borrow` methods enforce the same gate, and final strong release expires the
+weak handle. Concrete local types stay inside Rust; IDL transports shared weak
+interface references as `WeakComPtr<I>`. See [typed local ownership](../../crates/com/api/README.md).
+
 For coalesced publication, implement `MessageProcessor::apply_pending_changes` (or the
 host's `AppState::apply_pending_changes`) and return `ApplyOutcome::ChangesApplied`
 only after consuming pending work. Return `NothingPending` on an idle call. The
@@ -194,7 +201,7 @@ call returns before its own value is destroyed; no close retry queue is needed.
 The runtime schedules widgets automatically, including in `Ui::update`.
 It settles child messages and layout before dispatching an application message,
 then settles any resulting private work before continuing. Authors need no private
-dispatch loop, child registry or update-cycle object. The [events guide](../crates/ui/runtime/docs/EVENTS.md)
+dispatch loop, child registry or update-cycle object. The [events guide](../../crates/ui/runtime/docs/EVENTS.md)
 defines the full descendant-first schedule, destination ownership, work budget,
 reentrancy and failure rules. Posting does not itself request a platform frame.
 Layout/paint remain observational, and asset installation belongs after update.
@@ -209,8 +216,8 @@ until its next eligible update; hidden editors retain those requests. Authors mu
 distinguish geometry invalidation from behavior that needs another update and retain
 such requests explicitly. Shared external state still requires explicit synchronization.
 
-The [events guide](../crates/ui/runtime/docs/EVENTS.md) gives a complete small example;
-the [independent extension](../examples/ui-extension) exercises the same generated
+The [events guide](../../crates/ui/runtime/docs/EVENTS.md) gives a complete small example;
+the [independent extension](../../examples/ui-extension) exercises the same generated
 protocol through both ordinary-Cargo plugins and static monoliths.
 
 ## Paths, buffers, resources, and errors
@@ -296,7 +303,7 @@ implementation. `IWidget::properties().options` reports effective behavior and
 may add transient mouse-wheel or participation flags. It is an observation, not
 a configuration snapshot to feed back into a mutation. Custom widgets implement
 all three methods through their same common state, as shown in the independent
-[UI extension](../examples/ui-extension/src/lib.rs). Window-specific
+[UI extension](../../examples/ui-extension/src/lib.rs). Window-specific
 `WindowOptions` remain a distinct interface contract.
 
 The app queues raw input and then updates explicitly:
@@ -1051,7 +1058,7 @@ contract, its conservative enum limit, and failure-injection tests.
 Fresh private builders may deliberately discard returned candidates after a
 failed ABI call, provided those candidates cannot own an active receiver. There
 is no implicit tuple-to-status conversion that would hide that decision. See
-[ABI v17](../crates/com/docs/abi-v17.md) for wire slots, forwarding, multiple inputs
+[ABI v17](../../crates/com/docs/abi-v17.md) for wire slots, forwarding, multiple inputs
 and the requirement to return valid output after accepting ownership.
 
 For construction code that deliberately abandons failed candidates, convert to

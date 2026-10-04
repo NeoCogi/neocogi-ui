@@ -18,7 +18,7 @@ Application startup owns `ReloadIds` alongside the channel and passes it to the
 slot constructor. Additional or recreated slots sharing this message flow must
 reuse that allocator. Reload tokens contain `(slot_id, attempt)`; this example's
 Save handler continues to authenticate the widget origin directly. See the
-[reload identity contract](../../docs/RELOAD_GENERATION_IDENTITY.md).
+[reload identity contract](../../docs/contracts/RELOAD_GENERATION_IDENTITY.md).
 
 The `runtime-ui` assembly stages `neocogi-example-ui`. Its Cargo package remains
 `neocogi-runtime-ui-example`; use `--bin neocogi-example-ui` when selecting the

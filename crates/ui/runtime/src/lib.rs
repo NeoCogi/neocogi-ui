@@ -80,8 +80,8 @@
 //! Measurement caches are invalidated by truthful update results, changed setters, constraints,
 //! topology and installed resource revisions. Rendering observes the last complete commit and
 //! rejects stale geometry before acquiring a native frame. Author obligations, deployment and
-//! independent extension examples are documented in the workspace's `docs/COM_AUTHORS.md`,
-//! `docs/COM_NATIVE.md` and `examples/ui-extension`.
+//! independent extension examples are documented in the workspace's `docs/contracts/COM_AUTHORS.md`,
+//! `docs/guides/COM_NATIVE.md` and `examples/ui-extension`.
 
 // Compile the Rust examples in standalone guides as part of `cargo test --doc` without publishing
 // duplicate guide modules in the normal API reference.

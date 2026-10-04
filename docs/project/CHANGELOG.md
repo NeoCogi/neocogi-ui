@@ -2,6 +2,13 @@
 
 ## 0.0.0 (unreleased)
 
+- Organize repository documentation by purpose: issues, optimization opportunities,
+  contracts, experiments, measurements, architecture, guides, validation, reviews
+  and project information. Update cross-links and executable documentation paths.
+- Reconcile unresolved review findings in [issues](../issues/OPEN_ISSUES.md) and
+  [optimization opportunities](../optimizations/OPPORTUNITIES.md), retire completed
+  reviews and superseded plans, and update ownership, event and IDL guidance.
+
 - Add `LocalCom::downgrade` and `WeakLocalCom<T>::upgrade` for construction-proven
   weak access to shared Rust implementations. Promotion preserves the existing
   allocation, threading restrictions and COM borrow gate; final strong release
@@ -65,7 +72,7 @@
   generic enum, remove special optional lowering, and require borrowing the whole
   enum for owned payloads. Expose enum deserialization and conditional library
   decoder policies. COM designer catalog schema 5 uses named enum definitions
-  for optional fields. See [the generic value contract](IDL_GENERIC_VALUES.md) for syntax,
+  for optional fields. See [the generic value contract](../contracts/IDL_GENERIC_VALUES.md) for syntax,
   ownership, migration rules, and the remaining explicit limits.
 
 - Reset all workspace packages and plugin release metadata to **0.0.0** for
@@ -82,7 +89,7 @@
   IDL source annotations to generated declarations/members. Map formatted ranges,
   message helpers and observers to their authored origins without changing ABI
   identity. Expose typed lookup APIs and report the map through `module generate`.
-  See [IDL source maps](IDL_SOURCE_MAPS.md) for scope and coordinate conventions.
+  See [IDL source maps](../guides/IDL_SOURCE_MAPS.md) for scope and coordinate conventions.
 
 - Generate one concrete observer and local event enum from an NCIDL `#[observer]`
   producer. Built-in controls, choice menus and file dialogs retain that observer
@@ -91,7 +98,8 @@
   prebuilt-observer constructors, checked nullable COM inputs, and generated named
   export forwarding for documents. Migrate demos, editors and composite children.
   Existing controller scheduling/`LocalCom` and window/menu/popup binding remain.
-  See [constructor observers](CONSTRUCTION_OBSERVERS.md) for the design and measurements.
+  This observer design was later replaced by [typed event queues](../contracts/CLASS_EVENT_STREAMS.md);
+  the original implementation and measurements remain in Git history.
 
 - Rename typed output wiring to `events::bind`. Use one persistent owned
   `Controller<Model>` and `IEventOwner` contract for application and composite
@@ -127,8 +135,8 @@
   and registry plugins. Direct Rust implementation imports use those short
   targets; public facades and ABI identities remain unchanged. Standardize
   demo, example, benchmark, and asset-tool executables under `neocogi-*` names.
-  See the [library mapping](COM_NATIVE.md#profiles-and-output) and
-  [executable mapping](EXAMPLES.md). Rebuild and restage native assemblies;
+  See the [library mapping](../guides/COM_NATIVE.md#profiles-and-output) and
+  [executable mapping](../guides/EXAMPLES.md). Rebuild and restage native assemblies;
   old runtime filenames and plugin manifests belong to the previous build.
 
 - Consolidate COM object persistence into core contracts, the shared runtime, and
@@ -218,8 +226,8 @@
 
 The application API now consists of a thin static facade over actual COM objects.
 This replaces the 0.8 native node/weak-handle authoring API without compatibility
-wrappers. [COM_DESIGN.md](COM_DESIGN.md) defines the accepted architecture, and
-[COM_AUTHORS.md](COM_AUTHORS.md) defines its current author-facing contracts.
+wrappers. [COM_DESIGN.md](../architecture/COM_DESIGN.md) defines the accepted architecture, and
+[COM_AUTHORS.md](../contracts/COM_AUTHORS.md) defines its current author-facing contracts.
 
 - Replace the caller-coordinated combo header with a runtime-owned composite. Combo construction
   now registers a compact choice menu through the generic popup API under an explicit window
@@ -484,7 +492,7 @@ wrappers. [COM_DESIGN.md](COM_DESIGN.md) defines the accepted architecture, and
   buffers. Remaining native throughput and deployment-size overhead are recorded
   in COM_PERFORMANCE.md.
 
-See [author contracts](COM_AUTHORS.md) for explicit external-state, skipped-update,
+See [author contracts](../contracts/COM_AUTHORS.md) for explicit external-state, skipped-update,
 painting, lifecycle and callback responsibilities. Resize and retained setter
 invalidation remain independent of a widget's ordinary update return value.
 
@@ -622,4 +630,4 @@ Version 0.6 introduced retained `WidgetTree` authoring on top of the earlier per
 - Transport complete structured value definitions, named recursion, and enum tags
   through COM designer catalog schema 4. Keep one stream/one lifetime consumer
   and explicit application handlers; values no longer manufacture receivers.
-  See [the recursive value contract](RECURSIVE_VALUE_CONTRACT.md) for the supported positions and validation evidence.
+  See [the recursive value contract](../contracts/RECURSIVE_VALUE_CONTRACT.md) for the supported positions and validation evidence.

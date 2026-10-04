@@ -164,5 +164,5 @@ The theme editor is a concrete tool over these same boundaries. Its normal UI,
 interactive preview, and cached state sheet use separate compositors/sessions on
 one renderer device. `neocogi-skin-authoring` provides its document/compiler;
 there is no editor-specific runtime schema or reflected property framework.
-See [the guide](../tools/theme-editor/README.md), [coverage](THEME_EDITOR_COVERAGE.md),
+See [the guide](../../tools/theme-editor/README.md), [coverage](../validation/THEME_EDITOR_COVERAGE.md),
 and measured live-edit costs.

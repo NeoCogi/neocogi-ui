@@ -2,13 +2,13 @@
 
 | Example | Demonstrates |
 | --- | --- |
-| [simple](../demos/basic/src/bin/simple.rs) | A small facade-only application with one framed button. |
-| [calculator](../demos/basic/src/bin/calculator.rs) | Concrete typed actions, text updates and weighted layout. |
-| [backend-frame-cube](../demos/basic/src/bin/backend-frame-cube.rs) | A local COM leaf emitting solid triangles through the shared painter. |
-| [full](../demos/full/src/app.rs) | Menus, dialogs, editing, images, themes, containers and custom graphics. |
-| [smoke](../demos/smoke/src/main.rs) | Independent dynamic loading and explicit runtime/renderer boundary checks. |
+| [simple](../../demos/basic/src/bin/simple.rs) | A small facade-only application with one framed button. |
+| [calculator](../../demos/basic/src/bin/calculator.rs) | Concrete typed actions, text updates and weighted layout. |
+| [backend-frame-cube](../../demos/basic/src/bin/backend-frame-cube.rs) | A local COM leaf emitting solid triangles through the shared painter. |
+| [full](../../demos/full/src/app.rs) | Menus, dialogs, editing, images, themes, containers and custom graphics. |
+| [smoke](../../demos/smoke/src/main.rs) | Independent dynamic loading and explicit runtime/renderer boundary checks. |
 
-After installing the [assembly tool](../tools/cargo-neocogi), build and run a complete native package:
+After installing the [assembly tool](../../tools/cargo-neocogi), build and run a complete native package:
 
 ```sh
 cargo neocogi run --assembly calculator
@@ -33,7 +33,7 @@ names. Cargo's `-p` selects the package, while `--bin` selects the executable:
 | `neocogi-demo-smoke` | `neocogi-demo-smoke` | `smoke` |
 | `neocogi-demo-smoke` | `neocogi-com-bench` | Direct Cargo; requires `benchmark` |
 | `neocogi-runtime-ui-example` | `neocogi-example-ui` | `runtime-ui` |
-| `neocogi-example-com-plugin` | `neocogi-example-com` | [Direct Cargo](../examples/com-plugin/README.md); requires `host` or `monolith` |
+| `neocogi-example-com-plugin` | `neocogi-example-com` | [Direct Cargo](../../examples/com-plugin/README.md); requires `host` or `monolith` |
 | `neocogi-theme-editor` | `neocogi-theme-editor` | `theme-editor` |
 | `neocogi-ui-designer` | `neocogi-ui-designer` | `ui-designer` |
 | `neocogi-asset-tools` | `neocogi-atlas-export` | Direct Cargo |
@@ -70,10 +70,10 @@ Accepted edits publish one immutable revision; animation frames do not repeatedl
 reinstall unchanged styles. The log uses the actual TextBlock as its stored text,
 and Enter/Submit share the concrete submission operation.
 
-The [painter](../demos/full/src/painter_demo.rs),
-[falloff editor](../demos/full/src/falloff.rs),
-[grid](../demos/full/src/grid.rs) and
-[Suzanne viewport](../demos/full/src/mesh.rs) implement `LeafContent` directly.
+The [painter](../../demos/full/src/painter_demo.rs),
+[falloff editor](../../demos/full/src/falloff.rs),
+[grid](../../demos/full/src/grid.rs) and
+[Suzanne viewport](../../demos/full/src/mesh.rs) implement `LeafContent` directly.
 There is one COM widget allocation for each. Solid drawing uses the shared UI
 painter; Suzanne edits one renderer-owned `IMeshScene: IRenderItem` object, whose
 backend-specific GPU implementation stays in the renderer plugin.
@@ -97,4 +97,4 @@ The grid and falloff editor accept pointer focus without adding inert Tab stops.
 Suzanne also accepts arrow-key orbiting and committed W/S zoom. The browser demo
 retains the same controls and all themes, while its native-filesystem picker is
 inert. [WEB.md](WEB.md) documents IME and browser input limits; component/app writers
-own the synchronization obligations in [COM_AUTHORS.md](COM_AUTHORS.md).
+own the synchronization obligations in [COM_AUTHORS.md](../contracts/COM_AUTHORS.md).

@@ -10,13 +10,13 @@ cargo neocogi run --assembly full
 
 Contracts generate Rust bindings and source-graph metadata through ordinary
 Cargo build scripts. They produce no native libraries or description archives.
-`cargo-neocogi` is optional: the [sample plugin](../examples/com-plugin/README.md)
+`cargo-neocogi` is optional: the [sample plugin](../../examples/com-plugin/README.md)
 has complete plain-Cargo commands for dynamic and monolithic deployment.
 
 `cargo neocogi` builds the runtime, selected plugins, and application in order,
 then stages the executable, native libraries, plugin manifest, and assets. It
 reads the assembly definitions in `[workspace.metadata.neocogi]` in the root
-[Cargo.toml](../Cargo.toml). Users of a published tool can instead install with
+[Cargo.toml](../../Cargo.toml). Users of a published tool can instead install with
 `cargo install cargo-neocogi --locked`; publishing the tool and its component
 prerequisites is a separate release operation.
 
@@ -40,7 +40,7 @@ For contributors, the equivalent command without installation is
 `cargo run -p cargo-neocogi -- build --assembly full`. The installed command needs
 no workspace alias. Run `cargo neocogi plan --assembly full --variant vulkan` to
 review the selected typed configuration without compiling or inspecting plugins.
-The [tool reference](../tools/cargo-neocogi/README.md) describes package metadata,
+The [tool reference](../../tools/cargo-neocogi/README.md) describes package metadata,
 standalone `--config` files, per-component features, registry version requirements,
 resource paths, and lockfile behavior.
 
@@ -55,9 +55,9 @@ cargo neocogi run --assembly theme-editor --variant vulkan --variant monolith
 NEOCOGI_WEB_APP=theme-editor ./scripts/web-demo.sh serve
 ```
 
-[`scripts/test-theme-editor.sh`](../scripts/test-theme-editor.sh) exercises either
+[`scripts/test-theme-editor.sh`](../../scripts/test-theme-editor.sh) exercises either
 native linkage mode from relocated staging with exact staged resources. See the
-[editor guide](../tools/theme-editor/README.md) for project I/O and browser imports.
+[editor guide](../../tools/theme-editor/README.md) for project I/O and browser imports.
 
 ## Profiles and output
 
@@ -104,7 +104,7 @@ The `min-size` preset selects nightly automatically and includes its x86_64 Linu
 GNU target JSON, size-oriented compiler settings, and rebuilt standard library.
 Consumers do not need our `build-min-size` alias or a custom profile definition.
 The preset omits generated `Debug` formatting; shipped demo entry points therefore
-report [`HostError`](../demos/host/src/lib.rs) through its explicit `Display`
+report [`HostError`](../../demos/host/src/lib.rs) through its explicit `Display`
 implementation so runtime failures still include their status or diagnostic text.
 Generated contract bindings compile in the same Cargo target graph as their
 consumers; build scripts do not invoke a separate native compiler for contracts.
@@ -194,7 +194,7 @@ An ordinary dynamic demo `cargo build` still lacks a runtime linker search path
 and staged assembly. The command supplies that path for dynamic builds or selects
 the application-owned static graph for a monolith.
 `neocogi-ui` remains the static typed facade without native UI/renderer
-implementation dependencies. See the [backend source map](../crates/ui/runtime/docs/BACKENDS.md#backend-sources).
+implementation dependencies. See the [backend source map](../../crates/ui/runtime/docs/BACKENDS.md#backend-sources).
 
 Package metadata is our tool's configuration, not a Cargo execution hook. Ordinary
 `cargo build` and `cargo install` do not automatically run the assembly command.
@@ -285,7 +285,7 @@ The driver separately builds the extension, host, UI and renderer, and runs from
 It verifies common interface identity, shared activation delivery, callback
 measurement, unchanged measurement caches, setter/constraint/resize invalidation,
 exclusive attachment, topology changes and retained-handle closure. Ordinary demo
-packages omit this assembly. See [its source and contracts](../examples/ui-extension).
+packages omit this assembly. See [its source and contracts](../../examples/ui-extension).
 
 ## Optional construction workflows
 
@@ -301,7 +301,7 @@ Relative theme paths resolve against the executable directory. Use
 `cargo neocogi build --assembly full --variant glow --variant embedded` for an explicit embedded deployment;
 its GFX and skin plugins expose PNG decoding and live style edits without runtime
 atlas building or JSON loading. See
-[COM_ASSETS.md](COM_ASSETS.md) for immutable catalogs, bounded transfers, upload
+[COM_ASSETS.md](../contracts/COM_ASSETS.md) for immutable catalogs, bounded transfers, upload
 atomicity and decoder ownership.
 
 ## Browser

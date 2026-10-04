@@ -2,13 +2,14 @@
 
 Constructor helpers belong to IDL resolution. The resolver determines their
 meaning and exact names once; name validation, Rust rendering, and event metadata
-consume that result. This fixes consolidated audit group 11 (historical generated
-COM/IDL review finding 02), where valid IDL could emit duplicate Rust items.
+consume that result. Validation rejects collisions before valid-looking IDL can
+emit duplicate Rust items.
 
 ## The contract
 
 A method in the product's declaring module participates when it returns
-`ComPtr<Product>`, `ComBox<Product>`, or `WeakComBox<Product>` and accepts a borrowed
+`ComPtr<Product>`, `WeakComPtr<Product>`, `ComBox<Product>`, or
+`WeakComBox<Product>` and accepts a borrowed
 `EventBinding<Product, Event>`. Its owner may be an ordinary interface or factory.
 The binding is the ordinary `neocogi.com.events.EventBinding` library enum; an
 unrelated enum with a similar name does not acquire special meaning.
@@ -91,14 +92,15 @@ For an exclusively owned product, this is instead valid:
 ```
 
 Only the four binding/queue helpers are emitted, so the authored `CounterEventPort`
-record has no collision. `WeakComBox<Counter>` results follow the same rule.
+record has no collision. `WeakComBox<Counter>` and `WeakComPtr<Counter>` results
+follow the same rule: neither alone causes an `EventPort` alias to be emitted.
 
 ## Implementation and history
 
-[Constructor resolution](../crates/com/idl/src/resolve/construction.rs) stores typed
+[Constructor resolution](../../crates/com/idl/src/resolve/construction.rs) stores typed
 references into the resolved graph and an enum inventory of named helpers. The
-[namespace validator](../crates/com/idl/src/resolve.rs) visits each helper's stored
-name. [Rust rendering](../crates/com/idl/src/generate/construction.rs) exhaustively
+[namespace validator](../../crates/com/idl/src/resolve.rs) visits each helper's stored
+name. [Rust rendering](../../crates/com/idl/src/generate/construction.rs) exhaustively
 matches those same helper variants. Event metadata reads the stored association
 instead of rescanning methods. All of this data lives in the build-time compiler;
 it adds no COM object fields, call gates, vtables, or event-delivery operations.
@@ -130,13 +132,13 @@ parameters from being captured inside a method body. Neither fix replaces the ot
 
 ## Verification
 
-[Constructor-name regressions](../crates/com/idl/tests/constructor_names.rs) cover
+[Constructor-name regressions](../../crates/com/idl/tests/constructor_names.rs) cover
 all five shared helper families against authored and imported names; clashes with
 other generated companions; diagnostics across source files; malformed bindings;
 consistent and foreign constructors; generic products; absent event associations;
 exclusive/weak-exclusive conditional emission; and mixed constructor order.
 
-The [compiled fixture](../crates/com/idl/tests/fixtures/constructor_names.rs)
+The [compiled fixture](../../crates/com/idl/tests/fixtures/constructor_names.rs)
 compiles legal authored helper-like names, implements the readable queue trait
 through COM macros, executes a real exclusive factory/event round trip, verifies
 owner destruction, and compares exclusive, weak-exclusive and generic receiver

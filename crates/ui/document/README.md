@@ -25,7 +25,7 @@ Document JSON and catalog descriptions use bounded JSON writers/counters. Custom
 settings are opaque NCB bytes, with a separate 64 KiB snapshot ceiling. Providers
 use the same bounded NCB policy for encoding and decoding and validate their own
 typed schema/revision. The entire candidate's storage is checked before construction;
-providers also check direct calls. See [document resource admission](../../../docs/DOCUMENT_RESOURCE_ADMISSION.md).
+providers also check direct calls. See [document resource admission](../../../docs/contracts/DOCUMENT_RESOURCE_ADMISSION.md).
 
 A `Document` contains a tree of built-in widget constructors, styles, resources,
 and parent-owned layout edges. Each node has a unique stable key. Its physical
@@ -58,7 +58,7 @@ The policy is immutable across reload attempts and is never read from serialized
 content. JSON and binary recipes can be valid for a larger host while construction
 under this host's policy returns `NC_E_OUT_OF_RANGE`; a failed candidate leaves the
 published component intact. The designer preview and runtime-UI example select
-64 columns by 256 rows. See the [Grid contract](../../../docs/GRID_PLACEMENT.md)
+64 columns by 256 rows. See the [Grid contract](../../../docs/contracts/GRID_PLACEMENT.md)
 for placement, ownership-return, and resource semantics.
 
 `Component::widget::<ButtonAbi>("save")` resolves an authored node key and checks
@@ -194,7 +194,7 @@ compares the complete pair; generated dispatch also validates the weak origin.
 Allocator mutation uses `&mut self`. Concurrent slot creation must serialize access
 to the same allocator. Copied tokens need no synchronization beyond the channel's
 ordinary transport.
-The [reload identity contract](../../../docs/RELOAD_GENERATION_IDENTITY.md) defines
+The [reload identity contract](../../../docs/contracts/RELOAD_GENERATION_IDENTITY.md) defines
 allocator lifetime, reservation ordering, exhaustion, examples and regression coverage.
 
 Mount a `Component`, its `take_root()` result, or a `ReloadSlot::take_widget()`
@@ -207,7 +207,7 @@ authored defaults, not live focus, scrolling or application state.
 `Some(0)` explicitly clears them. Only `Some(bits)` calls `replace_flags` during
 loading. This applies to custom COM providers as well as built-ins. There is no
 per-kind defaults table. Read `IWidget.requested_flags()` for current
-constructor/setter configuration. See the [constructor configuration contract](../../../docs/WIDGET_CONSTRUCTOR_DEFAULTS.md)
+constructor/setter configuration. See the [constructor configuration contract](../../../docs/contracts/WIDGET_CONSTRUCTOR_DEFAULTS.md)
 for examples, designer behavior and the history of this distinction.
 
 For surface enablement, call `clear_flags(WidgetOptions::NO_INTERACT)` to enable
@@ -274,7 +274,7 @@ complete draft and copies a stable bounded snapshot. `NOINTERFACE` from
 Apply prepares history and successfully constructs the preview before accepting
 source. Failed drafts stay mounted; accepted snapshots support normal save/undo/
 redo. No generic reflected setter invocation or full IDL reconstruction is needed.
-See [the settings contract](../../../docs/PLUGIN_DESIGNER_SETTINGS.md) and the
+See [the settings contract](../../../docs/contracts/PLUGIN_DESIGNER_SETTINGS.md) and the
 [independent example](../../../examples/ui-extension/src/settings.rs).
 
 `Document::rust_bindings_with(&registry)` generates custom form fields and
