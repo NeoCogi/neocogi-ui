@@ -44,8 +44,9 @@ pub fn decode_settings<T: ComDeserialize>(bytes: &[u8]) -> Result<T, String> {
     neocogi_com::binary::from_slice_with_limits(bytes, settings_limits()).map_err(|error| error.to_string())
 }
 
-/// Revision 9 replaces scalar property lists with provider-owned NCB settings.
-pub const DESIGN_DESCRIPTOR_VERSION: u32 = 9;
+/// Revision 10 preserves shared weak ownership in structural value metadata.
+/// Provider-owned NCB settings from revision 9 retain their existing contract.
+pub const DESIGN_DESCRIPTOR_VERSION: u32 = 10;
 
 /// Owned structural field expression copied through the COM design catalog.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -61,6 +62,8 @@ pub enum DesignValueType {
     Named(String),
     /// Explicit owned COM capability; its interface is inspected separately.
     Object(String),
+    /// Shared weak capability; displaying or copying it must not imply a strong owner.
+    WeakObject(String),
     /// Explicitly indirect sequence of recursive values.
     Sequence(Box<DesignValueType>),
     /// Inline fixed-size array.
@@ -76,6 +79,7 @@ impl From<&neocogi_com::design::IdlValueType> for DesignValueType {
             I::Scalar(name) => Self::Scalar((*name).into()),
             I::Named(name) => Self::Named((*name).into()),
             I::Object(name) => Self::Object((*name).into()),
+            I::WeakObject(name) => Self::WeakObject((*name).into()),
             I::Sequence(value) => Self::Sequence(Box::new((*value).into())),
             I::Array(value, len) => Self::Array(Box::new((*value).into()), *len),
         }
@@ -88,6 +92,7 @@ impl std::fmt::Display for DesignValueType {
             Self::Unit => formatter.write_str("()"),
             Self::Text => formatter.write_str("String"),
             Self::Scalar(name) | Self::Named(name) | Self::Object(name) => formatter.write_str(name),
+            Self::WeakObject(name) => write!(formatter, "WeakComPtr<{name}>"),
             Self::Sequence(value) => write!(formatter, "Vec<{value}>"),
             Self::Array(value, len) => write!(formatter, "[{value}; {len}]"),
         }
@@ -361,7 +366,7 @@ fn validate_value_graph(values: &[DesignType]) -> Result<(), String> {
                     return Err("Unknown scalar definition".into());
                 }
             }
-            DesignValueType::Object(name) => {
+            DesignValueType::Object(name) | DesignValueType::WeakObject(name) => {
                 if !qualified_name(name) {
                     return Err("Invalid object identity".into());
                 }
@@ -452,6 +457,22 @@ fn identifier(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Transport, display and catalog validation must retain weak field ownership.
+    #[test]
+    fn weak_capability_metadata_round_trips_without_becoming_a_strong_object() {
+        let weak = DesignValueType::from(&neocogi_com::design::IdlValueType::WeakObject("example.Service"));
+        assert_eq!(weak.to_string(), "WeakComPtr<example.Service>");
+        assert_ne!(weak, DesignValueType::Object("example.Service".into()));
+        let json = serde_json::to_string(&weak).unwrap();
+        assert_eq!(serde_json::from_str::<DesignValueType>(&json).unwrap(), weak);
+        let mut manifest = counter_manifest();
+        let DesignShape::Enum(variants) = &mut manifest.interface.values[0].shape else { panic!("event enum") };
+        variants[0].fields.push(DesignField { name: "source".into(), ty: weak });
+        manifest.validate().unwrap();
+        manifest.version = 9;
+        assert!(manifest.validate().is_err(), "the old catalog cannot describe weak ownership");
+    }
 
     /// Supplies one complete stream for validation-boundary tests.
     fn counter_manifest() -> DesignWidgetManifest {

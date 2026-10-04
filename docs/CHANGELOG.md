@@ -8,6 +8,11 @@
   expires observers regardless of retained weak clones. UI runtime ownership is
   unchanged pending a separate evaluation.
 
+- Support `WeakComPtr<I>` in IDL results and recursively borrowed record/enum
+  fields, preserving interface identity, threading, expiration and weak ownership.
+  Add checked weak result lowering and metadata without promoting producers.
+  Design catalog schema 10 distinguishes weak fields from strong object fields.
+
 - Rename application message behavior from `EventModel` to `MessageProcessor`
   and its inbox owner from `Controller` to `Dispatcher`. Typed local access uses
   `dispatcher.processor`; delivery remains synchronous and exclusively borrowed.
