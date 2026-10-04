@@ -1,5 +1,5 @@
 extern neocogi.com.events;
-use neocogi.com.events::IEventReceiver;
+use neocogi.com.events::EventBinding;
 extern neocogi.ui.core;
 extern neocogi.ui.nodes;
 use neocogi.ui.nodes::UiFactory;
@@ -16,7 +16,7 @@ interface IUiComponent {
     fn widget(&self, name: &[u8]) -> Result<WeakComBox<IWidget>>;
 }
 
-#[version(2)]
+#[version(3)]
 /// Optional COM capability queried from an activated plugin root factory.
 /// It lets an independent designer enumerate constructible widgets without
 /// linking the plugin's Rust contract or implementation crate.
@@ -29,7 +29,7 @@ interface IDesignWidgetCatalog {
     /// Constructs a widget from bounded provider-owned NCB settings. The provider
     /// validates its private schema/revision and receiver before allocating a widget.
     /// Settings and editor snapshots share the 64 KiB ui-design NCB policy.
-    fn create_widget(&self, index: u32, host: &IWidgetHost, settings: &[u8], events: &WidgetEventBinding) -> Result<ComBox<IWidget>>;
+    fn create_widget(&self, index: u32, host: &IWidgetHost, settings: &[u8], events: &EventBinding) -> Result<ComBox<IWidget>>;
     /// Opens a fresh draft using the editor runtime's ordinary control factory.
     /// Return NOINTERFACE only when this kind deliberately has no settings editor.
     /// Other failures leave the host's accepted document and preview unchanged.
@@ -49,17 +49,6 @@ interface IDesignSettingsEditor {
     /// zero. Reads must be stable while the host performs length and copy calls
     /// without dispatching more UI input. No accepted runtime widget is modified.
     fn settings(&self, output: &mut [u8]) -> Result<u32>;
-}
-
-#[version(2)]
-/// Constructor-only receiver transport for a heterogeneous custom-widget catalog.
-/// Observed carries a COM capability, never an untyped event payload. The selected
-/// factory receives the common IEventReceiver before publishing the widget.
-enum WidgetEventBinding {
-    /// Permanently suppress delivery for this instance, including designer previews.
-    Unobserved,
-    /// Application receiver whose required typed interface is checked by the factory.
-    Observed(ComPtr<IEventReceiver>),
 }
 
 #[version(1)]

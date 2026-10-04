@@ -115,7 +115,7 @@ pub(crate) struct ChoiceMenuState {
     /// Explicit popup lifecycle reconciled by the runtime composition owner.
     popup: ChoicePopupLifecycle,
     /// Runtime-owned source for actual user commits only.
-    changed_event: neocogi_ui_core_contracts::IChoiceMenuEventPort,
+    changed_event: neocogi_com::events::EventPort,
 }
 
 impl ChoiceMenuState {
@@ -303,9 +303,8 @@ impl IChoiceMenuState for ChoiceMenuState {
             ChoicePopupLifecycle::Detached => ChoicePopupLifecycle::Detached,
         };
         // Commit the complete popup transition before entering even a pure mapper.
-        if changed {
-            self.changed_event
-                .post(neocogi_ui_core_contracts::IChoiceMenuEvent::Changed(ChoiceSelection::Selected(id)))?;
+        if changed && self.changed_event.is_bound() {
+            self.changed_event.post(neocogi_ui_core_contracts::events::choice_changed(ChoiceSelection::Selected(id))?)?;
         }
         Ok(self.revision)
     }

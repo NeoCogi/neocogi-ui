@@ -88,7 +88,7 @@ recipient; events do not automatically bubble through visual ancestors.
 captures that identity and moves the exclusive event into its inbox. The event
 stays a COM object until handling; no producer-side conversion to an application
 enum is needed. Handlers query derived event interfaces and read immutable
-getters, or use optional native Rust payload views. Event interface discovery
+getters. Event interface discovery
 returns `None` on a type miss and preserves actual ABI/provider errors.
 
 ```mermaid
@@ -128,6 +128,19 @@ private message enums stay within the owning binary. The COM boundary carries
 one `IEventReceiver` interface, an exclusive event capability and a checked weak-origin value. An
 independent queue implementation chooses its own capacity and delivery-failure
 policy.
+
+## Declaring and handling outputs
+
+Each producer lists its event interfaces with `#[events(...)]`. The compiler
+validates their immutable getters and exposes the same shape as authoring metadata.
+The designer displays event interface names and getter fields. It does not rebuild
+their meaning from constructor arguments or native enum variants.
+
+Applications use `events::channel()` and query concrete event interfaces in their
+handlers. Reloadable documents can use `document_receiver(generation, sender)` and
+`EventBindings::all`; `DocumentEvent::event_for(slot, key)` authenticates the current
+attempt and widget before the handler queries an event. Optional generated `Form`
+fields simplify widget lookup. No generated event dispatch code is required.
 
 ## Behavior inside a composite
 
@@ -290,7 +303,7 @@ synchronously. A widget requests its own removal by sending intent to its
 behavioral parent; the parent decides after the active call returns. Removing a
 currently executing subtree is rejected with Busy. Facts already sent to the
 application's independent inbox survive removal. Their consumer decides whether
-an expired origin makes the fact stale; generated forms additionally check
+an expired origin makes the fact stale; `DocumentEvent::event_for` additionally checks
 [reload generation and current field identity](../contracts/RELOAD_GENERATION_IDENTITY.md).
 
 `IWindow::close()` removes an individual window family and publishes its lifecycle

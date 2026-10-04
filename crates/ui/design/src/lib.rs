@@ -44,9 +44,9 @@ pub fn decode_settings<T: ComDeserialize>(bytes: &[u8]) -> Result<T, String> {
     neocogi_com::binary::from_slice_with_limits(bytes, settings_limits()).map_err(|error| error.to_string())
 }
 
-/// Revision 11 distinguishes observers of exclusive owners in value metadata.
-/// Provider-owned NCB settings retain their existing contract.
-pub const DESIGN_DESCRIPTOR_VERSION: u32 = 11;
+/// Revision 12 describes concrete COM event interfaces and their read-only getters.
+/// Provider-owned NCB settings retain their independent schema.
+pub const DESIGN_DESCRIPTOR_VERSION: u32 = 12;
 
 /// Owned structural field expression copied through the COM design catalog.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -200,19 +200,30 @@ impl From<&neocogi_com::design::IdlType> for DesignType {
     }
 }
 
-/// The exact receiver accepted by the product constructor, separate from class ancestry.
+/// One emitted COM interface, whose getters describe the immutable event snapshot.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct DesignEventQueue {
-    /// Checked Rust implementation trait used when exporting a shared application queue.
-    /// Its spelling cannot change the nominal identity or wire signature.
-    pub rust_trait: String,
-    /// Common IEventReceiver identity.
+pub struct DesignEvent {
+    /// Canonical IDL name of the concrete event interface.
+    pub qualified_name: String,
+    /// Interface identity queried on the owned IEvent value.
     pub iid: [u8; 16],
-    /// Common receiver ABI signature; concrete event interfaces negotiate separately.
+    /// Full transitive event ABI signature, including inherited getters.
     pub signature: [u8; 32],
-    /// Exact generated message payload.
-    pub message: String,
+    /// Zero-argument read-only getters in declaration order, including bases.
+    pub fields: Vec<DesignField>,
+}
+impl DesignEvent {
+    /// Copies generated event metadata without retaining producer pointers.
+    pub fn from_idl(source: &neocogi_com::design::IdlEvent) -> Result<Self, String> {
+        Ok(Self {
+            qualified_name: source.qualified_name.into(),
+            iid: source.abi.interface_id.to_uuid_bytes(),
+            // SAFETY: generated descriptors point to immutable static bytes.
+            signature: *unsafe { source.abi.abi_signature.as_digest() }.ok_or("Event has no ABI signature")?,
+            fields: source.fields.iter().map(|field| DesignField { name: field.name.into(), ty: (&field.ty).into() }).collect(),
+        })
+    }
 }
 
 /// Exact widget interface identity and its authoring-level output contracts.
@@ -225,19 +236,11 @@ pub struct DesignInterface {
     pub signature: [u8; 32],
     /// Public Rust `*Abi` projection used by generated forms; checked by [`neocogi_com::validate_rust_path`].
     pub rust_abi: String,
-    /// Optional constructor receiver; this is not an interface implemented by the widget.
-    pub event_queue: Option<DesignEventQueue>,
-    /// Complete finite value graph reachable from the product and its event value.
+    /// Concrete event interfaces advertised by this widget.
+    pub events: Vec<DesignEvent>,
+    /// Complete finite value graph reachable from the widget and event getters.
     pub values: Vec<DesignType>,
 }
-impl DesignInterface {
-    /// Resolves the receiver's canonical event value edge through the authoritative graph.
-    pub fn event_value(&self) -> Option<&DesignType> {
-        let stream = self.event_queue.as_ref()?;
-        self.values.iter().find(|value| value.qualified_name == stream.message)
-    }
-}
-
 /// One constructible widget kind and its provider-owned constructor defaults.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -261,19 +264,7 @@ impl DesignWidgetManifest {
         }
         // SAFETY: the generated ABI signature points to immutable static bytes.
         let digest = *unsafe { source.abi.abi_signature.as_digest() }.ok_or("IDL interface has no signature")?;
-        let stream = source
-            .event_queue
-            .as_ref()
-            .map(|output| -> Result<DesignEventQueue, String> {
-                Ok(DesignEventQueue {
-                    rust_trait: output.rust_trait.to_owned(),
-                    iid: output.abi.interface_id.to_uuid_bytes(),
-                    // SAFETY: IDL owns this immutable static descriptor.
-                    signature: *unsafe { output.abi.abi_signature.as_digest() }.ok_or("Receiver has no signature")?,
-                    message: output.message.qualified_name.to_owned(),
-                })
-            })
-            .transpose()?;
+        let events = source.events.iter().map(DesignEvent::from_idl).collect::<Result<Vec<_>, _>>()?;
         let manifest = Self {
             version: DESIGN_DESCRIPTOR_VERSION,
             kind: kind.into(),
@@ -282,7 +273,7 @@ impl DesignWidgetManifest {
                 iid: source.abi.interface_id.to_uuid_bytes(),
                 signature: digest,
                 rust_abi: source.rust_abi.to_owned(),
-                event_queue: stream,
+                events,
                 values: source.values.iter().map(DesignType::from).collect(),
             },
         };
@@ -299,18 +290,16 @@ impl DesignWidgetManifest {
         }
         neocogi_com::validate_rust_path(&self.interface.rust_abi).map_err(|error| format!("Widget {:?}, interface.rust_abi: {error}", self.kind))?;
         validate_settings_size(&self.defaults)?;
-        if let Some(output) = &self.interface.event_queue {
-            neocogi_com::validate_rust_path(&output.rust_trait).map_err(|error| format!("Invalid event queue Rust trait: {error}"))?;
-            if output.iid == [0; 16] || !qualified_name(&output.message) {
-                return Err("Invalid design widget output metadata".into());
+        let mut names = std::collections::BTreeSet::new();
+        let mut identities = std::collections::BTreeSet::new();
+        if self.interface.events.len() > 1024 { return Err("Too many event interfaces".into()); }
+        for event in &self.interface.events {
+            if !qualified_name(&event.qualified_name) || event.iid == [0; 16] || event.signature == [0; 32]
+                || !names.insert(&event.qualified_name) || !identities.insert(event.iid) {
+                return Err("Invalid or duplicate event interface".into());
             }
-            self.interface
-                .values
-                .iter()
-                .find(|value| value.qualified_name == output.message)
-                .ok_or("Event value is absent from its definition graph")?;
         }
-        validate_value_graph(&self.interface.values).map_err(|error| format!("Widget {:?}: {error}", self.kind))?;
+        validate_value_graph(&self.interface.values, &self.interface.events).map_err(|error| format!("Widget {:?}: {error}", self.kind))?;
         Ok(())
     }
 
@@ -340,7 +329,7 @@ fn qualified_name(name: &str) -> bool {
 }
 
 /// Validates a bounded finite graph, including references and inline layout cycles.
-fn validate_value_graph(values: &[DesignType]) -> Result<(), String> {
+fn validate_value_graph(values: &[DesignType], events: &[DesignEvent]) -> Result<(), String> {
     use std::collections::{BTreeMap, BTreeSet};
     if values.len() > 1024 {
         return Err("Too many value definitions".into());
@@ -403,6 +392,11 @@ fn validate_value_graph(values: &[DesignType]) -> Result<(), String> {
     }
     let mut pending = BTreeMap::new();
     let mut remaining = 4096;
+    for event in events {
+        // Getter names are identifiers; tuple positions only apply to value fields.
+        if event.fields.iter().any(|field| !identifier(&field.name)) { return Err("Invalid event getter name".into()); }
+        fields(&event.fields, &definitions, &mut BTreeSet::new(), &mut remaining)?;
+    }
     for value in values {
         let mut edges = BTreeSet::new();
         match &value.shape {
@@ -495,12 +489,12 @@ mod tests {
                 signature: [2; 32],
                 rust_abi: "example_contracts::CounterAbi".into(),
                 values: vec![],
-                event_queue: Some(DesignEventQueue {
-                    rust_trait: "example::CounterEventQueue".into(),
+                events: vec![DesignEvent {
+                    qualified_name: "example.ICounterEvent".into(),
                     iid: [2; 16],
                     signature: [3; 32],
-                    message: "example.CounterEvent".into(),
-                }),
+                    fields: vec![DesignField { name: "value".into(), ty: DesignValueType::Named("example.CounterEvent".into()) }],
+                }],
             },
         };
         manifest.interface.values.push(DesignType {
@@ -515,18 +509,24 @@ mod tests {
         manifest
     }
 
-    /// Queue implementation paths obey exactly the COM binding grammar used by
-    /// interface and value paths, including raw identifiers and keyword rejection.
+    /// Event identities and getter graph edges are checked before editor use.
     #[test]
-    fn queue_traits_use_the_shared_com_path_validator() {
-        let mut manifest = counter_manifest();
-        for path in ["example::type::Queue", "example::async", "crate::Queue", "example::Queue<u32>"] {
-            manifest.interface.event_queue.as_mut().unwrap().rust_trait = path.into();
-            assert!(manifest.validate().is_err(), "accepted {path}");
-        }
-        for path in ["example::r#type::Queue", "::example::Queue"] {
-            manifest.interface.event_queue.as_mut().unwrap().rust_trait = path.into();
-            manifest.validate().unwrap();
+    fn event_interfaces_validate_identities_and_getters() {
+        let valid = counter_manifest();
+        for corrupt in 0..7 {
+            let mut manifest = valid.clone();
+            match corrupt {
+                0 => manifest.interface.events[0].qualified_name = "bad::event".into(),
+                1 => manifest.interface.events[0].iid = [0; 16],
+                2 => manifest.interface.events[0].signature = [0; 32],
+                3 => manifest.interface.events.push(manifest.interface.events[0].clone()),
+                4 => manifest.interface.events[0].fields[0].name = "0".into(),
+                5 => { let field = manifest.interface.events[0].fields[0].clone(); manifest.interface.events[0].fields.push(field); },
+                6 => manifest.interface.events[0].fields[0].ty = DesignValueType::Named("example.Missing".into()),
+                _ => unreachable!(),
+            }
+            assert!(manifest.encode().is_err(), "corruption {corrupt}");
+            assert!(DesignWidgetManifest::decode(&serde_json::to_vec(&manifest).unwrap()).is_err());
         }
     }
 
@@ -590,7 +590,7 @@ mod tests {
     #[test]
     fn logical_names_do_not_use_rust_keyword_rules() {
         let mut manifest = counter_manifest();
-        manifest.interface.event_queue.as_mut().unwrap().message = "example.type".into();
+        manifest.interface.events[0].fields[0].ty = DesignValueType::Named("example.type".into());
         manifest.interface.values[0].qualified_name = "example.type".into();
         manifest.interface.values[0].rust_type = "example_contracts::r#type".into();
         manifest.validate().unwrap();
@@ -607,7 +607,7 @@ mod tests {
                 ty: DesignValueType::Sequence(Box::new(DesignValueType::Named("example.Tree".into()))),
             }]),
         };
-        assert!(validate_value_graph(&[tree.clone()]).is_ok());
+        assert!(validate_value_graph(&[tree.clone()], &[]).is_ok());
         let encoded = serde_json::to_vec(&tree).unwrap();
         assert_eq!(serde_json::from_slice::<DesignType>(&encoded).unwrap(), tree);
         let mut invalid = tree.clone();
@@ -634,12 +634,12 @@ mod tests {
                 },
             ]),
         };
-        assert_eq!(validate_value_graph(&[invalid, optional]).unwrap_err(), "Recursive inline value layout");
+        assert_eq!(validate_value_graph(&[invalid, optional], &[]).unwrap_err(), "Recursive inline value layout");
         let mut missing = tree.clone();
         let DesignShape::Struct(fields) = &mut missing.shape else { unreachable!() };
         fields[0].ty = DesignValueType::Named("example.Missing".into());
-        assert!(validate_value_graph(&[missing]).unwrap_err().contains("Missing value definition"));
-        assert!(validate_value_graph(&[tree.clone(), tree]).unwrap_err().contains("duplicate"));
+        assert!(validate_value_graph(&[missing], &[]).unwrap_err().contains("Missing value definition"));
+        assert!(validate_value_graph(&[tree.clone(), tree], &[]).unwrap_err().contains("duplicate"));
     }
 
     /// Tagged cases must identify an unambiguous payload at every named definition.
@@ -661,7 +661,7 @@ mod tests {
                 },
             ]),
         };
-        assert!(validate_value_graph(&[value]).unwrap_err().contains("duplicate enum case"));
+        assert!(validate_value_graph(&[value], &[]).unwrap_err().contains("duplicate enum case"));
     }
 
     /// Both NCB directions admit exactly the same byte boundary and reject trailing data.

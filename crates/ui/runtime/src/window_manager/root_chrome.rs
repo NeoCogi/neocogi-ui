@@ -84,8 +84,7 @@ pub(super) enum RootCaptionButton {
     Close,
 }
 
-/// Authoritative NCIDL window fact; chrome policy uses private geometry, not a second event model.
-pub use neocogi_ui_core_contracts::WindowEvent;
+
 
 /// Stable lookup identity; the manager or declaration owns all presentation and delivery state.
 #[derive(Clone)]

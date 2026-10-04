@@ -2,6 +2,16 @@
 
 ## 0.0.0 (unreleased)
 
+- Complete the COM-only event migration: remove native widget output enums,
+  conversion traits, generic constructor associations, product helper aliases and
+  generated form dispatch scaffolding. Producers construct exclusive snapshots;
+  handlers authenticate origins and read concrete event getters directly.
+- Add explicit `#[events(...)]` IDL declarations and inherited getter metadata.
+  Advance canonical IDL encoding to v9 and owned design descriptors to v12.
+  Optional generated forms expose only checked fields; the shared document receiver
+  preserves COM ownership and checks reload generation plus widget membership.
+  These changes supersede the optional native decoding/form handler paths below.
+
 - Replace per-widget event receiver interfaces with one `IEventReceiver` carrying
   exclusive `ComBox<IEvent>` snapshots and weak widget/service origins. Add typed
   immutable event getters, optional native payload decoding, and a common channel.

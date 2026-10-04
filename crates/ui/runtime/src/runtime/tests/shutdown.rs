@@ -8,7 +8,7 @@ use std::sync::mpsc::{self, Sender};
 /// Records every attempted notification, including ones deliberately rejected.
 struct WindowQueue {
     /// Application-owned facts must survive destruction of their producer.
-    events: Sender<WindowEvent>,
+    events: Sender<&'static str>,
     /// Rejection distinguishes no posting from posting and silently losing its error.
     reject_destroyed: bool,
     /// Reports final receiver release independently of retained window capabilities.
@@ -18,11 +18,10 @@ impl neocogi_com::events::IEventReceiver for WindowQueue {
     /// Accepts ordinary lifecycle facts and optionally rejects terminal delivery.
     fn post(&mut self, _: neocogi_com::NcValueRef<'_, neocogi_com::events::EventOrigin>, event_owner: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
         let result = (|| -> Result<(), NcStatus> {
-        let event = <WindowEvent as neocogi_com::events::EventPayload>::from_event(&event_owner)?.ok_or(NC_E_INVALID_ARG)?;
-        let result = match &event {
-            WindowEvent::Destroyed if self.reject_destroyed => Err(NC_E_INVALID_ARG),
-            _ => Ok(()),
-        };
+        let event = if event_owner.query_weak::<neocogi_ui::IWindowDestroyedEventAbi>().is_ok() { "destroyed" }
+            else if event_owner.query_weak::<neocogi_ui::IWindowHiddenEventAbi>().is_ok() { "hidden" }
+            else { "other" };
+        let result = if event == "destroyed" && self.reject_destroyed { Err(NC_E_INVALID_ARG) } else { Ok(()) };
         self.events.send(event).unwrap();
         result
 
@@ -98,7 +97,7 @@ fn runtime_shutdown_is_silent_and_preserves_already_queued_facts() {
             windows.push(window);
         }
         let (popup_send, popup_events) = mpsc::channel();
-        let popup_queue = neocogi_ui::test_event_queue!(popup, PopupDismissed, popup_send, |_queue, _origin, event| event).unwrap();
+        let popup_queue = neocogi_ui::test_event_queue!(neocogi_ui::IPopupAbi, (), popup_send, |_queue, _origin, event| { event.query_weak::<neocogi_ui::IPopupDismissedEventAbi>()?; () }).unwrap();
         let owner = ui.widgets().button_unobserved("popup").unwrap();
         views.push(owner.node_interface().unwrap());
         let mut popup = ui.popup_with_queue(root.as_com_ref(), "popup", owner, Some(popup_queue.as_com_ref())).unwrap();
@@ -122,7 +121,7 @@ fn runtime_shutdown_is_silent_and_preserves_already_queued_facts() {
         assert_eq!(found, ["model", "pending", "queue"]);
         let facts: Vec<_> = events.try_iter().collect();
         assert!(
-            matches!(facts.as_slice(), [WindowEvent::Hidden]),
+            matches!(facts.as_slice(), ["hidden"]),
             "shutdown preserves the earlier fact without posting any new lifecycle event"
         );
         assert!(matches!(popup_events.try_recv(), Err(mpsc::TryRecvError::Disconnected)));
@@ -208,7 +207,7 @@ fn individual_removal_keeps_terminal_notifications_and_error_reporting() {
     assert_eq!(window.close(), Err(NC_E_INVALID_ARG));
     assert!(!observed.is_alive());
     assert_eq!(child.snapshot(), Err(UI_E_CLOSED));
-    assert_eq!(events.try_iter().filter(|event| matches!(event, WindowEvent::Destroyed)).count(), 2);
+    assert_eq!(events.try_iter().filter(|event| *event == "destroyed").count(), 2);
     assert_eq!(drops.try_recv(), Ok("queue"));
     assert!(survivor.snapshot().is_ok());
     ui.update(SIZE).unwrap();

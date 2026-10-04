@@ -1,9 +1,16 @@
 //! Standard picker acceptance exercises public methods, routed input, and exact native filesystem values.
 use super::*;
 use neocogi_com::NcValueRef;
-use neocogi_com::events::{EventOrigin, EventPayload};
+use neocogi_com::events::EventOrigin;
 use neocogi_ui_support::test_support::events::TestApp;
-use neocogi_ui::events::completed_file_path;
+/// Terminal recorder extracts the native path while it owns the event.
+fn completion(event: &ComBox<neocogi_com::events::IEventAbi>) -> Result<Option<PathBuf>, NcStatus> {
+    if let Some(event) = neocogi_com::events::downcast_event::<IFileAcceptedEventAbi>(event)? {
+        return neocogi_ui::path::decode(event.path()?.as_com_ref()).map(Some);
+    }
+    event.query_weak::<IFileCancelledEventAbi>()?;
+    Ok(None)
+}
 
 /// Deterministic drawable keeps the full modal visible while testing its real flex layout.
 const SIZE: Size = Size { width: 900, height: 600 };
@@ -23,17 +30,17 @@ struct Fixture {
     /// Same runtime-owned concrete widget, retained only for test observations of fixed roles.
     widget: WeakLocalBox<FileDialog>,
     /// Default completion inbox is owned by this fixture until a test consumes it.
-    messages: Option<std::sync::mpsc::Receiver<FileDialogCompletion>>,
+    messages: Option<std::sync::mpsc::Receiver<Option<PathBuf>>>,
 }
 impl Fixture {
     /// Uses public production runtime and node-provider construction, exactly as plugin clients do.
     fn new() -> Self {
         let (send, messages) = std::sync::mpsc::channel();
         let queue = neocogi_ui::test_event_queue!(
-            file_dialog,
-            FileDialogCompletion,
+            neocogi_ui::IFileDialogAbi,
+            Option<PathBuf>,
             send,
-            |_queue, _origin, IFileDialogEvent::Completed(event)| event
+            |_queue, _origin, event| completion(event)?
         )
         .unwrap();
         let mut fixture = Self::with_queue(queue);
@@ -93,7 +100,7 @@ impl Fixture {
     }
 }
 /// Connects the real picker completion protocol to a consumer-owned inbox.
-fn session(fixture: &mut Fixture) -> std::sync::mpsc::Receiver<FileDialogCompletion> {
+fn session(fixture: &mut Fixture) -> std::sync::mpsc::Receiver<Option<PathBuf>> {
     fixture.messages.take().expect("one consumer per constructed picker")
 }
 
@@ -119,7 +126,7 @@ fn save_request_preserves_suggested_filename_and_rejects_directory_components() 
     fixture.key(KeyCode::Enter, 0);
     fixture.ui.update(SIZE).unwrap();
     assert_eq!(
-        completed_file_path(&events.try_recv().unwrap()).unwrap(),
+        events.try_recv().unwrap(),
         Some(directory.path().join("new theme.json"))
     );
     assert!(!fixture.handle.active().unwrap());
@@ -174,7 +181,7 @@ fn empty_acceptance_and_independent_picker_requests_use_actual_controls() {
     let directory = tempfile::tempdir().unwrap();
     let events = session(&mut fixture);
     let app = TestApp::new(Vec::new(), events, |outcomes, message| {
-        outcomes.push(completed_file_path(&message)?);
+        outcomes.push(message);
         Ok(())
     });
     fixture.open(directory.path());
@@ -194,10 +201,10 @@ fn empty_acceptance_and_independent_picker_requests_use_actual_controls() {
             fixture.owner.as_com_ref(),
             Some(
                 neocogi_ui::test_event_queue!(
-                    file_dialog,
-                    FileDialogCompletion,
+                    neocogi_ui::IFileDialogAbi,
+                    Option<PathBuf>,
                     second_events_tx.clone(),
-                    |_queue, _origin, neocogi_ui::file_dialog::Event::Completed(event)| event
+                    |_queue, _origin, event| completion(event)?
                 )
                 .unwrap()
                 .as_com_ref(),
@@ -210,7 +217,7 @@ fn empty_acceptance_and_independent_picker_requests_use_actual_controls() {
     second.cancel().unwrap();
     app.update(&fixture.ui, SIZE).unwrap();
     for message in second_events.try_iter() {
-        second_outcomes.push(completed_file_path(&message).unwrap());
+        second_outcomes.push(message);
     }
     assert_eq!(&*app.state(), &[None]);
     assert_eq!(&*second_outcomes, &[None]);
@@ -225,7 +232,7 @@ fn typed_filename_acceptance_uses_real_controls_and_completes_before_update_retu
     // Only the parent folder row is focusable: Up, Home, Path, Go, Parent, Filename, Cancel, Open.
     let events = session(&mut fixture);
     let app = TestApp::new(Vec::new(), events, |outcomes, message| {
-        outcomes.push(completed_file_path(&message)?);
+        outcomes.push(message);
         Ok(())
     });
     fixture.open(directory.path());
@@ -256,7 +263,7 @@ fn selected_non_utf8_file_preserves_exact_native_identity_across_display_collisi
     assert_eq!(first.to_string_lossy(), second.to_string_lossy());
     let events = session(&mut fixture);
     let app = TestApp::new(Vec::new(), events, |outcomes, message| {
-        outcomes.push(completed_file_path(&message)?);
+        outcomes.push(message);
         Ok(())
     });
     fixture.open(directory.path());
@@ -309,7 +316,7 @@ fn lifecycle_cancellation_is_once_per_request_and_stale_hide_does_not_cancel_reo
     let directory = tempfile::tempdir().unwrap();
     let events = session(&mut fixture);
     let app = TestApp::new(Vec::new(), events, |outcomes, message| {
-        outcomes.push(completed_file_path(&message)?);
+        outcomes.push(message);
         Ok(())
     });
     fixture.open(directory.path());
@@ -347,7 +354,7 @@ fn runtime_release_destroys_active_picker_without_posting_from_an_expired_origin
     assert!(outcomes.is_empty());
     assert_eq!(handle.active(), Err(neocogi_com::NC_E_DROPPED));
     for message in events.try_iter() {
-        outcomes.push(completed_file_path(&message).unwrap());
+        outcomes.push(message);
     }
     assert!(outcomes.is_empty(), "destruction does not synthesize a completion from an expired widget");
     assert!(events.try_recv().is_err());
@@ -389,10 +396,10 @@ fn application_callback_opens_picker_and_later_input_reaches_its_new_modal_scope
     // A separate activator lets the picker retain its original ordinary owner and tests cross-window modal routing.
     let (events_tx, events) = std::sync::mpsc::channel();
     let queue = neocogi_ui::test_event_queue!(
-        file_dialog,
+        neocogi_ui::IFileDialogAbi,
         AppMessage,
         events_tx.clone(),
-        |_queue, _origin, IFileDialogEvent::Completed(event)| AppMessage::Completed(event)
+        |_queue, _origin, event| AppMessage::Completed(completion(event)?)
     )
     .unwrap();
     let mut fixture = Fixture::with_queue(queue);
@@ -403,10 +410,10 @@ fn application_callback_opens_picker_and_later_input_reaches_its_new_modal_scope
             "open picker",
             Some(
                 neocogi_ui::test_event_queue!(
-                    button,
+                    neocogi_ui::ButtonAbi,
                     AppMessage,
                     events_tx.clone(),
-                    |_queue, _origin, neocogi_ui::button::Event::Activated(_)| { AppMessage::Open }
+                    |_queue, _origin, _| { AppMessage::Open }
                 )
                 .unwrap()
                 .as_com_ref(),
@@ -419,7 +426,7 @@ fn application_callback_opens_picker_and_later_input_reaches_its_new_modal_scope
         /// Requests that the reusable dialog become visible.
         Open,
         /// Captured native completion.
-        Completed(FileDialogCompletion),
+        Completed(Option<PathBuf>),
     }
 
     let app = TestApp::new(
@@ -428,7 +435,7 @@ fn application_callback_opens_picker_and_later_input_reaches_its_new_modal_scope
         |(picker, directory, outcomes), message| match message {
             AppMessage::Open => picker.open(&neocogi_ui::FileDialogRequest::new(directory)),
             AppMessage::Completed(event) => {
-                outcomes.push(completed_file_path(&event)?);
+                outcomes.push(event);
                 Ok(())
             }
         },
@@ -460,7 +467,7 @@ fn closed_picker_preserves_all_completed_requests_during_manual_handler_runtime_
     }
     fixture.handle.close().unwrap();
     for message in events.try_iter() {
-        assert!(matches!(message, FileDialogCompletion::Cancelled));
+        assert!(matches!(message, None));
         completions += 1;
         ui.update(SIZE).unwrap();
     }
@@ -474,19 +481,19 @@ fn completion_mapping_reentry_uses_the_widget_com_gate() {
     let directory = tempfile::tempdir().unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
     let queue = neocogi_ui::test_event_queue!(
-        file_dialog,
-        FileDialogCompletion,
+        neocogi_ui::IFileDialogAbi,
+        Option<PathBuf>,
         events_tx,
-        |_queue, origin, IFileDialogEvent::Completed(message)| {
+        |_queue, origin, message| {
             assert_eq!(origin.active(), Err(neocogi_com::NC_E_BUSY));
-            message
+            completion(message)?
         }
     )
     .unwrap();
     let mut fixture = Fixture::with_queue(queue);
     fixture.open(directory.path());
     assert_eq!(fixture.handle.cancel(), Ok(true));
-    assert!(matches!(events.try_recv().ok(), Some(FileDialogCompletion::Cancelled)));
+    assert!(matches!(events.try_recv().ok(), Some(None)));
     // Closing releases the queue; the receiver never retains the producer.
     fixture.handle.close().unwrap();
 }
@@ -539,8 +546,8 @@ fn shared_child_queue_discards_events_from_replaced_directory_rows() {
         (queue, old)
     }).unwrap();
     // Post through the real generated ABI before replacing the row's membership.
-    let event = neocogi_ui::list_item::Event::Activated(Activation { label: "old.txt".into() });
-    queue.post(NcValueRef::new(&EventOrigin::Widget(old.clone().into_unknown())).unwrap(), event.into_event().unwrap()).unwrap();
+    let event = neocogi_ui::events::activated("old.txt").unwrap();
+    queue.post(NcValueRef::new(&EventOrigin::Widget(old.clone().into_unknown())).unwrap(), event).unwrap();
     fixture.widget.with_mut(|dialog| {
         let listing = dialog.model.candidate(replacement.path()).unwrap();
         dialog.model.install(replacement.path().to_owned(), listing, true).unwrap();
@@ -632,7 +639,7 @@ fn close_retries_refused_removal_without_reposting_the_completed_request() {
     assert_eq!(fixture.handle.close(), Err(UI_E_BUSY));
     assert_eq!(fixture.handle.active(), Ok(false));
     assert!(fixture.handle.as_interface().is_alive());
-    assert!(matches!(events.try_recv().unwrap(), FileDialogCompletion::Cancelled));
+    assert!(matches!(events.try_recv().unwrap(), None));
     assert_eq!(fixture.handle.close(), Ok(()));
     assert!(!fixture.handle.as_interface().is_alive());
     assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 2);
@@ -665,14 +672,13 @@ fn caption_intent_cancels_current_request_without_destroying_or_crossing_reopen(
     fixture.open(directory.path());
     let window = fixture.handle.window().unwrap();
     let mut queue = fixture.widget.with(|dialog| dialog.model.nodes.queue.query::<neocogi_com::events::IEventReceiverAbi>()).unwrap().unwrap();
-    let event = WindowEvent::CloseRequested;
-    queue.post(NcValueRef::new(&EventOrigin::Service(window.downgrade().unwrap().into_unknown())).unwrap(), event.into_event().unwrap()).unwrap();
+    queue.post(NcValueRef::new(&EventOrigin::Service(window.downgrade().unwrap().into_unknown())).unwrap(), neocogi_ui::events::window_close_requested().unwrap()).unwrap();
     assert_eq!(fixture.handle.cancel(), Ok(true));
     fixture.open(directory.path());
     fixture.ui.update(SIZE).unwrap();
     assert_eq!(fixture.handle.active(), Ok(true), "old caption intent belongs to the superseded request");
     assert_eq!(completions.try_iter().count(), 1, "only explicit cancellation completed the old request");
-    queue.post(NcValueRef::new(&EventOrigin::Service(window.downgrade().unwrap().into_unknown())).unwrap(), event.into_event().unwrap()).unwrap();
+    queue.post(NcValueRef::new(&EventOrigin::Service(window.downgrade().unwrap().into_unknown())).unwrap(), neocogi_ui::events::window_close_requested().unwrap()).unwrap();
     fixture.ui.update(SIZE).unwrap();
     assert_eq!(fixture.handle.active(), Ok(false));
     assert_eq!(window.snapshot().unwrap().visibility, Visibility::Hidden);

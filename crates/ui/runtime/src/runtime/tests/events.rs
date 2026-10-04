@@ -9,7 +9,7 @@ fn constructor_queue_allocates_once_and_drops_with_logical_widget_closure() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let (sender, receiver) = std::sync::mpsc::channel();
     let measurement = crate::test_support::AllocationMeasurement::begin();
-    let queue = neocogi_ui::test_event_queue!(textbox, neocogi_ui::textbox::Event, sender, |_queue, _origin, event| event).unwrap();
+    let queue = neocogi_ui::test_event_queue!(neocogi_ui::TextboxAbi, (), sender, |_queue, _origin, _event| ()).unwrap();
     let allocations = measurement.finish();
     assert_eq!(allocations.events, 1, "sender must live inside the one concrete COM queue allocation");
 
@@ -38,7 +38,7 @@ fn failed_constructor_releases_its_queue() {
     let (sender, receiver) = std::sync::mpsc::channel::<()>();
     let result = ui.widgets().number_with_queue(
         NumberOptions { value: f32::NAN, step: 1.0, precision: 0 },
-        Some(neocogi_ui::test_event_queue!(number, (), sender, |_queue, _origin, _| ()).unwrap().as_com_ref()),
+        Some(neocogi_ui::test_event_queue!(neocogi_ui::NumberAbi, (), sender, |_queue, _origin, _| ()).unwrap().as_com_ref()),
     );
     assert!(matches!(result, Err(NC_E_INVALID_ARG)));
     assert!(matches!(receiver.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
@@ -70,10 +70,10 @@ fn consumer_preserves_emission_order_snapshot_values_and_bounded_progress() {
             "a",
             Some(
                 neocogi_ui::test_event_queue!(
-                    button,
+                    neocogi_ui::ButtonAbi,
                     String,
                     session_tx.clone(),
-                    |_queue, _origin, neocogi_ui::button::Event::Activated(event)| event.label
+                    |_queue, _origin, event| event.query_weak::<neocogi_ui::IActivatedEventAbi>()?.label()?.to_string()?
                 )
                 .unwrap()
                 .as_com_ref(),
@@ -87,10 +87,10 @@ fn consumer_preserves_emission_order_snapshot_values_and_bounded_progress() {
             "b",
             Some(
                 neocogi_ui::test_event_queue!(
-                    button,
+                    neocogi_ui::ButtonAbi,
                     String,
                     session_tx.clone(),
-                    |_queue, _origin, neocogi_ui::button::Event::Activated(event)| event.label
+                    |_queue, _origin, event| event.query_weak::<neocogi_ui::IActivatedEventAbi>()?.label()?.to_string()?
                 )
                 .unwrap()
                 .as_com_ref(),
@@ -139,7 +139,7 @@ enum Mutation {
     /// Replaces the old window through ordinary COM editing capabilities.
     Replace,
     /// Records a lifecycle transition emitted during replacement.
-    Window(WindowEvent),
+    Window(bool),
 }
 
 /// An owned application may edit the UI after traversal releases its context.
@@ -154,10 +154,10 @@ fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
             "replace window",
             Some(
                 neocogi_ui::test_event_queue!(
-                    button,
+                    neocogi_ui::ButtonAbi,
                     Mutation,
                     events_tx.clone(),
-                    |_queue, _origin, neocogi_ui::button::Event::Activated(_)| { Mutation::Replace }
+                    |_queue, _origin, _| { Mutation::Replace }
                 )
                 .unwrap()
                 .as_com_ref(),
@@ -166,7 +166,7 @@ fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
         .unwrap();
     let button = button_owner.handle();
 
-    let queue = neocogi_ui::test_event_queue!(window, Mutation, events_tx.clone(), |_queue, _origin, event| Mutation::Window(event)).unwrap();
+    let queue = neocogi_ui::test_event_queue!(neocogi_ui::IWindowAbi, Mutation, events_tx.clone(), |_queue, _origin, event| Mutation::Window(neocogi_com::events::downcast_event::<IWindowDestroyedEventAbi>(event)?.is_some())).unwrap();
     let previous = ui.window_with_queue("first", RECT, button_owner, Some(queue.as_com_ref())).unwrap();
     // Move every callback dependency into the persistent model; retain separate
     // assertion capabilities only where the test also needs direct observations.
@@ -185,7 +185,7 @@ fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
                     *editor = Some(replacement);
                     observations.push("activated");
                 }
-                Mutation::Window(WindowEvent::Destroyed) => observations.push("destroyed"),
+                Mutation::Window(true) => observations.push("destroyed"),
                 Mutation::Window(_) => {}
             }
             Ok(())
@@ -215,10 +215,10 @@ fn dropping_inbox_and_application_releases_runtime_without_a_source_sink_cycle()
             "owned runtime",
             Some(
                 neocogi_ui::test_event_queue!(
-                    button,
+                    neocogi_ui::ButtonAbi,
                     String,
                     events_tx.clone(),
-                    |_queue, _origin, neocogi_ui::button::Event::Activated(event)| { event.label }
+                    |_queue, _origin, event| { event.query_weak::<IActivatedEventAbi>()?.label()?.to_string()? }
                 )
                 .unwrap()
                 .as_com_ref(),
@@ -249,10 +249,10 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
             false,
             Some(
                 neocogi_ui::test_event_queue!(
-                    checkbox,
+                    neocogi_ui::CheckboxAbi,
                     String,
                     session_tx.clone(),
-                    |_queue, _origin, neocogi_ui::checkbox::Event::Changed(event)| { format!("checked:{}", event.checked) }
+                    |_queue, _origin, event| { format!("checked:{}", event.query_weak::<ICheckboxChangedEventAbi>()?.checked()?) }
                 )
                 .unwrap()
                 .as_com_ref(),
@@ -287,10 +287,10 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
             },
             Some(
                 neocogi_ui::test_event_queue!(
-                    slider,
+                    neocogi_ui::SliderAbi,
                     String,
                     session_tx.clone(),
-                    |_queue, _origin, neocogi_ui::slider::Event::Changed(event)| format!("numeric:{}", event.value)
+                    |_queue, _origin, event| format!("numeric:{}", event.query_weak::<INumericChangedEventAbi>()?.value()?)
                 )
                 .unwrap()
                 .as_com_ref(),
@@ -315,10 +315,10 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
             NumberOptions { value: 3.0, step: 1.0, precision: 0 },
             Some(
                 neocogi_ui::test_event_queue!(
-                    number,
+                    neocogi_ui::NumberAbi,
                     String,
                     session_tx.clone(),
-                    |_queue, _origin, neocogi_ui::number::Event::Changed(event)| format!("numeric:{}", event.value)
+                    |_queue, _origin, event| format!("numeric:{}", event.query_weak::<INumericChangedEventAbi>()?.value()?)
                 )
                 .unwrap()
                 .as_com_ref(),
@@ -340,10 +340,10 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
             "item",
             Some(
                 neocogi_ui::test_event_queue!(
-                    list_item,
+                    neocogi_ui::ListItemAbi,
                     String,
                     session_tx.clone(),
-                    |_queue, _origin, neocogi_ui::list_item::Event::Activated(event)| event.label
+                    |_queue, _origin, event| event.query_weak::<IActivatedEventAbi>()?.label()?.to_string()?
                 )
                 .unwrap()
                 .as_com_ref(),
@@ -357,10 +357,10 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
             "box",
             Some(
                 neocogi_ui::test_event_queue!(
-                    list_box,
+                    neocogi_ui::ListBoxAbi,
                     String,
                     session_tx.clone(),
-                    |_queue, _origin, neocogi_ui::list_box::Event::Activated(event)| event.label
+                    |_queue, _origin, event| event.query_weak::<IActivatedEventAbi>()?.label()?.to_string()?
                 )
                 .unwrap()
                 .as_com_ref(),
@@ -390,10 +390,10 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
             },
             Some(
                 neocogi_ui::test_event_queue!(
-                    scrollbar,
+                    neocogi_ui::ScrollbarAbi,
                     String,
                     session_tx.clone(),
-                    |_queue, _origin, neocogi_ui::scrollbar::Event::Changed(event)| format!("scroll:{}", event.offset)
+                    |_queue, _origin, event| format!("scroll:{}", event.query_weak::<IScrollbarChangedEventAbi>()?.offset()?)
                 )
                 .unwrap()
                 .as_com_ref(),
@@ -432,9 +432,12 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
         .textbox_with_queue(
             "",
             Some(
-                neocogi_ui::test_event_queue!(textbox, String, session_tx.clone(), |_queue, _origin, event| match event {
-                    neocogi_ui::textbox::Event::Changed(value) => format!("changed:{}:{}", value.text, value.cursor),
-                    neocogi_ui::textbox::Event::Submitted(value) => format!("submitted:{}", value.text),
+                neocogi_ui::test_event_queue!(neocogi_ui::TextboxAbi, String, session_tx.clone(), |_queue, _origin, event| {
+                    if let Some(value) = neocogi_com::events::downcast_event::<ITextChangedEventAbi>(event)? {
+                        format!("changed:{}:{}", value.text()?.to_string()?, value.cursor()?)
+                    } else {
+                        format!("submitted:{}", event.query_weak::<ITextSubmittedEventAbi>()?.text()?.to_string()?)
+                    }
                 })
                 .unwrap()
                 .as_com_ref(),
@@ -464,9 +467,12 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
             TextWrapping::Word,
             true,
             Some(
-                neocogi_ui::test_event_queue!(text_area, String, session_tx.clone(), |_queue, _origin, event| match event {
-                    neocogi_ui::text_area::Event::Changed(value) => format!("changed:{}:{}", value.text, value.cursor),
-                    neocogi_ui::text_area::Event::Submitted(value) => format!("submitted:{}", value.text),
+                neocogi_ui::test_event_queue!(neocogi_ui::TextAreaAbi, String, session_tx.clone(), |_queue, _origin, event| {
+                    if let Some(value) = neocogi_com::events::downcast_event::<ITextChangedEventAbi>(event)? {
+                        format!("changed:{}:{}", value.text()?.to_string()?, value.cursor()?)
+                    } else {
+                        format!("submitted:{}", event.query_weak::<ITextSubmittedEventAbi>()?.text()?.to_string()?)
+                    }
                 })
                 .unwrap()
                 .as_com_ref(),
@@ -490,7 +496,7 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     ui.update_with_events(SIZE, app.as_interface()).unwrap();
     assert!(app.state().ends_with(&["changed:☃:3".to_owned(), "submitted:☃".to_owned()]));
     let popup_content = ui.widgets().text_block("popup", TextWrapping::None).unwrap();
-    let queue = neocogi_ui::test_event_queue!(popup, String, session_tx.clone(), |_queue, _origin, _| "dismissed".to_owned()).unwrap();
+    let queue = neocogi_ui::test_event_queue!(neocogi_ui::IPopupAbi, String, session_tx.clone(), |_queue, _origin, _| "dismissed".to_owned()).unwrap();
     let mut popup = ui
         .popup_with_queue(window.as_com_ref(), "popup", popup_content, Some(queue.as_com_ref()))
         .unwrap();
@@ -513,7 +519,7 @@ fn failed_consumer_recovers_on_next_update_and_preserves_remaining_native_input(
         .button_with_queue(
             "fail once",
             Some(
-                neocogi_ui::test_event_queue!(button, (), events_tx.clone(), |_queue, _origin, neocogi_ui::button::Event::Activated(_)| ())
+                neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, (), events_tx.clone(), |_queue, _origin, _| ())
                     .unwrap()
                     .as_com_ref(),
             ),
@@ -559,12 +565,11 @@ fn failed_consumer_recovers_on_next_update_and_preserves_remaining_native_input(
 fn real_lifecycle_cascade_is_deferred_until_each_consumer_returns() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let button = ui.widgets().button_unobserved("cascade").unwrap();
-    let (events_tx, events) = std::sync::mpsc::channel();
-    let queue = neocogi_ui::test_event_queue!(window, neocogi_ui::WindowEvent, events_tx.clone(), |_queue, _origin, event| event).unwrap();
+    let (queue, events) = neocogi_com::events::channel();
     let window = ui.window_with_queue("cascade", RECT, button, Some(queue.as_com_ref())).unwrap();
     window.set_visibility(Visibility::Hidden).unwrap();
     let app = TestApp::new((0, window.clone()), events, |(observed, window), event| {
-        if event == WindowEvent::Hidden {
+        if event.downcast::<IWindowHiddenEventAbi>()?.is_some() {
             *observed += 1;
             if *observed < 3 {
                 window.set_visibility(Visibility::Visible)?;
@@ -649,12 +654,12 @@ fn failed_post_preserves_committed_widget_state_and_requires_a_new_frame() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
     let (renderer, _) = renderer();
-    let queue = neocogi_ui::test_event_queue!(number, f32, events_tx,
-        |queue, _origin, neocogi_ui::number::Event::Changed(event)| {
+    let queue = neocogi_ui::test_event_queue!(neocogi_ui::NumberAbi, f32, events_tx,
+        |queue, _origin, event| {
             // A queue may reject one post without rolling back the producer's edit.
             match std::mem::replace(&mut queue.reject_next, false) {
                 true => return Err(NC_E_INVALID_ARG),
-                false => event.value,
+                false => event.query_weak::<INumericChangedEventAbi>()?.value()?,
             }
         }, { reject_next: bool = true })
     .unwrap();
@@ -691,7 +696,7 @@ fn failed_lifecycle_post_preserves_visibility_and_returns_its_receiver_error() {
         /// Valid decoding does not oblige an application receiver to accept a post.
         fn post(&mut self, _: neocogi_com::NcValueRef<'_, neocogi_com::events::EventOrigin>, event_owner: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
         let result = (|| -> Result<(), NcStatus> {
-            let _ = <WindowEvent as neocogi_com::events::EventPayload>::from_event(&event_owner)?.ok_or(NC_E_INVALID_ARG)?;
+            event_owner.query_weak::<IWindowEventAbi>()?;
             Err(NC_E_INVALID_ARG)
 
         })();

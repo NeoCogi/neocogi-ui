@@ -117,7 +117,7 @@ impl WindowManager {
         window: Window,
         options: WindowOption,
         visible: bool,
-        queue: Option<neocogi_ui_core_contracts::IWindowEventPort>,
+        queue: Option<neocogi_com::events::EventPort>,
     ) -> WindowHandle {
         // Public child/dialog entry points authenticate and classify the owner before moving the
         // Window here. Keep registration infallible after that transfer: this is the boundary that
@@ -160,7 +160,7 @@ impl WindowManager {
     }
 
     /// Creates an open independent window from one complete retained definition.
-    pub fn create_window(&mut self, window: Window, queue: Option<neocogi_ui_core_contracts::IWindowEventPort>) -> WindowHandle {
+    pub fn create_window(&mut self, window: Window, queue: Option<neocogi_com::events::EventPort>) -> WindowHandle {
         // Independent construction has no fallible owner edge.
         self.register_window(RootMode::Normal { layer: DEFAULT_LAYER }, None, window, WindowOption::FRAME, true, queue)
     }
@@ -169,7 +169,7 @@ impl WindowManager {
         &mut self,
         parent: &WindowHandle,
         window: Window,
-        queue: Option<neocogi_ui_core_contracts::IWindowEventPort>,
+        queue: Option<neocogi_com::events::EventPort>,
     ) -> Result<WindowHandle, SurfaceCreationError<Window>> {
         // Authenticate and classify the parent while `window` remains local. On either validation
         // failure, move that exact value into the concrete error instead of dropping its unique
@@ -185,7 +185,7 @@ impl WindowManager {
         &mut self,
         owner: &WindowHandle,
         window: Window,
-        queue: Option<neocogi_ui_core_contracts::IWindowEventPort>,
+        queue: Option<neocogi_com::events::EventPort>,
     ) -> Result<WindowHandle, SurfaceCreationError<Window>> {
         // A dialog accepts the same ordinary owner roles as a structural child but reports its own
         // policy reason. Keep the Window untouched until both capability and role checks pass.
@@ -201,7 +201,7 @@ impl WindowManager {
         owner: &WindowHandle,
         name: &str,
         content: Node,
-        queue: Option<neocogi_ui_core_contracts::IPopupEventPort>,
+        queue: Option<neocogi_com::events::EventPort>,
     ) -> Result<PopupHandle, SurfaceCreationError<Node>> {
         // Resolve the authenticated window capability while the Node is still owned locally. Once
         // validation succeeds, application-popup registration is an infallible ownership transfer.
@@ -218,7 +218,7 @@ impl WindowManager {
         &mut self,
         owner: &WindowHandle,
         menu: crate::Menu,
-        queue: Option<neocogi_ui_core_contracts::IPopupEventPort>,
+        queue: Option<neocogi_com::events::EventPort>,
     ) -> Result<PopupHandle, SurfaceCreationError<crate::Menu>> {
         // Authenticate while the complete recursive declaration remains recoverable by the caller.
         let owner = match self.window_id(owner) {
@@ -378,7 +378,7 @@ impl WindowManager {
     }
 
     /// Registers one application-addressable popup below an already validated root.
-    pub(super) fn register_application_popup(&mut self, parent: SurfaceKey, surface: Surface, queue: Option<neocogi_ui_core_contracts::IPopupEventPort>) -> PopupHandle {
+    pub(super) fn register_application_popup(&mut self, parent: SurfaceKey, surface: Surface, queue: Option<neocogi_com::events::EventPort>) -> PopupHandle {
         let id = PopupId::allocate();
         // The forest record owns delivery; the handle needs only its existing lookup identity.
         let events = queue.unwrap_or_default();
@@ -790,10 +790,7 @@ impl WindowManager {
             // independently, so components can settle requests after native teardown.
             let result = self
                 .root_node_mut(id)?
-                .root_mut()
-                .expect("collected roots have root policy")
-                .events
-                .post(WindowEvent::Destroyed);
+                .emit_window_event(neocogi_ui_core_contracts::events::window_destroyed);
             self.posted(result);
         }
         self.surfaces.remove_roots(&removed);

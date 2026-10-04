@@ -44,6 +44,3 @@ pub use leaf::{LeafContent, DispatchingLeafContent, LeafDispatchContext};
 /// Owned immutable renderer images with cached measurement dimensions.
 pub mod image;
 pub use image::Image;
-
-/// IDL-derived widget event variants and construction-time channel adapters.
-pub use events::{combo, button, checkbox, textbox, text_area, slider, number, list_item, list_box, scrollbar, split_view};

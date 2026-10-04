@@ -94,7 +94,7 @@ the mounted tree, and keeping metadata cannot prolong a removed tree. An optiona
 output alias is a display name, not a second endpoint or receiver replacement API.
 Generated bindings resolve widgets by node key.
 
-## Generated application contract
+## Optional typed fields and common event handling
 
 The designer's **File → Export Rust bindings…** command calls
 `Document::rust_bindings()`. The command-line equivalent is:
@@ -103,73 +103,48 @@ The designer's **File → Export Rust bindings…** command calls
 cargo run -p neocogi-ui-document --example export_bindings -- form.ui.json > bindings.rs
 ```
 
-The generated module contains `Form` with checked concrete fields for all
-built-in nodes, an `Event` enum with one variant per emitting node, a
-`QueuedEvent` with a weak origin and owned event per distinct queue contract, a
-reload-generation-tagged `Message`, and a `Handlers` trait with one required
-method per emitting node. No handler body is generated. Regenerate after
-changing node keys or widget types and keep `impl Handlers` in application-owned
-source. A missing trait method is a Rust compile error when the application
-implements the generated trait. Names are normalized with a role prefix and
-node ordinal to avoid keyword and punctuation collisions; authored keys remain
-exact escaped literals for runtime lookup.
+The generated module contains `Form` with checked concrete widget fields and
+`bind(component)` only. Regenerate when node keys or types change. Names include
+ordinals to avoid punctuation/keyword collisions; runtime keys remain exact literals.
+Event handling requires no generated queue, event enum or handler trait. Applications
+can also use `component.widget::<ButtonAbi>("save")` directly without generating fields.
 
-For a form containing a button `save` and text block `title`, an application
-handler can use the generated typed fields directly:
-
-```rust
-impl generated::Handlers for generated::Form {
-    fn on_save_2(
-        &mut self,
-        event: neocogi_ui::button::Event,
-    ) -> Result<(), neocogi_com::NcStatus> {
-        match event {
-            neocogi_ui::button::Event::Activated(value) => self.widget_title_1.set_text(&value.label),
-        }
-    }
-}
-```
-
-The actual method and field ordinals come from the generated file. First use
-`generated::events(generation, sender)` in the reload receiver callback. Then use
-`generated::bind(component)` in the field-validation callback and retain that
-`Form` only after successful publication. The first function constructs one application queue object for all emitting fields;
-the second resolves widget fields without changing event ownership.
+For reloadable documents, share a `Sender<DocumentEvent>` across attempts. Construct
+a library receiver carrying each attempt's generation and bind all emitting widgets:
 
 ```rust,ignore
 let mut candidate_form = None;
-let outcome = slot.reload(&document, resources,
-    |generation| generated::events(generation, sender.clone()),
+slot.reload(&document, resources,
+    |generation| {
+        let queue = document_receiver(generation, sender.clone())?;
+        EventBindings::all(&document, &registry, queue.as_com_ref())
+    },
     |component, _| { candidate_form = Some(generated::bind(component)?); Ok(()) },
 )?;
-let mut form = candidate_form.unwrap();
+let form = candidate_form.unwrap();
 ```
 
-At the application's safe update boundary, first check the reload generation,
-then resolve the weak origin against the current form's concrete fields:
+At the application dispatch boundary, authenticate generation and current widget
+identity before querying the concrete event:
 
 ```rust,ignore
-for message in receiver.try_iter() {
-    if slot.accepts(message.generation) {
-        if let Some(event) = message.event.resolve(&form)? {
-            event.dispatch(&mut form)?;
+for envelope in receiver.try_iter() {
+    if let Some(message) = envelope.event_for(&slot, "save")? {
+        if let Some(event) = message.downcast::<IActivatedEventAbi>()? {
+            form.widget_title_1.set_text(&event.label()?.to_string()?)?;
         }
     }
 }
 ```
 
-`resolve` finishes its immutable form borrow before the mutable handler runs.
-When behavior lives on `App { form, model }`, resolve against `&app.form`, then
-call `event.dispatch(&mut app)`. Two buttons share one queue receiver while their
-origins select separate required handlers. Expired or foreign origins return
-`None`; no current widget is substituted. Weak calls cannot promote into ownership. Generation checks additionally identify
-the construction attempt before resolving its concrete widget membership.
+`event_for` rejects stale attempts before lookup, then rejects expired, service and
+foreign origins. It returns a borrowed message while the envelope keeps the original
+`ComBox<IEventAbi>` owner. Unsupported event queries return `None`; real COM errors
+remain errors. The receiver adds only generation and a sender, with no widget or
+application ownership. Disconnection returns the same event owner to the producer.
 
-Generated forms allocate one queue for the whole construction attempt and none
-when there are no events. The queue owns only a sender and generation, not form
-fields or application state. It acquires each event and weak origin once. Code
-interested only in an old captured result can inspect `QueuedEvent` directly;
-resolving it into a current widget handler is an explicit application decision.
+Use `EventBindings::insert_queue` to observe selected keys. Non-reloading consumers
+can supply `events::channel()` directly. No generated Rust is required for either path.
 
 ## Reload, ownership, and authored state
 
@@ -245,19 +220,15 @@ A host installs custom widgets through `CustomWidgetRegistry`. A local
 and a constructor accepting its optional COM receiver and returning `OwnedWidget<IWidgetAbi>`. Static conversion checks the
 product identity and complete reachable event graph. The constructor receiver
 is separate from the product's interface chain. A custom widget
-may expose zero or one event port; multiple logical events belong in one
-`enum`, such as `CounterEvent::Activated` and
-`CounterEvent::Changed`.
+uses one common receiver and advertises its concrete event interfaces, for
+example `#[events(IActivatedEvent, ICounterChangedEvent)]`.
 
-An independently built plugin can expose `IDesignWidgetCatalog` on its root COM
-factory. The registry reads bounded, versioned descriptions through the catalog's
-`describe` method, copies the reachable IDL value graph and opaque NCB defaults,
-and retains the catalog for construction. Catalog revision 9 replaces the old
-four-scalar property language; no compatibility path remains. Receiver identities,
-Rust binding paths and event metadata still describe the generated application
-contract. `create_widget` receives `WidgetEventBinding` and queries the exact queue
-before allocating its product. The returned concrete interface identity is checked
-before publication. Registration validates all kinds before publishing any.
+An independently built plugin exposes `IDesignWidgetCatalog` on its root factory.
+The registry reads bounded version-12 `DesignWidgetManifest` records: event
+identities, getter fields, their reachable value definitions, Rust ABI paths and
+opaque NCB defaults. `create_widget` receives the common `EventBinding`. The host
+checks the returned concrete interface before publication; registration validates
+all kinds before publishing any. Older native event/receiver metadata is removed.
 
 The document stores `Custom { kind, settings: Vec<u8> }`. The plugin interprets its
 private NCB schema, including its version and semantic constraints. The host bounds
@@ -277,12 +248,9 @@ redo. No generic reflected setter invocation or full IDL reconstruction is neede
 See [the settings contract](../../../docs/contracts/PLUGIN_DESIGNER_SETTINGS.md) and the
 [independent example](../../../examples/ui-extension/src/settings.rs).
 
-`Document::rust_bindings_with(&registry)` generates custom form fields and
-required handler methods using the owned IDL interface and message metadata
-read through the registry. The generated field uses the concrete COM projection;
-the generated handler receives the declared message enum or struct. The custom
-receiver is a projection of the generated application queue, supplied during construction;
-subsequent form binding only checks and retains the concrete widget fields.
+`Document::rust_bindings_with(&registry)` generates optional concrete widget fields
+using the owned IDL interface metadata from the registry. Event handling uses
+common receivers and concrete COM getters independently of those fields.
 The plain `rust_bindings()` helper and the command-line example use an empty
 registry and therefore handle built-in documents only. The designer's Rust
 export uses its active registry.

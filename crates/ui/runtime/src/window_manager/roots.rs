@@ -144,8 +144,7 @@ impl<T> std::error::Error for SurfaceCreationError<T> {
     }
 }
 
-/// Canonical generated popup dismissal fact emitted on active-branch removal.
-pub use neocogi_ui_core_contracts::PopupDismissed as PopupEvent;
+
 
 /// Process-unique identifier for one popup definition inside its owning window.
 ///
@@ -550,7 +549,7 @@ struct RootState {
     /// Expanded outer height retained while the minimize button shows a compact window.
     unminimized_height: Option<i32>,
     /// Strong owner of the unified window geometry/lifecycle event stream.
-    events: neocogi_ui_core_contracts::IWindowEventPort,
+    events: neocogi_com::events::EventPort,
     /// Optional concrete menu bar laid out above the application widget body.
     menu_bar: Option<MenuSurface>,
     /// Descendant viewport policy applied when layout enters direct structural child windows.
@@ -577,7 +576,7 @@ enum PopupState {
         /// Exact screen rectangle supplied by the public popup API.
         anchor: Recti,
         /// Strong owner of policy-driven popup lifecycle events.
-        events: neocogi_ui_core_contracts::IPopupEventPort,
+        events: neocogi_com::events::EventPort,
         /// Whether the next committed layout must select this popup's first keyboard target.
         focus_on_layout: bool,
     },
@@ -692,7 +691,7 @@ impl SurfaceNode {
         }
         // Commit visibility before even the mapper can observe the captured transition.
         match hidden {
-            true => self.emit_window_event(WindowEvent::Hidden),
+            true => self.emit_window_event(neocogi_ui_core_contracts::events::window_hidden),
             false => Ok(()),
         }
     }
@@ -776,9 +775,10 @@ impl SurfaceNode {
     }
 
     /// Emits one concrete window event at the next safe application dispatch boundary.
-    fn emit_window_event(&mut self, event: WindowEvent) -> Result<(), neocogi_com::NcStatus> {
+    fn emit_window_event(&mut self, snapshot: impl FnOnce() -> Result<neocogi_com::ComBox<neocogi_com::events::IEventAbi>, neocogi_com::NcStatus>) -> Result<(), neocogi_com::NcStatus> {
         // The record owns its receiver; posting owns no queue and invokes no app behavior.
-        self.root_mut().expect("window events are emitted only by roots").events.post(event)
+        let events = &mut self.root_mut().expect("window events are emitted only by roots").events;
+        if events.is_bound() { events.post(snapshot()?) } else { Ok(()) }
     }
 
     /// Dismisses an active popup and emits exactly one policy event.
@@ -787,7 +787,7 @@ impl SurfaceNode {
         self.surface.body.clear_transient_targets();
         if let Some(PopupState::Application { events, .. }) = self.popup_mut() {
             // Menu popups have no unobservable lifecycle port; their visibility is wholly internal.
-            events.post(PopupEvent::Dismissed)?;
+            if events.is_bound() { events.post(neocogi_ui_core_contracts::events::popup_dismissed()?)?; }
         }
         Ok(())
     }

@@ -2,14 +2,13 @@
 
 use super::*;
 use neocogi_ui_support::test_support::events::TestApp;
-use neocogi_ui_core_contracts::Activation;
 
 /// A typed fixture sender and its one application inbox, created together.
 struct Emitter {
     /// Private Rust queue injects owned fixture messages into real composite dispatch.
-    source: std::sync::mpsc::Sender<Activation>,
+    source: std::sync::mpsc::Sender<()>,
     /// Moved once into the owning controller; subsequent setup is rejected by the fixture.
-    messages: Option<std::sync::mpsc::Receiver<Activation>>,
+    messages: Option<std::sync::mpsc::Receiver<()>>,
 }
 impl Emitter {
     /// Constructs complete delivery before any component can publish this source.
@@ -28,7 +27,7 @@ struct PrivateRecord {
     /// Component name used to prove child/surface ordering at the boundary.
     name: &'static str,
     /// Optional public output makes upward delivery explicit rather than exposing child events.
-    forward: Option<std::sync::mpsc::Sender<Activation>>,
+    forward: Option<std::sync::mpsc::Sender<()>>,
     /// One ordinary tree edit, consumed before entering foreign topology code.
     edit: Edit,
 }
@@ -38,7 +37,7 @@ impl PrivateRecord {
     fn handle(&mut self, trace: &Trace) -> Result<(), NcStatus> {
         trace.borrow_mut().push(self.name);
         if let Some(source) = &self.forward {
-            let _ = source.send(Activation { label: self.name.into() });
+            let _ = source.send(());
         }
         // A consumed edit cannot repeat during a later dispatch sweep.
         match std::mem::replace(&mut self.edit, Edit::None) {
@@ -81,9 +80,9 @@ struct Consumer {
     record: PrivateRecord,
 }
 impl neocogi_ui::events::MessageProcessor for Consumer {
-    type Message = Activation;
+    type Message = ();
     /// Handles one message; framework code owns all queue traversal and timing.
-    fn handle(&mut self, _: Activation) -> Result<(), NcStatus> {
+    fn handle(&mut self, _: ()) -> Result<(), NcStatus> {
         self.record.handle(&self.trace)
     }
 }
@@ -94,7 +93,7 @@ fn component(
     trace: &Trace,
     name: &'static str,
     source: &mut Emitter,
-    forward: Option<std::sync::mpsc::Sender<Activation>>,
+    forward: Option<std::sync::mpsc::Sender<()>>,
     edit: Edit,
 ) -> (neocogi_ui::OwnedWidget<IWidgetAbi>, neocogi_ui::LinearWidget) {
     let messages = source.messages.take().expect("one consumer per fixture source");
@@ -111,7 +110,7 @@ fn component(
 
 /// Emits a captured fixture fact without entering any application callback.
 fn emit(source: &Emitter) {
-    let _ = source.source.send(Activation { label: "fixture".into() });
+    let _ = source.source.send(());
 }
 
 /// Three actual component levels forward upward before the application, with no manual child pumping.
@@ -270,5 +269,5 @@ fn close_intent_does_not_silently_discard_pending_private_messages() {
     assert!(window.snapshot().is_ok());
     app.update(&ui, SIZE).unwrap();
     assert_eq!(window.snapshot(), Err(UI_E_CLOSED));
-    assert!(source.source.send(Activation { label: "late".into() }).is_err());
+    assert!(source.source.send(()).is_err());
 }

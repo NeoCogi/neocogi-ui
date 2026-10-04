@@ -65,7 +65,7 @@ use neocogi_com::{ComBox, ComInterface, ComPtr, ComRef, NC_E_INVALID_ARG, NcCopy
 use std::{cell::RefCell, rc::Rc};
 mod queue;
 pub(super) use queue::Inputs;
-use neocogi_com::WeakComPtr;
+use neocogi_com::INcStringComPtrExt;
 
 /// Application-owned combo values never cross the ABI as an erased generic collection.
 const FRUIT: [&str; 4] = ["Apple", "Banana", "Cherry", "Date"];
@@ -108,11 +108,11 @@ pub(super) enum NumericTarget {
 }
 impl NumericTarget {
     /// Promotes a committed numeric snapshot into the owning model's protocol.
-    fn message(self, event: NumericChanged) -> Message {
+    fn message(self, value: f32) -> Message {
         match self {
-            Self::Background(shift) => Message::Background(shift, event),
-            Self::Color(role, channel) => Message::Style(super::style_editor::Message::Color(role, channel, event.value as u8)),
-            Self::Metric(metric) => Message::Style(super::style_editor::Message::Metric(metric, event.value as i32)),
+            Self::Background(shift) => Message::Background(shift, value),
+            Self::Color(role, channel) => Message::Style(super::style_editor::Message::Color(role, channel, value as u8)),
+            Self::Metric(metric) => Message::Style(super::style_editor::Message::Metric(metric, value as i32)),
         }
     }
 }
@@ -165,25 +165,10 @@ fn floating(ui: &Ui, desktop: ComRef<'_, IWindowAbi>, title: &str, area: Rect, c
     Ok(window)
 }
 
-/// One application protocol combines native snapshots with explicit routing data.
+/// Application commands name the edit to perform; COM events stay in the inbox.
 pub(super) enum Message {
-    /// Owned button snapshot and nonowning source, resolved only during application dispatch.
-    Button(neocogi_com::WeakComBox<ButtonAbi>, neocogi_ui::events::button::Event),
-    /// Owned slider snapshot and nonowning source, resolved only during application dispatch.
-    Slider(neocogi_com::WeakComBox<SliderAbi>, neocogi_ui::events::slider::Event),
-    /// Owned activation snapshot and nonowning source, resolved only during application dispatch.
-    Menu(WeakComPtr<IMenuItemAbi>, neocogi_ui::events::activation::Event),
-    /// Owned textbox snapshot and nonowning source, resolved only during application dispatch.
-    Textbox(neocogi_com::WeakComBox<TextboxAbi>, neocogi_ui::events::textbox::Event),
-    /// Owned combo snapshot and nonowning source, resolved only during application dispatch.
-    Combo(neocogi_com::WeakComBox<ComboAbi>, neocogi_ui::events::combo::Event),
-    /// Owned file_dialog snapshot and nonowning source, resolved only during application dispatch.
-    FileDialog(neocogi_com::WeakComBox<IFileDialogAbi>, neocogi_ui::events::file_dialog::Event),
-    /// Owned window snapshot and nonowning source, resolved only during application dispatch.
-    WindowEvent(WeakComPtr<IWindowAbi>, neocogi_ui::events::window::Event),
-
     /// Background channel selector and its new numeric value.
-    Background(u32, NumericChanged),
+    Background(u32, f32),
     /// Palette editor's explicit local command.
     Style(super::style_editor::Message),
 }
@@ -289,8 +274,7 @@ impl AppState for State {
     type Message = neocogi_com::events::EventMessage;
     /// Interprets one message using ordinary exclusive application state.
     fn update(&mut self, event: Self::Message) -> Result<(), NcStatus> {
-        if let Some(message) = Message::decode(&event)? { self.command(message)?; }
-        Ok(())
+        self.handle_event(&event)
     }
 
     /// Publishes assets prepared by the previous frame's handlers before this frame's UI update.
@@ -348,9 +332,9 @@ pub(super) enum Action {
 }
 impl State {
     /// Runs after the UI releases its context, permitting ordinary concrete edits and menu coordination.
-    fn activate(&mut self, action: Action, event: &Activation) -> Result<(), NcStatus> {
+    fn activate(&mut self, action: Action, label: &str) -> Result<(), NcStatus> {
         match action {
-            Action::Log => self.write_log(&format!("Pressed {}", event.label)),
+            Action::Log => self.write_log(&format!("Pressed {label}")),
             Action::Submit => self.submit(),
             // The popup capability resolves the pointer captured by the triggering input boundary,
             // so moving the Demo Window does not require application-authored coordinate offsets.
@@ -398,8 +382,8 @@ impl State {
     }
 
     /// Enter uses the captured submitted text, which may differ from a later silent edit.
-    fn text_submitted(&mut self, event: &TextSubmitted) -> Result<(), NcStatus> {
-        self.write_log(&event.text)?;
+    fn text_submitted(&mut self, text: &str) -> Result<(), NcStatus> {
+        self.write_log(text)?;
         self.entry.clear()
     }
 
@@ -416,33 +400,31 @@ impl State {
     }
 
     /// Accepted paths remain native values until explicitly formatted for this human-readable log.
-    fn file_selected(&mut self, event: &FileDialogCompletion) -> Result<(), NcStatus> {
+    fn file_selected(&mut self, path: Option<std::path::PathBuf>) -> Result<(), NcStatus> {
         self.open_item.set_enabled(true)?;
-        match completed_file_path(event)? {
+        match path {
             Some(path) => self.write_log(&format!("Selected file: {}", path.display())),
             None => self.write_log("File dialog cancelled"),
         }
     }
 
     /// Preserves manager-owned minimize/maximize/restore rectangles and clamps only ordinary geometry.
-    fn window_changed(&mut self, event: &neocogi_ui::events::WindowEvent) -> Result<(), NcStatus> {
-        let (mut area, clamp) = match *event {
-            WindowEvent::GeometryChanged { rect } => (rect, !self.minimized),
-            WindowEvent::Minimized { .. } => {
-                self.minimized = true;
-                return self.write_log("Minimized Demo Window");
-            }
-            WindowEvent::Maximized { rect } | WindowEvent::Restored { rect } => {
-                self.minimized = false;
-                (rect, false)
-            }
-            WindowEvent::CloseRequested => {
-                // This application keeps the demo tree for its explicit Show action.
-                self.demo.set_visibility(Visibility::Hidden)?;
-                return self.write_log("Closed Demo Window; use Grid > Show Demo Window to restore it");
-            },
-            WindowEvent::Hidden | WindowEvent::Destroyed => return Ok(()),
-        };
+    fn window_changed(&mut self, message: &neocogi_com::events::EventMessage) -> Result<(), NcStatus> {
+        let (mut area, clamp) = if let Some(event) = message.downcast::<IWindowGeometryChangedEventAbi>()? {
+            (event.rect()?, !self.minimized)
+        } else if message.downcast::<IWindowMinimizedEventAbi>()?.is_some() {
+            self.minimized = true;
+            return self.write_log("Minimized Demo Window");
+        } else if let Some(event) = message.downcast::<IWindowMaximizedEventAbi>()? {
+            self.minimized = false;
+            (event.rect()?, false)
+        } else if let Some(event) = message.downcast::<IWindowRestoredEventAbi>()? {
+            self.minimized = false;
+            (event.rect()?, false)
+        } else if message.downcast::<IWindowCloseRequestedEventAbi>()?.is_some() {
+            self.demo.set_visibility(Visibility::Hidden)?;
+            return self.write_log("Closed Demo Window; use Grid > Show Demo Window to restore it");
+        } else { return Ok(()); };
         if clamp && (area.width < 240 || area.height < 300) {
             area.width = area.width.max(240);
             area.height = area.height.max(300);
@@ -453,10 +435,10 @@ impl State {
     }
     /// Paint-only external state reports NoChange; its intrinsic dimensions do not depend on color.
     /// The captured channel shift selects byte 0, 8, or 16 in the packed RGBA value.
-    fn background_changed(&mut self, shift: u32, event: &NumericChanged) -> Result<(), NcStatus> {
+    fn background_changed(&mut self, shift: u32, channel: f32) -> Result<(), NcStatus> {
         let value = {
             let mut grid = self.grid.borrow_mut();
-            grid.background = (grid.background & !(255 << shift)) | ((event.value as u32) << shift);
+            grid.background = (grid.background & !(255 << shift)) | ((channel as u32) << shift);
             grid.background
         };
         self.background.set_fill(value)
@@ -824,99 +806,43 @@ fn build_examples(host: &Host, state: &mut State, log_owner: OwnedWidget<ScrollA
 mod tests;
 
 impl State {
-    /// Applies a decoded command while the update caller retains the event owner.
+    /// Authenticate installed controls before reading their immutable COM snapshots.
+    fn handle_event(&mut self, message: &neocogi_com::events::EventMessage) -> Result<(), NcStatus> {
+        use neocogi_com::events::EventOrigin;
+        match &message.origin {
+            EventOrigin::Widget(origin) if origin.is_alive() => {
+                if let Some(action) = self.inputs.buttons.iter().find(|(control, _)| control.same_object(origin)).map(|(_, action)| *action) {
+                    if let Some(event) = message.downcast::<IActivatedEventAbi>()? { self.activate(action, &event.label()?.to_string()?)?; }
+                } else if let Some(target) = self.inputs.sliders.iter().find(|(control, _)| control.same_object(origin)).map(|(_, target)| *target) {
+                    if let Some(event) = message.downcast::<INumericChangedEventAbi>()? {
+                        let value = event.value()?;
+                        if !value.is_finite() { return Err(NC_E_INVALID_ARG); }
+                        self.command(target.message(value))?;
+                    }
+                } else if origin.same_object(self.entry.as_interface()) {
+                    if let Some(event) = message.downcast::<ITextSubmittedEventAbi>()? { self.text_submitted(&event.text()?.to_string()?)?; }
+                } else if origin.same_object(self.combo.as_interface()) {
+                    if let Some(event) = message.downcast::<IChoiceChangedEventAbi>()? { self.choice_changed(&event.selection()?)?; }
+                } else if self.file_dialog.as_ref().is_some_and(|dialog| origin.same_object(dialog.as_interface())) {
+                    if let Some(event) = message.downcast::<IFileAcceptedEventAbi>()? {
+                        self.file_selected(Some(neocogi_ui::path::decode(event.path()?.as_com_ref())?))?;
+                    } else if message.downcast::<IFileCancelledEventAbi>()?.is_some() { self.file_selected(None)?; }
+                }
+            }
+            EventOrigin::Service(origin) if origin.upgrade()?.is_some() => {
+                if let Some(action) = self.inputs.menus.iter().find(|(control, _)| control.same_object(origin)).map(|(_, action)| *action) {
+                    if let Some(event) = message.downcast::<IActivatedEventAbi>()? { self.activate(action, &event.label()?.to_string()?)?; }
+                } else if origin.same_object(&self.demo.downgrade()?) { self.window_changed(message)?; }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+    /// Applies explicit application edits after event interpretation.
     fn command(&mut self, message: Message) -> Result<(), NcStatus> {
         match message {
-            Message::Button(origin, neocogi_ui::events::button::Event::Activated(event)) => {
-                if !origin.is_alive() {
-                    return Ok(());
-                }
-                let action = self
-                    .inputs
-                    .buttons
-                    .iter()
-                    .find(|(control, _)| control.same_object(&origin))
-                    .map(|(_, action)| *action);
-                match action {
-                    Some(action) => self.activate(action, &event),
-                    None => Ok(()),
-                }
-            }
-            Message::Menu(origin, event) => {
-                if origin.upgrade()?.is_none() {
-                    return Ok(());
-                }
-                let action = self
-                    .inputs
-                    .menus
-                    .iter()
-                    .find(|(control, _)| control.same_object(&origin))
-                    .map(|(_, action)| *action);
-                match action {
-                    Some(action) => self.activate(action, &event),
-                    None => Ok(()),
-                }
-            }
-            Message::Slider(origin, neocogi_ui::events::slider::Event::Changed(event)) => {
-                if !origin.is_alive() {
-                    return Ok(());
-                }
-                let target = self
-                    .inputs
-                    .sliders
-                    .iter()
-                    .find(|(control, _)| control.same_object(&origin))
-                    .map(|(_, target)| *target);
-                match target {
-                    Some(target) => self.command(target.message(event)),
-                    None => Ok(()),
-                }
-            }
-            Message::Textbox(origin, event) => match (origin.is_alive(), event) {
-                (true, neocogi_ui::events::textbox::Event::Submitted(event)) => self.text_submitted(&event),
-                _ => Ok(()),
-            },
-            Message::Combo(origin, neocogi_ui::events::combo::Event::Changed(event)) => match origin.is_alive() {
-                true => self.choice_changed(&event),
-                false => Ok(()),
-            },
-            Message::FileDialog(origin, neocogi_ui::events::file_dialog::Event::Completed(event)) => match origin.is_alive() {
-                true => self.file_selected(&event),
-                false => Ok(()),
-            },
-            Message::WindowEvent(origin, event) => match origin.upgrade()? {
-                Some(_) => self.window_changed(&event),
-                None => Ok(()),
-            },
-            Message::Background(shift, event) => self.background_changed(shift, &event),
+            Message::Background(shift, value) => self.background_changed(shift, value),
             Message::Style(message) => self.style.update(&self.ui, message),
         }
-    }
-}
-impl Message {
-    /// Decode at the handling boundary while the inbox still owns the COM event.
-    fn decode(message: &neocogi_com::events::EventMessage) -> Result<Option<Self>, neocogi_com::NcStatus> {
-        if let Some((origin, event)) = message.widget::<ButtonAbi>()? {
-            return Ok(Some(Self::Button(origin, event)));
-        }
-        if let Some((origin, event)) = message.widget::<SliderAbi>()? {
-            return Ok(Some(Self::Slider(origin, event)));
-        }
-        if let Some((origin, event)) = message.widget::<TextboxAbi>()? {
-            return Ok(Some(Self::Textbox(origin, event)));
-        }
-        if let Some((origin, event)) = message.widget::<ComboAbi>()? {
-            return Ok(Some(Self::Combo(origin, event)));
-        }
-        if let Some((origin, event)) = message.widget::<IFileDialogAbi>()? {
-            return Ok(Some(Self::FileDialog(origin, event)));
-        }
-        if let Some((origin, event)) = message.service::<IMenuItemAbi>()? {
-            return Ok(Some(Self::Menu(origin, event)));
-        }
-        if let Some((origin, event)) = message.service::<IWindowAbi>()? {
-            return Ok(Some(Self::WindowEvent(origin, event)));
-        }
-        Ok(None)
     }
 }

@@ -52,12 +52,13 @@ enum ChoiceSelection: u8 {
     Selected(u64),
 }
 
-#[version(2)]
+#[version(3)]
 /// Live selection-oriented menu owned by the core popup manager.
 ///
 /// The menu owns hierarchy, navigation, placement and committed selection. A header control such
 /// as Combo owns only its presentation and delegates these menu responsibilities through this
 /// interface. Mutations are silent; only user submission publishes `ChoiceSelection`.
+#[events(IChoiceChangedEvent)]
 class IChoiceMenu {
     /// Returns the exact committed stable identity, including explicit absence.
     fn selection(&self) -> Result<ChoiceSelection>;
@@ -82,7 +83,7 @@ class IChoiceMenu {
     fn close(&mut self) -> Result<()>;
 }
 
-#[version(2)]
+#[version(3)]
 /// Construction capability for selection menus managed by the core popup forest.
 interface IChoiceMenus {
     /// Creates one validated hidden choice hierarchy owned by an authenticated ordinary window.
@@ -91,11 +92,12 @@ interface IChoiceMenus {
         parent: &IWindow,
         menu_text: &[u8],
         entries: &[ChoiceMenuEntry],
-        selection: ChoiceSelection, events: &EventBinding<IChoiceMenu, IChoiceMenuEvent>) -> Result<ComPtr<IChoiceMenu>>;
+        selection: ChoiceSelection, events: &EventBinding) -> Result<ComPtr<IChoiceMenu>>;
 }
 
-#[version(1)]
+#[version(2)]
 /// Live compact row capability, editable before mounting and while its owning surface exists.
+#[events(IActivatedEvent)]
 interface IMenuItem {
     /// Returns the same label used by measurement, paint and captured submissions.
     fn label(&self) -> Result<ComPtr<INcString>>;
@@ -115,18 +117,18 @@ interface IMenuItem {
     fn set_shortcut_hint(&self, hint: &[u8]) -> Result<()>;
 }
 
-#[version(1)]
+#[version(2)]
 /// Unique declaration tree consumed once by the owning manager; retained item capabilities remain live afterward.
 interface IMenuBuilder {
     /// Appends an enabled unmarked row and returns its editing/event capability.
-    fn item(&self, label: &[u8], events: &EventBinding<IMenuItem, Activation>) -> Result<ComPtr<IMenuItem>>;
+    fn item(&self, label: &[u8], events: &EventBinding) -> Result<ComPtr<IMenuItem>>;
     /// Appends one noninteractive separator in exact declaration order.
     fn separator(&self) -> Result<()>;
     /// Appends a submenu and returns a builder scoped to that child; only the root is mountable.
     fn submenu(&self, label: &[u8]) -> Result<ComPtr<IMenuBuilder>>;
 }
 
-#[version(1)]
+#[version(2)]
 /// Menu construction and attachment capability on the same runtime identity as the window manager.
 interface IMenus {
     /// Creates one root declaration; for a bar its direct entries must all be submenus.
@@ -134,12 +136,5 @@ interface IMenus {
     /// Installs a bar once on a live window; validates owner, declaration shape and prior attachment before transfer.
     fn attach_bar(&self, window: &IWindow, menu: &IMenuBuilder) -> Result<()>;
     /// Creates an ordinary hidden popup from one root declaration, including all its nested menus.
-    fn create_popup(&self, window: &IWindow, menu: &IMenuBuilder, events: &EventBinding<IPopup, PopupDismissed>) -> Result<ComPtr<IPopup>>;
-}
-
-#[version(1)]
-/// Complete typed event stream of IChoiceMenu; consumed by its behavioral parent.
-enum IChoiceMenuEvent {
-    /// Captured changed fact, acquired before the producer call returns.
-    Changed(ChoiceSelection),
+    fn create_popup(&self, window: &IWindow, menu: &IMenuBuilder, events: &EventBinding) -> Result<ComPtr<IPopup>>;
 }

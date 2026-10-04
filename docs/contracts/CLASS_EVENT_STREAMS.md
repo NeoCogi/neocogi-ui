@@ -18,23 +18,16 @@ enum EventOrigin {
 interface IEventReceiver {
     fn post(&mut self, origin: &EventOrigin, event: ComBox<IEvent>) -> Result<()>;
 }
-enum EventBinding<Object, Event> {
+enum EventBinding {
     Unobserved,
     Observed(ComPtr<IEventReceiver>),
 }
 ```
 
-The binding's type arguments describe the producer and its optional native event
-representation for compiled handlers and authoring metadata. They do not select
-another receiver ABI. `Object` must be an interface/class; `Event` a declared
-value. Resolution requires the origin to match the constructor's returned product,
-accepts at most one binding per constructor, and requires associated constructors
-to agree on the native event type.
-
-IDL generates `ProductEventBinding` and the `EventSource::Event` association.
-Shared `ComPtr` construction also generates `ProductEventPort`. It generates no
-per-product queue trait, queue ABI alias, or queue provider. See the
-[constructor naming contract](IDL_CONSTRUCTOR_NAMES.md).
+`EventBinding` has no type parameters. It chooses the delivery policy only.
+The producer advertises its event interfaces with `#[events(...)]`; constructors
+do not infer metadata or generate product-specific helpers. See
+[advertised event interfaces](IDL_EVENT_METADATA.md).
 
 ## One common application inbox
 
@@ -49,9 +42,8 @@ let app = Dispatcher::into_local(Dispatcher::new(processor, messages));
 A handler can query `message.downcast::<ITextChangedEventAbi>()?` and call the
 returned projection's `text()` and `cursor()` methods. Unsupported interfaces
 return `None`; revision mismatches and provider failures remain errors. Rust
-handlers may instead use `message.widget::<TextboxAbi>()?` to read the native
-payload while the message continues owning its COM event. Neither approach needs
-per-form generated receiver code.
+handlers use `message.origin.widget::<TextboxAbi>()?` to query the weak origin
+separately. No per-form generated receiver code is needed.
 
 Applications needing an envelope, such as a reload generation, implement the one
 `IEventReceiver` interface. `EventMessage::capture` acquires the weak identity and
@@ -97,9 +89,8 @@ exists. Posting through a shared port temporarily pins the source; the queued
 message still contains only its weak identity.
 
 Queued event data survives source destruction. Consumers decide whether source
-expiry makes a fact irrelevant; file completion may remain useful. Generated
-forms additionally require [reload generation and current field identity](RELOAD_GENERATION_IDENTITY.md)
-before native decoding. Their single receiver transports the same COM event and
+expiry makes a fact irrelevant; file completion may remain useful. Document receivers additionally support [reload generation and current field identity](RELOAD_GENERATION_IDENTITY.md)
+before event queries. The shared library receiver transports the same COM event and
 adds only the construction attempt's generation.
 
 The [executed button walkthrough](../../crates/ui/api/docs/button_events.rs),

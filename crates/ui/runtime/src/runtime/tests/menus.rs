@@ -32,7 +32,7 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
         .item_with_queue(
             "Disabled",
             Some(
-                neocogi_ui::test_event_queue!(activation, String, session_tx.clone(), |_queue, _origin, event| event.label)
+                neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, session_tx.clone(), |_queue, _origin, event| event.query_weak::<neocogi_ui::IActivatedEventAbi>()?.label()?.to_string()?)
                     .unwrap()
                     .as_com_ref(),
             ),
@@ -45,7 +45,7 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
         .item_with_queue(
             "old",
             Some(
-                neocogi_ui::test_event_queue!(activation, String, session_tx.clone(), |_queue, _origin, event| event.label)
+                neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, session_tx.clone(), |_queue, _origin, event| event.query_weak::<neocogi_ui::IActivatedEventAbi>()?.label()?.to_string()?)
                     .unwrap()
                     .as_com_ref(),
             ),
@@ -146,7 +146,7 @@ fn standalone_menu_popup_submits_then_hides_without_destroying_its_live_rows() {
         .item_with_queue(
             "Run",
             Some(
-                neocogi_ui::test_event_queue!(activation, String, session_tx.clone(), |_queue, _origin, event| event.label)
+                neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, session_tx.clone(), |_queue, _origin, event| event.query_weak::<neocogi_ui::IActivatedEventAbi>()?.label()?.to_string()?)
                     .unwrap()
                     .as_com_ref(),
             ),

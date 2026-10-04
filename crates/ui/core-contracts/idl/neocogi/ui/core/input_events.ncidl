@@ -93,85 +93,6 @@ struct WidgetUpdate {
     }
 
 #[version(1)]
-/// Labelled activation shared by buttons and list items.
-struct Activation {
-    /// Label captured when the command is activated.
-    label: String,
-}
-
-#[version(1)]
-/// Complete text and cursor captured when a user edit commits.
-struct TextChanged {
-    /// Complete normalized text at the edit.
-    text: String,
-    /// Scalar-aligned UTF-8 byte cursor within this text.
-    cursor: u64,
-}
-
-#[version(1)]
-/// Complete text captured when the user submits.
-struct TextSubmitted {
-    /// Complete submitted text, independent of later edits.
-    text: String,
-}
-
-#[version(1)]
-/// Captured window lifecycle or user chrome interaction while the UI context runs.
-/// Destroyed reports individual removal. Whole-context shutdown and final runtime Drop
-/// release producers without posting terminal lifecycle notifications.
-enum WindowEvent: u8 {
-    /// A user move or resize committed this complete outer rectangle.
-    GeometryChanged {
-        /// Captured outer geometry, independent of subsequent window edits.
-        rect: Rect,
-    },
-    /// Close intent only: visibility and ownership are unchanged. The behavioral
-    /// parent may decline, hide or remove after handling its ordinary queued event.
-    CloseRequested,
-    /// Visibility became false; later callback code may observe a subsequent show.
-    Hidden,
-    /// Individual removal committed for this window and its descendants. Posted once before
-    /// releasing its record; delivery failure does not undo destruction. Whole-runtime shutdown
-    /// emits no such fact. Queued facts remain readable independently of the removed widget tree.
-    Destroyed,
-    /// The user minimized to this complete compact rectangle.
-    Minimized {
-        /// Captured compact outer geometry.
-        rect: Rect,
-    },
-    /// The user maximized into this inherited viewport rectangle.
-    Maximized {
-        /// Captured maximized outer geometry.
-        rect: Rect,
-    },
-    /// The user restored this previously saved rectangle.
-    Restored {
-        /// Captured restored outer geometry.
-        rect: Rect,
-    },
-}
-
-#[version(1)]
-/// Captured popup dismissal during ordinary operation. Whole-runtime shutdown
-/// drops popup storage without synthesizing dismissal notifications.
-enum PopupDismissed: u8 {
-    /// The popup left the active branch without fabricating destruction history.
-    Dismissed,
-}
-
-#[version(1)]
-/// Terminal outcome of one request; Pending is not a deliverable event.
-enum FileDialogCompletion: u8 {
-    /// The request accepted this exact native path.
-    Accepted {
-        /// Owned path capability retained independently of the producer.
-        path: ComPtr<INativePath>,
-    },
-    /// The request was cancelled or its active owner closed.
-    Cancelled,
-}
-
-#[version(1)]
 /// Presentation of a lexical file selection; the application validates existence and replacement policy.
 enum FileDialogMode: u8 {
     /// Select an existing input file, displaying an Open action.
@@ -180,11 +101,12 @@ enum FileDialogMode: u8 {
     Save,
 }
 
-#[version(4)]
+#[version(5)]
 /// Public editing capability of the nodes-provider file picker composite.
 /// The provider mounts the same object through IWidget/IContainerLayout; this
 /// capability controls its modal request and does not grant a second attachment.
 /// Retaining the picker does not keep its allocating runtime open.
+#[events(IFileAcceptedEvent, IFileCancelledEvent)]
 class IFileDialog {
     /// Returns the actual stable modal window capability for ordinary lifecycle and geometry operations.
     fn window(&self) -> Result<ComPtr<IWindow>>;
@@ -199,16 +121,9 @@ class IFileDialog {
 
 }
 
-#[version(2)]
+#[version(3)]
 /// Standard picker construction capability exposed by a nodes factory bound to window management.
 interface IFileDialogs {
     /// Creates one hidden reusable modal owned by the authenticated ordinary window.
-    fn create(&self, parent: &IWindow, events: &EventBinding<IFileDialog, IFileDialogEvent>) -> Result<WeakComBox<IFileDialog>>;
-}
-
-#[version(1)]
-/// Complete typed event stream of IFileDialog; consumed by its behavioral parent.
-enum IFileDialogEvent {
-    /// Captured completed fact, acquired before the producer call returns.
-    Completed(FileDialogCompletion),
+    fn create(&self, parent: &IWindow, events: &EventBinding) -> Result<WeakComBox<IFileDialog>>;
 }

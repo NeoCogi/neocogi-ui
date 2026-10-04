@@ -33,10 +33,10 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
             ChoiceSelection::Selected(1),
             Some(
                 neocogi_ui::test_event_queue!(
-                    combo,
+                    neocogi_ui::ComboAbi,
                     ChoiceSelection,
                     session_tx.clone(),
-                    |_queue, _origin, neocogi_ui::combo::Event::Changed(event)| event
+                    |_queue, _origin, event| event.query_weak::<IChoiceChangedEventAbi>()?.selection()?
                 )
                 .unwrap()
                 .as_com_ref(),
@@ -139,10 +139,10 @@ fn combo_choice_menu_uses_shared_submenu_navigation() {
             ChoiceSelection::Selected(10),
             Some(
                 neocogi_ui::test_event_queue!(
-                    combo,
+                    neocogi_ui::ComboAbi,
                     ChoiceSelection,
                     session_tx.clone(),
-                    |_queue, _origin, neocogi_ui::combo::Event::Changed(event)| event
+                    |_queue, _origin, event| event.query_weak::<IChoiceChangedEventAbi>()?.selection()?
                 )
                 .unwrap()
                 .as_com_ref(),
@@ -199,7 +199,7 @@ impl neocogi_com::events::IEventReceiver for RemoveComboDuringPost {
     /// Removal must not require a recursive call into the active menu state.
     fn post(&mut self, _: neocogi_com::NcValueRef<'_, neocogi_com::events::EventOrigin>, event_owner: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
         let result = (|| -> Result<(), NcStatus> {
-        let _ = <neocogi_ui::combo::Event as neocogi_com::events::EventPayload>::from_event(&event_owner)?.ok_or(NC_E_INVALID_ARG)?;
+        event_owner.query_weak::<neocogi_ui::IChoiceChangedEventAbi>()?;
         self.calls.set(self.calls.get() + 1);
         self.root.clear()
 

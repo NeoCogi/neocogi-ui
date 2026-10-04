@@ -138,7 +138,7 @@ fn precommit_callback_errors_recover_without_provider_notification() {
                 NcCopyFromBufferOffset::new(0, b"review"),
                 Rect { x: 0, y: 0, width: 200, height: 120 },
                 widget,
-                NcValueRef::new(&IWindowEventBinding::Unobserved).unwrap(),
+                NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
             )
             .unwrap();
         let size = Size { width: 640, height: 480 };

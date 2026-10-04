@@ -29,7 +29,7 @@ fn button(runtime: &ComPtr<UiRuntimeAbi>) -> ComBox<ButtonAbi> {
         .unwrap()
         .create_button(
             NcCopyFromBufferOffset::new(0, b""),
-            neocogi_com::NcValueRef::new(&neocogi_ui_nodes_contracts::ButtonEventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
         )
         .unwrap()
 }
@@ -44,7 +44,7 @@ fn oversized_window_title_returns_the_unmounted_root_for_retry() {
     let oversized = vec![b'x'; MAX_WINDOW_TITLE_BYTES + 1];
     let result = manager.create_window(
         NcCopyFromBufferOffset::new(0, &oversized), RECT, root.query().unwrap(),
-        neocogi_com::NcValueRef::new(&IWindowEventBinding::Unobserved).unwrap(),
+        neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
     );
     let (status, root) = result.unwrap_err();
     assert_eq!(status, neocogi_com::NC_E_OUT_OF_RANGE);
@@ -163,20 +163,20 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
     let button = factory
         .create_button(
             label,
-            neocogi_com::NcValueRef::new(&neocogi_ui_nodes_contracts::ButtonEventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     let _checkbox = factory
         .create_checkbox(
             false,
             label,
-            neocogi_com::NcValueRef::new(&neocogi_ui_nodes_contracts::CheckboxEventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     let _textbox = factory
         .create_textbox(
             label,
-            neocogi_com::NcValueRef::new(&neocogi_ui_nodes_contracts::TextboxEventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     let _text_block = factory.create_text_block(label, TextWrapping::Word).unwrap();
@@ -189,26 +189,26 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
                 step: 0.1,
                 precision: 1,
             },
-            neocogi_com::NcValueRef::new(&neocogi_ui_nodes_contracts::SliderEventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     let _number = factory
         .create_number(
             NumberOptions { value: 0.0, step: 1.0, precision: 0 },
-            neocogi_com::NcValueRef::new(&neocogi_ui_nodes_contracts::NumberEventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     let _swatch = factory.create_color_swatch(u32::MAX, label).unwrap();
     let _list_item = factory
         .create_list_item(
             label,
-            neocogi_com::NcValueRef::new(&neocogi_ui_nodes_contracts::ListItemEventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     let _list_box = factory
         .create_list_box(
             label,
-            neocogi_com::NcValueRef::new(&neocogi_ui_nodes_contracts::ListBoxEventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     let _scrollbar = factory
@@ -219,7 +219,7 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
                 content: 2,
                 offset: 0,
             },
-            neocogi_com::NcValueRef::new(&neocogi_ui_nodes_contracts::ScrollbarEventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     let _linear = factory.create_linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
@@ -235,7 +235,7 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
             label,
             TextWrapping::Word,
             true,
-            neocogi_com::NcValueRef::new(&neocogi_ui_nodes_contracts::TextAreaEventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     let root = area.query::<IWidgetAbi>().unwrap();
@@ -250,7 +250,7 @@ fn mount(runtime: &ComPtr<UiRuntimeAbi>, root: ComBox<IWidgetAbi>) -> Result<Com
         NcCopyFromBufferOffset::new(0, b"test"),
         RECT,
         root,
-        neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
+        neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
     ).map_err(|(status, _rejected)| status)
 }
 
@@ -633,7 +633,7 @@ fn window_com_capabilities_preserve_hierarchy_layers_visibility_and_subtree_clos
             NcCopyFromBufferOffset::new(0, b"child"),
             RECT,
             child_button_owner.query::<IWidgetAbi>().unwrap(),
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     let dialog_button_owner = button(&runtime);
@@ -644,7 +644,7 @@ fn window_com_capabilities_preserve_hierarchy_layers_visibility_and_subtree_clos
             NcCopyFromBufferOffset::new(0, b"dialog"),
             RECT,
             dialog_button_owner.query::<IWidgetAbi>().unwrap(),
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     root.set_layer(2).unwrap();
@@ -705,7 +705,7 @@ fn child_creation_rejects_foreign_and_modal_parents_before_mounting() {
                 NcCopyFromBufferOffset::new(0, b"foreign"),
                 RECT,
                 node,
-                neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
+                neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
             )
             .unwrap_err().0,
         UI_E_OWNER
@@ -717,7 +717,7 @@ fn child_creation_rejects_foreign_and_modal_parents_before_mounting() {
             NcCopyFromBufferOffset::new(0, b"modal"),
             RECT,
             button(&first).query::<IWidgetAbi>().unwrap(),
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     assert_eq!(
@@ -727,7 +727,7 @@ fn child_creation_rejects_foreign_and_modal_parents_before_mounting() {
                 NcCopyFromBufferOffset::new(0, b"invalid"),
                 RECT,
                 button(&first).query().unwrap(),
-                neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
+                neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
             )
             .unwrap_err().0,
         UI_E_POLICY
@@ -738,7 +738,7 @@ fn child_creation_rejects_foreign_and_modal_parents_before_mounting() {
             NcCopyFromBufferOffset::new(0, b"valid"),
             RECT,
             button(&first).query().unwrap(),
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     assert_eq!(valid.snapshot().unwrap().visibility, Visibility::Visible);
@@ -759,7 +759,7 @@ fn popup_com_capability_enforces_active_owner_policy_and_permanent_removal() {
             root.as_com_ref(),
             NcCopyFromBufferOffset::new(0, b"popup"),
             popup_button_owner.query::<IWidgetAbi>().unwrap(),
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IPopupEventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     assert_eq!(popup.query::<IWindowAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
@@ -775,7 +775,7 @@ fn popup_com_capability_enforces_active_owner_policy_and_permanent_removal() {
             NcCopyFromBufferOffset::new(0, b"modal"),
             RECT,
             button(&runtime).query::<IWidgetAbi>().unwrap(),
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::IWindowEventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     dialog.set_visibility(Visibility::Visible).unwrap();
@@ -1351,7 +1351,7 @@ fn builtin_scoped_paint_preserves_alignment_with_inline_semantic_state() {
 mod component_events;
 mod event_queues;
 mod events;
-mod generated_queues;
+mod document_events;
 mod widget_dispatch;
 
 mod combo;
@@ -1629,7 +1629,7 @@ fn review_dispatch_child_surface_precedes_raised_parent() {
     let parent = ui.window("parent", RECT, parent).unwrap();
     let child = ui.widgets().dispatching_leaf(ReviewDispatchTrace { name: "child", trace: trace.clone() }, WidgetOptions::NONE).unwrap();
     let _child = manager.create_child(parent.as_com_ref(), NcCopyFromBufferOffset::new(0, b"child"), RECT,
-        child.into_interface(), neocogi_com::NcValueRef::new(&IWindowEventBinding::Unobserved).unwrap()).unwrap();
+        child.into_interface(), neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap()).unwrap();
     parent.raise().unwrap();
     ui.update(SIZE).unwrap();
     assert_eq!(&trace.borrow()[..2], &["child", "parent"], "documented descendant-first delivery survives ancestor raising");

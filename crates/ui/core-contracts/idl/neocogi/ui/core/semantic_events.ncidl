@@ -23,19 +23,56 @@ interface ITextSubmittedEvent: IEvent {
     fn text(&self) -> Result<ComPtr<INcString>>;
 }
 
+#[version(2)]
+/// Common category for immutable window lifecycle facts.
+interface IWindowEvent: IEvent {}
+
 #[version(1)]
-/// Immutable window lifecycle or geometry fact.
-interface IWindowEvent: IEvent {
-    /// Exact lifecycle variant and its copied geometry, if present.
-    fn value(&self) -> Result<WindowEvent>;
+/// Captured window GeometryChanged fact, independent of the live source.
+interface IWindowGeometryChangedEvent: IWindowEvent {
+    /// Complete captured outer geometry.
+    fn rect(&self) -> Result<Rect>;
 }
 
 #[version(1)]
-/// Immutable popup dismissal; producer closure is independent of this event's lifetime.
-interface IPopupDismissedEvent: IEvent {
-    /// Captured popup lifecycle fact.
-    fn value(&self) -> Result<PopupDismissed>;
+/// Captured window CloseRequested fact, independent of the live source.
+interface IWindowCloseRequestedEvent: IWindowEvent {
 }
+
+#[version(1)]
+/// Captured window Hidden fact, independent of the live source.
+interface IWindowHiddenEvent: IWindowEvent {
+}
+
+#[version(1)]
+/// Captured window Destroyed fact, independent of the live source.
+interface IWindowDestroyedEvent: IWindowEvent {
+}
+
+#[version(1)]
+/// Captured window Minimized fact, independent of the live source.
+interface IWindowMinimizedEvent: IWindowEvent {
+    /// Complete captured outer geometry.
+    fn rect(&self) -> Result<Rect>;
+}
+
+#[version(1)]
+/// Captured window Maximized fact, independent of the live source.
+interface IWindowMaximizedEvent: IWindowEvent {
+    /// Complete captured outer geometry.
+    fn rect(&self) -> Result<Rect>;
+}
+
+#[version(1)]
+/// Captured window Restored fact, independent of the live source.
+interface IWindowRestoredEvent: IWindowEvent {
+    /// Complete captured outer geometry.
+    fn rect(&self) -> Result<Rect>;
+}
+
+#[version(2)]
+/// Captured dismissal; whole-runtime shutdown does not synthesize this fact.
+interface IPopupDismissedEvent: IEvent {}
 
 #[version(1)]
 /// Immutable committed menu selection shared by choice menus and combo controls.

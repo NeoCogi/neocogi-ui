@@ -13,15 +13,6 @@ mod button_form {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../document/tests/fixtures/empty_bindings.rs"));
 }
 
-impl button_form::Handlers for button_form::Form {
-    /// Application behavior edits its typed widget after the channel event has been consumed.
-    fn on_root_0(&mut self, event: neocogi_ui::button::Event) -> Result<(), NcStatus> {
-        match event {
-            neocogi_ui::button::Event::Activated(_) => self.widget_root_0.set_label("Handled by application"),
-        }
-    }
-}
-
 /// All former named setter operations are callable through compiled concrete form fields.
 #[test]
 fn generated_form_fields_preserve_widget_validation_silence_and_reload_lifetime() {
@@ -38,7 +29,7 @@ fn generated_form_fields_preserve_widget_validation_silence_and_reload_lifetime(
     slot.reload(
         &document,
         Resources::new(),
-        |generation| generated::events(generation, send.clone()),
+        |generation| EventBindings::all(&document, &neocogi_ui_document::CustomWidgetRegistry::new(), neocogi_ui_document::document_receiver(generation, send.clone())?.as_com_ref()),
         |component, _| {
             candidate = Some(generated::bind(component)?);
             Ok(())
@@ -122,7 +113,7 @@ fn generated_event_handler_uses_widget_methods_after_receiving_the_user_event() 
     slot.reload(
         &document,
         Resources::new(),
-        |generation| button_form::events(generation, send.clone()),
+        |generation| EventBindings::all(&document, &neocogi_ui_document::CustomWidgetRegistry::new(), neocogi_ui_document::document_receiver(generation, send.clone())?.as_com_ref()),
         |_, _| Ok(()),
     )
     .unwrap();
@@ -136,8 +127,9 @@ fn generated_event_handler_uses_widget_methods_after_receiving_the_user_event() 
     assert_eq!(form.widget_root_0.label().unwrap(), "Before click");
     let message = events.try_recv().unwrap();
     assert!(slot.accepts(message.generation));
-    let event = message.event.resolve(&form).unwrap().unwrap();
-    event.dispatch(&mut form).unwrap();
+    let event = message.event_for(&slot, "root").unwrap().unwrap();
+    assert!(event.downcast::<IActivatedEventAbi>().unwrap().is_some());
+    form.widget_root_0.set_label("Handled by application").unwrap();
     assert_eq!(form.widget_root_0.label().unwrap(), "Handled by application");
     assert!(matches!(events.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
 }

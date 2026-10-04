@@ -112,8 +112,7 @@ impl MenuItemParameters {
     }
 }
 
-/// Canonical generated activation snapshot from an enabled menu item.
-pub use neocogi_ui_core_contracts::Activation as MenuItemSubmitted;
+
 
 /// Failure reported when a [`Ui`](crate::Ui) cannot resolve one menu-item capability.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -204,7 +203,7 @@ pub(crate) struct MenuItemRecord {
     /// Mutable presentation and interaction values stored without a second mirror type.
     pub(crate) parameters: MenuItemParameters,
     /// Installed concrete activation receiver; no pending messages belong to the item.
-    pub(crate) submitted_event: neocogi_ui_core_contracts::IMenuItemEventPort,
+    pub(crate) submitted_event: neocogi_com::events::EventPort,
 }
 
 /// Uniquely owned declaration value for one actionable menu row.
@@ -218,7 +217,7 @@ pub struct MenuItem {
 
 impl MenuItem {
     /// Creates one uniquely owned item declaration and its non-owning application capability.
-    pub fn create(parameters: MenuItemParameters, queue: Option<neocogi_ui_core_contracts::IMenuItemEventPort>) -> (MenuItemHandle, Self) {
+    pub fn create(parameters: MenuItemParameters, queue: Option<neocogi_com::events::EventPort>) -> (MenuItemHandle, Self) {
         // The record owns its optional destination through declaration-to-surface transfer;
         // its handle needs only the stable identity used for checked lookup.
         let id = MenuItemId::allocate();
@@ -647,7 +646,9 @@ impl MenuSurface {
             MenuSlot::Item(item) if item.parameters.enabled => {
                 // Queue only the semantic event; WindowManager closes the complete path after this
                 // mutable surface borrow ends and before application dispatch begins.
-                let posted = item.submitted_event.post(MenuItemSubmitted { label: item.parameters.label.clone() });
+                let posted = if item.submitted_event.is_bound() {
+                    neocogi_ui_core_contracts::events::activated(&item.parameters.label).and_then(|event| item.submitted_event.post(event))
+                } else { Ok(()) };
                 Some(MenuAction::SubmitAndClose(posted))
             }
             MenuSlot::Choice { enabled: false, .. } | MenuSlot::Item(_) | MenuSlot::Separator => None,
@@ -722,7 +723,9 @@ impl MenuSurface {
                 MenuSlot::Item(item) if item.parameters.enabled => {
                     // Emission only queues a typed value. Application code cannot run until the
                     // manager has consumed `SubmitAndClose` and released every surface borrow.
-                    let posted = item.submitted_event.post(MenuItemSubmitted { label: item.parameters.label.clone() });
+                    let posted = if item.submitted_event.is_bound() {
+                    neocogi_ui_core_contracts::events::activated(&item.parameters.label).and_then(|event| item.submitted_event.post(event))
+                } else { Ok(()) };
                     Some(MenuAction::SubmitAndClose(posted))
                 }
                 MenuSlot::Choice { enabled: false, .. } | MenuSlot::Item(_) | MenuSlot::Separator => None,

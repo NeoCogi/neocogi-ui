@@ -273,7 +273,7 @@ struct ThemeState {
 struct InstallTheme;
 impl InstallTheme {
     /// The generated COM borrow gate rejects this call before the renderer observes a candidate.
-    fn handle(&mut self, state: &mut ThemeState, _: &neocogi_ui::events::Activation) -> Result<(), NcStatus> {
+    fn handle(&mut self, state: &mut ThemeState, _: &()) -> Result<(), NcStatus> {
         state.ui.install_assets(state.candidate.as_com_ref(), state.renderer.as_com_ref())?;
         state.installed += 1;
         Ok(())
@@ -293,10 +293,10 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
             "switch theme",
             Some(
                 neocogi_ui::test_event_queue!(
-                    button,
-                    neocogi_ui::events::Activation,
+                    neocogi_ui::ButtonAbi,
+                    (),
                     session_tx.clone(),
-                    |_queue, _origin, neocogi_ui::button::Event::Activated(event)| event
+                    |_queue, _origin, _event| ()
                 )
                 .unwrap()
                 .as_com_ref(),

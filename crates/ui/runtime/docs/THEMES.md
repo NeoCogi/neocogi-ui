@@ -349,11 +349,11 @@ manager consumes only its concrete `AssetChrome` fields and never branches on a 
 platform mode.
 
 Minimize keeps the retained window visible, saves its expanded height, reduces its application body
-to `minimized_content_height`, and emits `WindowEvent::Minimized`. Activating minimize again restores
-the saved height and emits `WindowEvent::Restored`. Maximize saves the exact normal outer rectangle,
-tracks the complete inherited viewport, and emits `WindowEvent::Maximized`. Activating the same
+to `minimized_content_height`, and emits `IWindowMinimizedEvent`. Activating minimize again restores
+the saved height and emits `IWindowRestoredEvent`. Maximize saves the exact normal outer rectangle,
+tracks the complete inherited viewport, and emits `IWindowMaximizedEvent`. Activating the same
 caption position while maximized uses `control.restore_button`, restores the saved rectangle, and
-emits `WindowEvent::Restored`.
+emits `IWindowRestoredEvent`.
 
 ## Compatibility with retained application resources
 

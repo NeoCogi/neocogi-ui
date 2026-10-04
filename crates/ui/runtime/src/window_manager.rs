@@ -65,7 +65,7 @@ use roots::{SurfaceForest, SurfaceKey};
 mod root_chrome;
 mod roots;
 
-pub use root_chrome::{WindowEvent, WindowHandle};
+pub use root_chrome::WindowHandle;
 // Popup identity/events and checked surface failures describe forest policy rather than chrome.
 // Re-export both borrowed-mutation and owner-preserving creation errors with the public window API.
 pub use roots::{PopupHandle, SurfaceMutationError};

@@ -42,13 +42,12 @@ projection. `ComBox<T>` remains forbidden inside repeatable IDL value fields.
 
 Weak fields cannot persist without an explicit reconstruction protocol. IDL
 resolution and authoring metadata distinguish shared and exclusive weak fields;
-the design catalog uses descriptor version 11 for that distinction.
+the design catalog uses descriptor version 12, including concrete event getter metadata.
 
 Rust can select concrete event interfaces with generic COM queries. Other hosts
 can use the same IDL interfaces through the C ABI. This protocol does not prescribe
 a script language, string-based field registry, per-form generated queue or
-application message enum. Any native payload conversion is consumer convenience,
-not a prerequisite for transporting an event through COM.
+application message enum. Applications read the event getters directly and may construct their own domain commands.
 
 ## Concrete UI snapshots
 
@@ -64,7 +63,8 @@ contracts define event meaning independently of the producer's concrete class:
 | `ICheckboxChangedEvent` | Checked state |
 | `INumericChangedEvent` | Finite numeric value; shared by slider and number controls |
 | `IScrollbarChangedEvent` / `ISplitChangedEvent` | Nonnegative offset or divider position |
-| `IWindowEvent` / `IPopupDismissedEvent` | Captured lifecycle and geometry facts |
+| `IWindowGeometryChangedEvent`, `IWindowMinimizedEvent`, `IWindowMaximizedEvent`, `IWindowRestoredEvent` | Captured window rectangle |
+| `IWindowCloseRequestedEvent`, `IWindowHiddenEvent`, `IWindowDestroyedEvent`, `IPopupDismissedEvent` | Distinct lifecycle facts; the window root is a marker interface |
 | `IChoiceChangedEvent` | Stable selection identity or explicit absence |
 | `IFileAcceptedEvent` / `IFileCancelledEvent` | Exact native path or a distinct cancellation fact |
 
@@ -73,14 +73,16 @@ its captured data, and its getters never consult the originating widget. Concret
 event allocations are exclusive even when a payload contains a shared immutable
 string or path capability.
 
-Rust's optional `EventPayload` conversion moves a native snapshot into its concrete
-COM event or reads a compatible event through those same public getters. It
-validates semantic fields on construction and after reading foreign getters.
-Existing native event enums can select these conversions without becoming the
-common queue's transported representation. A custom widget can add a derived
-event interface, as the demo's `ICounterChangedEvent` does, without adding a new
-receiver interface. Native generated form handlers additionally require the custom
-payload's `EventPayload` implementation; direct COM handlers do not.
+Rust constructors such as `events::text_changed(text, cursor)` and
+`events::numeric_changed(value)` return `Result<ComBox<IEventAbi>, NcStatus>`
+directly. They validate finite numeric values, nonnegative geometry and UTF-8
+cursor boundaries. Unobserved producers skip construction. String snapshots store
+one immutable string capability; repeated getters add references without copying
+its contents. Foreign getter results remain subject to the consumer's domain checks.
+There are no native widget output enums or conversion traits.
+
+A custom widget adds an `IEvent`-derived interface and lists it in `#[events(...)]`.
+The compiler derives getter metadata directly; see [event metadata](IDL_EVENT_METADATA.md).
 
 ## Construction and native form conveniences
 
@@ -90,24 +92,24 @@ directly. A custom receiver is needed only when it adds behavior at the transpor
 boundary, such as attaching a reload generation or forwarding a public origin.
 All observed factories accept that same receiver projection. `EventBindings`
 registers it by authored key without a widget type parameter. The constructor
-binding still records the source/native payload association for metadata, but no
-per-source queue ABI or implementation trait is generated.
+binding selects only delivery policy. It does not encode an event type.
 
-Generated forms are optional native conveniences. Their one receiver adds a reload
-generation and keeps the exclusive event intact. Consumers check that generation
-before resolving the weak source against current form fields and decoding its
-native payload. Events from unrelated or removed controls cannot select a handler.
+Optional generated forms contain typed widget fields and `bind(component)` only.
+`document_receiver(generation, sender)` is a shared library receiver that tags the
+same exclusive event with a reload generation. `EventBindings::all` can select all
+emitting widgets without generated wiring. `DocumentEvent::event_for(slot, key)`
+checks the generation before lookup, then validates weak origin liveness and exact
+current widget membership. Unrelated or removed controls return `None`.
 The standard channel returns `NC_E_CLOSED` with the original event owner when its
 inbox is gone. Producer convenience APIs discard that rejected snapshot and return
 the status without rolling back committed widget changes.
 
 ## Validation
 
-[Generated-code regressions](../../crates/com/idl/tests/event_interfaces.rs)
-exercise both origin kinds, live and expired weak fields, successful and missing
-event interfaces, mismatched ABI revisions, exclusive event destruction, and
-return of the original event owner after a rejected post. The generated receiver
-and event getters are invoked through actual COM tables.
+[Generated ABI regressions](../../crates/com/idl/tests/event_interfaces.rs) exercise
+both origin kinds, live/expired weak fields, missing event interfaces, ABI revision
+mismatches, exclusive destruction and return of the owner after rejected posts.
+The generated receiver and event getters are invoked through actual COM tables.
 
 The [snapshot and channel regressions](../../crates/ui/api/tests/event_snapshots.rs)
 also verify that the standard inbox preserves allocation identity, keeps facts
@@ -115,8 +117,10 @@ readable after source destruction, and restores the same owner on disconnection.
 Each observed scalar event now requires an exclusive allocation. The existing
 [allocation probe](../../examples/com-plugin/examples/event_allocations.rs), run
 on October 4 with `--features monolith`, recorded 2 setup allocations and 10,323
-allocations for 10,000 scalar events including channel storage. This is an
-allocation count, not an elapsed-time benchmark.
+allocations for 10,000 scalar events including channel storage. The unobserved
+path performed 10,000 updates with zero allocations. These are
+allocation counts, not an elapsed-time benchmark. See the
+[migration validation](../validation/COM_EVENTS_ONLY_2026-10-04.md).
 
 The [October 4 benchmark](../experiments/COM_EVENT_DOWNCAST_2026-10-04.md) measured
 shared `ComPtr` queries. Its exact timings do not measure this exclusive event

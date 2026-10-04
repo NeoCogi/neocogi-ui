@@ -1,7 +1,7 @@
 # Independent widget and container example
 
 This optional assembly depends only on the facade, UI contracts, example contracts,
-neocogi-com (including its event adapters). It contains a counter and a one-child inset container. It is built and
+neocogi-com (including its common event channel). It contains a counter and a one-child inset container. It is built and
 loaded separately from the host, UI, and renderer; ordinary demo packages omit it.
 
 ```sh
@@ -31,7 +31,7 @@ The contracts live in [the demo IDL module](../../demos/contracts/idl/neocogi/de
 `class Counter: IWidget + ILeafLayout + IWidgetProbe`
 is the concrete counter contract; `IInset: IContainer` is a reusable capability.
 The registered `ExtensionProvider` factory constructs both with a typed
-`IWidgetHost` argument; Counter also receives `EventBinding<Counter, CounterEvent>`. Factories are the only parameterless activation roots.
+`IWidgetHost` argument; Counter also receives `EventBinding`. Factories are the only parameterless activation roots.
 
 During attachment the runtime queries and caches each control's layout capability
 beside `IWidget`; later update, layout, and paint calls use those cached pointers.
@@ -39,23 +39,22 @@ External controls share the built-in ownership and routing rules.
 
 The [implementation](src/lib.rs) uses `WidgetState` for common options, mount-once
 attachment and sticky invalidation. The counter stores its value
-once and owns an optional typed queue plus cached weak origin initialized before publication.
-`CounterEvent` is an optional native view of activation and counter-change facts.
+once and owns an optional common receiver plus cached weak origin initialized before publication.
+`#[events(IActivatedEvent, ICounterChangedEvent)]` advertises the captured facts.
 The counter captures each fact as an immutable `ComBox<IEvent>`, exposing the
 common `IActivatedEvent` or custom `ICounterChangedEvent` interface. Both move
 through the same `IEventReceiver` after state commits. Factories transfer widget
 `ComBox` owners; destruction releases descendants and receiver references.
 
 The [acceptance host](../../demos/smoke/src/extension.rs) uses `events::channel()`.
-Its handler reads a native `CounterEvent` through the public event getters after
-traversal returns. The host needs no custom receiver interface or generated form.
-`CounterAbi::IDL_INTERFACE` and `CounterEvent::IDL_TYPE` still supply optional
-native authoring metadata. `ExtensionProvider` implements `IDesignWidgetCatalog`;
-its common constructor receives the already typed `IEventReceiver` capability.
-Catalog registration checks that the advertised common receiver revision matches.
+Its handler queries the public event interfaces and reads their getters after
+traversal returns. `CounterAbi::IDL_INTERFACE.events` supplies the same getter
+metadata to authoring tools. `ExtensionProvider` implements `IDesignWidgetCatalog`;
+its common constructor receives `EventBinding`. Catalog registration validates
+the event identities and getter value graph.
 The unlinked native designer can load this library with `--plugin` and discover
 the counter without a Rust registration hook. A UI document stores only its kind
-and opaque NCB settings; it does not restate the event enum.
+and opaque NCB settings; it does not restate event contracts.
 
 The inset exclusively owns one `ComBox<IChildrenEditor>` and exposes its read-only view. It reads
 the authoritative child count instead of maintaining a second topology flag. Its

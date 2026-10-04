@@ -648,7 +648,7 @@ impl WindowManager {
                 {
                     // Snapshot after geometry mutation so subscribers receive the committed value.
                     let rect = node.surface.rect;
-                    let result = node.emit_window_event(WindowEvent::GeometryChanged { rect: crate::boundary::copied_rect(rect) });
+                    let result = node.emit_window_event(|| neocogi_ui_core_contracts::events::window_geometry_changed(crate::boundary::copied_rect(rect)));
                     self.posted(result);
                     self.invalidate_ui_commit();
                 }
@@ -694,7 +694,7 @@ impl WindowManager {
                 let result = self
                     .root_node_mut(root)
                     .expect("caption target must remain registered")
-                    .emit_window_event(WindowEvent::CloseRequested);
+                    .emit_window_event(neocogi_ui_core_contracts::events::window_close_requested);
                 self.posted(result);
             }
             RootCaptionButton::Minimize => {
@@ -705,9 +705,7 @@ impl WindowManager {
                     // the exact height saved by the preceding minimize action.
                     let maximized = node.root().expect("caption target must be a root").restore_rect.is_some();
                     node.surface.rect.height = if maximized { node.surface.clip.height } else { height };
-                    WindowEvent::Restored {
-                        rect: crate::boundary::copied_rect(node.surface.rect),
-                    }
+                    neocogi_ui_core_contracts::events::window_restored as fn(_) -> _
                 } else {
                     let expanded_height = node.surface.rect.height;
                     node.root_mut().expect("caption target must be a root").unminimized_height = Some(expanded_height);
@@ -717,11 +715,10 @@ impl WindowManager {
                         .height
                         .saturating_sub(node.surface.geometry.body.height)
                         .saturating_add(minimized_content_height.max(0));
-                    WindowEvent::Minimized {
-                        rect: crate::boundary::copied_rect(node.surface.rect),
-                    }
+                    neocogi_ui_core_contracts::events::window_minimized as fn(_) -> _
                 };
-                let result = node.emit_window_event(event);
+                let rect = crate::boundary::copied_rect(node.surface.rect);
+                let result = node.emit_window_event(|| event(rect));
                 self.posted(result);
                 self.invalidate_ui_commit();
             }
@@ -737,7 +734,7 @@ impl WindowManager {
                 let event = if let Some(rect) = restore {
                     // Restore exactly the normal placement captured by the preceding maximize.
                     node.surface.rect = rect;
-                    WindowEvent::Restored { rect: crate::boundary::copied_rect(rect) }
+                    neocogi_ui_core_contracts::events::window_restored as fn(_) -> _
                 } else {
                     // The committed clip is the complete available viewport for top-level, child,
                     // and modal roots. Save normal placement before replacing it.
@@ -745,9 +742,10 @@ impl WindowManager {
                     let rect = node.surface.clip;
                     node.root_mut().expect("caption target must be a root").restore_rect = Some(normal);
                     node.surface.rect = rect;
-                    WindowEvent::Maximized { rect: crate::boundary::copied_rect(rect) }
+                    neocogi_ui_core_contracts::events::window_maximized as fn(_) -> _
                 };
-                let result = node.emit_window_event(event);
+                let rect = crate::boundary::copied_rect(node.surface.rect);
+                let result = node.emit_window_event(|| event(rect));
                 self.posted(result);
                 self.invalidate_ui_commit();
             }

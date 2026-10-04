@@ -3,7 +3,7 @@ use crate::factory::NodeServices;
 use neocogi_ui_core_contracts::*;
 use neocogi_ui_nodes_contracts::{ContentIcon, CrossSize, FlowDirection, LayoutTrack, LinearEdge};
 use neocogi_ui::{ScrollAreaWidget, TextBlockWidget, TextboxWidget};
-use neocogi_com::{ComBox, WeakComBox, ComPtr, ComRef, WeakLocalBox, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_object};
+use neocogi_com::{ComBox, WeakComBox, ComPtr, ComRef, WeakLocalBox, INcStringComPtrExt, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG, com_object};
 use std::{
     path::{Path, PathBuf},
     rc::Rc,
@@ -18,7 +18,7 @@ struct Request {
     /// Active versus idle request state; COM ownership alone controls destruction.
     phase: RequestPhase,
     /// Installed concrete completion receiver; consumers own their committed outcomes.
-    completed: WidgetEvents<IFileDialogAbi>,
+    completed: WidgetEvents,
 }
 
 /// Mutually exclusive picker-request lifecycle; no two booleans can disagree.
@@ -47,11 +47,11 @@ impl Request {
     }
 
     /// Emits one committed outcome after the modal has become idle.
-    fn finish(&mut self, status: FileDialogCompletion) -> Result<(), NcStatus> {
+    fn finish(&mut self, snapshot: impl FnOnce() -> Result<ComBox<neocogi_com::events::IEventAbi>, NcStatus>) -> Result<(), NcStatus> {
         match self.phase {
             RequestPhase::Active => {
                 self.phase = RequestPhase::Idle;
-                self.completed.post(IFileDialogEvent::Completed(status))?;
+                if self.completed.is_bound() { self.completed.post(snapshot()?)?; }
             }
             RequestPhase::Idle => {}
         }
@@ -126,12 +126,12 @@ impl Model {
         })
     }
     /// Hides before emitting the outcome so later messages observe an idle reusable component.
-    fn finish(&mut self, outcome: FileDialogCompletion) -> Result<(), NcStatus> {
+    fn finish(&mut self, snapshot: impl FnOnce() -> Result<ComBox<neocogi_com::events::IEventAbi>, NcStatus>) -> Result<(), NcStatus> {
         if self.request.active() {
             if self.window().is_ok_and(|window| window.snapshot().is_ok()) {
                 self.window()?.set_visibility(Visibility::Hidden)?;
             }
-            self.request.finish(outcome)?;
+            self.request.finish(snapshot)?;
         }
         Ok(())
     }
@@ -148,23 +148,8 @@ impl Model {
         };
         // Capture the exact native identity once at commit, not through a lossy
         // display label or a dispatcher-time reconstruction of this model.
-        self.finish(FileDialogCompletion::Accepted {
-            path: neocogi_ui::NativePath::new(&path).as_interface().add_ref(),
-        })
+        self.finish(|| neocogi_ui_core_contracts::events::file_accepted(neocogi_ui::NativePath::new(&path).as_interface().add_ref()))
     }
-}
-
-/// Private component messages own every captured value, including exact native paths.
-#[derive(Clone)]
-enum Message {
-    /// Owned button event resolved after traversal against the current component controls.
-    Button(neocogi_com::WeakComBox<neocogi_ui::ButtonAbi>, neocogi_ui::events::button::Event),
-    /// Owned list_item event resolved after traversal against the current component controls.
-    Row(neocogi_com::WeakComBox<neocogi_ui::ListItemAbi>, neocogi_ui::events::list_item::Event),
-    /// Owned textbox event resolved after traversal against the current component controls.
-    Text(neocogi_com::WeakComBox<neocogi_ui::TextboxAbi>, neocogi_ui::events::textbox::Event),
-    /// Owned window event resolved after traversal against the current component controls.
-    Window(neocogi_com::WeakComPtr<IWindowAbi>, neocogi_ui::events::window::Event),
 }
 
 /// Application commands resolved from private child lifetime identities.
@@ -190,8 +175,6 @@ enum Command {
     FilenameEdited,
     /// Submit the captured path text without reading a later editor value.
     Navigate(String),
-    /// Observe the existing modal's committed lifecycle fact.
-    Lifecycle(WindowEvent),
 }
 
 /// One completely built column and its owned row commands, still unpublished to the modal.
@@ -430,7 +413,7 @@ impl FileDialog {
         })?;
         let windows = services.windows.clone();
         let window_sink = dialog.try_borrow()?.model.nodes.queue.clone();
-        let window_binding = IWindowEventBinding::from_queue(Some(window_sink.as_com_ref()));
+        let window_binding = neocogi_com::events::EventBinding::from_queue(Some(window_sink.as_com_ref()));
         let mut observer = dialog.downgrade();
         let root = dialog.into_interface::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?;
         let window = windows.create_dialog(
@@ -535,88 +518,37 @@ impl Model {
 
     /// Handles one child message and completes any navigation before the next message.
     fn update(&mut self, event: neocogi_com::events::EventMessage) -> Result<(), NcStatus> {
-        let Some(message) = Message::decode(&event)? else { return Ok(()); };
-        let message = match message {
-            Message::Button(origin, event) => {
-                drop(event);
-                if !origin.is_alive() {
-                    return Ok(());
-                }
-                let action = self
-                    .buttons
-                    .iter()
-                    .find(|(control, _)| control.same_object(&origin))
-                    .map(|(_, action)| action.clone());
-                match action {
-                    Some(action) => action,
-                    None => return Ok(()),
-                }
+        // Lifecycle observations remain useful after destruction. Authenticate the
+        // modal identity before inspecting the fact; an old hide cannot cancel a
+        // newer visible request.
+        if let Some(origin) = event.origin.service::<IWindowAbi>()? {
+            if origin.same_object(&self.window()?.downgrade()?) && self.request.active() {
+                let close = event.downcast::<IWindowCloseRequestedEventAbi>()?.is_some();
+                let hidden = event.downcast::<IWindowHiddenEventAbi>()?.is_some()
+                    && self.window()?.snapshot().is_ok_and(|s| s.visibility == Visibility::Hidden);
+                if close || hidden { self.finish(neocogi_ui_core_contracts::events::file_cancelled)?; }
             }
-            Message::Row(origin, event) => {
-                drop(event);
-                if !origin.is_alive() {
-                    return Ok(());
-                }
-                let action = self
-                    .rows
-                    .iter()
-                    .find(|(control, _)| control.same_object(&origin))
-                    .map(|(_, action)| action.clone());
-                match action {
-                    Some(action) => action,
-                    None => return Ok(()),
-                }
-            }
-            Message::Text(origin, event) => {
-                if !origin.is_alive() {
-                    return Ok(());
-                };
-                match (
-                    origin.same_object(self.path.as_interface()),
-                    origin.same_object(self.filename.as_interface()),
-                    event,
-                ) {
-                    (true, _, neocogi_ui::textbox::Event::Changed(_)) => Command::PathEdited,
-                    (true, _, neocogi_ui::textbox::Event::Submitted(value)) => Command::Navigate(value.text),
-                    (_, true, neocogi_ui::textbox::Event::Changed(_)) => Command::FilenameEdited,
-                    (_, true, neocogi_ui::textbox::Event::Submitted(_)) => Command::Accept,
-                    _ => return Ok(()),
-                }
-            }
-            // Lifecycle facts remain meaningful after the closed window loses its
-            // final owner; the snapshot itself is owned by this component's inbox.
-            Message::Window(origin, event) => {
-                if !origin.same_object(&self.window()?.downgrade()?) {
-                    return Ok(());
-                }
-                Command::Lifecycle(event)
-            }
-        };
+            return Ok(());
+        }
+        let command = if let Some(origin) = event.origin.widget::<neocogi_ui::ButtonAbi>()? {
+            if !origin.is_alive() || event.downcast::<IActivatedEventAbi>()?.is_none() { return Ok(()); }
+            self.buttons.iter().find(|(control, _)| control.same_object(&origin)).map(|(_, action)| action.clone())
+        } else if let Some(origin) = event.origin.widget::<neocogi_ui::ListItemAbi>()? {
+            if !origin.is_alive() || event.downcast::<IActivatedEventAbi>()?.is_none() { return Ok(()); }
+            self.rows.iter().find(|(control, _)| control.same_object(&origin)).map(|(_, action)| action.clone())
+        } else if let Some(origin) = event.origin.widget::<neocogi_ui::TextboxAbi>()? {
+            if !origin.is_alive() { return Ok(()); }
+            let is_path = origin.same_object(self.path.as_interface());
+            let is_filename = origin.same_object(self.filename.as_interface());
+            if !is_path && !is_filename { return Ok(()); }
+            if event.downcast::<ITextChangedEventAbi>()?.is_some() {
+                Some(if is_path { Command::PathEdited } else { Command::FilenameEdited })
+            } else if let Some(submitted) = event.downcast::<ITextSubmittedEventAbi>()? {
+                Some(if is_path { Command::Navigate(submitted.text()?.to_string()?) } else { Command::Accept })
+            } else { None }
+        } else { None };
+        let Some(message) = command else { return Ok(()); };
         let directory = match message {
-            Command::Lifecycle(event) => {
-                match event {
-                    // The dialog's model is the behavioral parent of its window
-                    // interaction. A caption request cancels the current request;
-                    // it does not destroy this widget or its modal definition.
-                    WindowEvent::CloseRequested if self.request.active() => {
-                        self.finish(FileDialogCompletion::Cancelled)?;
-                    },
-                    WindowEvent::Hidden
-                        if self.request.active()
-                            && self
-                                .window()
-                                .is_ok_and(|window| window.snapshot().is_ok_and(|snapshot| snapshot.visibility == Visibility::Hidden)) =>
-                    {
-                        // An older hide fact must not cancel a newly visible request.
-                        self.finish(FileDialogCompletion::Cancelled)?;
-                    }
-                    // Owner destruction disconnects this inbox; it cannot produce
-                    // a completion from an expired widget origin.
-                    WindowEvent::Destroyed => {},
-                    _ => {}
-                }
-                None
-            }
             _ if !self.request.active() => None,
             Command::PathEdited => {
                 self.path_dirty = true;
@@ -634,7 +566,7 @@ impl Model {
                 None
             }
             Command::Cancel => {
-                self.finish(FileDialogCompletion::Cancelled)?;
+                self.finish(neocogi_ui_core_contracts::events::file_cancelled)?;
                 None
             }
             Command::Folder(path) => Some(path),
@@ -788,7 +720,7 @@ impl IFileDialog for FileDialog {
         let model = &mut self.model;
         model.owner()?;
         let active = model.request.active();
-        model.finish(FileDialogCompletion::Cancelled)?;
+        model.finish(neocogi_ui_core_contracts::events::file_cancelled)?;
         Ok(active)
     }
     /// Copies diagnostics while the dialog owner exists; expired handles fail at entry.
@@ -837,22 +769,3 @@ fn read_directory(path: &Path) -> std::io::Result<(Vec<PathBuf>, Vec<PathBuf>)> 
 
 #[cfg(test)]
 mod tests;
-
-impl Message {
-    /// Decode at the handling boundary while the inbox still owns the COM event.
-    fn decode(message: &neocogi_com::events::EventMessage) -> Result<Option<Self>, neocogi_com::NcStatus> {
-        if let Some((origin, event)) = message.widget::<neocogi_ui::ButtonAbi>()? {
-            return Ok(Some(Self::Button(origin, event)));
-        }
-        if let Some((origin, event)) = message.widget::<neocogi_ui::ListItemAbi>()? {
-            return Ok(Some(Self::Row(origin, event)));
-        }
-        if let Some((origin, event)) = message.widget::<neocogi_ui::TextboxAbi>()? {
-            return Ok(Some(Self::Text(origin, event)));
-        }
-        if let Some((origin, event)) = message.service::<IWindowAbi>()? {
-            return Ok(Some(Self::Window(origin, event)));
-        }
-        Ok(None)
-    }
-}

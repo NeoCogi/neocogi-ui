@@ -44,8 +44,8 @@ impl CustomWidgetFactory for CatalogWidgetFactory {
         neocogi_ui_design::validate_settings_size(settings).map_err(|_| NC_E_INVALID_ARG)?;
         let host = ui.widgets().host()?;
         let binding = match sink {
-            None => neocogi_ui_document_contracts::WidgetEventBinding::Unobserved,
-            Some(receiver) => neocogi_ui_document_contracts::WidgetEventBinding::Observed(receiver),
+            None => neocogi_com::events::EventBinding::Unobserved,
+            Some(receiver) => neocogi_com::events::EventBinding::Observed(receiver),
         };
         let widget = self.catalog.create_widget(
             self.index,

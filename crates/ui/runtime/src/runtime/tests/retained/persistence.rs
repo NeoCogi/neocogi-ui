@@ -123,17 +123,17 @@ impl neocogi_com::persistence::IPersistenceFactory for SettingsFactory {
         let state = settings(version, state, children.count()?)?;
         let button = self.widgets.button_with_queue(
             &state.save_label,
-            Some(neocogi_ui::test_event_queue!(button, AppEvent, self.sender.clone(), |_queue, _origin, _| AppEvent::Save)?.as_com_ref()),
+            Some(neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, AppEvent, self.sender.clone(), |_queue, _origin, _| AppEvent::Save)?.as_com_ref()),
         )?;
         let checkbox = self.widgets.checkbox_with_queue(
             &state.checkbox_label,
             state.checked,
             Some(
                 neocogi_ui::test_event_queue!(
-                    checkbox,
+                    neocogi_ui::CheckboxAbi,
                     AppEvent,
                     self.sender.clone(),
-                    |_queue, _origin, neocogi_ui::checkbox::Event::Changed(value)| AppEvent::Enabled(value.checked)
+                    |_queue, _origin, value| AppEvent::Enabled(value.query_weak::<ICheckboxChangedEventAbi>()?.checked()?)
                 )?
                 .as_com_ref(),
             ),

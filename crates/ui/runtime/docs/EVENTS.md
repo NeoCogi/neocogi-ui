@@ -51,9 +51,8 @@ event. `set_settings` remains the explicit whole-policy replacement. The combo's
 ## Construction and posting
 
 Concrete event interfaces derive from `IEvent` and expose captured data through
-immutable getters. `EventBinding<Object, Event>` retains the source/native payload
-association for compiled Rust and authoring metadata; its Observed case always
-contains the common receiver. A published widget has no receiver-installation method.
+immutable getters. `EventBinding` selects delivery policy; its Observed case
+contains the common receiver. `#[events(...)]` supplies authoring metadata. A published widget has no receiver-installation method.
 
 ```rust,no_run
 use neocogi_ui::Ui;
@@ -253,7 +252,7 @@ superseded implementations; their measurements are not results for this change.
 
 ## Caption intent and parent policy
 
-`WindowEvent::CloseRequested` means that the user clicked the close control. The
+`IWindowCloseRequestedEvent` means that the user clicked the close control. The
 runtime leaves visibility and ownership unchanged. A missing receiver or failed
 post does not hide the window. The parent can return `Ok(())` without changing it,
 show a confirmation UI and decide later, hide it for reuse, or remove it. The
@@ -261,15 +260,12 @@ existing `IWindow::close` is the parent's **immediate removal operation**, not a
 intent-posting API or a method on the widget itself. `IWidget` has no close method.
 
 ```rust,ignore
-match message {
-    AppMessage::Window(origin, WindowEvent::CloseRequested) => {
-        if may_discard_changes() {
-            if let Some(window) = origin.upgrade()? {
-                window.close()?; // Parent approves; Drop completes here.
-            }
+if let Some(origin) = message.origin.service::<IWindowAbi>()? {
+    if message.downcast::<IWindowCloseRequestedEventAbi>()?.is_some() && may_discard_changes() {
+        if let Some(window) = origin.upgrade()? {
+            window.close()?; // Parent approves; Drop completes here.
         }
-    },
-    _ => {},
+    }
 }
 ```
 

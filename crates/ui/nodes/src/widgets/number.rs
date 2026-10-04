@@ -104,7 +104,7 @@ pub struct Number {
     /// Text editing state for shift-click numeric entry.
     edit: NumberEditState,
     /// Single lifetime event slot; the constructor fixes the parent receiver before publishing the widget.
-    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::NumberAbi>,
+    events: crate::widget_object::WidgetEvents,
 }
 
 impl Number {
@@ -182,9 +182,8 @@ impl Number {
             let drag_delta = f64::from(delta.x) * f64::from(self.step);
             self.value = add_number_delta(self.value, drag_delta);
         }
-        let changed = (self.value != last).then_some(crate::NumericChanged { value: self.value });
-        if let Some(event) = changed {
-            ctx.posted(self.events.post(neocogi_ui_nodes_contracts::NumberEvent::Changed(event)));
+        if self.value != last && self.events.is_bound() {
+            ctx.posted(neocogi_ui_nodes_contracts::events::numeric_changed(self.value).and_then(|event| self.events.post(event)));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(self.value != last)

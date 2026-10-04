@@ -25,8 +25,8 @@ fn split_drag_clamps_panes_and_preserves_requested_width_on_resize() {
         .split_view_with_queue(
             settings(SplitAxis::Horizontal),
             Some(
-                neocogi_ui::test_event_queue!(split_view, i32, send, |_queue, _origin, neocogi_ui::split_view::Event::Changed(event)| {
-                    event.position
+                neocogi_ui::test_event_queue!(neocogi_ui::SplitViewAbi, i32, send, |_queue, _origin, event| {
+                    event.query_weak::<ISplitChangedEventAbi>()?.position()?
                 })
                 .unwrap()
                 .as_com_ref(),
@@ -205,7 +205,7 @@ fn split_position_setter_preserves_policy_and_checks_the_real_com_boundary() {
             .split_view_with_queue(
                 settings(axis),
                 Some(
-                    neocogi_ui::test_event_queue!(split_view, neocogi_ui::split_view::Event, send, |_queue, _origin, event| event)
+                    neocogi_ui::test_event_queue!(neocogi_ui::SplitViewAbi, i32, send, |_queue, _origin, event| event.query_weak::<ISplitChangedEventAbi>()?.position()?)
                         .unwrap()
                         .as_com_ref(),
                 ),
@@ -260,7 +260,7 @@ fn split_position_setter_cancels_active_drag_and_relayouts_panes() {
         .split_view_with_queue(
             settings(SplitAxis::Horizontal),
             Some(
-                neocogi_ui::test_event_queue!(split_view, neocogi_ui::split_view::Event, send, |_queue, _origin, event| event)
+                neocogi_ui::test_event_queue!(neocogi_ui::SplitViewAbi, i32, send, |_queue, _origin, event| event.query_weak::<ISplitChangedEventAbi>()?.position()?)
                     .unwrap()
                     .as_com_ref(),
             ),

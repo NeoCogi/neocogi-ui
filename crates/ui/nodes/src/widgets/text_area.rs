@@ -124,7 +124,7 @@ pub struct TextEditor {
     /// Shared scalar scroll data supports caret reveal without retaining a parent widget or tree.
     scroll_area: Option<std::rc::Rc<crate::ScrollModel>>,
     /// Single event slot shared by edits and submissions; the parent supplies its receiver during construction.
-    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::TextAreaAbi>,
+    events: crate::widget_object::WidgetEvents,
 }
 
 /// Concrete fixed scrolling text-area class with one actual editor child.
@@ -295,17 +295,14 @@ impl TextEditor {
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
         let outcome = textarea_update(ctx, input, self, font);
 
-        // Emit complete immutable snapshots after the semantic update has committed cursor and text.
-        if outcome.changed {
-            ctx.posted(self.events.post(neocogi_ui_nodes_contracts::TextAreaEvent::Changed(crate::TextChanged {
-                text: self.buf.clone(),
-                cursor: self.cursor as u64,
-            })));
-        }
-        if outcome.submitted {
-            ctx.posted(self.events.post(neocogi_ui_nodes_contracts::TextAreaEvent::Submitted(crate::TextSubmitted {
-                text: self.buf.clone(),
-            })));
+        // Capture committed text/cursor once, only when a receiver exists.
+        if self.events.is_bound() {
+            if outcome.changed {
+                ctx.posted(neocogi_ui_core_contracts::events::text_changed(&self.buf, self.cursor as u64).and_then(|event| self.events.post(event)));
+            }
+            if outcome.submitted {
+                ctx.posted(neocogi_ui_core_contracts::events::text_submitted(&self.buf).and_then(|event| self.events.post(event)));
+            }
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(outcome.changed)
@@ -923,9 +920,13 @@ mod tests {
         impl FnMut(&mut Vec<RecordedEvent>) -> bool,
     ) {
         let (events_tx, events) = std::sync::mpsc::channel();
-        let queue = neocogi_ui::test_event_queue!(text_area, RecordedEvent, events_tx, |_queue, _origin, event| match event {
-            neocogi_ui::text_area::Event::Changed(value) => RecordedEvent::Changed(value.text, value.cursor),
-            neocogi_ui::text_area::Event::Submitted(value) => RecordedEvent::Submitted(value.text),
+        let queue = neocogi_ui::test_event_queue!(neocogi_ui::TextAreaAbi, RecordedEvent, events_tx, |_queue, _origin, event| {
+            if let Some(value) = neocogi_com::events::downcast_event::<neocogi_ui::ITextChangedEventAbi>(event)? {
+                RecordedEvent::Changed(value.text()?.to_string()?, value.cursor()?)
+            } else {
+                let value = event.query_weak::<neocogi_ui::ITextSubmittedEventAbi>()?;
+                RecordedEvent::Submitted(value.text()?.to_string()?)
+            }
         })
         .unwrap();
         let text_area = text_area.map(|mut value| {

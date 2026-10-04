@@ -1,5 +1,7 @@
 //! Typed constructor receivers preserve ownership, validation and queue ordering.
 use super::*;
+use neocogi_com::INcStringComPtrExt;
+use neocogi_ui::events as snapshot;
 use neocogi_com::NC_E_INVALID_ARG;
 use neocogi_com::events::EventPort;
 use std::{cell::Cell, rc::Rc};
@@ -19,16 +21,16 @@ fn construction_queue_preserves_fifo_and_owned_snapshots() {
     let menu = ui.menus().unwrap().create("origins").unwrap();
     let origin = menu.item("source").unwrap();
     let (sender, messages) = std::sync::mpsc::channel();
-    let mut first = EventPort::<IMenuItemAbi>::with_queue(
-        Some(neocogi_ui::test_event_queue!(activation, String, sender.clone(), |_queue, _origin, event| event.label).unwrap()),
+    let mut first = EventPort::with_queue(
+        Some(neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, sender.clone(), |_queue, _origin, event| event.query_weak::<neocogi_ui::IActivatedEventAbi>()?.label()?.to_string()?).unwrap()),
         origin.as_interface().downgrade().unwrap(),
     );
-    let mut second = EventPort::<IMenuItemAbi>::with_queue(
-        Some(neocogi_ui::test_event_queue!(activation, String, sender, |_queue, _origin, event| event.label).unwrap()),
+    let mut second = EventPort::with_queue(
+        Some(neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, sender, |_queue, _origin, event| event.query_weak::<neocogi_ui::IActivatedEventAbi>()?.label()?.to_string()?).unwrap()),
         menu.item("second").unwrap().as_interface().downgrade().unwrap(),
     );
-    second.post(Activation { label: "second".into() }).unwrap();
-    first.post(Activation { label: "first".into() }).unwrap();
+    second.post(snapshot::activated("second").unwrap()).unwrap();
+    first.post(snapshot::activated("first").unwrap()).unwrap();
     drop(first);
     drop(second);
     assert_eq!(messages.try_iter().collect::<Vec<_>>(), ["second", "first"]);
@@ -43,16 +45,16 @@ fn close_releases_queue_once_and_preserves_already_queued_facts() {
     let (sender, messages) = std::sync::mpsc::channel();
     let drops = Rc::new(Cell::new(0));
     let capture = Lifetime(drops.clone());
-    let sink = neocogi_ui::test_event_queue!(activation, String, sender,
-        |_queue, _origin, event| event.label, { _lifetime: Lifetime = capture })
+    let sink = neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, sender,
+        |_queue, _origin, event| event.query_weak::<neocogi_ui::IActivatedEventAbi>()?.label()?.to_string()?, { _lifetime: Lifetime = capture })
     .unwrap();
-    let mut port = EventPort::<IMenuItemAbi>::with_queue(Some(sink), origin.as_interface().downgrade().unwrap());
-    port.post(Activation { label: "before close".into() }).unwrap();
+    let mut port = EventPort::with_queue(Some(sink), origin.as_interface().downgrade().unwrap());
+    port.post(snapshot::activated("before close").unwrap()).unwrap();
     assert_eq!(drops.get(), 0);
     port.close();
     port.close();
     assert_eq!(drops.get(), 1);
-    assert_eq!(port.post(Activation { label: "after close".into() }), Err(neocogi_com::NC_E_CLOSED));
+    assert_eq!(port.post(snapshot::activated("after close").unwrap()), Err(neocogi_com::NC_E_CLOSED));
     assert_eq!(messages.try_recv().unwrap(), "before close");
     drop(port);
     assert_eq!(drops.get(), 1);
@@ -67,16 +69,16 @@ fn translation_precedes_dispatch_and_disconnection_keeps_cleanup_deterministic()
     let (sender, messages) = std::sync::mpsc::channel();
     let calls = Rc::new(Cell::new(0));
     let observed = calls.clone();
-    let sink = neocogi_ui::test_event_queue!(activation, String, sender,
-        |queue, _origin, event| { queue.calls.set(queue.calls.get() + 1); event.label },
+    let sink = neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, sender,
+        |queue, _origin, event| { queue.calls.set(queue.calls.get() + 1); event.query_weak::<neocogi_ui::IActivatedEventAbi>()?.label()?.to_string()? },
         { calls: Rc<Cell<u32>> = observed })
     .unwrap();
-    let mut port = EventPort::<IMenuItemAbi>::with_queue(Some(sink), origin.as_interface().downgrade().unwrap());
-    port.post(Activation { label: "first".into() }).unwrap();
+    let mut port = EventPort::with_queue(Some(sink), origin.as_interface().downgrade().unwrap());
+    port.post(snapshot::activated("first").unwrap()).unwrap();
     assert_eq!(calls.get(), 1);
     assert_eq!(messages.try_recv().unwrap(), "first");
     drop(messages);
-    port.post(Activation { label: "abandoned".into() }).unwrap();
+    port.post(snapshot::activated("abandoned").unwrap()).unwrap();
     assert_eq!(calls.get(), 2);
     port.close();
 }
@@ -84,10 +86,10 @@ fn translation_precedes_dispatch_and_disconnection_keeps_cleanup_deterministic()
 /// Permanently unobserved ports need no receiver allocation but still honor terminal closure.
 #[test]
 fn unobserved_port_has_no_delivery_and_cannot_emit_after_close() {
-    let mut port = EventPort::<IMenuItemAbi>::new();
-    port.post(Activation { label: "ignored".into() }).unwrap();
+    let mut port = EventPort::new();
+    port.post(snapshot::activated("ignored").unwrap()).unwrap();
     port.close();
-    assert_eq!(port.post(Activation { label: "closed".into() }), Err(neocogi_com::NC_E_CLOSED));
+    assert_eq!(port.post(snapshot::activated("closed").unwrap()), Err(neocogi_com::NC_E_CLOSED));
 }
 
 /// The generated aggregate sink preserves facade domain checks before queue.
@@ -95,22 +97,18 @@ fn unobserved_port_has_no_delivery_and_cannot_emit_after_close() {
 fn constructor_queues_reject_invalid_payloads_before_recording() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let origin = ui.widgets().textbox_unobserved("").unwrap();
-    let (sender, receiver) = std::sync::mpsc::channel();
-    let mut sink = neocogi_ui::test_event_queue!(textbox, neocogi_ui::textbox::Event, sender, |_queue, _origin, event| event).unwrap();
-    use neocogi_com::events::{EventOrigin, EventPayload};
-    let invalid = neocogi_ui::textbox::Event::Changed(TextChanged { text: "é".into(), cursor: 1 });
-    assert_eq!(invalid.into_event().unwrap_err(), NC_E_INVALID_ARG);
+    let (mut sink, receiver) = neocogi_com::events::channel();
+    use neocogi_com::events::EventOrigin;
+    assert_eq!(snapshot::text_changed("é", 1).unwrap_err(), NC_E_INVALID_ARG);
     assert!(receiver.try_recv().is_err());
     let origin = EventOrigin::Widget(origin.as_interface().downgrade().into_unknown());
-    for value in [
-        neocogi_ui::textbox::Event::Changed(TextChanged { text: "é".into(), cursor: 2 }),
-        neocogi_ui::textbox::Event::Submitted(TextSubmitted { text: "é".into() }),
-    ] {
-        sink.post(neocogi_com::NcValueRef::new(&origin).unwrap(), value.into_event().unwrap()).unwrap();
+    for value in [snapshot::text_changed("é", 2).unwrap(), snapshot::text_submitted("é").unwrap()] {
+        sink.post(neocogi_com::NcValueRef::new(&origin).unwrap(), value).unwrap();
     }
-    assert!(matches!(receiver.try_recv().unwrap(), neocogi_ui::textbox::Event::Changed(TextChanged { cursor: 2, .. })));
-    assert!(matches!(receiver.try_recv().unwrap(), neocogi_ui::textbox::Event::Submitted(TextSubmitted { text }) if text == "é"));
-    assert_eq!(neocogi_ui::number::Event::Changed(NumericChanged { value: f32::INFINITY }).into_event().unwrap_err(), NC_E_INVALID_ARG);
+    assert_eq!(receiver.try_recv().unwrap().downcast::<neocogi_ui::ITextChangedEventAbi>().unwrap().unwrap().cursor(), Ok(2));
+    assert_eq!(receiver.try_recv().unwrap().downcast::<neocogi_ui::ITextSubmittedEventAbi>().unwrap().unwrap().text().unwrap().to_string().unwrap(), "é");
+    assert_eq!(snapshot::numeric_changed(f32::INFINITY).unwrap_err(), NC_E_INVALID_ARG);
+
 }
 
 #[neocogi_com::com_object(interfaces(neocogi_com::events::IEventReceiver))]
@@ -170,16 +168,18 @@ fn one_application_queue_handles_two_widget_types_without_retaining_origins() {
     assert!(!button_origin.is_alive());
     assert!(!text_origin.is_alive());
     let button_message = messages.try_recv().unwrap();
-    let (origin, neocogi_ui_nodes_contracts::ButtonEvent::Activated(event)) = button_message.widget::<ButtonAbi>().unwrap().unwrap();
+    let origin = button_message.origin.widget::<ButtonAbi>().unwrap().unwrap();
+    let event = button_message.downcast::<neocogi_ui::IActivatedEventAbi>().unwrap().unwrap();
     assert!(origin.same_object(&button_origin));
     assert!(!origin.is_alive());
-    assert_eq!(event.label, "captured");
+    assert_eq!(event.label().unwrap().to_string().unwrap(), "captured");
     assert!(button_message.downcast::<neocogi_ui::ITextChangedEventAbi>().unwrap().is_none());
     let text_message = messages.try_recv().unwrap();
-    let (origin, neocogi_ui_nodes_contracts::TextboxEvent::Changed(event)) = text_message.widget::<TextboxAbi>().unwrap().unwrap() else { panic!("textbox should enqueue second") };
+    let origin = text_message.origin.widget::<TextboxAbi>().unwrap().unwrap();
+    let event = text_message.downcast::<neocogi_ui::ITextChangedEventAbi>().unwrap().unwrap();
     assert!(origin.same_object(&text_origin));
     assert!(!origin.is_alive());
-    assert_eq!(event.text, "owned snapshot");
+    assert_eq!(event.text().unwrap().to_string().unwrap(), "owned snapshot");
     assert!(messages.try_recv().is_err());
 }
 
@@ -188,14 +188,7 @@ fn one_application_queue_handles_two_widget_types_without_retaining_origins() {
 #[test]
 fn composite_queues_report_outer_origins_without_retaining_their_children() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
-    let (send, messages) = std::sync::mpsc::channel();
-    let queue = neocogi_ui::test_event_queue!(
-        text_area,
-        (neocogi_com::WeakComBox<TextAreaAbi>, neocogi_ui::text_area::Event),
-        send,
-        |_queue, origin, event| (origin.downgrade_box()?, event)
-    )
-    .unwrap();
+    let (queue, messages) = neocogi_com::events::channel();
     let area = ui
         .widgets()
         .text_area_with_queue("", TextWrapping::Word, true, Some(queue.as_com_ref()))
@@ -207,23 +200,17 @@ fn composite_queues_report_outer_origins_without_retaining_their_children() {
     ui.update(SIZE).unwrap();
     window.close().unwrap();
     drop((window, queue));
-    let (captured, event) = messages.try_recv().unwrap();
+    let message = messages.try_recv().unwrap();
+    let captured = message.origin.widget::<TextAreaAbi>().unwrap().unwrap();
     assert!(captured.same_object(&origin));
     assert!(!captured.is_alive());
-    assert!(matches!(event, TextAreaEvent::Changed(TextChanged { text, .. }) if text == "outer text"));
+    assert_eq!(message.downcast::<neocogi_ui::ITextChangedEventAbi>().unwrap().unwrap().text().unwrap().to_string().unwrap(), "outer text");
 
     let root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let root_owner = root;
     let mut root = root_owner.handle();
     let window = ui.window("combo origin", RECT, root_owner).unwrap();
-    let (send, messages) = std::sync::mpsc::channel();
-    let queue = neocogi_ui::test_event_queue!(
-        combo,
-        (neocogi_com::WeakComBox<ComboAbi>, neocogi_ui::combo::Event),
-        send,
-        |_queue, origin, event| (origin.downgrade_box()?, event)
-    )
-    .unwrap();
+    let (queue, messages) = neocogi_com::events::channel();
     let combo = ui
         .combo_box_with_queue(
             window.as_com_ref(),
@@ -240,10 +227,11 @@ fn composite_queues_report_outer_origins_without_retaining_their_children() {
     ui.update(SIZE).unwrap();
     window.close().unwrap();
     drop((window, root, queue));
-    let (captured, event) = messages.try_recv().unwrap();
+    let message = messages.try_recv().unwrap();
+    let captured = message.origin.widget::<ComboAbi>().unwrap().unwrap();
     assert!(captured.same_object(&origin));
     assert!(!captured.is_alive());
-    let neocogi_ui::combo::Event::Changed(selection) = event;
+    let selection = message.downcast::<neocogi_ui::IChoiceChangedEventAbi>().unwrap().unwrap().selection().unwrap();
     assert_eq!(selection, ChoiceSelection::Selected(1));
 }
 
@@ -269,16 +257,15 @@ fn expired_origin_and_explicit_port_close_have_distinct_statuses() {
     let menu = ui.menus().unwrap().create("short-lived producer").unwrap();
     let origin = menu.item("origin").unwrap();
     let (send, messages) = std::sync::mpsc::channel();
-    let queue = neocogi_ui::test_event_queue!(activation, String, send, |_queue, _origin, event| event.label).unwrap();
-    let mut port = EventPort::<IMenuItemAbi>::with_queue(Some(queue), origin.as_interface().downgrade().unwrap());
+    let queue = neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, send, |_queue, _origin, event| event.query_weak::<neocogi_ui::IActivatedEventAbi>()?.label()?.to_string()?).unwrap();
+    let mut port = EventPort::with_queue(Some(queue), origin.as_interface().downgrade().unwrap());
     // The unmounted declaration owns the other strong origin reference.
     // Drop both owners while leaving this separate port and its weak origin alive.
     drop(origin);
     drop(menu);
-    let event = Activation { label: "expired origin".into() };
-    assert_eq!(port.post(event.clone()), Err(neocogi_com::NC_E_DROPPED));
+    assert_eq!(port.post(snapshot::activated("expired origin").unwrap()), Err(neocogi_com::NC_E_DROPPED));
     assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
     port.close();
-    assert_eq!(port.post(event.clone()), Err(neocogi_com::NC_E_CLOSED));
+    assert_eq!(port.post(snapshot::activated("expired origin").unwrap()), Err(neocogi_com::NC_E_CLOSED));
     assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)));
 }

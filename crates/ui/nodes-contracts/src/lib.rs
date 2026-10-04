@@ -10,4 +10,4 @@ include!(concat!(env!("OUT_DIR"), "/neocogi_ui_nodes.include.rs"));
 
 mod helpers;
 
-mod semantic_events;
+pub mod events;

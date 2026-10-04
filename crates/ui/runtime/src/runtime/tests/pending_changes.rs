@@ -28,8 +28,8 @@ impl MessageProcessor for RenameButton {
 fn applied_pending_changes_dispatch_children_before_the_first_queued_input() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let (send, messages) = mpsc::channel();
-    let queue = neocogi_ui::test_event_queue!(button, String, send,
-        |_queue, _origin, neocogi_ui::button::Event::Activated(event)| event.label).unwrap();
+    let queue = neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, String, send,
+        |_queue, _origin, event| event.query_weak::<neocogi_ui::IActivatedEventAbi>()?.label()?.to_string()?).unwrap();
     let button = ui.widgets().button_with_queue("before", Some(queue.as_com_ref())).unwrap();
     let (child_send, child_messages) = mpsc::channel();
     let (child, mut shell) = Composite::build(&ui, RenameButton { button: button.handle() }, child_messages);
@@ -91,7 +91,7 @@ impl IApplicationDispatcher for UnknownOutcome {
 fn unknown_application_dispatch_outcome_stops_before_input_and_allows_retry() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let (send, messages) = mpsc::channel();
-    let queue = neocogi_ui::test_event_queue!(button, (), send, |_queue, _origin, _event| ()).unwrap();
+    let queue = neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, (), send, |_queue, _origin, _event| ()).unwrap();
     let button = ui.widgets().button_with_queue("queued", Some(queue.as_com_ref())).unwrap();
     let window = ui.window("unknown outcome", RECT, button).unwrap();
     key(&ui, KeyCode::Tab);
@@ -113,7 +113,7 @@ fn unknown_application_dispatch_outcome_stops_before_input_and_allows_retry() {
 fn failed_pending_changes_leave_input_queued_and_the_frame_uncommitted() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let (send, messages) = mpsc::channel();
-    let queue = neocogi_ui::test_event_queue!(button, (), send, |_queue, _origin, _event| ()).unwrap();
+    let queue = neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, (), send, |_queue, _origin, _event| ()).unwrap();
     let button = ui.widgets().button_with_queue("queued", Some(queue.as_com_ref())).unwrap();
     let window = ui.window("pending failure", RECT, button).unwrap();
     key(&ui, KeyCode::Tab);

@@ -1,7 +1,7 @@
 //! Standard native-path file-picker requests with one construction-time queue.
 //!
 //! ```no_run
-//! use neocogi_ui::{Ui, IWindowAbi, neocogi_com::events::IEventReceiverAbi, FileDialogRequest};
+//! use neocogi_ui::{Ui, IWindowAbi, FileDialogRequest};
 //! use neocogi_com::{ComRef, NcStatus};
 //! fn example(ui: &Ui, owner: ComRef<'_, IWindowAbi>, queue: ComRef<'_, neocogi_com::events::IEventReceiverAbi>) -> Result<(), NcStatus> {
 //!     let mut picker = ui.file_dialog_with_queue(owner, Some(queue))?;
@@ -17,7 +17,7 @@
 //! The picker returns a path; the application validates it, confirms overwrites,
 //! and performs any file writes.
 //!
-//! Decode exact native paths with `events::completed_file_path` when handling a completion.
+//! Query `IFileAcceptedEventAbi` and decode its `path()` with `path::decode`.
 //! Whole-context `Ui::close()` drops the picker without synthesizing cancellation or
 //! dispatching pending completion work. If application shutdown requires a cancellation
 //! result, call `cancel()` and handle that result before terminating the UI context.
@@ -108,6 +108,3 @@ impl FileDialog {
         self.interface.diagnostic()?.to_string()
     }
 }
-
-/// Constructor-bound completion queue and its generated local event type.
-pub use crate::events::file_dialog::Event;

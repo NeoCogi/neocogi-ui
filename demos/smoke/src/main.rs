@@ -1,7 +1,7 @@
 //! Small native host using the static facade/contracts and runtime binding.
 //! Implementations may be loaded from an assembly or linked into one monolith.
 use neocogi_ui::*;
-use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, WeakComPtr};
+use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, INcStringComPtrExt};
 use std::{error::Error, time::Duration};
 #[cfg(feature = "extension")]
 mod extension;
@@ -18,14 +18,15 @@ impl events::MessageProcessor for ClickModel {
     type Message = neocogi_com::events::EventMessage;
     /// Uses the captured label and commits the next presentation before later input.
     fn handle(&mut self, message: Self::Message) -> Result<(), NcStatus> {
-        let Some((origin, neocogi_ui::button::Event::Activated(event))) = message.widget::<ButtonAbi>()? else { return Ok(()); };
+        let Some(origin) = message.origin.widget::<ButtonAbi>()? else { return Ok(()); };
         if !origin.is_alive() {
             return Ok(());
         };
         if !origin.same_object(self.button.as_interface()) {
             return Ok(());
         }
-        let label = event.label;
+        let Some(event) = message.downcast::<IActivatedEventAbi>()? else { return Ok(()); };
+        let label = event.label()?.to_string()?;
         self.count += 1;
         println!("button submitted: {label}");
         self.button.set_label(&format!("Clicked {} times", self.count))
@@ -350,13 +351,6 @@ fn smoke_key(ui: &Ui, key: KeyCode, value: u32) -> Result<(), NcStatus> {
         "",
     )
 }
-/// Smoke application facts from independent menu and completion protocols.
-enum ComponentMessage {
-    /// Captured menu activation label.
-    Menu(WeakComPtr<IMenuItemAbi>, events::Activation),
-    /// Exact native file completion.
-    File(neocogi_com::WeakComBox<IFileDialogAbi>, FileDialogCompletion),
-}
 /// Owned assertion model combines independent public component protocols.
 struct ComponentModel {
     /// Completed semantic messages across menu and file-dialog sources.
@@ -368,21 +362,15 @@ impl events::MessageProcessor for ComponentModel {
     type Message = neocogi_com::events::EventMessage;
     /// Checks the captured fact and mutates ordinary host state after traversal.
     fn handle(&mut self, event: Self::Message) -> Result<(), NcStatus> {
-        let Some(message) = ComponentMessage::decode(&event)? else { return Ok(()); };
-        match message {
-            ComponentMessage::Menu(origin, event) => {
-                if origin.upgrade()?.is_none() {
-                    return Ok(());
-                }
-                assert_eq!(event.label, "Menu command");
-            }
-            ComponentMessage::File(origin, event) => {
-                if !origin.is_alive() {
-                    return Ok(());
-                }
-                assert_eq!(events::completed_file_path(&event)?.as_deref(), Some(self.expected_path.as_path()));
-            }
-        }
+        if let Some(origin) = event.origin.service::<IMenuItemAbi>()? {
+            if origin.upgrade()?.is_none() { return Ok(()); }
+            let Some(event) = event.downcast::<IActivatedEventAbi>()? else { return Ok(()); };
+            assert_eq!(event.label()?.to_string()?, "Menu command");
+        } else if let Some(origin) = event.origin.widget::<IFileDialogAbi>()? {
+            if !origin.is_alive() { return Ok(()); }
+            let Some(event) = event.downcast::<IFileAcceptedEventAbi>()? else { return Ok(()); };
+            assert_eq!(neocogi_ui::path::decode(event.path()?.as_com_ref())?, self.expected_path);
+        } else { return Ok(()); }
         self.count += 1;
         Ok(())
     }
@@ -445,18 +433,4 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     assert_eq!(combo.selection(), Err(neocogi_com::NC_E_DROPPED));
     assert_eq!(item.label(), Err(UI_E_CLOSED));
     Ok(())
-}
-
-impl ComponentMessage {
-    /// Decode at the handling boundary while the inbox still owns the COM event.
-    fn decode(message: &neocogi_com::events::EventMessage) -> Result<Option<Self>, neocogi_com::NcStatus> {
-        if let Some((origin, event)) = message.service::<IMenuItemAbi>()? {
-            return Ok(Some(Self::Menu(origin, event)));
-        }
-        if let Some((origin, event)) = message.widget::<IFileDialogAbi>()? {
-            let IFileDialogEvent::Completed(event) = event;
-            return Ok(Some(Self::File(origin, event)));
-        }
-        Ok(None)
-    }
 }

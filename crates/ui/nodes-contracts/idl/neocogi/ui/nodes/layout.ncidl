@@ -166,9 +166,10 @@ struct SplitOptions {
     handle_width: i32,
 }
 
-#[version(4)]
+#[version(5)]
 /// Two-pane layout with a draggable divider owned by this same concrete container.
 /// Zero children is empty; one fills the allocation; two enable the divider.
+#[events(ISplitChangedEvent)]
 class SplitView: IWidget + IContainerLayout {
     /// Returns immutable topology; indices zero and one identify first and second panes.
     fn children(&self) -> Result<ComPtr<IChildren>>;
@@ -244,11 +245,4 @@ interface Form: IWidget + IContainerLayout {
     fn insert(&mut self, index: u32, child: ComBox<IWidget>, edge: Rect) -> Result<()>;
     /// Commits a new child and rectangle and destroys the old child owner.
     fn replace(&mut self, index: u32, child: ComBox<IWidget>, edge: Rect) -> Result<()>;
-}
-
-#[version(1)]
-/// Complete typed event stream of SplitView; consumed by its behavioral parent.
-enum SplitViewEvent {
-    /// Captured changed fact, acquired before the producer call returns.
-    Changed(SplitChanged),
 }

@@ -8,8 +8,8 @@ The process itself may continue, including with other UI contexts.
 
 | Operation | Ownership and notification contract |
 | --- | --- |
-| `IWindow::close()` while the runtime is live | Remove the selected window family and its widget owners. Publish `WindowEvent::Destroyed` for removed windows. Complete destruction even if posting fails, then report the delivery error. |
-| `IPopup::close()` while the runtime is live | Remove the selected popup subtree; ordinary active-popup dismissal can publish `PopupDismissed`. Retain normal delivery error handling. |
+| `IWindow::close()` while the runtime is live | Remove the selected window family and its widget owners. Publish `IWindowDestroyedEvent` for removed windows. Complete destruction even if posting fails, then report the delivery error. |
+| `IPopup::close()` while the runtime is live | Remove the selected popup subtree; ordinary active-popup dismissal can publish `IPopupDismissedEvent`. Retain normal delivery error handling. |
 | `Ui::close()` | Preflight the complete tree, then consume the runtime context through ordinary Drop. No `Destroyed`, dismissal or synthetic cancellation is emitted by runtime teardown. |
 | Final runtime owner Drop | Release the owned context through the same ordinary field destruction, without lifecycle notifications. If explicit shutdown already consumed it, nothing is destroyed twice. |
 

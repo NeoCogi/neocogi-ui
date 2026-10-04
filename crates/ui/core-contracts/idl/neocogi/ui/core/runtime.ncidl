@@ -222,8 +222,9 @@ struct WindowSnapshot {
     child_clip: ChildClip,
 }
 
-#[version(1)]
+#[version(2)]
 /// Logical UI window retained independently of its runtime's tree membership.
+#[events(IWindowGeometryChangedEvent, IWindowCloseRequestedEvent, IWindowHiddenEvent, IWindowDestroyedEvent, IWindowMinimizedEvent, IWindowMaximizedEvent, IWindowRestoredEvent)]
 interface IWindow {
     /// Copies current authoritative geometry, visibility and policy without caching app-side state.
     fn snapshot(&self) -> Result<WindowSnapshot>;
@@ -250,7 +251,7 @@ interface IWindow {
     fn close(&self) -> Result<()>;
 }
 
-#[version(2)]
+#[version(3)]
 /// Window policy and topology are owned by the UI runtime object.
 interface IWindowManager {
     /// Creates a visible structural child; a modal parent is rejected before claiming the widget.
@@ -259,22 +260,22 @@ interface IWindowManager {
         parent: &IWindow,
         title: &[u8],
         rect: Rect,
-        root: ComBox<IWidget>, events: &EventBinding<IWindow, WindowEvent>) -> Result<ComPtr<IWindow>>;
+        root: ComBox<IWidget>, events: &EventBinding) -> Result<ComPtr<IWindow>>;
     /// Creates a hidden modal dialog owned by an ordinary window.
     fn create_dialog(
         &self,
         parent: &IWindow,
         title: &[u8],
         rect: Rect,
-        root: ComBox<IWidget>, events: &EventBinding<IWindow, WindowEvent>) -> Result<ComPtr<IWindow>>;
+        root: ComBox<IWidget>, events: &EventBinding) -> Result<ComPtr<IWindow>>;
     /// Creates a hidden auto-sized popup owned by a live window or dialog.
     fn create_popup(
         &self,
         parent: &IWindow,
         title: &[u8],
-        root: ComBox<IWidget>, events: &EventBinding<IPopup, PopupDismissed>) -> Result<ComPtr<IPopup>>;
+        root: ComBox<IWidget>, events: &EventBinding) -> Result<ComPtr<IPopup>>;
     /// Mounts one previously unmounted root and creates its logical window.
-    fn create_window(&self, title: &[u8], rect: Rect, root: ComBox<IWidget>, events: &EventBinding<IWindow, WindowEvent>) -> Result<ComPtr<IWindow>>;
+    fn create_window(&self, title: &[u8], rect: Rect, root: ComBox<IWidget>, events: &EventBinding) -> Result<ComPtr<IWindow>>;
 }
 
 #[version(1)]
@@ -346,8 +347,9 @@ interface IWidgetHost {
     fn mark_geometry_changed(&self) -> Result<()>;
 }
 
-#[version(2)]
+#[version(3)]
 /// A popup has transient placement and cannot be passed to ordinary window operations.
+#[events(IPopupDismissedEvent)]
 interface IPopup {
     /// Reports whether this popup belongs to the manager's active visible branch.
     fn visibility(&self) -> Result<Visibility>;

@@ -447,7 +447,7 @@ impl Document {
             if !exported_nodes.insert(&output.node) {
                 return Err(format!("Widget {} exports its event stream twice", output.node));
             }
-            if node.widget.event_stream().is_none() {
+            if node.widget.event_interfaces().is_empty() {
                 return Err(format!("{} has no event stream", output.node));
             }
             if nodes.contains_key(output.name.as_str()) && output.name != output.node {
@@ -455,7 +455,7 @@ impl Document {
             }
         }
         for node in nodes.values() {
-            if node.widget.event_stream().is_some() && !exported_nodes.contains(&node.key) && names.contains(&node.key) {
+            if !node.widget.event_interfaces().is_empty() && !exported_nodes.contains(&node.key) && names.contains(&node.key) {
                 return Err(format!("Widget event name {} conflicts with an exported alias", node.key));
             }
         }
@@ -528,10 +528,10 @@ impl WidgetSpec {
             | Self::Custom { .. } => None,
         }
     }
-    /// The built-in class's complete resolved stream, taken from generated IDL metadata.
+    /// The built-in class's advertised event interfaces and inherited getter metadata.
     /// Custom kinds obtain the equivalent owned description through their COM catalog.
-    pub fn event_stream(&self) -> Option<neocogi_com::design::IdlEventQueue> {
-        self.event_source_metadata()?.event_queue
+    pub fn event_interfaces(&self) -> &'static [neocogi_com::design::IdlEvent] {
+        self.event_source_metadata().map_or(&[], |metadata| metadata.events)
     }
     /// Whether authored font selection has a concrete setter, including a disclosure's header.
     pub fn supports_font(&self) -> bool {

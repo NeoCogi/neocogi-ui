@@ -113,7 +113,7 @@ pub struct Button {
     /// Initialization-only fill behavior.
     fill: WidgetFillOption,
     /// Single event slot; receives its destination during construction and is released when the widget is destroyed.
-    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::ButtonAbi>,
+    events: crate::widget_object::WidgetEvents,
 }
 
 impl Button {
@@ -217,9 +217,7 @@ impl Widget for Button {
         }
         // Pointer click, Enter, and Space converge on the button's single typed submission port.
         if self.events.is_bound() {
-            ctx.posted(self.events.post(neocogi_ui_nodes_contracts::ButtonEvent::Activated(crate::Activation {
-                label: self.com_label().to_owned(),
-            })));
+            ctx.posted(neocogi_ui_core_contracts::events::activated(self.com_label()).and_then(|event| self.events.post(event)));
         }
 
         // Submitting leaves the label and preferred dimensions unchanged.

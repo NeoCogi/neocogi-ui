@@ -80,7 +80,7 @@ mod tests {
 #[test]
 fn review_callback_shutdown_does_not_restore_expired_cache_entries() {
     use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcValueRef};
-    use neocogi_ui_core_contracts::{IWindowManagerAbi, IWindowEventBinding, Rect, Size, UiRuntimeAbi, UI_E_CLOSED};
+    use neocogi_ui_core_contracts::{IWindowManagerAbi, Rect, Size, UiRuntimeAbi, UI_E_CLOSED};
     let bundle = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
     let assets = crate::assets::ImportedAssets::read(bundle.as_com_ref(), None).unwrap();
     let gfx = neocogi_ui_support::test_support::gfx_factory();
@@ -94,7 +94,7 @@ fn review_callback_shutdown_does_not_restore_expired_cache_entries() {
     let weak = button.node_interface().unwrap();
     let _window = manager.create_window(NcCopyFromBufferOffset::new(0, b"window"),
         Rect { x: 0, y: 0, width: 300, height: 200 }, button.into_interface().query().unwrap(),
-        NcValueRef::new(&IWindowEventBinding::Unobserved).unwrap()).unwrap();
+        NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap()).unwrap();
     let (send, messages) = std::sync::mpsc::channel();
     let app = neocogi_ui_support::test_support::events::TestApp::new(runtime.clone(), messages, |runtime, ()| runtime.close());
     send.send(()).unwrap();

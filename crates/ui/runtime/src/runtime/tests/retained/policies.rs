@@ -300,9 +300,8 @@ fn title_drag_and_close_deliver_window_events_through_the_production_session() {
     let mut fixture = Headless::standard();
     let body_owner = fixture.ui.widgets().button_unobserved("body").unwrap();
     let body = body_owner.handle();
-    let (events_tx, events) = std::sync::mpsc::channel();
+    let (queue, events) = neocogi_com::events::channel();
     let observations = Vec::new();
-    let queue = neocogi_ui::test_event_queue!(window, neocogi_ui::WindowEvent, events_tx.clone(), |_queue, _origin, event| event).unwrap();
     let owner = fixture
         .ui
         .window_with_queue("chrome", Rect { x: 30, y: 30, width: 180, height: 120 }, body_owner, Some(queue.as_com_ref()))
@@ -318,7 +317,8 @@ fn title_drag_and_close_deliver_window_events_through_the_production_session() {
     fixture.ui.update_with_events(VIEW, app.as_interface()).unwrap();
     let moved = owner.snapshot().unwrap().rect;
     assert_eq!((moved.x, moved.y, moved.width, moved.height), (40, 38, 180, 120));
-    assert!(matches!(app.state().as_slice(), [WindowEvent::GeometryChanged { rect }] if *rect == moved));
+    assert_eq!(app.state().len(), 1);
+    assert_eq!(app.state()[0].downcast::<IWindowGeometryChangedEventAbi>().unwrap().unwrap().rect(), Ok(moved));
     // The default recipe puts its sole caption control at the trailing edge of the title.
     pointer(
         &fixture.ui,
@@ -340,10 +340,9 @@ fn title_drag_and_close_deliver_window_events_through_the_production_session() {
     // This parent records and declines the intent. No Hidden event or topology
     // mutation is manufactured by the caption control itself.
     assert_eq!(owner.snapshot().unwrap().visibility, Visibility::Visible);
-    assert!(matches!(
-        app.state().as_slice(),
-        [WindowEvent::GeometryChanged { .. }, WindowEvent::CloseRequested]
-    ));
+    assert_eq!(app.state().len(), 2);
+    assert!(app.state()[0].downcast::<IWindowGeometryChangedEventAbi>().unwrap().is_some());
+    assert!(app.state()[1].downcast::<IWindowCloseRequestedEventAbi>().unwrap().is_some());
     assert!(body.label().is_ok());
 }
 
@@ -511,17 +510,16 @@ fn caption_close_obeys_the_parents_explicit_decision() {
         let mut fixture = Headless::standard();
         let body_owner = fixture.ui.widgets().button_unobserved("live").unwrap();
         let body = body_owner.handle();
-        let (send, messages) = std::sync::mpsc::channel();
-        let queue = neocogi_ui::test_event_queue!(window, WindowEvent, send, |_queue, _origin, event| event).unwrap();
+        let (queue, messages) = neocogi_com::events::channel();
         let window = fixture.ui.window_with_queue("close policy", Rect { x: 30, y: 30, width: 180, height: 120 }, body_owner, Some(queue.as_com_ref())).unwrap();
         fixture.frame(VIEW).unwrap();
         let app = TestApp::new((window.clone(), decision), messages, |(window, decision), event| {
-            match (event, *decision) {
-                (WindowEvent::CloseRequested, CaptionDecision::Keep) => Ok(()),
-                (WindowEvent::CloseRequested, CaptionDecision::Fail) => Err(neocogi_com::NC_E_INVALID_ARG),
-                (WindowEvent::CloseRequested, CaptionDecision::Hide) => window.set_visibility(Visibility::Hidden),
-                (WindowEvent::CloseRequested, CaptionDecision::Remove) => window.close(),
-                _ => Ok(()),
+            if event.downcast::<IWindowCloseRequestedEventAbi>()?.is_none() { return Ok(()); }
+            match *decision {
+                CaptionDecision::Keep => Ok(()),
+                CaptionDecision::Fail => Err(neocogi_com::NC_E_INVALID_ARG),
+                CaptionDecision::Hide => window.set_visibility(Visibility::Hidden),
+                CaptionDecision::Remove => window.close(),
             }
         });
         pointer(&fixture.ui, Point { x: 200, y: 40 }, true);
@@ -554,11 +552,8 @@ fn rejected_caption_event_leaves_the_window_visible_and_live() {
     let body_owner = fixture.ui.widgets().button_unobserved("live").unwrap();
     let body = body_owner.handle();
     let (send, _messages) = std::sync::mpsc::channel();
-    let queue = neocogi_ui::test_event_queue!(window, WindowEvent, send, |_queue, _origin, event| {
-        match event {
-            WindowEvent::CloseRequested => return Err(neocogi_com::NC_E_INVALID_ARG),
-            other => other,
-        }
+    let queue = neocogi_ui::test_event_queue!(neocogi_ui::IWindowAbi, (), send, |_queue, _origin, event| {
+        if neocogi_com::events::downcast_event::<IWindowCloseRequestedEventAbi>(event)?.is_some() { return Err(neocogi_com::NC_E_INVALID_ARG); }
     }).unwrap();
     let window = fixture.ui.window_with_queue("failed intent", Rect { x: 30, y: 30, width: 180, height: 120 }, body_owner, Some(queue.as_com_ref())).unwrap();
     fixture.frame(VIEW).unwrap();

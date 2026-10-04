@@ -13,7 +13,7 @@ These guides define current behavior. For component responsibilities see
   [lifetime errors](COM_LIFETIME_ERRORS.md).
 - [IDL language and generation](IDL_MODULES.md),
   [generic values](IDL_GENERIC_VALUES.md),
-  [constructor names](IDL_CONSTRUCTOR_NAMES.md), and
+  [event metadata](IDL_EVENT_METADATA.md), and
   [generated identifier hygiene](COM_GENERATED_IDENTIFIER_HYGIENE.md).
 - [Recursive wire values](RECURSIVE_VALUE_CONTRACT.md),
   [directional output buffers](COM_OUTPUT_BUFFERS.md), and

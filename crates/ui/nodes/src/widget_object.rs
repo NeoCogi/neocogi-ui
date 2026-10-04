@@ -498,28 +498,25 @@ pub(crate) trait ImageState {
 /// Private construction-selected delivery for an exclusively owned UI control.
 /// The widget's fields own this storage; destruction releases the destination.
 /// No attach method, close state, or second consumer exists here.
-pub(crate) struct WidgetEvents<C: neocogi_com::events::EventSource> {
-    /// The sole destination and cached non-owning source identity.
+pub(crate) struct WidgetEvents {
+    /// The sole destination and cached weak source identity.
     receiver: Option<(neocogi_com::ComPtr<neocogi_com::events::IEventReceiverAbi>, neocogi_com::events::EventOrigin)>,
-    /// Compile-time native payload association; owns no widget.
-    source: core::marker::PhantomData<fn() -> C>,
 }
-impl<C: neocogi_com::events::EventSource> Default for WidgetEvents<C> {
-    fn default() -> Self { Self { receiver: None, source: core::marker::PhantomData } }
+impl Default for WidgetEvents {
+    fn default() -> Self { Self { receiver: None } }
 }
-impl<C: neocogi_com::events::EventSource> WidgetEvents<C> {
-    /// Chooses delivery before publication; later receiver replacement is unsupported.
-    pub(crate) fn with_queue(queue: Option<neocogi_com::ComPtr<neocogi_com::events::IEventReceiverAbi>>, origin: neocogi_com::WeakComBox<C, C::Threading>) -> Self {
-        Self { receiver: queue.map(|queue| (queue, neocogi_com::events::EventOrigin::Widget(origin.into_unknown().into_thread_local()))), source: core::marker::PhantomData }
+impl WidgetEvents {
+    /// Selects the receiver before publication; replacement is unsupported.
+    pub(crate) fn with_queue<C: neocogi_com::ComInterface>(queue: Option<neocogi_com::ComPtr<neocogi_com::events::IEventReceiverAbi>>, origin: neocogi_com::WeakComBox<C, C::Threading>) -> Self {
+        Self { receiver: queue.map(|queue| (queue, neocogi_com::events::EventOrigin::Widget(origin.into_unknown().into_thread_local()))) }
     }
-    /// Skips snapshot allocation when the application requested no event delivery.
+    /// Allows unobserved controls to avoid allocating an event snapshot.
     pub(crate) fn is_bound(&self) -> bool { self.receiver.is_some() }
-    /// Transfers one exclusive snapshot; a rejection drops the returned event owner.
-    pub(crate) fn post(&mut self, event: C::Event) -> Result<(), neocogi_com::NcStatus> where C::Event: neocogi_com::events::EventPayload {
-        use neocogi_com::events::EventPayload;
+    /// Transfers the sole event owner; committed widget state survives receiver rejection.
+    pub(crate) fn post(&mut self, event: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), neocogi_com::NcStatus> {
         match &mut self.receiver {
             None => Ok(()),
-            Some((queue, origin)) => queue.post(neocogi_com::NcValueRef::new(origin)?, event.into_event()?).map_err(|(status, _event)| status),
+            Some((queue, origin)) => queue.post(neocogi_com::NcValueRef::new(origin)?, event).map_err(|(status, _event)| status),
         }
     }
 }

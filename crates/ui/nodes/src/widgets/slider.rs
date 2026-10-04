@@ -140,7 +140,7 @@ pub struct Slider {
     /// Inline numeric editing state.
     edit: NumberEditState,
     /// Single lifetime event slot; the constructor fixes the parent receiver before publishing the widget.
-    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::SliderAbi>,
+    events: crate::widget_object::WidgetEvents,
 }
 
 impl Slider {
@@ -259,11 +259,8 @@ impl Slider {
         // text may commit on blur with no routed event; its changed candidate reaches this path.
         value = clamp_slider_value(snap_slider_value(value, self.low, self.step), self.low, self.high);
         self.value = value;
-        if last != value {
-            ctx.posted(
-                self.events
-                    .post(neocogi_ui_nodes_contracts::SliderEvent::Changed(crate::NumericChanged { value })),
-            );
+        if last != value && self.events.is_bound() {
+            ctx.posted(neocogi_ui_nodes_contracts::events::numeric_changed(value).and_then(|event| self.events.post(event)));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(self.value != last)
@@ -674,8 +671,8 @@ mod tests {
                 .expect("finite ascending fractional slider parameters must validate"),
         );
         let (mut slider, mut dispatcher) = numeric_dispatcher(|send| {
-            let receiver = neocogi_ui::test_event_queue!(slider, f32, send, |_queue, _origin, neocogi_ui_nodes_contracts::SliderEvent::Changed(event)| {
-                event.value
+            let receiver = neocogi_ui::test_event_queue!(neocogi_ui::SliderAbi, f32, send, |_queue, _origin, event| {
+                event.query_weak::<neocogi_ui::INumericChangedEventAbi>()?.value()?
             })?;
             Ok(slider.map(|mut value| {
                 Slider::into_local_box_cyclic::<neocogi_ui_nodes_contracts::SliderAbi>(move |origin| {
@@ -836,8 +833,8 @@ mod tests {
             NumberParameters::new(0.0, 2.0, DecimalPrecision::ZERO).expect("finite non-negative number parameters must validate"),
         );
         let (mut number, mut dispatcher) = numeric_dispatcher(|send| {
-            let receiver = neocogi_ui::test_event_queue!(number, f32, send, |_queue, _origin, neocogi_ui_nodes_contracts::NumberEvent::Changed(event)| {
-                event.value
+            let receiver = neocogi_ui::test_event_queue!(neocogi_ui::NumberAbi, f32, send, |_queue, _origin, event| {
+                event.query_weak::<neocogi_ui::INumericChangedEventAbi>()?.value()?
             })?;
             Ok(number.map(|value| value.into_observed(receiver)))
         });
@@ -921,8 +918,8 @@ mod tests {
             SliderParameters::new(0.0, -5.0, 5.0).expect("finite ascending slider parameters must validate"),
         );
         let (mut slider, mut dispatcher) = numeric_dispatcher(|send| {
-            let receiver = neocogi_ui::test_event_queue!(slider, f32, send, |_queue, _origin, neocogi_ui_nodes_contracts::SliderEvent::Changed(event)| {
-                event.value
+            let receiver = neocogi_ui::test_event_queue!(neocogi_ui::SliderAbi, f32, send, |_queue, _origin, event| {
+                event.query_weak::<neocogi_ui::INumericChangedEventAbi>()?.value()?
             })?;
             Ok(slider.map(|mut value| {
                 Slider::into_local_box_cyclic::<neocogi_ui_nodes_contracts::SliderAbi>(move |origin| {
@@ -945,8 +942,8 @@ mod tests {
             SliderParameters::with_opt(2.0, 0.0, 10.0, 1.0, DecimalPrecision::ZERO, WidgetOption::FRAME).unwrap(),
         );
         let (mut slider, mut dispatcher) = numeric_dispatcher(|send| {
-            let receiver = neocogi_ui::test_event_queue!(slider, f32, send, |_queue, _origin, neocogi_ui_nodes_contracts::SliderEvent::Changed(event)| {
-                event.value
+            let receiver = neocogi_ui::test_event_queue!(neocogi_ui::SliderAbi, f32, send, |_queue, _origin, event| {
+                event.query_weak::<neocogi_ui::INumericChangedEventAbi>()?.value()?
             })?;
             Ok(slider.map(|mut value| {
                 Slider::into_local_box_cyclic::<neocogi_ui_nodes_contracts::SliderAbi>(move |origin| {

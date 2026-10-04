@@ -269,7 +269,7 @@ pub struct Scrollbar {
     pub(crate) axis_state: std::rc::Rc<ScrollAxisState>,
     /// Caller-authored options; dynamic range policy is resolved from the same shared state.
     /// Typed source for user-originated movement; programmatic requests remain silent.
-    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::ScrollbarAbi>,
+    events: crate::widget_object::WidgetEvents,
 }
 
 /// Coherent copied values shared by a real scrollbar and its co-packaged scroll layout.
@@ -426,12 +426,10 @@ impl Widget for Scrollbar {
             }
             _ => {}
         }
-        if self.offset() != previous {
+        if self.offset() != previous && self.events.is_bound() {
             // Publish only user-originated movement. Programmatic setters intentionally remain
             // silent so owners can synchronize range and offset without recursive notifications.
-            ctx.posted(self.events.post(neocogi_ui_nodes_contracts::ScrollbarEvent::Changed(crate::ScrollbarChanged {
-                offset: self.offset(),
-            })));
+            ctx.posted(neocogi_ui_nodes_contracts::events::scrollbar_changed(self.offset()).and_then(|event| self.events.post(event)));
         }
 
         // A containing ScrollArea reads this offset when placing its content.

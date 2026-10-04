@@ -78,7 +78,7 @@ pub struct ListBox {
     /// Initialization-only font.
     font: FontRef,
     /// Single event slot; receives its destination during construction and is released when the widget is destroyed.
-    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::ListBoxAbi>,
+    events: crate::widget_object::WidgetEvents,
 }
 
 impl ListBox {
@@ -135,9 +135,7 @@ impl Widget for ListBox {
         }
         // Pointer and keyboard activation publish the same application-facing submission.
         if self.events.is_bound() {
-            ctx.posted(self.events.post(neocogi_ui_nodes_contracts::ListBoxEvent::Activated(crate::Activation {
-                label: self.com_label().to_owned(),
-            })));
+            ctx.posted(neocogi_ui_core_contracts::events::activated(self.com_label()).and_then(|event| self.events.post(event)));
         }
 
         // The submitted event does not change this header's intrinsic inputs.

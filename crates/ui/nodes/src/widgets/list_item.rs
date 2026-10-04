@@ -90,7 +90,7 @@ pub struct ListItem {
     /// Mutable label displayed for the item.
     label: String,
     /// Single event slot; receives its destination during construction and is released when the widget is destroyed.
-    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::ListItemAbi>,
+    events: crate::widget_object::WidgetEvents,
 }
 
 impl ListItem {
@@ -174,10 +174,7 @@ impl Widget for ListItem {
         }
         // Clone before emission so queues receive an immutable selection snapshot.
         let label = self.label.clone();
-        ctx.posted(
-            self.events
-                .post(neocogi_ui_nodes_contracts::ListItemEvent::Activated(crate::Activation { label })),
-        );
+        ctx.posted(neocogi_ui_core_contracts::events::activated(&label).and_then(|event| self.events.post(event)));
 
         // Submitting preserves the label and icon used by intrinsic measurement.
         crate::Change::NoChange

@@ -8,7 +8,7 @@ pub use model::*;
 /// Generated component lookup and custom-widget discovery contracts.
 pub use neocogi_ui_document_contracts as contracts;
 mod event_bindings;
-pub use event_bindings::EventBindings;
+pub use event_bindings::{EventBindings, DocumentEvent, document_receiver};
 /// Owned COM-transportable authoring metadata for custom widgets.
 pub use neocogi_ui_design as design;
 mod custom;

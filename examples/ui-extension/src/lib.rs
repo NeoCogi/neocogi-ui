@@ -7,7 +7,7 @@ mod settings;
 use neocogi_ui::com::widget::WidgetState;
 use neocogi_ui_core_contracts::*;
 use neocogi_demo_contracts::*;
-use neocogi_ui::{Painter, events::Activation};
+use neocogi_ui::Painter;
 use neocogi_com::{ComBox, WeakComBox, ComPtr, ComRef, NcCopyFromBufferOffset, NcOutputWriter, NcStatus, NC_E_INVALID_ARG, com_factory, com_object};
 use neocogi_ui_design::DesignWidgetManifest;
 use neocogi_ui_document_contracts::IDesignWidgetCatalog;
@@ -127,8 +127,10 @@ impl CounterObject {
             self.count = self.settings.next(self.count);
             // A rejected foreign post cannot erase this already committed change.
             self.common.state.record_change(GeometryChange::Changed);
-            self.post(CounterEvent::Activated(Activation { label: self.count.to_string() }))?;
-            self.post(CounterEvent::Changed(CounterChanged { value: self.count }))?;
+            if self.event.is_some() {
+                self.post(neocogi_ui_core_contracts::events::activated(&self.count.to_string())?)?;
+                self.post(neocogi_demo_contracts::events::counter_changed(self.count)?)?;
+            }
             Ok(GeometryChange::Changed)
         } else {
             Ok(GeometryChange::NoChange)
@@ -140,13 +142,13 @@ impl CounterObject {
     }
     /// Enqueues a typed snapshot while lending its live origin. Destruction drops
     /// the receiver automatically; there is no separate port-close state.
-    fn post(&mut self, event: CounterEvent) -> Result<(), NcStatus> {
+    fn post(&mut self, event: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), NcStatus> {
         match &mut self.event {
             None => Ok(()),
             Some((queue, origin)) => {
-                use neocogi_com::events::{EventOrigin, EventPayload};
+                use neocogi_com::events::EventOrigin;
                 let origin = EventOrigin::Widget(origin.clone().into_unknown());
-                queue.post(neocogi_com::NcValueRef::new(&origin)?, event.into_event()?).map_err(|(status, _event)| status)
+                queue.post(neocogi_com::NcValueRef::new(&origin)?, event).map_err(|(status, _event)| status)
             },
         }
     }
@@ -346,7 +348,7 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
         index: u32,
         host: ComRef<'_, IWidgetHostAbi>,
         settings: NcCopyFromBufferOffset<'_, u8>,
-        events: neocogi_com::NcValueRef<'_, neocogi_ui_document_contracts::WidgetEventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
     ) -> Result<ComBox<IWidgetAbi>, NcStatus> {
         if index != 0 || settings.offset() != 0 {
             return Err(NC_E_INVALID_ARG);
@@ -357,8 +359,8 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
         CounterObject::create(
             host,
             match events.to_owned()? {
-                neocogi_ui_document_contracts::WidgetEventBinding::Unobserved => None,
-                neocogi_ui_document_contracts::WidgetEventBinding::Observed(queue) => Some(queue),
+                neocogi_com::events::EventBinding::Unobserved => None,
+                neocogi_com::events::EventBinding::Observed(queue) => Some(queue),
             },
             settings,
         )?
@@ -377,7 +379,7 @@ impl ExtensionProvider for ExtensionProviderObject {
     fn counter(
         &self,
         host: ComRef<'_, IWidgetHostAbi>,
-        events: neocogi_com::NcValueRef<'_, neocogi_demo_contracts::CounterEventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
     ) -> Result<ComBox<CounterAbi>, NcStatus> {
         CounterObject::create(host, events.to_owned()?.into_queue(), settings::Settings::default())
     }

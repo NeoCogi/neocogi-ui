@@ -2,15 +2,8 @@ use neocogi.com.events::{EventBinding, IEvent};
 extern neocogi.com.events;
 extern neocogi.ui.core;
 extern neocogi.ui.document;
-use neocogi.ui.core::{IWidget, ILeafLayout, Activation, IWidgetHost, IContainer};
+use neocogi.ui.core::{IActivatedEvent, IWidget, ILeafLayout, IWidgetHost, IContainer};
 use neocogi.ui.document::IDesignWidgetCatalog;
-
-#[version(1)]
-/// Committed value from the example counter.
-struct CounterChanged {
-    /// Committed counter value.
-    value: u32,
-}
 
 #[version(1)]
 /// Immutable counter fact available through the common event receiver.
@@ -40,17 +33,9 @@ interface IWidgetProbe {
     fn calls(&self) -> Result<WidgetCalls>;
 }
 
-#[version(1)]
-/// One complete event stream for every user-visible Counter transition.
-enum CounterEvent: u8 {
-    /// Activation captures the displayed count label.
-    Activated(Activation),
-    /// The committed count after that activation.
-    Changed(CounterChanged),
-}
-
-#[version(2)]
+#[version(3)]
 /// A custom control with one enum-valued event port and a concrete editing interface.
+#[events(IActivatedEvent, ICounterChangedEvent)]
 class Counter: IWidget + ILeafLayout + IWidgetProbe {
     /// Reads the actual current activation count.
     fn count(&self) -> Result<u32>;
@@ -68,11 +53,11 @@ interface IInset: IContainer {
     fn set_padding(&mut self, padding: i32) -> Result<()>;
 }
 
-#[version(1)]
+#[version(2)]
 /// Stateless plugin factory receiving runtime authority explicitly for each custom object.
 factory ExtensionProvider: IDesignWidgetCatalog {
     /// Creates a counter whose complete state belongs to the returned COM identity.
-    fn counter(&self, host: &IWidgetHost, events: &EventBinding<Counter, CounterEvent>) -> Result<ComBox<Counter>>;
+    fn counter(&self, host: &IWidgetHost, events: &EventBinding) -> Result<ComBox<Counter>>;
     /// Creates an empty custom container; child attachment follows the same rules as built-ins.
     fn inset(&self, host: &IWidgetHost) -> Result<ComBox<IInset>>;
 }

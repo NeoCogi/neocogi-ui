@@ -1,19 +1,10 @@
 //! Loads a UI document without linking its concrete widgets into application code.
-use neocogi_com::{ComPtr, WeakComPtr, NcStatus};
+use neocogi_com::{ComPtr, NcStatus};
 use neocogi_ui_document::EventBindings;
 use neocogi_demo_host::{AppState, Host, HostError};
 use neocogi_ui::*;
 use neocogi_ui_document::{Document, ReloadIds, ReloadSlot, Resources};
 
-/// Application messages retain nonowning identities, checked against the current component.
-enum Message {
-    /// Re-read the selected file, or the built-in document.
-    Reload(WeakComPtr<IMenuItemAbi>),
-    /// Parent-controlled caption intent and other captured window lifecycle facts.
-    Window(WeakComPtr<IWindowAbi>, neocogi_ui::events::WindowEvent),
-    /// The component's public Save action, independent of its widget layout.
-    Save(neocogi_com::WeakComBox<ButtonAbi>),
-}
 /// Application state owns its current component and uses checked concrete widget handles.
 struct State {
     /// Stable publication slot owns the current loaded component.
@@ -62,36 +53,23 @@ impl AppState for State {
     type Message = neocogi_com::events::EventMessage;
     /// Runtime calls application handlers only at its normal safe mutation boundary.
     fn update(&mut self, event: Self::Message) -> Result<(), NcStatus> {
-        let Some(message) = Message::decode(&event)? else { return Ok(()); };
-        match message {
-            Message::Window(origin, neocogi_ui::events::WindowEvent::CloseRequested) => {
-                // This host retains the loaded form and hides its logical window.
+        if let Some(origin) = event.origin.service::<IWindowAbi>()? {
+            if event.downcast::<IWindowCloseRequestedEventAbi>()?.is_some() {
                 if let Some(window) = origin.upgrade()? { window.set_visibility(Visibility::Hidden)?; }
-            },
-            Message::Window(_, _) => {},
-            Message::Reload(origin) => {
-                let Some(origin) = origin.upgrade()? else {
-                    return Ok(());
-                };
-                if !origin.as_com_ref().same_object(self.reload_item.as_interface()) {
-                    return Ok(());
-                }
-                if let Err(error) = self.reload() {
-                    eprintln!("Reload: {error}");
+            }
+        } else if let Some(origin) = event.origin.service::<IMenuItemAbi>()? {
+            if let Some(origin) = origin.upgrade()? {
+                if origin.as_com_ref().same_object(self.reload_item.as_interface()) && event.downcast::<IActivatedEventAbi>()?.is_some() {
+                    if let Err(error) = self.reload() { eprintln!("Reload: {error}"); }
                 }
             }
-            Message::Save(origin) => {
-                if !origin.is_alive() {
-                    return Ok(());
-                };
+        } else if let Some(origin) = event.origin.widget::<ButtonAbi>()? {
+            if origin.is_alive() {
                 if let Some(component) = self.slot.component() {
-                    if !origin.same_object(component.widget::<ButtonAbi>("save")?.as_interface()) {
-                        return Ok(());
+                    if origin.same_object(component.widget::<ButtonAbi>("save")?.as_interface()) && event.downcast::<IActivatedEventAbi>()?.is_some() {
+                        self.saves += 1;
+                        component.widget::<TextBlockAbi>("title")?.set_text(&format!("Save requested {} times", self.saves))?;
                     }
-                    self.saves += 1;
-                    component
-                        .widget::<TextBlockAbi>("title")?
-                        .set_text(&format!("Save requested {} times", self.saves))?;
                 }
             }
         }
@@ -132,22 +110,4 @@ fn run() -> Result<(), HostError> {
 /// Preserves operational diagnostics under the min-size profile.
 fn main() -> std::process::ExitCode {
     neocogi_demo_host::report_exit(run())
-}
-
-impl Message {
-    /// Decode at the handling boundary while the inbox still owns the COM event.
-    fn decode(message: &neocogi_com::events::EventMessage) -> Result<Option<Self>, neocogi_com::NcStatus> {
-        if let Some((origin, event)) = message.widget::<ButtonAbi>()? {
-            let _ = event;
-            return Ok(Some(Self::Save(origin)));
-        }
-        if let Some((origin, event)) = message.service::<IMenuItemAbi>()? {
-            let _ = event;
-            return Ok(Some(Self::Reload(origin)));
-        }
-        if let Some((origin, event)) = message.service::<IWindowAbi>()? {
-            return Ok(Some(Self::Window(origin, event)));
-        }
-        Ok(None)
-    }
 }

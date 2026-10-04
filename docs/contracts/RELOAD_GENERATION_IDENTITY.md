@@ -100,17 +100,20 @@ has exhausted new slot IDs.
 
 ## Generations and widget origins answer different questions
 
-The token identifies the accepted construction attempt. Generated events also
-carry weak widget origins, and `QueuedEvent::resolve` checks liveness and membership
-in the current generated form. Keep both checks:
+The token identifies the accepted construction attempt. `DocumentEvent` also
+contains a weak widget origin and the sole event owner. `event_for` checks generation
+before any lookup/query, then origin liveness and current component membership:
 
 ```rust,ignore
-if slot.accepts(message.generation) {
-    if let Some(event) = message.event.resolve(&form)? {
-        event.dispatch(&mut app)?;
+if let Some(message) = message.event_for(&slot, "save")? {
+    if message.downcast::<IActivatedEventAbi>()?.is_some() {
+        app.save()?;
     }
 }
 ```
+
+Both checks matter: a current token cannot authenticate a foreign widget, and an
+old attempt cannot target a replacement with the same authored key.
 
 Application messages may intentionally retain only a generation and an owned
 payload, such as an asynchronous result. Pair comparison protects those messages
@@ -137,7 +140,7 @@ The regression suite covers:
 - Same-slot successful replacement and rejection of all failed/previous tokens.
 - Cross-thread token copies, the 16-byte representation, and permanent exhaustion
   of both counters without wrapping or invalidating existing slot counters.
-- Actual generated queues shared by two live forms, retaining independent origin checks.
+- Common document receivers shared by two live forms, retaining independent origin checks.
 - Designer preview-surface replacement using its retained application allocator.
 
 Generated fixtures are regenerated, compiled and compared with current generator

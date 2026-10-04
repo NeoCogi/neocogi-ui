@@ -885,7 +885,7 @@ fn idle_composite_destruction_releases_child_and_parent_queues_once() {
             label: "parent",
         };
         let (send, _receive) = std::sync::mpsc::channel::<()>();
-        let queue = neocogi_ui::test_event_queue!(split_view, (), send,
+        let queue = neocogi_ui::test_event_queue!(neocogi_ui::SplitViewAbi, (), send,
             |queue, _origin, _| { queue.lifetime.released.send("unexpected post").unwrap(); }, { lifetime: QueueLifetime = lifetime })
         .unwrap();
         let mut parent = ui
@@ -906,7 +906,7 @@ fn idle_composite_destruction_releases_child_and_parent_queues_once() {
         for label in ["first", "second"] {
             let lifetime = QueueLifetime { released: released.clone(), label };
             let (send, _receive) = std::sync::mpsc::channel::<()>();
-            let queue = neocogi_ui::test_event_queue!(button, (), send,
+            let queue = neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, (), send,
             |queue, _origin, _| { queue.lifetime.released.send("unexpected post").unwrap(); }, { lifetime: QueueLifetime = lifetime })
             .unwrap();
             let child = ui.widgets().button_with_queue(label, Some(queue.as_com_ref())).unwrap();

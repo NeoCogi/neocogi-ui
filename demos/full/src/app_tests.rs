@@ -133,7 +133,7 @@ fn exercise() -> Result<(Host, TestApp<State, neocogi_com::events::EventMessage>
     }
     {
         state.select_theme(Theme::Default)?;
-        state.activate(Action::Spacing(false), &Activation { label: String::new() })?;
+        state.activate(Action::Spacing(false), "")?;
         state.combo.set_selection(ChoiceSelection::Selected(2))?;
         assert_eq!(state.combo.selection()?, ChoiceSelection::Selected(2));
         assert_eq!(state.combo.display_text()?, "Cherry");
@@ -142,7 +142,7 @@ fn exercise() -> Result<(Host, TestApp<State, neocogi_com::events::EventMessage>
         assert!(state.entry.text()?.is_empty());
         assert!(state.log.text()?.ends_with("Unicode: 日本語"));
         state.demo.set_visibility(Visibility::Hidden)?;
-        state.activate(Action::ShowDemo, &Activation { label: String::new() })?;
+        state.activate(Action::ShowDemo, "")?;
         assert_eq!(state.demo.snapshot()?.visibility, Visibility::Visible);
     }
     // Commit the final style edit before observing the installed immutable revision.

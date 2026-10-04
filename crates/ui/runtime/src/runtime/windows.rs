@@ -156,7 +156,7 @@ impl IWindowManager for Runtime {
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
         root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
-        events: neocogi_com::NcValueRef<'_, IWindowEventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
     ) -> Result<ComPtr<IWindowAbi>, (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
         let prepared = (|| {
             let queue = events.to_owned()?.into_queue();
@@ -177,7 +177,7 @@ impl IWindowManager for Runtime {
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
         root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
-        events: neocogi_com::NcValueRef<'_, IWindowEventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
     ) -> Result<ComPtr<IWindowAbi>, (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
         let prepared = (|| {
             let queue = events.to_owned()?.into_queue();
@@ -198,7 +198,7 @@ impl IWindowManager for Runtime {
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
         root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
-        events: neocogi_com::NcValueRef<'_, IWindowEventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
     ) -> Result<ComPtr<IWindowAbi>, (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
         let prepared = (|| {
             let queue = events.to_owned()?.into_queue();
@@ -218,7 +218,7 @@ impl IWindowManager for Runtime {
         parent: ComRef<'_, IWindowAbi>,
         title: NcCopyFromBufferOffset<'_, u8>,
         root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
-        events: neocogi_com::NcValueRef<'_, IPopupEventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
     ) -> Result<ComPtr<IPopupAbi>, (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
         let prepared = (|| {
             let queue = events.to_owned()?.into_queue();
@@ -443,7 +443,7 @@ impl LogicalPopup {
     pub(super) fn create(
         runtime: Weak<RuntimeStorage>,
         queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
-        register: impl FnOnce(Option<IPopupEventPort>) -> PopupHandle,
+        register: impl FnOnce(Option<neocogi_com::events::EventPort>) -> PopupHandle,
     ) -> (ComPtr<IUnknown>, NativeSurface) {
         let local = Self::into_local_cyclic::<IPopupAbi>(|origin| Self {
             runtime,
@@ -561,7 +561,7 @@ mod tests {
             .item_with_queue(
                 "Run at pointer",
                 Some(
-                    neocogi_ui::test_event_queue!(activation, String, events_tx.clone(), |_queue, _origin, event| event.label)
+                    neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, events_tx.clone(), |_queue, _origin, event| event.query_weak::<neocogi_ui::IActivatedEventAbi>()?.label()?.to_string()?)
                         .unwrap()
                         .as_com_ref(),
                 ),
@@ -600,8 +600,7 @@ mod tests {
 
 #[cfg(test)]
 mod placement_tests {
-    use neocogi_com::WeakComPtr;
-    use neocogi_ui::{IWindowAbi, Rect, Visibility, WindowEvent};
+    use neocogi_ui::{IWindowAbi, Rect, Visibility, IWindowHiddenEventAbi, IWindowDestroyedEventAbi};
 
     /// The shared initializer preserves each placement's visibility, public event
     /// origin and complete subtree closure through actual COM calls.
@@ -609,12 +608,7 @@ mod placement_tests {
     fn window_placements_share_one_queue_without_sharing_origins() {
         let runtime = crate::test_support::create_runtime(crate::test_support::test_atlas());
         let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
-        let (send, events) = std::sync::mpsc::channel();
-        let queue = neocogi_ui::test_event_queue!(window, (WeakComPtr<IWindowAbi>, WindowEvent), send, |_queue, origin, event| (
-            origin.downgrade()?,
-            event
-        ))
-        .unwrap();
+        let (queue, events) = neocogi_com::events::channel();
         let weak_queue = queue.downgrade().unwrap();
         let rect = Rect { x: 20, y: 20, width: 320, height: 240 };
         let root = ui
@@ -652,17 +646,14 @@ mod placement_tests {
             window.set_visibility(Visibility::Hidden).unwrap();
             let found = events
                 .try_iter()
-                .any(|(origin, event)| origin.same_object(&origins[index]) && matches!(event, WindowEvent::Hidden));
+                .any(|message| message.origin.service::<IWindowAbi>().unwrap().unwrap().same_object(&origins[index]) && message.downcast::<IWindowHiddenEventAbi>().unwrap().is_some());
             assert!(found, "placement {index} must identify its own visibility event");
             window.set_visibility(Visibility::Visible).unwrap();
         }
         root.close().unwrap();
         let closed: Vec<_> = events
             .try_iter()
-            .filter_map(|(origin, event)| match event {
-                WindowEvent::Destroyed => Some(origin),
-                _ => None,
-            })
+            .filter_map(|message| message.downcast::<IWindowDestroyedEventAbi>().unwrap().map(|_| message.origin.service::<IWindowAbi>().unwrap().unwrap()))
             .collect();
         assert_eq!(closed.len(), 3);
         assert!(closed.iter().any(|origin| origin.same_object(&origins[0])));

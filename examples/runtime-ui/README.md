@@ -1,14 +1,14 @@
 # Runtime UI loading example
 
-This application binds the `save` button's complete `ButtonEvent` stream directly and
+This application binds the `save` button's `IActivatedEvent` output directly and
 checks the authored `title` node as a concrete `TextBlockAbi` widget. Clicking
 Save queues an application message; its handler updates the title through that
 typed widget handle at the normal update boundary. File → Reload replaces the UI
 only after loading and connecting a complete candidate.
 
-One concrete `AppQueue` implements both `ButtonEventQueue` and
-`IMenuItemEventQueue`. It owns only the sender and is reused across reloads.
-Messages carry weak origins. Before applying Save, the application checks origin
+One `events::channel()` receiver serves buttons and menu/window services and is
+reused across reloads. Messages retain the exclusive COM event and weak origin.
+Before applying Save, the application checks origin
 liveness and compares it with the current component's `save` field. A queued event
 from a removed form is ignored; observers cannot retain the removed widget.
 The reload command is likewise checked against the actual static menu entry.

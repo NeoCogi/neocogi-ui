@@ -106,7 +106,7 @@ pub struct Textbox {
     /// Initialization-only font.
     font: FontRef,
     /// Single event slot; receives its destination during construction and is released when the widget is destroyed.
-    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::TextboxAbi>,
+    events: crate::widget_object::WidgetEvents,
 }
 
 impl Textbox {
@@ -190,16 +190,13 @@ impl Textbox {
     fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
         let outcome = textbox_update(ctx, input, &mut self.buf, &mut self.cursor, &mut self.editing, font, self.runtime.state.host());
-        let changed = outcome.changed.then(|| crate::TextChanged {
-            text: self.buf.clone(),
-            cursor: self.cursor as u64,
-        });
-        let submitted = outcome.submitted.then(|| crate::TextSubmitted { text: self.buf.clone() });
-        if let Some(event) = changed {
-            ctx.posted(self.events.post(neocogi_ui_nodes_contracts::TextboxEvent::Changed(event)));
-        }
-        if let Some(event) = submitted {
-            ctx.posted(self.events.post(neocogi_ui_nodes_contracts::TextboxEvent::Submitted(event)));
+        if self.events.is_bound() {
+            if outcome.changed {
+                ctx.posted(neocogi_ui_core_contracts::events::text_changed(&self.buf, self.cursor as u64).and_then(|event| self.events.post(event)));
+            }
+            if outcome.submitted {
+                ctx.posted(neocogi_ui_core_contracts::events::text_submitted(&self.buf).and_then(|event| self.events.post(event)));
+            }
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(outcome.changed)
@@ -437,9 +434,13 @@ mod tests {
         impl FnMut(&mut Vec<RecordedEvent>) -> bool,
     ) {
         let (events_tx, events) = std::sync::mpsc::channel();
-        let queue = neocogi_ui::test_event_queue!(textbox, RecordedEvent, events_tx, |_queue, _origin, event| match event {
-            neocogi_ui::textbox::Event::Changed(value) => RecordedEvent::Changed(value.text, value.cursor),
-            neocogi_ui::textbox::Event::Submitted(value) => RecordedEvent::Submitted(value.text),
+        let queue = neocogi_ui::test_event_queue!(neocogi_ui::TextboxAbi, RecordedEvent, events_tx, |_queue, _origin, event| {
+            if let Some(value) = neocogi_com::events::downcast_event::<neocogi_ui::ITextChangedEventAbi>(event)? {
+                RecordedEvent::Changed(value.text()?.to_string()?, value.cursor()?)
+            } else {
+                let value = event.query_weak::<neocogi_ui::ITextSubmittedEventAbi>()?;
+                RecordedEvent::Submitted(value.text()?.to_string()?)
+            }
         })
         .unwrap();
         let textbox = textbox.map(|mut value| {

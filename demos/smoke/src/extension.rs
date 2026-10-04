@@ -1,6 +1,8 @@
 //! Native acceptance uses the same extension protocol in dynamic assemblies and static monoliths.
 use super::*;
+use neocogi_com::INcStringComPtrExt;
 use neocogi_demo_contracts::*;
+use neocogi_ui::events;
 
 /// Host-local controller owns its labels and the extension's editing projection.
 struct Model {
@@ -13,19 +15,18 @@ impl events::MessageProcessor for Model {
     type Message = neocogi_com::events::EventMessage;
     /// Handles the independent plugin's concrete public event protocol.
     fn handle(&mut self, message: Self::Message) -> Result<(), NcStatus> {
-        let Some((origin, event)) = message.widget::<CounterAbi>()? else { return Ok(()); };
+        let Some(origin) = message.origin.widget::<CounterAbi>()? else { return Ok(()); };
         if !origin.is_alive() {
             return Ok(());
         }
         if !origin.same_object(&self.counter) {
             return Ok(());
         }
-        match event {
-            CounterEvent::Activated(event) => {
-                self.labels.push(event.label);
-                self.counter.set_count(100)?;
-            }
-            CounterEvent::Changed(event) => self.labels.push(format!("count={}", event.value)),
+        if let Some(event) = message.downcast::<IActivatedEventAbi>()? {
+            self.labels.push(event.label()?.to_string()?);
+            self.counter.set_count(100)?;
+        } else if let Some(event) = message.downcast::<ICounterChangedEventAbi>()? {
+            self.labels.push(format!("count={}", event.value()?));
         }
         Ok(())
     }
@@ -57,7 +58,7 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     assert_eq!(b_view.children().unwrap_err(), neocogi_com::NC_E_DROPPED);
 
     let (queue, events) = neocogi_com::events::channel();
-    let binding = neocogi_demo_contracts::CounterEventBinding::from_queue(Some(queue.as_com_ref()));
+    let binding = neocogi_com::events::EventBinding::from_queue(Some(queue.as_com_ref()));
     let counter_owner = provider.counter(host.as_com_ref(), neocogi_com::NcValueRef::new(&binding)?)?;
     let mut counter = counter_owner.downgrade();
     let probe: neocogi_com::WeakComBox<IWidgetProbeAbi> = counter.query()?;
@@ -131,7 +132,7 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     assert_eq!(inset.children()?.child_count()?, 0);
     ui.update_with_events(size, owner.as_com_ref())?;
     ui.render(size, renderer)?;
-    let replacement = provider.counter(host.as_com_ref(), neocogi_com::NcValueRef::new(&CounterEventBinding::Unobserved)?)?;
+    let replacement = provider.counter(host.as_com_ref(), neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved)?)?;
     let replacement_view = replacement.downgrade();
     let replacement_probe = replacement_view.query::<IWidgetProbeAbi>()?;
     let replacement = replacement.query::<IWidgetAbi>().map_err(|(status, _candidate)| status)?;

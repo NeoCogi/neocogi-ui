@@ -28,7 +28,7 @@ explicit diagnostics while avoiding their retention by ordinary projections.
 
 ## What crosses COM
 
-`IDesignWidgetCatalog` revision 2 supplies `describe`, `create_widget` and
+`IDesignWidgetCatalog` revision 3 supplies `describe`, `create_widget` and
 `create_editor`. Descriptor schema 10 carries bounded opaque NCB defaults plus
 the existing logical event graph. UI document revision 7 stores:
 

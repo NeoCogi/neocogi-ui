@@ -48,14 +48,6 @@ impl CustomWidgetRegistry {
     pub fn register(&mut self, factory: Rc<dyn CustomWidgetFactory>) -> Result<(), String> {
         let manifest = factory.manifest()?;
         manifest.validate()?;
-        if let Some(queue) = &manifest.interface.event_queue {
-            let expected = neocogi_com::events::IEventReceiverAbi::INTERFACE_DESCRIPTOR;
-            // SAFETY: the expected descriptor is immutable generated static storage.
-            let signature = unsafe { expected.abi_signature.as_digest() }.expect("generated receiver signature");
-            if queue.iid != expected.interface_id.to_uuid_bytes() || &queue.signature != signature {
-                return Err("Custom widget requires an incompatible IEventReceiver revision".into());
-            }
-        }
         if self.entries.contains_key(&manifest.kind) {
             return Err(format!("Duplicate custom widget kind: {}", manifest.kind));
         }

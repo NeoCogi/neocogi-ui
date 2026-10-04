@@ -83,7 +83,7 @@ pub struct Checkbox {
     /// Current checked value.
     checked: bool,
     /// Single lifetime event slot; the constructor fixes the parent receiver before publishing the widget.
-    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::CheckboxAbi>,
+    events: crate::widget_object::WidgetEvents,
 }
 
 impl Checkbox {
@@ -153,10 +153,9 @@ impl Widget for Checkbox {
         // Windows-style checkboxes toggle with Space; Enter remains available to a default button.
         self.checked = !self.checked;
         let checked = self.checked;
-        ctx.posted(
-            self.events
-                .post(neocogi_ui_nodes_contracts::CheckboxEvent::Changed(crate::CheckboxChanged { checked })),
-        );
+        if self.events.is_bound() {
+            ctx.posted(neocogi_ui_nodes_contracts::events::checkbox_changed(checked).and_then(|event| self.events.post(event)));
+        }
 
         // The check mark changes paint only; both states reserve the same icon space.
         crate::Change::NoChange

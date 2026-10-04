@@ -48,7 +48,7 @@ impl IMenuBuilder for Builder {
     fn item(
         &self,
         input: NcCopyFromBufferOffset<'_, u8>,
-        events: neocogi_com::NcValueRef<'_, IMenuItemEventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
     ) -> Result<ComPtr<IMenuItemAbi>, NcStatus> {
         let runtime = self.owner()?;
         let label = text(input)?;
@@ -320,7 +320,7 @@ impl IMenus for Runtime {
         &self,
         window: ComRef<'_, IWindowAbi>,
         menu: ComRef<'_, IMenuBuilderAbi>,
-        events: neocogi_com::NcValueRef<'_, IPopupEventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
     ) -> Result<ComPtr<IPopupAbi>, NcStatus> {
         self.storage.factory.host.check_mutation()?;
         let queue = events.to_owned()?.into_queue();

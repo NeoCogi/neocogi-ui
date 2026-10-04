@@ -18,4 +18,4 @@ pub use neocogi_gfx_contracts::*;
 mod helpers;
 pub use helpers::*;
 
-mod semantic_events;
+pub mod events;

@@ -36,7 +36,7 @@ impl neocogi_ui_document::contracts::IDesignWidgetCatalog for BudgetCatalog {
     fn create_widget(
         &self, index: u32, _host: neocogi_com::ComRef<'_, IWidgetHostAbi>,
         settings: neocogi_com::NcCopyFromBufferOffset<'_, u8>,
-        _events: neocogi_com::NcValueRef<'_, contracts::WidgetEventBinding>,
+        _events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
     ) -> Result<neocogi_com::ComBox<IWidgetAbi>, NcStatus> {
         self.calls.fetch_add(1, Ordering::Relaxed);
         if index != 0 || settings.offset() != 0 { return Err(neocogi_com::NC_E_INVALID_ARG); }

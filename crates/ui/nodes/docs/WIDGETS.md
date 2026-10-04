@@ -40,24 +40,23 @@ cannot preserve live resources. Generic widget close no longer exists.
 
 ## Controls and standard events
 
-| Client | Purpose | Event enum variant |
+| Client | Purpose | Event interface |
 | --- | --- | --- |
-| `Button` | Text/image action | `Event::Activated` |
-| `Checkbox` | Boolean choice | `Event::Changed` |
-| `Combo` | Optional selection and runtime-owned choice popup | `Event::Changed` |
-| `ListBox` | Activatable label/image | `Event::Activated` |
-| `ListItem` | Activatable text/icon row | `Event::Activated` |
-| `Slider`, `Number` | Numeric controls | `Event::Changed` |
-| `Textbox`, `TextArea` | UTF-8 editors | `Event::Changed`, `Event::Submitted` |
-| `Scrollbar` | Horizontal/vertical range | `Event::Changed` |
+| `Button` | Text/image action | `IActivatedEvent` |
+| `Checkbox` | Boolean choice | `ICheckboxChangedEvent` |
+| `Combo` | Optional selection and runtime-owned choice popup | `IChoiceChangedEvent` |
+| `ListBox` | Activatable label/image | `IActivatedEvent` |
+| `ListItem` | Activatable text/icon row | `IActivatedEvent` |
+| `Slider`, `Number` | Numeric controls | `INumericChangedEvent` |
+| `Textbox`, `TextArea` | UTF-8 editors | `ITextChangedEvent`, `ITextSubmittedEvent` |
+| `Scrollbar` | Horizontal/vertical range | `IScrollbarChangedEvent` |
 | `TextBlock` | Read-only text with explicit wrapping | None |
 | `ColorSwatch` | Color preview and optional label | None |
 
 Each emitting class owns one event port initialized from its factory's
-`EventBinding<Object, Event>` argument. The receiver is fixed before publication;
+`EventBinding` argument. The receiver is fixed before publication;
 there is no later attachment operation.
-`neocogi_ui::textbox::Event`, for example, is the actual contract message enum
-covering both Changed and Submitted.
+`#[events(...)]` lists the immutable interfaces a class emits.
 Use `*_unobserved` constructors when no events are needed.
 Events own the value captured at the interaction. Ordinary programmatic setters
 remain silent. The [events guide](../../runtime/docs/EVENTS.md) describes delivery; exact interfaces and
@@ -123,7 +122,7 @@ are pixels along the movement axis. The requested position survives temporary
 allocation clamping; when both minima cannot fit, they compress proportionally.
 The handle uses normal button appearance with a small grip, and `handle_width`
 controls its visible and interactive thickness. Tab focuses it; the corresponding
-arrow keys move it by eight pixels. Capture loss cancels dragging. `Event::Changed`
+arrow keys move it by eight pixels. Capture loss cancels dragging. `ISplitChangedEvent`
 reports user changes only; `set_settings()` and window resizing are silent.
 
 The structural children of a composed control are real, distinct COM objects, not
@@ -174,8 +173,8 @@ Custom drawing uses the painter's solid geometry/image methods or an owned
 `IRenderItem` implemented by the renderer assembly.
 
 External controls use the same constructor contract: one
-`EventBinding<Editor, EditorEvent>`, with all event kinds in its complete enum.
-The application creates the typed queue before calling the custom factory;
+`EventBinding`, with emitted interfaces advertised through `#[events(...)]`.
+The application creates the common receiver before calling the custom factory;
 producers retain that receiver and a weak public origin. No inherited interface adds another port.
 Dispatch consumes local messages and never consults a class registry.
 

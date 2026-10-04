@@ -63,10 +63,6 @@ pub(crate) use widgets::{
     ButtonParameters, CheckboxParameters, ColorSwatchParameters, ComboParameters, DecimalPrecision, ListBoxParameters, ListItemParameters, NumberParameters,
     SliderParameters, Real, ScrollbarAxis, ScrollbarParameters, TextBlockParameters, TextboxParameters,
 };
-/// Shared concrete output values retain their contract names throughout native controls.
-pub(crate) use neocogi_ui_core_contracts::{Activation, TextChanged, TextSubmitted};
-/// Numeric and state facts have the same type in every built-in producer and consumer.
-pub(crate) use neocogi_ui_nodes_contracts::{CheckboxChanged, NumericChanged, ScrollbarChanged};
 #[cfg(test)]
 pub(crate) use neocogi_ui_support::widget_context;
 
