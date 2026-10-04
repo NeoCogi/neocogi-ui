@@ -11,8 +11,6 @@ use std::{
 use crate::boundary::text;
 use crate::widget_object::WidgetEvents;
 use neocogi_ui::OwnedWidget;
-mod queue;
-use queue::DialogQueue;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
 /// Request state is an ordinary field of the exclusively borrowed picker model.
@@ -292,9 +290,9 @@ impl FileDialog {
     /// Constructs one hidden modal from actual COM controls; no native widget handle or generic application state enters its ABI.
     fn new(services: Rc<NodeServices>, parent: ComRef<'_, IWindowAbi>, queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>) -> Result<WeakLocalBox<Self>, NcStatus> {
         services.host.check_mutation()?;
-        let (events_tx, events) = std::sync::mpsc::channel();
+        let (children, events) = neocogi_com::events::channel();
         let nodes = Rc::new(DialogNodes {
-            queue: DialogQueue::from_value(DialogQueue::new(events_tx)).query()?,
+            queue: children,
             host: services.host.clone(),
             resources: services.resources.clone(),
         });

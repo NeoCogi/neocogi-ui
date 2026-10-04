@@ -507,8 +507,8 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<neocogi_com::event
     neocogi_demo_host::initialize()?;
     let host = Host::new("neocogi-ui COM Demo", Size { width: 1200, height: 800 }, neocogi_demo_assets::load_bundle()?)?;
     let ui = &host.ui;
-    let (sender, events) = std::sync::mpsc::channel();
-    let mut events_tx = Inputs::new(sender);
+    let (receiver, events) = neocogi_com::events::channel();
+    let mut events_tx = Inputs::new(receiver);
     let grid = Rc::new(RefCell::new(GridState::default()));
     let grid_widget = ui.widgets().leaf(GridViewWidget::new(grid.clone()), WidgetOptions::NONE)?;
     let desktop = ui.window("X-Y Grid Surface", rect(0, 0, 1200, 800), into_widget(grid_widget)?).map_err(|(status, _candidate)| status)?;

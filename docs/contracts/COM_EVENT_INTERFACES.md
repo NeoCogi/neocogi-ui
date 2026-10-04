@@ -85,6 +85,9 @@ payload's `EventPayload` implementation; direct COM handlers do not.
 ## Construction and native form conveniences
 
 `events::channel()` returns one common receiver and an `EventMessage` inbox.
+Applications and composites that only enqueue these messages use that channel
+directly. A custom receiver is needed only when it adds behavior at the transport
+boundary, such as attaching a reload generation or forwarding a public origin.
 All observed factories accept that same receiver projection. `EventBindings`
 registers it by authored key without a widget type parameter. The constructor
 binding still records the source/native payload association for metadata, but no
