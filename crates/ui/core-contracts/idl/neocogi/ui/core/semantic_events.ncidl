@@ -1,0 +1,56 @@
+use neocogi.com.events::IEvent;
+
+#[version(1)]
+/// Immutable activation snapshot shared by buttons, list items and menu commands.
+interface IActivatedEvent: IEvent {
+    /// Label captured at activation, independently of subsequent producer edits.
+    fn label(&self) -> Result<ComPtr<INcString>>;
+}
+
+#[version(1)]
+/// Immutable committed edit, independent of the editor's current text and cursor.
+interface ITextChangedEvent: IEvent {
+    /// Complete normalized UTF-8 snapshot.
+    fn text(&self) -> Result<ComPtr<INcString>>;
+    /// UTF-8 byte cursor at a scalar boundary within this snapshot.
+    fn cursor(&self) -> Result<u64>;
+}
+
+#[version(1)]
+/// Immutable submission, distinct from a text change even when the text is equal.
+interface ITextSubmittedEvent: IEvent {
+    /// Complete text captured when the user submitted.
+    fn text(&self) -> Result<ComPtr<INcString>>;
+}
+
+#[version(1)]
+/// Immutable window lifecycle or geometry fact.
+interface IWindowEvent: IEvent {
+    /// Exact lifecycle variant and its copied geometry, if present.
+    fn value(&self) -> Result<WindowEvent>;
+}
+
+#[version(1)]
+/// Immutable popup dismissal; producer closure is independent of this event's lifetime.
+interface IPopupDismissedEvent: IEvent {
+    /// Captured popup lifecycle fact.
+    fn value(&self) -> Result<PopupDismissed>;
+}
+
+#[version(1)]
+/// Immutable committed menu selection shared by choice menus and combo controls.
+interface IChoiceChangedEvent: IEvent {
+    /// Stable selection identity, including explicit absence.
+    fn selection(&self) -> Result<ChoiceSelection>;
+}
+
+#[version(1)]
+/// Accepted native file identity; a cancelled event does not implement this interface.
+interface IFileAcceptedEvent: IEvent {
+    /// Retained immutable native path; display text is never its identity.
+    fn path(&self) -> Result<ComPtr<INativePath>>;
+}
+
+#[version(1)]
+/// Cancellation fact with no path payload; distinct from an accepted empty path.
+interface IFileCancelledEvent: IEvent {}

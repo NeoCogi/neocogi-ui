@@ -50,6 +50,37 @@ a script language, string-based field registry, per-form generated queue or
 application message enum. Any native payload conversion is consumer convenience,
 not a prerequisite for transporting an event through COM.
 
+## Concrete UI snapshots
+
+The [core](../../crates/ui/core-contracts/idl/neocogi/ui/core/semantic_events.ncidl)
+and [node](../../crates/ui/nodes-contracts/idl/neocogi/ui/nodes/semantic_events.ncidl)
+contracts define event meaning independently of the producer's concrete class:
+
+| Interface | Immutable information |
+| --- | --- |
+| `IActivatedEvent` | Captured label; shared by buttons, rows and menu commands |
+| `ITextChangedEvent` | Complete text and its UTF-8 byte cursor |
+| `ITextSubmittedEvent` | Submitted text |
+| `ICheckboxChangedEvent` | Checked state |
+| `INumericChangedEvent` | Finite numeric value; shared by slider and number controls |
+| `IScrollbarChangedEvent` / `ISplitChangedEvent` | Nonnegative offset or divider position |
+| `IWindowEvent` / `IPopupDismissedEvent` | Captured lifecycle and geometry facts |
+| `IChoiceChangedEvent` | Stable selection identity or explicit absence |
+| `IFileAcceptedEvent` / `IFileCancelledEvent` | Exact native path or a distinct cancellation fact |
+
+String getters return ordinary immutable `INcString` capabilities. An event owns
+its captured data, and its getters never consult the originating widget. Concrete
+event allocations are exclusive even when a payload contains a shared immutable
+string or path capability.
+
+Rust's optional `EventPayload` conversion moves a native snapshot into its concrete
+COM event or reads a compatible event through those same public getters. It
+validates semantic fields on construction and after reading foreign getters.
+Existing native event enums can select these conversions without becoming the
+common queue's transported representation. A custom widget can add a derived
+event interface, as the demo's `ICounterChangedEvent` does, without adding a new
+receiver interface.
+
 ## Validation
 
 [Generated-code regressions](../../crates/com/idl/tests/event_interfaces.rs)

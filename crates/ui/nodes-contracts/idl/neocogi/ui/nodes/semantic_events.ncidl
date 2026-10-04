@@ -1,0 +1,29 @@
+use neocogi.com.events::IEvent;
+
+#[version(1)]
+/// Immutable user checkbox state, not the widget's subsequently edited state.
+interface ICheckboxChangedEvent: IEvent {
+    /// Committed checked state.
+    fn checked(&self) -> Result<bool>;
+}
+
+#[version(1)]
+/// Immutable finite user value shared by sliders and numeric controls.
+interface INumericChangedEvent: IEvent {
+    /// Committed finite value.
+    fn value(&self) -> Result<f32>;
+}
+
+#[version(1)]
+/// Immutable scrollbar interaction snapshot.
+interface IScrollbarChangedEvent: IEvent {
+    /// Committed nonnegative offset.
+    fn offset(&self) -> Result<i32>;
+}
+
+#[version(1)]
+/// Immutable divider interaction snapshot.
+interface ISplitChangedEvent: IEvent {
+    /// Committed nonnegative first-pane extent.
+    fn position(&self) -> Result<i32>;
+}

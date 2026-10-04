@@ -1,4 +1,4 @@
-use neocogi.com.events::EventBinding;
+use neocogi.com.events::{EventBinding, IEvent};
 extern neocogi.com.events;
 extern neocogi.ui.core;
 extern neocogi.ui.document;
@@ -10,6 +10,13 @@ use neocogi.ui.document::IDesignWidgetCatalog;
 struct CounterChanged {
     /// Committed counter value.
     value: u32,
+}
+
+#[version(1)]
+/// Immutable counter fact available through the common event receiver.
+interface ICounterChangedEvent: IEvent {
+    /// Committed count captured independently of later counter edits or removal.
+    fn value(&self) -> Result<u32>;
 }
 
 #[version(1)]
