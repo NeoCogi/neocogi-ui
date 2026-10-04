@@ -106,11 +106,11 @@ struct CounterObject {
     /// Accepted provider-owned constructor policy, shared with the design editor.
     settings: settings::Settings,
     /// Sole destination for the complete enum-valued event stream.
-    event: Option<(ComPtr<CounterEventQueueAbi>, WeakComBox<CounterAbi>)>,
+    event: Option<(ComPtr<neocogi_com::events::IEventReceiverAbi>, WeakComBox<CounterAbi>)>,
 }
 impl CounterObject {
     /// Validates runtime authority and publishes one fully initialized counter identity.
-    fn create(host: ComRef<'_, IWidgetHostAbi>, queue: Option<ComPtr<neocogi_demo_contracts::CounterEventQueueAbi>>, settings: settings::Settings) -> Result<ComBox<CounterAbi>, NcStatus> {
+    fn create(host: ComRef<'_, IWidgetHostAbi>, queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>, settings: settings::Settings) -> Result<ComBox<CounterAbi>, NcStatus> {
         host.check_mutation()?;
         Self::into_box_cyclic::<CounterAbi>(move |origin| Self {
             common: Common::new(host, WidgetOptions::FRAME),
@@ -127,8 +127,8 @@ impl CounterObject {
             self.count = self.settings.next(self.count);
             // A rejected foreign post cannot erase this already committed change.
             self.common.state.record_change(GeometryChange::Changed);
-            self.post(&CounterEvent::Activated(Activation { label: self.count.to_string() }))?;
-            self.post(&CounterEvent::Changed(CounterChanged { value: self.count }))?;
+            self.post(CounterEvent::Activated(Activation { label: self.count.to_string() }))?;
+            self.post(CounterEvent::Changed(CounterChanged { value: self.count }))?;
             Ok(GeometryChange::Changed)
         } else {
             Ok(GeometryChange::NoChange)
@@ -140,10 +140,14 @@ impl CounterObject {
     }
     /// Enqueues a typed snapshot while lending its live origin. Destruction drops
     /// the receiver automatically; there is no separate port-close state.
-    fn post(&mut self, event: &CounterEvent) -> Result<(), NcStatus> {
+    fn post(&mut self, event: CounterEvent) -> Result<(), NcStatus> {
         match &mut self.event {
             None => Ok(()),
-            Some((queue, origin)) => queue.post(origin.as_com_ref(), neocogi_com::NcValueRef::new(event)?),
+            Some((queue, origin)) => {
+                use neocogi_com::events::{EventOrigin, EventPayload};
+                let origin = EventOrigin::Widget(origin.clone().into_unknown());
+                queue.post(neocogi_com::NcValueRef::new(&origin)?, event.into_event()?).map_err(|(status, _event)| status)
+            },
         }
     }
 }
@@ -354,7 +358,7 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
             host,
             match events.to_owned()? {
                 neocogi_ui_document_contracts::WidgetEventBinding::Unobserved => None,
-                neocogi_ui_document_contracts::WidgetEventBinding::Observed(queue) => Some(queue.query()?),
+                neocogi_ui_document_contracts::WidgetEventBinding::Observed(queue) => Some(queue),
             },
             settings,
         )?

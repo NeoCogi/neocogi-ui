@@ -498,27 +498,28 @@ pub(crate) trait ImageState {
 /// Private construction-selected delivery for an exclusively owned UI control.
 /// The widget's fields own this storage; destruction releases the destination.
 /// No attach method, close state, or second consumer exists here.
-pub(crate) struct WidgetEvents<Q: neocogi_com::events::EventQueueInterface> {
-    /// Absent means permanently unobserved; present owns one destination and a
-    /// cached weak origin that cannot keep the emitting widget alive.
-    receiver: Option<(neocogi_com::ComPtr<Q>, neocogi_com::WeakComBox<Q::Object, <Q::Object as neocogi_com::ComInterface>::Threading>)>,
+pub(crate) struct WidgetEvents<C: neocogi_com::events::EventSource> {
+    /// The sole destination and cached non-owning source identity.
+    receiver: Option<(neocogi_com::ComPtr<neocogi_com::events::IEventReceiverAbi>, neocogi_com::events::EventOrigin)>,
+    /// Compile-time native payload association; owns no widget.
+    source: core::marker::PhantomData<fn() -> C>,
 }
-impl<Q: neocogi_com::events::EventQueueInterface> Default for WidgetEvents<Q> {
-    /// Unobserved construction has no receiver or weak token to allocate/retain.
-    fn default() -> Self { Self { receiver: None } }
+impl<C: neocogi_com::events::EventSource> Default for WidgetEvents<C> {
+    fn default() -> Self { Self { receiver: None, source: core::marker::PhantomData } }
 }
-impl<Q: neocogi_com::events::EventQueueInterface> WidgetEvents<Q> {
+impl<C: neocogi_com::events::EventSource> WidgetEvents<C> {
     /// Chooses delivery before publication; later receiver replacement is unsupported.
-    pub(crate) fn with_queue(queue: Option<neocogi_com::ComPtr<Q>>, origin: neocogi_com::WeakComBox<Q::Object, <Q::Object as neocogi_com::ComInterface>::Threading>) -> Self {
-        Self { receiver: queue.map(|queue| (queue, origin)) }
+    pub(crate) fn with_queue(queue: Option<neocogi_com::ComPtr<neocogi_com::events::IEventReceiverAbi>>, origin: neocogi_com::WeakComBox<C, C::Threading>) -> Self {
+        Self { receiver: queue.map(|queue| (queue, neocogi_com::events::EventOrigin::Widget(origin.into_unknown().into_thread_local()))), source: core::marker::PhantomData }
     }
     /// Skips snapshot allocation when the application requested no event delivery.
     pub(crate) fn is_bound(&self) -> bool { self.receiver.is_some() }
-    /// Lends the protected origin during enqueueing, without shared ownership.
-    pub(crate) fn post(&mut self, event: &Q::Event) -> Result<(), neocogi_com::NcStatus> {
-        match &self.receiver {
+    /// Transfers one exclusive snapshot; a rejection drops the returned event owner.
+    pub(crate) fn post(&mut self, event: C::Event) -> Result<(), neocogi_com::NcStatus> where C::Event: neocogi_com::events::EventPayload {
+        use neocogi_com::events::EventPayload;
+        match &mut self.receiver {
             None => Ok(()),
-            Some((queue, origin)) => Q::post(queue.as_com_ref(), origin.as_com_ref(), event),
+            Some((queue, origin)) => queue.post(neocogi_com::NcValueRef::new(origin)?, event.into_event()?).map_err(|(status, _event)| status),
         }
     }
 }

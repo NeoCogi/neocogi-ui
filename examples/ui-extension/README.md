@@ -40,23 +40,19 @@ External controls share the built-in ownership and routing rules.
 The [implementation](src/lib.rs) uses `WidgetState` for common options, mount-once
 attachment and sticky invalidation. The counter stores its value
 once and owns an optional typed queue plus cached weak origin initialized before publication.
-`CounterEvent` is an ordinary IDL enum containing `Activated(Activation)` and
-`Changed(CounterChanged)`; the latter nests the committed count. The factory
-receives one typed queue for that whole enum. There is no later attachment API.
-The counter posts both variants after committing state. Factories transfer `ComBox` owners. The inset consumes its child owner; ordinary
-destruction releases descendants and queues, without `IWidget::close`.
+`CounterEvent` is an optional native view of activation and counter-change facts.
+The counter captures each fact as an immutable `ComBox<IEvent>`, exposing the
+common `IActivatedEvent` or custom `ICounterChangedEvent` interface. Both move
+through the same `IEventReceiver` after state commits. Factories transfer widget
+`ComBox` owners; destruction releases descendants and receiver references.
 
-The [acceptance host](../../demos/smoke/src/extension.rs) implements the concrete
-`CounterEventQueue` on an object containing its channel sender and passes that
-projection into `ExtensionProvider::counter`.
-Its application handler matches `CounterEvent` after traversal releases widget
-borrows. `CounterAbi::IDL_INTERFACE` and `CounterEvent::IDL_TYPE` supply generated
-metadata. The root `ExtensionProvider` also
-implements the shared `IDesignWidgetCatalog` COM interface. Its `describe`
-method copies the counter's typed authoring descriptor through COM, and
-`create_widget` accepts the host and optional COM receiver, queries that receiver
-for `CounterEventQueueAbi`, and only then constructs the counter. A wrong queue is
-rejected by the plugin even when a caller bypasses registry preflight.
+The [acceptance host](../../demos/smoke/src/extension.rs) uses `events::channel()`.
+Its handler reads a native `CounterEvent` through the public event getters after
+traversal returns. The host needs no custom receiver interface or generated form.
+`CounterAbi::IDL_INTERFACE` and `CounterEvent::IDL_TYPE` still supply optional
+native authoring metadata. `ExtensionProvider` implements `IDesignWidgetCatalog`;
+its common constructor receives the already typed `IEventReceiver` capability.
+Catalog registration checks that the advertised common receiver revision matches.
 The unlinked native designer can load this library with `--plugin` and discover
 the counter without a Rust registration hook. A UI document stores only its kind
 and opaque NCB settings; it does not restate the event enum.

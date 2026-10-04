@@ -30,7 +30,7 @@
 //! Calculator with concrete application state and typed COM button handlers.
 use neocogi_ui::*;
 use neocogi_demo_host::{AppState, Host, HostError, report_exit};
-use neocogi_com::{ComPtr, ComRef, NcStatus, NcValueRef};
+use neocogi_com::{ComPtr, NcStatus};
 
 /// Maximum typed display length; calculated results retain the existing decimal formatting policy.
 const DISPLAY_MAX_LEN: usize = 24;
@@ -327,21 +327,6 @@ impl Calculator {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui::nodes::ButtonEventQueue)]
-/// One concrete receiver for the entire keypad; action selection belongs to State.
-struct KeypadQueue {
-    /// Only weak origins are needed for the button's sole activation variant.
-    send: std::sync::mpsc::Sender<neocogi_com::WeakComBox<ButtonAbi>>,
-}
-impl neocogi_ui::nodes::ButtonEventQueue for KeypadQueue {
-    /// Validate foreign payloads before queueing; presentation labels do not identify keys.
-    fn post(&mut self, origin: ComRef<'_, ButtonAbi>, event: NcValueRef<'_, neocogi_ui::button::Event>) -> Result<(), NcStatus> {
-        neocogi_ui::button::validate(&event.to_owned()?)?;
-        let _ = self.send.send(origin.downgrade_box()?);
-        Ok(())
-    }
-}
-
 /// Local calculator model and editing capability; topology remains in the UI plugin.
 struct State {
     /// The fixed calculator panel follows the platform drawable rectangle.
@@ -355,9 +340,10 @@ struct State {
 }
 impl AppState for State {
     /// All keypad controls post to one concrete queue and are resolved by identity.
-    type Message = neocogi_com::WeakComBox<ButtonAbi>;
+    type Message = neocogi_com::events::EventMessage;
     /// Consumes one command using exclusive access to the ordinary arithmetic model.
-    fn update(&mut self, origin: neocogi_com::WeakComBox<ButtonAbi>) -> Result<(), NcStatus> {
+    fn update(&mut self, message: Self::Message) -> Result<(), NcStatus> {
+        let Some((origin, _)) = message.widget::<ButtonAbi>()? else { return Ok(()); };
         if !origin.is_alive() {
             return Ok(());
         }
@@ -406,8 +392,7 @@ fn run() -> Result<(), HostError> {
         calculator: Calculator::new(),
         keys: Vec::new(),
     };
-    let (events_tx, events) = std::sync::mpsc::channel();
-    let queue = KeypadQueue::from_value(KeypadQueue { send: events_tx }).query::<ButtonEventQueueAbi>()?;
+    let (queue, events) = neocogi_com::events::channel();
     for (index, (label, action)) in [
         ("AC", Action::ClearAll),
         ("CE", Action::ClearEntry),

@@ -1,5 +1,6 @@
 //! Generated form queues run against actual COM widgets and transactional reloads.
 use super::*;
+use neocogi_com::events::{EventOrigin, EventPayload, EventMessage};
 use neocogi_ui_document::{Document, ReloadIds, ReloadSlot, Resources};
 
 /// This exact generated fixture is compared with fresh output in document tests.
@@ -99,10 +100,10 @@ fn generated_shared_queue_resolves_origins_and_rejects_replaced_forms() {
         |component, _| { foreign_form = Some(generated::bind(component)?); Ok(()) },
     ).unwrap();
     let foreign_form = foreign_form.unwrap();
-    let foreign_event = generated::QueuedEvent::Source0 {
-        origin: foreign_form.widget_first_1.as_interface().clone(),
-        event: neocogi_ui::button::Event::Activated(Activation { label: "foreign form".into() }),
-    };
+    let foreign_event = generated::QueuedEvent(EventMessage {
+        origin: EventOrigin::Widget(foreign_form.widget_first_1.as_interface().clone().into_unknown()),
+        event: neocogi_ui::button::Event::Activated(Activation { label: "foreign form".into() }).into_event().unwrap(),
+    });
     assert!(foreign_event.resolve(&app.form).unwrap().is_none(),
         "origin checks remain required independently of generation filtering");
 
@@ -146,15 +147,15 @@ fn generated_shared_queue_resolves_origins_and_rejects_replaced_forms() {
 
     // An unrelated live widget with the right interface cannot select a handler.
     let outsider = ui.widgets().button_unobserved("outsider").unwrap();
-    let unrelated = generated::QueuedEvent::Source0 {
-        origin: outsider.as_interface().downgrade(),
-        event: neocogi_ui::button::Event::Activated(Activation { label: "outside".into() }),
-    };
+    let unrelated = generated::QueuedEvent(EventMessage {
+        origin: EventOrigin::Widget(outsider.as_interface().downgrade().into_unknown()),
+        event: neocogi_ui::button::Event::Activated(Activation { label: "outside".into() }).into_event().unwrap(),
+    });
     assert!(unrelated.resolve(&replacement).unwrap().is_none());
-    let expired = generated::QueuedEvent::Source0 {
-        origin: outsider.as_interface().downgrade(),
-        event: neocogi_ui::button::Event::Activated(Activation { label: "expired".into() }),
-    };
+    let expired = generated::QueuedEvent(EventMessage {
+        origin: EventOrigin::Widget(outsider.as_interface().downgrade().into_unknown()),
+        event: neocogi_ui::button::Event::Activated(Activation { label: "expired".into() }).into_event().unwrap(),
+    });
     drop(outsider);
     assert!(expired.resolve(&replacement).unwrap().is_none());
     drop(app);

@@ -134,7 +134,7 @@ pub struct SplitView {
     /// Last routed local pointer position distinguishes the handle from inert pane backgrounds.
     pointer: Option<Vec2i>,
     /// Optional typed destination for user-originated position changes.
-    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::SplitViewEventQueueAbi>,
+    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::SplitViewAbi>,
 }
 
 impl SplitView {
@@ -143,7 +143,7 @@ impl SplitView {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         settings: SplitOptions,
-        queue: Option<ComPtr<neocogi_ui_nodes_contracts::SplitViewEventQueueAbi>>,
+        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<neocogi_com::ComBox<SplitViewAbi>, NcStatus> {
         validate(settings)?;
         let editor = host.create_children()?;
@@ -184,7 +184,7 @@ impl SplitView {
         self.settings.position = position;
         ctx.posted(
             self.events
-                .post(&neocogi_ui_nodes_contracts::SplitViewEvent::Changed(SplitChanged { position })),
+                .post(neocogi_ui_nodes_contracts::SplitViewEvent::Changed(SplitChanged { position })),
         );
         Change::Changed
     }

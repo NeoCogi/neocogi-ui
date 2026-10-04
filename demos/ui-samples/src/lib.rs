@@ -14,7 +14,7 @@ pub struct Sample {
 const FLEX: LayoutTrack = LayoutTrack::Flex { weight: 1.0 };
 
 /// Preserves the full demo's two opposing vertical stacks and their original dimensions.
-pub fn directions(ui: &Ui, queue: Option<ComRef<'_, ButtonEventQueueAbi>>) -> Result<Sample, NcStatus> {
+pub fn directions(ui: &Ui, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<Sample, NcStatus> {
     let mut content = ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Content)?;
     let mut buttons = Vec::new();
     for (name, direction) in [("Top to bottom", FlowDirection::TopToBottom), ("Bottom to top", FlowDirection::BottomToTop)] {
@@ -33,7 +33,7 @@ pub fn directions(ui: &Ui, queue: Option<ComRef<'_, ButtonEventQueueAbi>>) -> Re
 }
 
 /// Preserves the full demo's weighted row and grid; preview and demo use identical retained nodes.
-pub fn weights(ui: &Ui, queue: Option<ComRef<'_, ButtonEventQueueAbi>>) -> Result<Sample, NcStatus> {
+pub fn weights(ui: &Ui, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<Sample, NcStatus> {
     let mut content = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     let mut buttons = Vec::new();
     append(
@@ -66,7 +66,7 @@ pub fn weights(ui: &Ui, queue: Option<ComRef<'_, ButtonEventQueueAbi>>) -> Resul
 }
 
 /// Creates the same framed centered control as the full demo without prescribing its application action.
-fn button(ui: &Ui, text: &str, queue: Option<ComRef<'_, ButtonEventQueueAbi>>) -> Result<OwnedWidget<ButtonAbi>, NcStatus> {
+fn button(ui: &Ui, text: &str, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<ButtonAbi>, NcStatus> {
     let mut button = ui.widgets().button_with_queue(text, queue)?;
     button.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
     Ok(button)

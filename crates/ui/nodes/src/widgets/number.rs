@@ -104,7 +104,7 @@ pub struct Number {
     /// Text editing state for shift-click numeric entry.
     edit: NumberEditState,
     /// Single lifetime event slot; the constructor fixes the parent receiver before publishing the widget.
-    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::NumberEventQueueAbi>,
+    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::NumberAbi>,
 }
 
 impl Number {
@@ -144,7 +144,7 @@ impl Number {
 
     /// Test construction consumes the bare algorithm before fixing its real weak origin.
     #[cfg(test)]
-    pub(crate) fn into_observed(mut self, queue: ComPtr<neocogi_ui_nodes_contracts::NumberEventQueueAbi>) -> neocogi_com::LocalBox<Self> {
+    pub(crate) fn into_observed(mut self, queue: ComPtr<neocogi_com::events::IEventReceiverAbi>) -> neocogi_com::LocalBox<Self> {
         Self::into_local_box_cyclic::<NumberAbi>(move |origin| {
             self.events = crate::widget_object::WidgetEvents::with_queue(Some(queue), origin);
             self
@@ -184,7 +184,7 @@ impl Number {
         }
         let changed = (self.value != last).then_some(crate::NumericChanged { value: self.value });
         if let Some(event) = changed {
-            ctx.posted(self.events.post(&neocogi_ui_nodes_contracts::NumberEvent::Changed(event)));
+            ctx.posted(self.events.post(neocogi_ui_nodes_contracts::NumberEvent::Changed(event)));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(self.value != last)
@@ -292,7 +292,7 @@ impl Number {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         options: NumberOptions,
-        queue: Option<ComPtr<neocogi_ui_nodes_contracts::NumberEventQueueAbi>>,
+        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<neocogi_com::ComBox<NumberAbi>, NcStatus> {
         let mut value = Self::build(host, options, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.

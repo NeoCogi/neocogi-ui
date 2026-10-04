@@ -793,7 +793,7 @@ impl WindowManager {
                 .root_mut()
                 .expect("collected roots have root policy")
                 .events
-                .post(&WindowEvent::Destroyed);
+                .post(WindowEvent::Destroyed);
             self.posted(result);
         }
         self.surfaces.remove_roots(&removed);

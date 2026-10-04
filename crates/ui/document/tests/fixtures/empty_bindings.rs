@@ -40,56 +40,41 @@ pub fn bind(
     };
     Ok(form)
 }
-/// Captured facts retain weak origins; resolve against current fields before dispatch.
-pub enum QueuedEvent {
-    /// Complete stream for instances of neocogi_ui::ButtonAbi.
-    Source0 {
-        /// Does not retain a removed widget.
-        origin: neocogi_com::WeakComBox<neocogi_ui::ButtonAbi>,
-        /// Owned snapshot acquired before post returned.
-        event: neocogi_ui::button::Event,
-    },
-}
+/// A captured exclusive event and weak source, still readable after source removal.
+pub struct QueuedEvent(pub neocogi_com::events::EventMessage);
 impl QueuedEvent {
-    /// Resolve only after generation validation; expired or foreign origins return None.
-    /// Inspect the captured payload directly when its origin lifetime is irrelevant.
-    pub fn resolve(self, form: &Form) -> Result<Option<Event>, neocogi_com::NcStatus> {
-        let _ = &form;
-        match self {
-            Self::Source0 { origin, event } => {
-                if !origin.is_alive() { return Ok(None); }
-                Ok(match origin {
-                    origin if origin.same_object(form.widget_root_0.as_interface()) => Some(Event::Widget0(event)),
-                    _ => None,
-                })
-            }
+    /// Call only after generation validation. Removed or foreign sources return None.
+    /// Native decoding keeps the COM event owned by this message throughout the call.
+    pub fn resolve(&self, form: &Form) -> Result<Option<Event>, neocogi_com::NcStatus> {
+        let _ = form;
+        let neocogi_com::events::EventOrigin::Widget(origin) = &self.0.origin else { return Ok(None); };
+        if !origin.is_alive() { return Ok(None); }
+        if origin.same_object(form.widget_root_0.as_interface()) {
+            return Ok(self.0.payload::<neocogi_ui::button::Event>()?.map(Event::Widget0));
         }
+        Ok(None)
     }
 }
-#[neocogi_com::com_object(interfaces(neocogi_ui::nodes::IEventQueueInstance0517d9243d615b7d80421e7a13f2acac))]
-/// One application queue allocation serves every widget in this construction attempt.
+#[neocogi_com::com_object(interfaces(neocogi_com::events::IEventReceiver))]
+/// One receiver serves every widget in this construction attempt.
 struct FormQueue {
-    /// Complete slot/attempt identity from the application ReloadIds domain.
+    /// Slot/attempt identity is checked before interpreting an event.
     generation: neocogi_ui_document::Generation,
-    /// Retains the channel, never the form, model or widgets.
+    /// Posting access owns no application state or widgets.
     send: std::sync::mpsc::Sender<Message>,
 }
-impl neocogi_ui::nodes::IEventQueueInstance0517d9243d615b7d80421e7a13f2acac for FormQueue {
-    /// Acquires the snapshot and weak origin, then enqueues without running handlers.
-    fn post(&mut self, origin: neocogi_com::ComRef<'_, neocogi_ui::ButtonAbi>, event: neocogi_com::NcValueRef<'_, neocogi_ui::button::Event>) -> Result<(), neocogi_com::NcStatus> {
-        let event = event.to_owned()?;
-        neocogi_ui::button::validate(&event)?;
-        let event = QueuedEvent::Source0 { origin: origin.downgrade_box()?, event };
-        let _ = self.send.send(Message { generation: self.generation, event });
-        Ok(())
+impl neocogi_com::events::IEventReceiver for FormQueue {
+    /// Move the event into the inbox; rejection restores exactly the original owner.
+    fn post(&mut self, origin: neocogi_com::NcValueRef<'_, neocogi_com::events::EventOrigin>, event: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), (neocogi_com::NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
+        let event = QueuedEvent(neocogi_com::events::EventMessage::capture(origin, event)?);
+        self.send.send(Message { generation: self.generation, event }).map_err(|error| (neocogi_com::NC_E_CLOSED, error.0.event.0.event))
     }
 }
-/// Supplies shared queue projections before Loader or ReloadSlot creates widgets.
-/// Use the token issued by a slot constructed with the receiving application's ReloadIds.
+/// Supplies the common receiver before Loader or ReloadSlot creates widgets.
+/// Use the token issued by a slot in the receiving application's ReloadIds domain.
 pub fn events(generation: neocogi_ui_document::Generation, send: std::sync::mpsc::Sender<Message>) -> Result<neocogi_ui_document::EventBindings, neocogi_com::NcStatus> {
     let mut bindings = neocogi_ui_document::EventBindings::new();
-    let queue = FormQueue::from_value(FormQueue { generation, send });
-    let queue_0 = queue.query::<neocogi_com::events::QueueOf<neocogi_ui::ButtonAbi>>()?;
-    bindings.insert_queue::<neocogi_ui::ButtonAbi>("root", queue_0.as_com_ref())?;
+    let queue = FormQueue::from_value(FormQueue { generation, send }).query::<neocogi_com::events::IEventReceiverAbi>()?;
+    bindings.insert_queue("root", queue.as_com_ref())?;
     Ok(bindings)
 }

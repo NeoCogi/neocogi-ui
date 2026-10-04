@@ -1,6 +1,6 @@
 # Widget and event architecture
 
-NeoCogi combines a **retained widget tree** with **typed queues and deferred
+NeoCogi combines a **retained widget tree** with **COM event inboxes and deferred
 message processing**. Widgets own control state, the UI runtime owns routing and
 layout, and the application owns its behavior and inbox. A composite widget can
 also own behavior and a private inbox.
@@ -26,7 +26,7 @@ deployment boundaries.
 | Concrete widget | Control state and algorithms; `IWidget` update/paint and one leaf or container layout role. Built-ins and independent plugins use the same protocols. |
 | Retained node | The widget's sole `ComBox` owner, geometry, invalidation, cached layout/dispatch projections and, for containers, authenticated child storage. |
 | Surface forest | Window, dialog and popup relationships, widget roots, visibility, focus and input routing policy. |
-| Typed event queue object | Implements a producer's concrete queue interface, acquires borrowed event data and forwards an owned message to a chosen inbox. |
+| Event receiver | Implements the common `IEventReceiver`, acquires a weak origin and moves the exclusive COM event to its chosen inbox. |
 | `Dispatcher<Processor>` | Owns the application's `MessageProcessor` and its receiving endpoint; exposes `IApplicationDispatcher` to the scheduler. |
 | Behavioral composite | A widget allocation containing its own state and private receiver; exposes optional `IWidgetDispatcher` alongside its widget/layout interfaces. |
 
@@ -76,41 +76,40 @@ Three different values participate in a typical interaction:
 | Value | Example | Owner and destination |
 | --- | --- | --- |
 | Raw UI input | Pointer press, key transition, UTF-8 text | The runtime queues copied input and routes it using current focus, capture, modality and geometry. |
-| Semantic widget event | `ButtonEvent::Activated` | The widget synchronously posts its typed event to its constructor-selected queue. |
-| Private message | An application's enum containing a button event and weak origin | The queue adapter sends owned data to the application or composite that decides what it means. |
+| Semantic widget event | `ComBox<IEvent>` exposing `IActivatedEvent` | The widget moves its captured event to its constructor-selected receiver. |
+| Inbox message | `EventMessage`, optionally wrapped with a reload generation | The inbox owns the COM event and weak origin until its handler processes it. |
 
-An observed widget has one fixed queue for its complete event enum. The
-`*_with_queue` constructors select that queue; `*_unobserved` selects permanent
-non-delivery. Multiple widgets can share one queue object, and that object can
-implement several concrete queue interfaces. The queue destination establishes
-the behavioral recipient; semantic events do not automatically bubble through
-visual ancestors.
+An observed widget has one fixed receiver. The `*_with_queue` constructors
+select it; `*_unobserved` selects permanent non-delivery. Every widget can share
+the same `IEventReceiver` projection. The destination establishes the behavioral
+recipient; events do not automatically bubble through visual ancestors.
 
-`post` borrows the origin and event for the duration of the call. A queue that
-retains them acquires an owned event value and a weak origin. It validates and
-enqueues while the emitting widget's mutable call is still active. Application
-behavior runs after that call returns, so it can safely edit widgets through
-their ordinary interfaces.
+`post` borrows the weak origin and transfers a `ComBox<IEvent>`. The receiver
+captures that identity and moves the exclusive event into its inbox. The event
+stays a COM object until handling; no producer-side conversion to an application
+enum is needed. Handlers query derived event interfaces and read immutable
+getters, or use optional native Rust payload views. Event interface discovery
+returns `None` on a type miss and preserves actual ABI/provider errors.
 
 ```mermaid
 sequenceDiagram
     participant R as UI runtime
     participant B as Button
-    participant Q as Typed queue
+    participant Q as Common event receiver
     participant I as App inbox
     participant A as Dispatcher / processor
     participant L as TextBlock widget
     R->>B: update with routed input
-    B->>Q: post borrowed origin and Activated event
-    Q->>Q: validate and acquire owned event plus weak origin
-    Q->>I: send private message
+    B->>Q: post weak origin and move ComBox event
+    Q->>Q: capture weak origin
+    Q->>I: move EventMessage with exclusive event
     Q-->>B: return
     B-->>R: return from widget update
     Note over R,A: Traversal has returned. Dispatch boundary begins.
     R->>A: dispatch_next
     A->>I: try_recv
     I-->>A: one owned message
-    A->>A: processor.handle(message)
+    A->>A: query event interface and handle message
     A->>L: set_text
     L-->>A: return with geometry notification if needed
     A-->>R: MessageHandled
@@ -126,7 +125,7 @@ drives real keyboard input and destruction through those exact example sources.
 
 The facade's `Dispatcher` uses a Rust `mpsc::Receiver`, but channel types and
 private message enums stay within the owning binary. The COM boundary carries
-generated concrete queue interfaces and validated value representations. An
+one `IEventReceiver` interface, an exclusive event capability and a checked weak-origin value. An
 independent queue implementation chooses its own capacity and delivery-failure
 policy.
 
@@ -139,8 +138,8 @@ endpoint in the same exclusive widget allocation.
 
 ```mermaid
 flowchart LR
-    C["Child controls"] -->|typed event posts| Q["Composite queue adapter"]
-    Q -->|owned private messages| I["Private inbox"]
+    C["Child controls"] -->|ComBox event posts| Q["Composite queue adapter"]
+    Q -->|EventMessage owners| I["Private inbox"]
     subgraph F["One FileDialog widget allocation"]
         I
         S["Layout and picker state"]

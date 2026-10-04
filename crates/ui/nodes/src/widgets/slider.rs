@@ -140,7 +140,7 @@ pub struct Slider {
     /// Inline numeric editing state.
     edit: NumberEditState,
     /// Single lifetime event slot; the constructor fixes the parent receiver before publishing the widget.
-    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::SliderEventQueueAbi>,
+    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::SliderAbi>,
 }
 
 impl Slider {
@@ -262,7 +262,7 @@ impl Slider {
         if last != value {
             ctx.posted(
                 self.events
-                    .post(&neocogi_ui_nodes_contracts::SliderEvent::Changed(crate::NumericChanged { value })),
+                    .post(neocogi_ui_nodes_contracts::SliderEvent::Changed(crate::NumericChanged { value })),
             );
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
@@ -1057,7 +1057,7 @@ impl Slider {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         options: SliderOptions,
-        queue: Option<ComPtr<neocogi_ui_nodes_contracts::SliderEventQueueAbi>>,
+        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<neocogi_com::ComBox<SliderAbi>, NcStatus> {
         let mut value = Self::build(host, options, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.

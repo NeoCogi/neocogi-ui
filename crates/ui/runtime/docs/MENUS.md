@@ -17,7 +17,7 @@ before and after mounting; they never keep a removed menu surface logically open
 ```rust,no_run
 use neocogi_ui::{ IWindowAbi, Rect, Ui};
 use neocogi_com::{ComPtr, ComRef, NcStatus};
-fn install(ui: &Ui, queue: ComRef<'_, neocogi_ui::IMenuItemEventQueueAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+fn install(ui: &Ui, queue: ComRef<'_, neocogi_com::events::IEventReceiverAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
     let body = ui.widgets().button_unobserved("Document")?;
     let window = ui.window("Editor", Rect { x: 20, y: 20, width: 640, height: 480 }, body).map_err(|(status, _candidate)| status)?;
     let menus = ui.menus()?;

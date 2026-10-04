@@ -2,24 +2,6 @@
 use super::*;
 use neocogi_demo_contracts::*;
 
-/// Host-local facts prove plugins never need the consumer's message enum.
-enum Message {
-    /// Complete event from the counter's one physical port.
-    Counter(neocogi_com::WeakComBox<CounterAbi>, CounterEvent),
-}
-#[neocogi_com::com_object(neocogi_demo_contracts::CounterEventQueue)]
-/// The host implements the independently generated custom-widget queue directly.
-struct CounterQueue {
-    /// Producer lifetimes remain weak while messages wait in the host inbox.
-    sender: std::sync::mpsc::Sender<Message>,
-}
-impl CounterEventQueue for CounterQueue {
-    /// Acquire the custom payload through its checked ABI before the producer returns.
-    fn post(&mut self, origin: ComRef<'_, CounterAbi>, event: neocogi_com::NcValueRef<'_, CounterEvent>) -> Result<(), NcStatus> {
-        let _ = self.sender.send(Message::Counter(origin.downgrade_box()?, event.to_owned()?));
-        Ok(())
-    }
-}
 /// Host-local controller owns its labels and the extension's editing projection.
 struct Model {
     /// Captured values prove emission order independently of later producer edits.
@@ -28,10 +10,10 @@ struct Model {
     counter: neocogi_com::WeakComBox<CounterAbi>,
 }
 impl events::MessageProcessor for Model {
-    type Message = Message;
+    type Message = neocogi_com::events::EventMessage;
     /// Handles the independent plugin's concrete public event protocol.
-    fn handle(&mut self, message: Message) -> Result<(), NcStatus> {
-        let Message::Counter(origin, event) = message;
+    fn handle(&mut self, message: Self::Message) -> Result<(), NcStatus> {
+        let Some((origin, event)) = message.widget::<CounterAbi>()? else { return Ok(()); };
         if !origin.is_alive() {
             return Ok(());
         }
@@ -74,8 +56,7 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     assert_eq!(a_view.children().unwrap_err(), neocogi_com::NC_E_DROPPED);
     assert_eq!(b_view.children().unwrap_err(), neocogi_com::NC_E_DROPPED);
 
-    let (events_tx, events) = std::sync::mpsc::channel();
-    let queue = CounterQueue::from_value(CounterQueue { sender: events_tx }).query::<CounterEventQueueAbi>()?;
+    let (queue, events) = neocogi_com::events::channel();
     let binding = neocogi_demo_contracts::CounterEventBinding::from_queue(Some(queue.as_com_ref()));
     let counter_owner = provider.counter(host.as_com_ref(), neocogi_com::NcValueRef::new(&binding)?)?;
     let mut counter = counter_owner.downgrade();

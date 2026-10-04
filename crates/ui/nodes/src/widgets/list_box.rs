@@ -78,7 +78,7 @@ pub struct ListBox {
     /// Initialization-only font.
     font: FontRef,
     /// Single event slot; receives its destination during construction and is released when the widget is destroyed.
-    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::ListBoxEventQueueAbi>,
+    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::ListBoxAbi>,
 }
 
 impl ListBox {
@@ -135,7 +135,7 @@ impl Widget for ListBox {
         }
         // Pointer and keyboard activation publish the same application-facing submission.
         if self.events.is_bound() {
-            ctx.posted(self.events.post(&neocogi_ui_nodes_contracts::ListBoxEvent::Activated(crate::Activation {
+            ctx.posted(self.events.post(neocogi_ui_nodes_contracts::ListBoxEvent::Activated(crate::Activation {
                 label: self.com_label().to_owned(),
             })));
         }
@@ -218,7 +218,7 @@ impl ListBox {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         label: NcCopyFromBufferOffset<'_, u8>,
-        queue: Option<ComPtr<neocogi_ui_nodes_contracts::ListBoxEventQueueAbi>>,
+        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<neocogi_com::ComBox<ListBoxAbi>, NcStatus> {
         let mut value = Self::build(host, label, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.

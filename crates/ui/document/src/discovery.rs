@@ -3,7 +3,7 @@ use crate::{
     CustomWidgetFactory, CustomWidgetRegistry,
     design::{DesignWidgetManifest, MAX_DESIGN_DESCRIPTOR_BYTES},
 };
-use neocogi_com::{IUnknown, NcValueRef, ComPtr, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
+use neocogi_com::{NcValueRef, ComPtr, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
 use neocogi_ui::{IWidgetAbi, Ui};
 use neocogi_ui_document_contracts::IDesignWidgetCatalogAbi;
 use std::rc::Rc;
@@ -37,7 +37,7 @@ impl CustomWidgetFactory for CatalogWidgetFactory {
     }
 
     /// Calls the plugin's common COM constructor with typed, encoded settings.
-    fn create(&self, ui: &Ui, settings: &[u8], sink: Option<ComPtr<IUnknown>>) -> Result<neocogi_ui::OwnedWidget<IWidgetAbi>, NcStatus> {
+    fn create(&self, ui: &Ui, settings: &[u8], sink: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>) -> Result<neocogi_ui::OwnedWidget<IWidgetAbi>, NcStatus> {
         // The registry preflights the complete document before construction. Keep
         // this boundary bounded too, so direct adapter calls cannot allocate an
         // arbitrarily large transport buffer before discovering its limit.

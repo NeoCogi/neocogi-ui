@@ -127,7 +127,7 @@ pub(super) fn slider(ui: &Ui, value: f32, high: f32, queue: &mut Inputs, target:
             step: 1.,
             precision: 0,
         },
-        Some(queue.queue.query::<SliderEventQueueAbi>()?.as_com_ref()),
+        Some(queue.queue.as_com_ref()),
     )?;
     queue.sliders.push((control.as_interface().downgrade(), target));
     control.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
@@ -135,7 +135,7 @@ pub(super) fn slider(ui: &Ui, value: f32, high: f32, queue: &mut Inputs, target:
 }
 /// Creates a concrete button with its action queue already supplied to the factory.
 fn button(ui: &Ui, events_tx: &mut Inputs, text: &str, action: Action) -> Result<OwnedWidget<ButtonAbi>, NcStatus> {
-    let queue = events_tx.queue.query::<ButtonEventQueueAbi>()?;
+    let queue = events_tx.queue.clone();
     let mut control = ui.widgets().button_with_queue(text, Some(queue.as_com_ref()))?;
     events_tx.buttons.push((control.as_interface().downgrade(), action));
     control.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
@@ -286,74 +286,11 @@ impl State {
 }
 impl AppState for State {
     /// Every source maps into this application's one owned protocol.
-    type Message = Message;
+    type Message = neocogi_com::events::EventMessage;
     /// Interprets one message using ordinary exclusive application state.
-    fn update(&mut self, message: Message) -> Result<(), NcStatus> {
-        match message {
-            Message::Button(origin, neocogi_ui::events::button::Event::Activated(event)) => {
-                if !origin.is_alive() {
-                    return Ok(());
-                }
-                let action = self
-                    .inputs
-                    .buttons
-                    .iter()
-                    .find(|(control, _)| control.same_object(&origin))
-                    .map(|(_, action)| *action);
-                match action {
-                    Some(action) => self.activate(action, &event),
-                    None => Ok(()),
-                }
-            }
-            Message::Menu(origin, event) => {
-                if origin.upgrade()?.is_none() {
-                    return Ok(());
-                }
-                let action = self
-                    .inputs
-                    .menus
-                    .iter()
-                    .find(|(control, _)| control.same_object(&origin))
-                    .map(|(_, action)| *action);
-                match action {
-                    Some(action) => self.activate(action, &event),
-                    None => Ok(()),
-                }
-            }
-            Message::Slider(origin, neocogi_ui::events::slider::Event::Changed(event)) => {
-                if !origin.is_alive() {
-                    return Ok(());
-                }
-                let target = self
-                    .inputs
-                    .sliders
-                    .iter()
-                    .find(|(control, _)| control.same_object(&origin))
-                    .map(|(_, target)| *target);
-                match target {
-                    Some(target) => self.update(target.message(event)),
-                    None => Ok(()),
-                }
-            }
-            Message::Textbox(origin, event) => match (origin.is_alive(), event) {
-                (true, neocogi_ui::events::textbox::Event::Submitted(event)) => self.text_submitted(&event),
-                _ => Ok(()),
-            },
-            Message::Combo(origin, neocogi_ui::events::combo::Event::Changed(event)) => match origin.is_alive() {
-                true => self.choice_changed(&event),
-                false => Ok(()),
-            },
-            Message::FileDialog(origin, neocogi_ui::events::file_dialog::Event::Completed(event)) => match origin.is_alive() {
-                true => self.file_selected(&event),
-                false => Ok(()),
-            },
-            Message::WindowEvent(origin, event) => match origin.upgrade()? {
-                Some(_) => self.window_changed(&event),
-                None => Ok(()),
-            },
-            Message::Background(shift, event) => self.background_changed(shift, &event),
-            Message::Style(message) => self.style.update(&self.ui, message),
-        }
+    fn update(&mut self, event: Self::Message) -> Result<(), NcStatus> {
+        if let Some(message) = Message::decode(&event)? { self.command(message)?; }
+        Ok(())
     }
 
     /// Publishes assets prepared by the previous frame's handlers before this frame's UI update.
@@ -560,13 +497,13 @@ impl LeafContent for Triangle {
 
 /// Supplies each menu action's typed mapping before publishing its declaration.
 fn menu_item(menu: &MenuBuilder, send: &mut Inputs, text: &str, action: Action) -> Result<MenuItem, NcStatus> {
-    let item = menu.item_with_queue(text, Some(send.queue.query::<IMenuItemEventQueueAbi>()?.as_com_ref()))?;
+    let item = menu.item_with_queue(text, Some(send.queue.as_com_ref()))?;
     send.menus.push((item.as_interface().downgrade()?, action));
     Ok(item)
 }
 
 /// Creates the complete demo with the same structural desktop and floating examples on every backend.
-fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostError> {
+fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<neocogi_com::events::EventMessage>), HostError> {
     neocogi_demo_host::initialize()?;
     let host = Host::new("neocogi-ui COM Demo", Size { width: 1200, height: 800 }, neocogi_demo_assets::load_bundle()?)?;
     let ui = &host.ui;
@@ -583,7 +520,7 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
     let main_scroll = ui.widgets().scroll_area(into_widget(main_body)?, true).map_err(|(status, _candidate)| status)?;
     let mut main_body = main_body_handle;
     let main_scroll_handle = main_scroll.handle();
-    let lifecycle = events_tx.queue.query::<IWindowEventQueueAbi>()?;
+    let lifecycle = events_tx.queue.clone();
     let demo = ui.child_window_with_queue(
         desktop.as_com_ref(),
         "Demo Window",
@@ -597,7 +534,7 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
         demo.as_com_ref(),
         &FRUIT,
         ChoiceSelection::Selected(0),
-        Some(events_tx.queue.query::<ComboEventQueueAbi>()?.as_com_ref()),
+        Some(events_tx.queue.as_com_ref()),
     )?;
     let menus = ui.menus()?;
     let popup_menu = menus.create("Test Popup")?;
@@ -643,14 +580,14 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<Message>), HostErr
     log.set_font_role(FontRole::Mono)?;
     let log_handle = log.handle();
     let log_scroll = ui.widgets().scroll_area(into_widget(log)?, true).map_err(|(status, _candidate)| status)?;
-    let entry_sink = events_tx.queue.query::<TextboxEventQueueAbi>()?;
+    let entry_sink = events_tx.queue.clone();
     let mut entry = ui.widgets().textbox_with_queue("", Some(entry_sink.as_com_ref()))?;
     entry.set_font_role(FontRole::Mono)?;
     let (style, style_root) = StyleEditor::new(ui, &mut events_tx)?;
     floating(ui, desktop.as_com_ref(), "Flat Palette / Skin Metrics", rect(350, 250, 300, 240), into_widget(style_root)?)?;
     let background = ui.widgets().color_swatch(grid.borrow().background, "#5A5F64")?;
     #[cfg(not(target_arch = "wasm32"))]
-    let file_dialog = Some(ui.file_dialog_with_queue(demo.as_com_ref(), Some(events_tx.queue.query::<IFileDialogEventQueueAbi>()?.as_com_ref()))?);
+    let file_dialog = Some(ui.file_dialog_with_queue(demo.as_com_ref(), Some(events_tx.queue.as_com_ref()))?);
     #[cfg(target_arch = "wasm32")]
     let file_dialog = None;
     open_item.set_enabled(file_dialog.is_some())?;
@@ -861,7 +798,7 @@ fn build_examples(host: &Host, state: &mut State, log_owner: OwnedWidget<ScrollA
         into_widget(ui.widgets().leaf(Suzanne::new(host.renderer.as_com_ref())?, WidgetOptions::NONE)?)?,
     )?;
     // All sample buttons share this parent destination; each widget retains it at creation.
-    let sample_sink = events_tx.queue.query::<ButtonEventQueueAbi>()?;
+    let sample_sink = events_tx.queue.clone();
     for (sample, title, area) in [
         (
             neocogi_ui_samples::directions(ui, Some(sample_sink.as_com_ref()))?,
@@ -885,3 +822,101 @@ fn build_examples(host: &Host, state: &mut State, log_owner: OwnedWidget<ScrollA
 #[cfg(test)]
 #[path = "app_tests.rs"]
 mod tests;
+
+impl State {
+    /// Applies a decoded command while the update caller retains the event owner.
+    fn command(&mut self, message: Message) -> Result<(), NcStatus> {
+        match message {
+            Message::Button(origin, neocogi_ui::events::button::Event::Activated(event)) => {
+                if !origin.is_alive() {
+                    return Ok(());
+                }
+                let action = self
+                    .inputs
+                    .buttons
+                    .iter()
+                    .find(|(control, _)| control.same_object(&origin))
+                    .map(|(_, action)| *action);
+                match action {
+                    Some(action) => self.activate(action, &event),
+                    None => Ok(()),
+                }
+            }
+            Message::Menu(origin, event) => {
+                if origin.upgrade()?.is_none() {
+                    return Ok(());
+                }
+                let action = self
+                    .inputs
+                    .menus
+                    .iter()
+                    .find(|(control, _)| control.same_object(&origin))
+                    .map(|(_, action)| *action);
+                match action {
+                    Some(action) => self.activate(action, &event),
+                    None => Ok(()),
+                }
+            }
+            Message::Slider(origin, neocogi_ui::events::slider::Event::Changed(event)) => {
+                if !origin.is_alive() {
+                    return Ok(());
+                }
+                let target = self
+                    .inputs
+                    .sliders
+                    .iter()
+                    .find(|(control, _)| control.same_object(&origin))
+                    .map(|(_, target)| *target);
+                match target {
+                    Some(target) => self.command(target.message(event)),
+                    None => Ok(()),
+                }
+            }
+            Message::Textbox(origin, event) => match (origin.is_alive(), event) {
+                (true, neocogi_ui::events::textbox::Event::Submitted(event)) => self.text_submitted(&event),
+                _ => Ok(()),
+            },
+            Message::Combo(origin, neocogi_ui::events::combo::Event::Changed(event)) => match origin.is_alive() {
+                true => self.choice_changed(&event),
+                false => Ok(()),
+            },
+            Message::FileDialog(origin, neocogi_ui::events::file_dialog::Event::Completed(event)) => match origin.is_alive() {
+                true => self.file_selected(&event),
+                false => Ok(()),
+            },
+            Message::WindowEvent(origin, event) => match origin.upgrade()? {
+                Some(_) => self.window_changed(&event),
+                None => Ok(()),
+            },
+            Message::Background(shift, event) => self.background_changed(shift, &event),
+            Message::Style(message) => self.style.update(&self.ui, message),
+        }
+    }
+}
+impl Message {
+    /// Decode at the handling boundary while the inbox still owns the COM event.
+    fn decode(message: &neocogi_com::events::EventMessage) -> Result<Option<Self>, neocogi_com::NcStatus> {
+        if let Some((origin, event)) = message.widget::<ButtonAbi>()? {
+            return Ok(Some(Self::Button(origin, event)));
+        }
+        if let Some((origin, event)) = message.widget::<SliderAbi>()? {
+            return Ok(Some(Self::Slider(origin, event)));
+        }
+        if let Some((origin, event)) = message.widget::<TextboxAbi>()? {
+            return Ok(Some(Self::Textbox(origin, event)));
+        }
+        if let Some((origin, event)) = message.widget::<ComboAbi>()? {
+            return Ok(Some(Self::Combo(origin, event)));
+        }
+        if let Some((origin, event)) = message.widget::<IFileDialogAbi>()? {
+            return Ok(Some(Self::FileDialog(origin, event)));
+        }
+        if let Some((origin, event)) = message.service::<IMenuItemAbi>()? {
+            return Ok(Some(Self::Menu(origin, event)));
+        }
+        if let Some((origin, event)) = message.service::<IWindowAbi>()? {
+            return Ok(Some(Self::WindowEvent(origin, event)));
+        }
+        Ok(None)
+    }
+}

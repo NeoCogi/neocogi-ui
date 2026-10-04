@@ -1,7 +1,6 @@
-//! Typed event-domain validation and deferred application dispatch.
-//! Applications implement concrete queue traits on an object containing their sender.
-//! Each constructor borrows the appropriate queue projection; one behavioral inbox
-//! can serve many widgets without allocating per-widget callback adapters.
+//! Immutable COM event snapshots and deferred application dispatch.
+//! One common receiver serves every widget kind. The inbox owns each event as
+//! ComBox<IEventAbi> until its handler queries derived event interfaces.
 //!
 //! The walkthrough below uses an initialized, otherwise empty UI. Its keyboard
 //! input exercises actual activation, then removal with an application event queued.
@@ -33,7 +32,7 @@ pub fn completed_file_path(event: &FileDialogCompletion) -> Result<Option<std::p
 }
 
 /// Common COM event transport and optional native snapshot conversions.
-pub use neocogi_com::events::{EventMessage, EventOrigin, EventPayload, IEvent, IEventAbi, IEventReceiver, IEventReceiverAbi, downcast_event};
+pub use neocogi_com::events::{EventMessage, EventOrigin, EventPayload, IEvent, IEventAbi, IEventReceiver, IEventReceiverAbi, downcast_event, channel};
 
 /// Publishes a native convenience type without duplicating its domain validator.
 macro_rules! widget_event {

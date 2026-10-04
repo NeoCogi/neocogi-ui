@@ -778,7 +778,7 @@ impl SurfaceNode {
     /// Emits one concrete window event at the next safe application dispatch boundary.
     fn emit_window_event(&mut self, event: WindowEvent) -> Result<(), neocogi_com::NcStatus> {
         // The record owns its receiver; posting owns no queue and invokes no app behavior.
-        self.root_mut().expect("window events are emitted only by roots").events.post(&event)
+        self.root_mut().expect("window events are emitted only by roots").events.post(event)
     }
 
     /// Dismisses an active popup and emits exactly one policy event.
@@ -787,7 +787,7 @@ impl SurfaceNode {
         self.surface.body.clear_transient_targets();
         if let Some(PopupState::Application { events, .. }) = self.popup_mut() {
             // Menu popups have no unobservable lifecycle port; their visibility is wholly internal.
-            events.post(&PopupEvent::Dismissed)?;
+            events.post(PopupEvent::Dismissed)?;
         }
         Ok(())
     }

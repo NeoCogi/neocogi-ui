@@ -20,7 +20,7 @@ struct Request {
     /// Active versus idle request state; COM ownership alone controls destruction.
     phase: RequestPhase,
     /// Installed concrete completion receiver; consumers own their committed outcomes.
-    completed: WidgetEvents<IFileDialogEventQueueAbi>,
+    completed: WidgetEvents<IFileDialogAbi>,
 }
 
 /// Mutually exclusive picker-request lifecycle; no two booleans can disagree.
@@ -53,7 +53,7 @@ impl Request {
         match self.phase {
             RequestPhase::Active => {
                 self.phase = RequestPhase::Idle;
-                self.completed.post(&IFileDialogEvent::Completed(status))?;
+                self.completed.post(IFileDialogEvent::Completed(status))?;
             }
             RequestPhase::Idle => {}
         }
@@ -65,7 +65,7 @@ impl Request {
 /// Node construction data retained by the picker without retaining the core runtime identity.
 struct DialogNodes {
     /// One concrete receiver shared by all private children and directory rows.
-    queue: ComPtr<neocogi_com::IUnknown>,
+    queue: ComPtr<neocogi_com::events::IEventReceiverAbi>,
     /// Non-owning host authority reports logical closure after the owning UI is released.
     host: ComPtr<IWidgetHostAbi>,
     /// Provider-shared imported resources used by dynamically rebuilt directory rows.
@@ -238,7 +238,7 @@ fn label(nodes: &Rc<DialogNodes>, value: &str) -> Result<OwnedWidget<neocogi_ui:
 }
 /// Constructs a complete command Button through the dynamically implemented factory shorthand.
 fn button(nodes: &Rc<DialogNodes>, value: &str) -> Result<OwnedWidget<neocogi_ui::ButtonAbi>, NcStatus> {
-    let queue = nodes.queue.query::<neocogi_ui::ButtonEventQueueAbi>()?;
+    let queue = nodes.queue.clone();
     let button = OwnedWidget::from_interface(crate::Button::create_com(
         nodes.host.clone(),
         nodes.resources.clone(),
@@ -259,7 +259,7 @@ fn column(nodes: &Rc<DialogNodes>, directory: &Path, paths: Vec<PathBuf>, folder
             path.file_name().unwrap_or(path.as_os_str()).to_string_lossy()
         };
         let action = if folder { Command::Folder(path.clone()) } else { Command::File(path.clone()) };
-        let queue = nodes.queue.query::<neocogi_ui::ListItemEventQueueAbi>()?;
+        let queue = nodes.queue.clone();
         let mut item = OwnedWidget::from_interface(crate::ListItem::create_com(
             nodes.host.clone(),
             nodes.resources.clone(),
@@ -290,15 +290,15 @@ impl Listing {
 
 impl FileDialog {
     /// Constructs one hidden modal from actual COM controls; no native widget handle or generic application state enters its ABI.
-    fn new(services: Rc<NodeServices>, parent: ComRef<'_, IWindowAbi>, queue: Option<ComPtr<IFileDialogEventQueueAbi>>) -> Result<WeakLocalBox<Self>, NcStatus> {
+    fn new(services: Rc<NodeServices>, parent: ComRef<'_, IWindowAbi>, queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>) -> Result<WeakLocalBox<Self>, NcStatus> {
         services.host.check_mutation()?;
         let (events_tx, events) = std::sync::mpsc::channel();
         let nodes = Rc::new(DialogNodes {
-            queue: DialogQueue::from_value(DialogQueue::new(events_tx)),
+            queue: DialogQueue::from_value(DialogQueue::new(events_tx)).query()?,
             host: services.host.clone(),
             resources: services.resources.clone(),
         });
-        let path_sink = nodes.queue.query::<neocogi_ui::TextboxEventQueueAbi>()?;
+        let path_sink = nodes.queue.clone();
         let filename_sink = path_sink.clone();
         let path = OwnedWidget::from_interface(crate::Textbox::create_com(
             nodes.host.clone(),
@@ -431,7 +431,7 @@ impl FileDialog {
             Self { shell, model, messages: events }
         })?;
         let windows = services.windows.clone();
-        let window_sink = dialog.try_borrow()?.model.nodes.queue.query::<IWindowEventQueueAbi>()?;
+        let window_sink = dialog.try_borrow()?.model.nodes.queue.clone();
         let window_binding = IWindowEventBinding::from_queue(Some(window_sink.as_com_ref()));
         let mut observer = dialog.downgrade();
         let root = dialog.into_interface::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?;
@@ -536,7 +536,8 @@ impl Model {
     }
 
     /// Handles one child message and completes any navigation before the next message.
-    fn update(&mut self, message: Message) -> Result<(), NcStatus> {
+    fn update(&mut self, event: neocogi_com::events::EventMessage) -> Result<(), NcStatus> {
+        let Some(message) = Message::decode(&event)? else { return Ok(()); };
         let message = match message {
             Message::Button(origin, event) => {
                 drop(event);
@@ -669,7 +670,7 @@ struct FileDialog {
     /// Authoritative picker state, including typed child handles and completion mapping.
     model: Model,
     /// Sole receiving endpoint, destroyed with this exclusively owned value.
-    messages: Receiver<Message>,
+    messages: Receiver<neocogi_com::events::EventMessage>,
 }
 
 /// Optional dispatch delegates directly to the same object, with no COM reentry.
@@ -801,7 +802,7 @@ impl IFileDialog for FileDialog {
 pub(crate) fn create(
     services: Rc<NodeServices>,
     parent: ComRef<'_, IWindowAbi>,
-    queue: Option<ComPtr<IFileDialogEventQueueAbi>>,
+    queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
 ) -> Result<WeakComBox<IFileDialogAbi>, NcStatus> {
     FileDialog::new(services, parent, queue)?.query()
 }
@@ -838,3 +839,22 @@ fn read_directory(path: &Path) -> std::io::Result<(Vec<PathBuf>, Vec<PathBuf>)> 
 
 #[cfg(test)]
 mod tests;
+
+impl Message {
+    /// Decode at the handling boundary while the inbox still owns the COM event.
+    fn decode(message: &neocogi_com::events::EventMessage) -> Result<Option<Self>, neocogi_com::NcStatus> {
+        if let Some((origin, event)) = message.widget::<neocogi_ui::ButtonAbi>()? {
+            return Ok(Some(Self::Button(origin, event)));
+        }
+        if let Some((origin, event)) = message.widget::<neocogi_ui::ListItemAbi>()? {
+            return Ok(Some(Self::Row(origin, event)));
+        }
+        if let Some((origin, event)) = message.widget::<neocogi_ui::TextboxAbi>()? {
+            return Ok(Some(Self::Text(origin, event)));
+        }
+        if let Some((origin, event)) = message.service::<IWindowAbi>()? {
+            return Ok(Some(Self::Window(origin, event)));
+        }
+        Ok(None)
+    }
+}

@@ -1,30 +1,8 @@
-use neocogi_com::{ComRef, NcStatus, NcValueRef, WeakComBox};
+use neocogi_com::NcStatus;
 use neocogi_ui::{
-    ButtonAbi, ButtonEventQueueAbi, IApplicationDispatcherAbi, KeyCode, KeyStroke, Rect, Size, Ui, UiInput, button,
-    events::{Dispatcher, MessageProcessor},
+    ButtonAbi, IApplicationDispatcherAbi, KeyCode, KeyStroke, Rect, Size, Ui, UiInput, IActivatedEventAbi,
+    events::{channel, Dispatcher, EventMessage, MessageProcessor},
 };
-
-/// Application messages own their payload but only observe the emitting widget.
-type Message = (WeakComBox<ButtonAbi>, button::Event);
-
-#[neocogi_com::com_object(neocogi_ui::nodes::ButtonEventQueue)]
-/// One concrete COM receiver forwards facts into the application's inbox.
-struct AppQueue {
-    /// Sending never retains the application's mutable model.
-    send: std::sync::mpsc::Sender<Message>,
-}
-impl neocogi_ui::nodes::ButtonEventQueue for AppQueue {
-    /// Capture the event while its producer storage is valid; behavior runs later.
-    fn post(&mut self, origin: ComRef<'_, ButtonAbi>, value: NcValueRef<'_, button::Event>) -> Result<(), NcStatus> {
-        let event = value.to_owned()?;
-        button::validate(&event)?;
-        // A Button has one ComBox owner. It cannot promote into a shared ComPtr.
-        let origin = origin.downgrade_box()?;
-        // This application's policy discards facts after its receiver is gone.
-        let _ = self.send.send((origin, event));
-        Ok(())
-    }
-}
 
 /// Ordinary state changed only by the controller's exclusive handler call.
 struct Counter {
@@ -34,19 +12,19 @@ struct Counter {
     ignored: u32,
 }
 impl MessageProcessor for Counter {
-    type Message = Message;
+    type Message = EventMessage;
     /// This UI-thread policy ignores work from removed buttons. Dialog results
     /// may require a different policy: expiration does not erase captured facts.
-    fn handle(&mut self, (origin, event): Message) -> Result<(), NcStatus> {
+    fn handle(&mut self, message: EventMessage) -> Result<(), NcStatus> {
+        let Some(origin) = message.origin.widget::<ButtonAbi>()? else { return Ok(()); };
+        let Some(_activation) = message.downcast::<IActivatedEventAbi>()? else { return Ok(()); };
         if !origin.is_alive() {
             self.ignored += 1;
             return Ok(());
         }
         // is_alive is an observation, not a lease; any later widget call still
         // performs its own lifetime/borrow check before entering the provider.
-        match event {
-            button::Event::Activated(_) => self.count += 1,
-        }
+        self.count += 1;
         Ok(())
     }
 }
@@ -68,8 +46,7 @@ fn press(ui: &Ui, key: KeyCode) -> Result<(), NcStatus> {
 /// Run with an initialized, otherwise empty Ui and room for a 400-by-200 window.
 /// Mount, activate and remove a real button while retaining a queued weak origin.
 pub fn walkthrough(ui: &Ui, size: Size) -> Result<(), NcStatus> {
-    let (send, messages) = std::sync::mpsc::channel();
-    let queue = AppQueue::from_value(AppQueue { send }).query::<ButtonEventQueueAbi>()?;
+    let (queue, messages) = channel();
     let button = ui.widgets().button_with_queue("Count", Some(queue.as_com_ref()))?;
     let observed = button.as_interface().downgrade();
     // Insertion transfers ownership to the window. On construction failure this

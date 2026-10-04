@@ -362,25 +362,27 @@ impl neocogi_ui_nodes_contracts::Combo for Combo {
 
 /// Private composition bridge: the core menu emits its own origin, while the
 /// application observes the public Combo. No event payload is copied here.
-#[neocogi_com::com_object(neocogi_ui_core_contracts::IChoiceMenuEventQueue)]
+#[neocogi_com::com_object(interfaces(neocogi_com::events::IEventReceiver))]
 pub(crate) struct ComboEventForwarder {
     /// Final application queue, fixed before the private menu is created.
-    pub(crate) queue: ComPtr<neocogi_ui_nodes_contracts::ComboEventQueueAbi>,
+    pub(crate) queue: ComPtr<neocogi_com::events::IEventReceiverAbi>,
     /// Filled exactly once by the enclosing Combo constructor, before publication.
     /// No public method can replace this origin or its queue.
     pub(crate) origin: Option<neocogi_com::WeakComBox<ComboAbi>>,
 }
-impl neocogi_ui_core_contracts::IChoiceMenuEventQueue for ComboEventForwarder {
-    /// Forwards the borrowed snapshot with the public identity, without entering
+impl neocogi_com::events::IEventReceiver for ComboEventForwarder {
+    /// Forwards the sole snapshot owner with the public identity, without entering
     /// either object's widget state or performing application behavior.
     fn post(
         &mut self,
-        _origin: neocogi_com::ComRef<'_, IChoiceMenuAbi>,
-        event: neocogi_com::NcValueRef<'_, neocogi_ui_core_contracts::IChoiceMenuEvent>,
-    ) -> Result<(), NcStatus> {
-        let origin = match &self.origin {
-            Some(origin) => origin.as_com_ref(),
-            None => return Err(neocogi_com::NC_E_BUSY),
+        _origin: neocogi_com::NcValueRef<'_, neocogi_com::events::EventOrigin>,
+        event: neocogi_com::ComBox<neocogi_com::events::IEventAbi>,
+    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
+        let Some(origin) = &self.origin else { return Err((neocogi_com::NC_E_BUSY, event)) };
+        let origin = neocogi_com::events::EventOrigin::Widget(origin.clone().into_unknown());
+        let origin = match neocogi_com::NcValueRef::new(&origin) {
+            Ok(origin) => origin,
+            Err(status) => return Err((status, event)),
         };
         self.queue.post(origin, event)
     }

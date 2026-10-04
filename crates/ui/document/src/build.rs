@@ -58,22 +58,22 @@ impl Construction<'_> {
         let queue = self.events.take(&node.key);
         let mut widget = match &node.widget {
             WidgetSpec::Button { text } => {
-                root(factory.button_with_queue(text, queue.as_ref().map(|queue| queue.query()).transpose()?.as_ref().map(ComPtr::as_com_ref))?)?
+                root(factory.button_with_queue(text, queue.as_ref().map(ComPtr::as_com_ref))?)?
             }
             WidgetSpec::Checkbox { text, checked } => root(factory.checkbox_with_queue(
                 text,
                 *checked,
-                queue.as_ref().map(|queue| queue.query()).transpose()?.as_ref().map(ComPtr::as_com_ref),
+                queue.as_ref().map(ComPtr::as_com_ref),
             )?)?,
             WidgetSpec::Textbox { text } => {
-                root(factory.textbox_with_queue(text, queue.as_ref().map(|queue| queue.query()).transpose()?.as_ref().map(ComPtr::as_com_ref))?)?
+                root(factory.textbox_with_queue(text, queue.as_ref().map(ComPtr::as_com_ref))?)?
             }
             WidgetSpec::TextBlock { text, wrapping: policy } => root(factory.text_block(text, wrapping(policy))?)?,
             WidgetSpec::TextArea { text, wrapping: policy, scrolling } => root(factory.text_area_with_queue(
                 text,
                 wrapping(policy),
                 *scrolling,
-                queue.as_ref().map(|queue| queue.query()).transpose()?.as_ref().map(ComPtr::as_com_ref),
+                queue.as_ref().map(ComPtr::as_com_ref),
             )?)?,
             WidgetSpec::Slider { value, low, high, step, precision } => root(factory.slider_with_queue(
                 SliderOptions {
@@ -83,7 +83,7 @@ impl Construction<'_> {
                     step: *step,
                     precision: *precision,
                 },
-                queue.as_ref().map(|queue| queue.query()).transpose()?.as_ref().map(ComPtr::as_com_ref),
+                queue.as_ref().map(ComPtr::as_com_ref),
             )?)?,
             WidgetSpec::Number { value, step, precision } => root(factory.number_with_queue(
                 NumberOptions {
@@ -91,14 +91,14 @@ impl Construction<'_> {
                     step: *step,
                     precision: *precision,
                 },
-                queue.as_ref().map(|queue| queue.query()).transpose()?.as_ref().map(ComPtr::as_com_ref),
+                queue.as_ref().map(ComPtr::as_com_ref),
             )?)?,
             WidgetSpec::ColorSwatch { text, rgba } => root(factory.color_swatch(*rgba, text)?)?,
             WidgetSpec::ListItem { text } => {
-                root(factory.list_item_with_queue(text, queue.as_ref().map(|queue| queue.query()).transpose()?.as_ref().map(ComPtr::as_com_ref))?)?
+                root(factory.list_item_with_queue(text, queue.as_ref().map(ComPtr::as_com_ref))?)?
             }
             WidgetSpec::ListBox { text } => {
-                root(factory.list_box_with_queue(text, queue.as_ref().map(|queue| queue.query()).transpose()?.as_ref().map(ComPtr::as_com_ref))?)?
+                root(factory.list_box_with_queue(text, queue.as_ref().map(ComPtr::as_com_ref))?)?
             }
             WidgetSpec::Scrollbar { vertical, viewport, content, offset } => root(factory.scrollbar_with_queue(
                 ScrollRange {
@@ -107,7 +107,7 @@ impl Construction<'_> {
                     content: *content,
                     offset: *offset,
                 },
-                queue.as_ref().map(|queue| queue.query()).transpose()?.as_ref().map(ComPtr::as_com_ref),
+                queue.as_ref().map(ComPtr::as_com_ref),
             )?)?,
             WidgetSpec::Combo { labels, selected, placeholder } => {
                 let parent = self.parent.ok_or(NC_E_INVALID_ARG)?;
@@ -115,7 +115,7 @@ impl Construction<'_> {
                     parent.as_com_ref(),
                     labels,
                     selection(*selected),
-                    queue.as_ref().map(|queue| queue.query()).transpose()?.as_ref().map(ComPtr::as_com_ref),
+                    queue.as_ref().map(ComPtr::as_com_ref),
                 )?;
                 combo.set_placeholder(placeholder)?;
                 root(combo)?
@@ -154,7 +154,7 @@ impl Construction<'_> {
                     minimum_second: *minimum_second,
                     handle_width: *handle,
                 },
-                queue.as_ref().map(|queue| queue.query()).transpose()?.as_ref().map(ComPtr::as_com_ref),
+                queue.as_ref().map(ComPtr::as_com_ref),
             )?)?,
             WidgetSpec::Scroll { enabled } => {
                 // The scroll constructor consumes its sole child before ordinary

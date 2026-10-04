@@ -268,7 +268,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
             .to_owned()?
             .into_queue()
             .map(|queue| crate::widgets::ComboEventForwarder::into_local(crate::widgets::ComboEventForwarder { queue, origin: None }));
-        let receiver = forwarder.as_ref().map(|forwarder| forwarder.query::<IChoiceMenuEventQueueAbi>()).transpose()?;
+        let receiver = forwarder.as_ref().map(|forwarder| forwarder.query::<neocogi_com::events::IEventReceiverAbi>()).transpose()?;
         let binding = IChoiceMenuEventBinding::from_queue(receiver.as_ref().map(ComPtr::as_com_ref));
         let menu = self
             .services

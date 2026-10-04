@@ -1,30 +1,21 @@
 //! The demo's one queue object posts snapshots without application callbacks.
-use super::{Action, Message, NumericTarget};
-use neocogi_com::{com_object, ComRef, NcStatus, NcValueRef, WeakComPtr};
+use super::{Action, NumericTarget};
+use neocogi_com::WeakComPtr;
 use neocogi_ui::*;
-use neocogi_ui::nodes::{ButtonEventQueue, SliderEventQueue, TextboxEventQueue, ComboEventQueue};
 
-#[com_object(interfaces(
-    neocogi_ui::nodes::ButtonEventQueue,
-    neocogi_ui::nodes::SliderEventQueue,
-    neocogi_ui::nodes::TextboxEventQueue,
-    neocogi_ui::nodes::ComboEventQueue,
-    IMenuItemEventQueue,
-    IFileDialogEventQueue,
-    IWindowEventQueue
-))]
+#[neocogi_com::com_object(interfaces(neocogi_com::events::IEventReceiver))]
 /// One receiver allocation serves every observed control in the demo.
 /// It owns only posting access, never a reference to application state or targets.
 struct Queue {
-    /// Disconnection discards future events without undoing committed UI edits.
-    sender: std::sync::mpsc::Sender<Message>,
+    /// Disconnection rejects delivery and returns the original event owner.
+    sender: std::sync::mpsc::Sender<neocogi_com::events::EventMessage>,
 }
 
 /// Ordinary application-owned construction and command identities.
 /// Only &mut Inputs registers controls; no second COM borrow gate protects this data.
 pub(crate) struct Inputs {
-    /// Shared concrete receiver; each factory requests its exact interface projection.
-    pub(super) queue: neocogi_com::ComPtr<neocogi_com::IUnknown>,
+    /// Common receiver projection shared directly with every observed factory.
+    pub(super) queue: neocogi_com::ComPtr<neocogi_com::events::IEventReceiverAbi>,
     /// Weak identities keep action lookup independent of labels and address reuse.
     pub(super) buttons: Vec<(neocogi_com::WeakComBox<ButtonAbi>, Action)>,
     /// Menu entries retain only their explicit application command.
@@ -34,75 +25,24 @@ pub(crate) struct Inputs {
 }
 impl Inputs {
     /// Constructs the sole queue before creating any eventful widgets.
-    pub(super) fn new(sender: std::sync::mpsc::Sender<Message>) -> Self {
+    pub(super) fn new(sender: std::sync::mpsc::Sender<neocogi_com::events::EventMessage>) -> Self {
         Self {
-            queue: Queue::from_value(Queue { sender }),
+            queue: Queue::from_value(Queue { sender }).query().expect("Queue implements IEventReceiver"),
             buttons: Vec::new(),
             menus: Vec::new(),
             sliders: Vec::new(),
         }
     }
 }
-impl ButtonEventQueue for Queue {
-    /// Acquires producer-owned fields before returning across COM; handlers run later.
-    fn post(&mut self, origin: ComRef<'_, ButtonAbi>, event: NcValueRef<'_, neocogi_ui::events::button::Event>) -> Result<(), NcStatus> {
-        let event = event.to_owned()?;
-        neocogi_ui::events::button::validate(&event)?;
-        let _ = self.sender.send(Message::Button(origin.downgrade_box()?, event));
-        Ok(())
-    }
-}
-impl SliderEventQueue for Queue {
-    /// Acquires producer-owned fields before returning across COM; handlers run later.
-    fn post(&mut self, origin: ComRef<'_, SliderAbi>, event: NcValueRef<'_, neocogi_ui::events::slider::Event>) -> Result<(), NcStatus> {
-        let event = event.to_owned()?;
-        neocogi_ui::events::slider::validate(&event)?;
-        let _ = self.sender.send(Message::Slider(origin.downgrade_box()?, event));
-        Ok(())
-    }
-}
-impl IMenuItemEventQueue for Queue {
-    /// Acquires producer-owned fields before returning across COM; handlers run later.
-    fn post(&mut self, origin: ComRef<'_, IMenuItemAbi>, event: NcValueRef<'_, neocogi_ui::events::activation::Event>) -> Result<(), NcStatus> {
-        let event = event.to_owned()?;
-        neocogi_ui::events::activation::validate(&event)?;
-        let _ = self.sender.send(Message::Menu(origin.downgrade()?, event));
-        Ok(())
-    }
-}
-impl TextboxEventQueue for Queue {
-    /// Acquires producer-owned fields before returning across COM; handlers run later.
-    fn post(&mut self, origin: ComRef<'_, TextboxAbi>, event: NcValueRef<'_, neocogi_ui::events::textbox::Event>) -> Result<(), NcStatus> {
-        let event = event.to_owned()?;
-        neocogi_ui::events::textbox::validate(&event)?;
-        let _ = self.sender.send(Message::Textbox(origin.downgrade_box()?, event));
-        Ok(())
-    }
-}
-impl ComboEventQueue for Queue {
-    /// Acquires producer-owned fields before returning across COM; handlers run later.
-    fn post(&mut self, origin: ComRef<'_, ComboAbi>, event: NcValueRef<'_, neocogi_ui::events::combo::Event>) -> Result<(), NcStatus> {
-        let event = event.to_owned()?;
-        neocogi_ui::events::combo::validate(&event)?;
-        let _ = self.sender.send(Message::Combo(origin.downgrade_box()?, event));
-        Ok(())
-    }
-}
-impl IFileDialogEventQueue for Queue {
-    /// Acquires producer-owned fields before returning across COM; handlers run later.
-    fn post(&mut self, origin: ComRef<'_, IFileDialogAbi>, event: NcValueRef<'_, neocogi_ui::events::file_dialog::Event>) -> Result<(), NcStatus> {
-        let event = event.to_owned()?;
-        neocogi_ui::events::file_dialog::validate(&event)?;
-        let _ = self.sender.send(Message::FileDialog(origin.downgrade_box()?, event));
-        Ok(())
-    }
-}
-impl IWindowEventQueue for Queue {
-    /// Acquires producer-owned fields before returning across COM; handlers run later.
-    fn post(&mut self, origin: ComRef<'_, IWindowAbi>, event: NcValueRef<'_, neocogi_ui::events::window::Event>) -> Result<(), NcStatus> {
-        let event = event.to_owned()?;
-        neocogi_ui::events::window::validate(&event)?;
-        let _ = self.sender.send(Message::WindowEvent(origin.downgrade()?, event));
-        Ok(())
+
+impl neocogi_com::events::IEventReceiver for Queue {
+    /// Transfer the exclusive event to the inbox; a failed send restores its owner.
+    fn post(
+        &mut self,
+        origin: neocogi_com::NcValueRef<'_, neocogi_com::events::EventOrigin>,
+        event: neocogi_com::ComBox<neocogi_com::events::IEventAbi>,
+    ) -> Result<(), (neocogi_com::NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
+        let message = neocogi_com::events::EventMessage::capture(origin, event)?;
+        self.sender.send(message).map_err(|error| (neocogi_com::NC_E_CLOSED, error.0.event))
     }
 }

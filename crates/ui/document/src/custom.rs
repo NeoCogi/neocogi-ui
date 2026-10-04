@@ -3,7 +3,7 @@ use crate::{
     Document, Node, WidgetSpec,
     design::{DesignInterface, DesignWidgetManifest},
 };
-use neocogi_com::{ComPtr, IUnknown, NcGuid, NcStatus, NC_E_INVALID_ARG};
+use neocogi_com::{ComPtr, NcGuid, NcStatus, NC_E_INVALID_ARG};
 use neocogi_ui::{IWidgetAbi, Ui};
 use std::{collections::BTreeMap, rc::Rc};
 
@@ -20,7 +20,7 @@ pub trait CustomWidgetFactory {
     /// Constructs one concrete COM identity using the runtime's widget host.
     /// The provider validates settings and the supplied typed sink before returning.
     /// `None` constructs a permanently unobserved widget; no later attachment is allowed.
-    fn create(&self, ui: &Ui, settings: &[u8], sink: Option<ComPtr<IUnknown>>) -> Result<neocogi_ui::OwnedWidget<IWidgetAbi>, NcStatus>;
+    fn create(&self, ui: &Ui, settings: &[u8], sink: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>) -> Result<neocogi_ui::OwnedWidget<IWidgetAbi>, NcStatus>;
 }
 
 /// One installed provider and the immutable metadata validated at registration.
@@ -48,6 +48,14 @@ impl CustomWidgetRegistry {
     pub fn register(&mut self, factory: Rc<dyn CustomWidgetFactory>) -> Result<(), String> {
         let manifest = factory.manifest()?;
         manifest.validate()?;
+        if let Some(queue) = &manifest.interface.event_queue {
+            let expected = neocogi_com::events::IEventReceiverAbi::INTERFACE_DESCRIPTOR;
+            // SAFETY: the expected descriptor is immutable generated static storage.
+            let signature = unsafe { expected.abi_signature.as_digest() }.expect("generated receiver signature");
+            if queue.iid != expected.interface_id.to_uuid_bytes() || &queue.signature != signature {
+                return Err("Custom widget requires an incompatible IEventReceiver revision".into());
+            }
+        }
         if self.entries.contains_key(&manifest.kind) {
             return Err(format!("Duplicate custom widget kind: {}", manifest.kind));
         }
@@ -105,7 +113,7 @@ impl CustomWidgetRegistry {
     }
 
     /// Calls the installed provider and verifies its advertised concrete identity.
-    pub(crate) fn create(&self, kind: &str, ui: &Ui, settings: &[u8], sink: Option<ComPtr<IUnknown>>) -> Result<neocogi_ui::OwnedWidget<IWidgetAbi>, NcStatus> {
+    pub(crate) fn create(&self, kind: &str, ui: &Ui, settings: &[u8], sink: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>) -> Result<neocogi_ui::OwnedWidget<IWidgetAbi>, NcStatus> {
         let entry = self.entries.get(kind).ok_or(NC_E_INVALID_ARG)?;
         let widget = entry.factory.create(ui, settings, sink)?;
         let interface = &entry.manifest.interface;

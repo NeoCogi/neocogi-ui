@@ -92,69 +92,69 @@ impl<State, Message, Context> DerefMut for StateGuard<'_, State, Message, Contex
 #[macro_export]
 macro_rules! test_event_queue {
     (button, $message:ty, $sender:expr, |$this:ident, $origin:pat_param, $event:pat_param| $body:expr $(, { $($field:ident: $ty:ty = $value:expr),* $(,)? })? $(,)?) => {
-        $crate::test_event_queue!(@concrete $crate::nodes::ButtonEventQueue, $crate::nodes::ButtonEventQueueAbi, $crate::nodes::ButtonAbi,
+        $crate::test_event_queue!(@concrete $crate::nodes::ButtonAbi,
             button, $message, $sender, |$this, $origin, $event| $body $(, { $($field: $ty = $value),* })?)
     };
     (checkbox, $message:ty, $sender:expr, |$this:ident, $origin:pat_param, $event:pat_param| $body:expr $(, { $($field:ident: $ty:ty = $value:expr),* $(,)? })? $(,)?) => {
-        $crate::test_event_queue!(@concrete $crate::nodes::CheckboxEventQueue, $crate::nodes::CheckboxEventQueueAbi, $crate::nodes::CheckboxAbi,
+        $crate::test_event_queue!(@concrete $crate::nodes::CheckboxAbi,
             checkbox, $message, $sender, |$this, $origin, $event| $body $(, { $($field: $ty = $value),* })?)
     };
     (textbox, $message:ty, $sender:expr, |$this:ident, $origin:pat_param, $event:pat_param| $body:expr $(, { $($field:ident: $ty:ty = $value:expr),* $(,)? })? $(,)?) => {
-        $crate::test_event_queue!(@concrete $crate::nodes::TextboxEventQueue, $crate::nodes::TextboxEventQueueAbi, $crate::nodes::TextboxAbi,
+        $crate::test_event_queue!(@concrete $crate::nodes::TextboxAbi,
             textbox, $message, $sender, |$this, $origin, $event| $body $(, { $($field: $ty = $value),* })?)
     };
     (text_area, $message:ty, $sender:expr, |$this:ident, $origin:pat_param, $event:pat_param| $body:expr $(, { $($field:ident: $ty:ty = $value:expr),* $(,)? })? $(,)?) => {
-        $crate::test_event_queue!(@concrete $crate::nodes::TextAreaEventQueue, $crate::nodes::TextAreaEventQueueAbi, $crate::nodes::TextAreaAbi,
+        $crate::test_event_queue!(@concrete $crate::nodes::TextAreaAbi,
             text_area, $message, $sender, |$this, $origin, $event| $body $(, { $($field: $ty = $value),* })?)
     };
     (slider, $message:ty, $sender:expr, |$this:ident, $origin:pat_param, $event:pat_param| $body:expr $(, { $($field:ident: $ty:ty = $value:expr),* $(,)? })? $(,)?) => {
-        $crate::test_event_queue!(@concrete $crate::nodes::SliderEventQueue, $crate::nodes::SliderEventQueueAbi, $crate::nodes::SliderAbi,
+        $crate::test_event_queue!(@concrete $crate::nodes::SliderAbi,
             slider, $message, $sender, |$this, $origin, $event| $body $(, { $($field: $ty = $value),* })?)
     };
     (number, $message:ty, $sender:expr, |$this:ident, $origin:pat_param, $event:pat_param| $body:expr $(, { $($field:ident: $ty:ty = $value:expr),* $(,)? })? $(,)?) => {
-        $crate::test_event_queue!(@concrete $crate::nodes::NumberEventQueue, $crate::nodes::NumberEventQueueAbi, $crate::nodes::NumberAbi,
+        $crate::test_event_queue!(@concrete $crate::nodes::NumberAbi,
             number, $message, $sender, |$this, $origin, $event| $body $(, { $($field: $ty = $value),* })?)
     };
     (list_item, $message:ty, $sender:expr, |$this:ident, $origin:pat_param, $event:pat_param| $body:expr $(, { $($field:ident: $ty:ty = $value:expr),* $(,)? })? $(,)?) => {
-        $crate::test_event_queue!(@concrete $crate::nodes::ListItemEventQueue, $crate::nodes::ListItemEventQueueAbi, $crate::nodes::ListItemAbi,
+        $crate::test_event_queue!(@concrete $crate::nodes::ListItemAbi,
             list_item, $message, $sender, |$this, $origin, $event| $body $(, { $($field: $ty = $value),* })?)
     };
     (list_box, $message:ty, $sender:expr, |$this:ident, $origin:pat_param, $event:pat_param| $body:expr $(, { $($field:ident: $ty:ty = $value:expr),* $(,)? })? $(,)?) => {
-        $crate::test_event_queue!(@concrete $crate::nodes::ListBoxEventQueue, $crate::nodes::ListBoxEventQueueAbi, $crate::nodes::ListBoxAbi,
+        $crate::test_event_queue!(@concrete $crate::nodes::ListBoxAbi,
             list_box, $message, $sender, |$this, $origin, $event| $body $(, { $($field: $ty = $value),* })?)
     };
     (scrollbar, $message:ty, $sender:expr, |$this:ident, $origin:pat_param, $event:pat_param| $body:expr $(, { $($field:ident: $ty:ty = $value:expr),* $(,)? })? $(,)?) => {
-        $crate::test_event_queue!(@concrete $crate::nodes::ScrollbarEventQueue, $crate::nodes::ScrollbarEventQueueAbi, $crate::nodes::ScrollbarAbi,
+        $crate::test_event_queue!(@concrete $crate::nodes::ScrollbarAbi,
             scrollbar, $message, $sender, |$this, $origin, $event| $body $(, { $($field: $ty = $value),* })?)
     };
     (split_view, $message:ty, $sender:expr, |$this:ident, $origin:pat_param, $event:pat_param| $body:expr $(, { $($field:ident: $ty:ty = $value:expr),* $(,)? })? $(,)?) => {
-        $crate::test_event_queue!(@concrete $crate::nodes::SplitViewEventQueue, $crate::nodes::SplitViewEventQueueAbi, $crate::nodes::SplitViewAbi,
+        $crate::test_event_queue!(@concrete $crate::nodes::SplitViewAbi,
             split_view, $message, $sender, |$this, $origin, $event| $body $(, { $($field: $ty = $value),* })?)
     };
     (combo, $message:ty, $sender:expr, |$this:ident, $origin:pat_param, $event:pat_param| $body:expr $(, { $($field:ident: $ty:ty = $value:expr),* $(,)? })? $(,)?) => {
-        $crate::test_event_queue!(@concrete $crate::nodes::ComboEventQueue, $crate::nodes::ComboEventQueueAbi, $crate::nodes::ComboAbi,
+        $crate::test_event_queue!(@concrete $crate::nodes::ComboAbi,
             combo, $message, $sender, |$this, $origin, $event| $body $(, { $($field: $ty = $value),* })?)
     };
     (file_dialog, $message:ty, $sender:expr, |$this:ident, $origin:pat_param, $event:pat_param| $body:expr $(, { $($field:ident: $ty:ty = $value:expr),* $(,)? })? $(,)?) => {
-        $crate::test_event_queue!(@concrete $crate::IFileDialogEventQueue, $crate::IFileDialogEventQueueAbi, $crate::IFileDialogAbi,
+        $crate::test_event_queue!(@concrete $crate::IFileDialogAbi,
             file_dialog, $message, $sender, |$this, $origin, $event| $body $(, { $($field: $ty = $value),* })?)
     };
     (window, $message:ty, $sender:expr, |$this:ident, $origin:pat_param, $event:pat_param| $body:expr $(, { $($field:ident: $ty:ty = $value:expr),* $(,)? })? $(,)?) => {
-        $crate::test_event_queue!(@concrete $crate::IWindowEventQueue, $crate::IWindowEventQueueAbi, $crate::IWindowAbi,
+        $crate::test_event_queue!(@concrete $crate::IWindowAbi,
             window, $message, $sender, |$this, $origin, $event| $body $(, { $($field: $ty = $value),* })?)
     };
     (popup, $message:ty, $sender:expr, |$this:ident, $origin:pat_param, $event:pat_param| $body:expr $(, { $($field:ident: $ty:ty = $value:expr),* $(,)? })? $(,)?) => {
-        $crate::test_event_queue!(@concrete $crate::IPopupEventQueue, $crate::IPopupEventQueueAbi, $crate::IPopupAbi,
+        $crate::test_event_queue!(@concrete $crate::IPopupAbi,
             popup, $message, $sender, |$this, $origin, $event| $body $(, { $($field: $ty = $value),* })?)
     };
     (activation, $message:ty, $sender:expr, |$this:ident, $origin:pat_param, $event:pat_param| $body:expr $(, { $($field:ident: $ty:ty = $value:expr),* $(,)? })? $(,)?) => {
-        $crate::test_event_queue!(@concrete $crate::IMenuItemEventQueue, $crate::IMenuItemEventQueueAbi, $crate::IMenuItemAbi,
+        $crate::test_event_queue!(@concrete $crate::IMenuItemAbi,
             activation, $message, $sender, |$this, $origin, $event| $body $(, { $($field: $ty = $value),* })?)
     };
-    (@concrete $interface:path, $abi:ty, $object:ty, $kind:ident,
+    (@concrete $object:ty, $kind:ident,
         $message:ty, $sender:expr, |$this:ident, $origin:pat_param, $event:pat_param| $body:expr
         $(, { $($field:ident: $ty:ty = $value:expr),* $(,)? })? $(,)?) => {{
-        #[neocogi_com::com_object($interface)]
+        #[neocogi_com::com_object(interfaces(neocogi_com::events::IEventReceiver))]
         /// Fixture-local receiver with concrete, fully owned observation storage.
         struct RecordingQueue {
             /// Posting capability does not own the tested widget or application model.
@@ -162,19 +162,30 @@ macro_rules! test_event_queue {
             $($(/// Explicit fixture instrumentation; lifetime is owned by this queue.
                 $field: $ty,)*)?
         }
-        impl $interface for RecordingQueue {
-            /// Exercise real generated decoding and domain validation before recording.
-            fn post(&mut self, $origin: neocogi_com::ComRef<'_, $object>,
-                value: neocogi_com::NcValueRef<'_, $crate::events::$kind::Event>) -> Result<(), neocogi_com::NcStatus> {
-                let value = value.to_owned()?;
-                $crate::events::$kind::validate(&value)?;
-                let $event = value;
-                let $this = self;
-                let message: $message = $body;
-                let _ = $this.send.send(message);
-                Ok(())
+        impl neocogi_com::events::IEventReceiver for RecordingQueue {
+            /// This terminal test recorder reads the snapshot while owning its COM event.
+            /// Production inboxes retain EventMessage itself until dispatch.
+            fn post(&mut self, origin: neocogi_com::NcValueRef<'_, neocogi_com::events::EventOrigin>,
+                event_owner: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), (neocogi_com::NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
+                let result = (|| -> Result<(), neocogi_com::NcStatus> {
+                    let value = <$crate::events::$kind::Event as neocogi_com::events::EventPayload>::from_event(&event_owner)?.ok_or(neocogi_com::NC_E_INVALID_ARG)?;
+                    let captured = origin.to_owned()?;
+                    let widget = captured.widget::<$object>()?;
+                    let service = captured.service::<$object>()?.map(|origin| origin.upgrade()).transpose()?.flatten();
+                    let $origin = match (&widget, &service) {
+                        (Some(origin), _) => origin.as_com_ref(),
+                        (_, Some(origin)) => origin.as_com_ref(),
+                        _ => return Err(neocogi_com::NC_E_INVALID_ARG),
+                    };
+                    let $event = value;
+                    let $this = self;
+                    let message: $message = $body;
+                    let _ = $this.send.send(message);
+                    Ok(())
+                })();
+                result.map_err(|status| (status, event_owner))
             }
         }
-        RecordingQueue::from_value(RecordingQueue { send: $sender, $($($field: $value,)*)? }).query::<$abi>()
+        RecordingQueue::from_value(RecordingQueue { send: $sender, $($($field: $value,)*)? }).query::<neocogi_com::events::IEventReceiverAbi>()
     }};
 }

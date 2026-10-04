@@ -1,10 +1,9 @@
 //! Loads a UI document without linking its concrete widgets into application code.
-use neocogi_com::{ComPtr, ComRef, WeakComPtr, NcValueRef, NcStatus, IUnknown};
+use neocogi_com::{ComPtr, WeakComPtr, NcStatus};
 use neocogi_ui_document::EventBindings;
 use neocogi_demo_host::{AppState, Host, HostError};
 use neocogi_ui::*;
 use neocogi_ui_document::{Document, ReloadIds, ReloadSlot, Resources};
-use std::sync::mpsc::{self, Sender};
 
 /// Application messages retain nonowning identities, checked against the current component.
 enum Message {
@@ -15,35 +14,6 @@ enum Message {
     /// The component's public Save action, independent of its widget layout.
     Save(neocogi_com::WeakComBox<ButtonAbi>),
 }
-#[neocogi_com::com_object(interfaces(neocogi_ui::nodes::ButtonEventQueue, neocogi_ui::IMenuItemEventQueue, neocogi_ui::IWindowEventQueue))]
-/// One application receiver is reused across every document replacement and the static menu.
-struct AppQueue {
-    /// Queued origins never keep a removed component or control alive.
-    sender: Sender<Message>,
-}
-impl neocogi_ui::nodes::ButtonEventQueue for AppQueue {
-    /// Acquire the activation before returning; current-form membership is checked at dispatch.
-    fn post(&mut self, origin: ComRef<'_, ButtonAbi>, event: NcValueRef<'_, neocogi_ui::button::Event>) -> Result<(), NcStatus> {
-        neocogi_ui::button::validate(&event.to_owned()?)?;
-        let _ = self.sender.send(Message::Save(origin.downgrade_box()?));
-        Ok(())
-    }
-}
-impl neocogi_ui::IMenuItemEventQueue for AppQueue {
-    /// Static menus use the same queue but retain their own exact origin type.
-    fn post(&mut self, origin: ComRef<'_, IMenuItemAbi>, event: NcValueRef<'_, Activation>) -> Result<(), NcStatus> {
-        neocogi_ui::events::activation::validate(&event.to_owned()?)?;
-        let _ = self.sender.send(Message::Reload(origin.downgrade()?));
-        Ok(())
-    }
-}
-impl neocogi_ui::IWindowEventQueue for AppQueue {
-    /// Map intent into the existing application channel, never mutate the window here.
-    fn post(&mut self, origin: ComRef<'_, IWindowAbi>, event: NcValueRef<'_, neocogi_ui::events::WindowEvent>) -> Result<(), NcStatus> {
-        let _ = self.sender.send(Message::Window(origin.downgrade()?, event.to_owned()?));
-        Ok(())
-    }
-}
 /// Application state owns its current component and uses checked concrete widget handles.
 struct State {
     /// Stable publication slot owns the current loaded component.
@@ -51,7 +21,7 @@ struct State {
     /// Source path is a host concern, never interpreted by the COM loader.
     path: Option<std::path::PathBuf>,
     /// Supplies the same concrete receiver to every replacement component.
-    queue: ComPtr<IUnknown>,
+    queue: ComPtr<neocogi_com::events::IEventReceiverAbi>,
     /// Exact menu entry accepted as a reload command.
     reload_item: MenuItem,
     /// Counts application-handled button activations.
@@ -71,13 +41,13 @@ impl State {
             }
             None => Document::new("Runtime-loaded UI"),
         };
-        let queue = self.queue.query::<ButtonEventQueueAbi>().map_err(|error| error.to_string())?;
+        let queue = self.queue.query::<neocogi_com::events::IEventReceiverAbi>().map_err(|error| error.to_string())?;
         self.slot.reload(
             &document,
             Resources::new(),
             move |_| {
                 let mut events = EventBindings::new();
-                events.insert_queue::<ButtonAbi>("save", queue.as_com_ref())?;
+                events.insert_queue("save", queue.as_com_ref())?;
                 Ok(events)
             },
             |component, _| {
@@ -89,9 +59,10 @@ impl State {
     }
 }
 impl AppState for State {
-    type Message = Message;
+    type Message = neocogi_com::events::EventMessage;
     /// Runtime calls application handlers only at its normal safe mutation boundary.
-    fn update(&mut self, message: Message) -> Result<(), NcStatus> {
+    fn update(&mut self, event: Self::Message) -> Result<(), NcStatus> {
+        let Some(message) = Message::decode(&event)? else { return Ok(()); };
         match message {
             Message::Window(origin, neocogi_ui::events::WindowEvent::CloseRequested) => {
                 // This host retains the loaded form and hides its logical window.
@@ -135,9 +106,8 @@ fn run() -> Result<(), HostError> {
     // One allocator belongs to this application's dispatch domain. Reuse it for
     // any additional/recreated slots that post into the same channel.
     let mut reload_ids = ReloadIds::new();
-    let (sender, receiver) = mpsc::channel();
-    let queue = AppQueue::from_value(AppQueue { sender });
-    let lifecycle = queue.query::<IWindowEventQueueAbi>()?;
+    let (queue, receiver) = neocogi_com::events::channel();
+    let lifecycle = queue.query::<neocogi_com::events::IEventReceiverAbi>()?;
     let root = host.ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     let root_handle = root.handle();
     let window = host.ui.window_with_queue("Loaded component", Rect { x: 20, y: 20, width: 740, height: 540 }, root, Some(lifecycle.as_com_ref())).map_err(|(status, _candidate)| status)?;
@@ -149,7 +119,7 @@ fn run() -> Result<(), HostError> {
     let bar = menus.create("Runtime UI")?;
     let reload_item = bar
         .submenu("File")?
-        .item_with_queue("Reload", Some(queue.query::<IMenuItemEventQueueAbi>()?.as_com_ref()))?;
+        .item_with_queue("Reload", Some(queue.query::<neocogi_com::events::IEventReceiverAbi>()?.as_com_ref()))?;
     menus.attach_bar(window.as_com_ref(), &bar)?;
     #[cfg(not(target_arch = "wasm32"))]
     let path = std::env::args_os().nth(1).map(std::path::PathBuf::from);
@@ -162,4 +132,22 @@ fn run() -> Result<(), HostError> {
 /// Preserves operational diagnostics under the min-size profile.
 fn main() -> std::process::ExitCode {
     neocogi_demo_host::report_exit(run())
+}
+
+impl Message {
+    /// Decode at the handling boundary while the inbox still owns the COM event.
+    fn decode(message: &neocogi_com::events::EventMessage) -> Result<Option<Self>, neocogi_com::NcStatus> {
+        if let Some((origin, event)) = message.widget::<ButtonAbi>()? {
+            let _ = event;
+            return Ok(Some(Self::Save(origin)));
+        }
+        if let Some((origin, event)) = message.service::<IMenuItemAbi>()? {
+            let _ = event;
+            return Ok(Some(Self::Reload(origin)));
+        }
+        if let Some((origin, event)) = message.service::<IWindowAbi>()? {
+            return Ok(Some(Self::Window(origin, event)));
+        }
+        Ok(None)
+    }
 }

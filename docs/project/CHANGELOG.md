@@ -2,6 +2,16 @@
 
 ## 0.0.0 (unreleased)
 
+- Replace per-widget event receiver interfaces with one `IEventReceiver` carrying
+  exclusive `ComBox<IEvent>` snapshots and weak widget/service origins. Add typed
+  immutable event getters, optional native payload decoding, and a common channel.
+  Migrate producers, composites, forms, tools and plugin examples. Failed posts
+  return the original event owner; missing event interfaces return `None` while
+  ABI failures remain errors. Form generation and membership checks remain intact.
+  This supersedes the concrete generic queue migration recorded below.
+- Support recursive `WeakComBox` IDL value fields with checked exclusive ownership,
+  canonical weak projections, and design descriptor version 11.
+
 - Organize repository documentation by purpose: issues, optimization opportunities,
   contracts, experiments, measurements, architecture, guides, validation, reviews
   and project information. Update cross-links and executable documentation paths.

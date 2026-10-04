@@ -3,7 +3,7 @@
 //! The root forest stores only generic menu surfaces and popup ownership. This module connects
 //! one public header, one authoritative typed state, and one private choice-popup definition.
 
-use neocogi_ui_core_contracts::IChoiceMenuEventQueueAbi;
+
 use crate::menu::{Menu, MenuEntry};
 use crate::window_manager::{PopupHandle, SurfaceMutationError, WindowManager};
 use neocogi_com::{
@@ -124,7 +124,7 @@ impl ChoiceMenuState {
         menu_text: String,
         entries: Vec<ChoiceMenuEntry>,
         selection: Option<u64>,
-        queue: Option<ComPtr<IChoiceMenuEventQueueAbi>>,
+        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<ComPtr<IChoiceMenuStateAbi>, NcStatus> {
         validate_menu(&menu_text, &entries, selection)?;
         Self::from_value_cyclic::<IChoiceMenuAbi>(move |origin| Self {
@@ -305,7 +305,7 @@ impl IChoiceMenuState for ChoiceMenuState {
         // Commit the complete popup transition before entering even a pure mapper.
         if changed {
             self.changed_event
-                .post(&neocogi_ui_core_contracts::IChoiceMenuEvent::Changed(ChoiceSelection::Selected(id)))?;
+                .post(neocogi_ui_core_contracts::IChoiceMenuEvent::Changed(ChoiceSelection::Selected(id)))?;
         }
         Ok(self.revision)
     }

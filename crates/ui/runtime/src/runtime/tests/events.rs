@@ -684,19 +684,23 @@ fn failed_post_preserves_committed_widget_state_and_requires_a_new_frame() {
 /// Window mutations report posting errors after committing their complete lifecycle transition.
 #[test]
 fn failed_lifecycle_post_preserves_visibility_and_returns_its_receiver_error() {
-    #[neocogi_com::com_object(neocogi_ui::IWindowEventQueue)]
+    #[neocogi_com::com_object(interfaces(neocogi_com::events::IEventReceiver))]
     /// Concrete foreign queue rejects each fully decoded lifecycle event.
     struct Reject;
-    impl neocogi_ui::IWindowEventQueue for Reject {
+    impl neocogi_com::events::IEventReceiver for Reject {
         /// Valid decoding does not oblige an application receiver to accept a post.
-        fn post(&mut self, _: neocogi_com::ComRef<'_, IWindowAbi>, event: neocogi_com::NcValueRef<'_, WindowEvent>) -> Result<(), NcStatus> {
-            let _ = event.to_owned()?;
+        fn post(&mut self, _: neocogi_com::NcValueRef<'_, neocogi_com::events::EventOrigin>, event_owner: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
+        let result = (|| -> Result<(), NcStatus> {
+            let _ = <WindowEvent as neocogi_com::events::EventPayload>::from_event(&event_owner)?.ok_or(NC_E_INVALID_ARG)?;
             Err(NC_E_INVALID_ARG)
-        }
+
+        })();
+        result.map_err(|status| (status, event_owner))
+    }
     }
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let button = ui.widgets().button_unobserved("lifecycle").unwrap();
-    let queue = Reject::from_value(Reject).query::<IWindowEventQueueAbi>().unwrap();
+    let queue = Reject::from_value(Reject).query::<neocogi_com::events::IEventReceiverAbi>().unwrap();
     let window = ui.window_with_queue("post failure", RECT, button, Some(queue.as_com_ref())).unwrap();
     assert_eq!(window.set_visibility(Visibility::Hidden), Err(NC_E_INVALID_ARG));
     assert_eq!(window.snapshot().unwrap().visibility, Visibility::Hidden);

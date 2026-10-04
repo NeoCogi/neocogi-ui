@@ -186,7 +186,7 @@ fn combo_choice_menu_uses_shared_submenu_navigation() {
     assert_eq!(*app.state(), [ChoiceSelection::Selected(11), ChoiceSelection::Selected(11)]);
 }
 
-#[com_object(neocogi_ui::nodes::ComboEventQueue)]
+#[neocogi_com::com_object(interfaces(neocogi_com::events::IEventReceiver))]
 /// Hostile queue removes the emitting header during synchronous menu forwarding.
 /// Application queues normally only enqueue; this probes the destructor boundary.
 struct RemoveComboDuringPost {
@@ -195,12 +195,16 @@ struct RemoveComboDuringPost {
     /// Independent observation proves one real submission crossed the ABI.
     calls: Rc<Cell<u32>>,
 }
-impl neocogi_ui::nodes::ComboEventQueue for RemoveComboDuringPost {
+impl neocogi_com::events::IEventReceiver for RemoveComboDuringPost {
     /// Removal must not require a recursive call into the active menu state.
-    fn post(&mut self, _origin: ComRef<'_, neocogi_ui::ComboAbi>, event: neocogi_com::NcValueRef<'_, neocogi_ui::combo::Event>) -> Result<(), NcStatus> {
-        let _ = event.to_owned()?;
+    fn post(&mut self, _: neocogi_com::NcValueRef<'_, neocogi_com::events::EventOrigin>, event_owner: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
+        let result = (|| -> Result<(), NcStatus> {
+        let _ = <neocogi_ui::combo::Event as neocogi_com::events::EventPayload>::from_event(&event_owner)?.ok_or(NC_E_INVALID_ARG)?;
         self.calls.set(self.calls.get() + 1);
         self.root.clear()
+
+        })();
+        result.map_err(|status| (status, event_owner))
     }
 }
 
@@ -214,7 +218,7 @@ fn combo_removal_during_forwarding_releases_menu_queue_without_close_callback() 
     let window = ui.window("reentrant combo destruction", RECT, root_owner).unwrap();
     let calls = Rc::new(Cell::new(0));
     let queue = RemoveComboDuringPost::from_value(RemoveComboDuringPost { root: root.clone(), calls: calls.clone() })
-        .query::<neocogi_ui::ComboEventQueueAbi>().unwrap();
+        .query::<neocogi_com::events::IEventReceiverAbi>().unwrap();
     let weak_queue = queue.downgrade().unwrap();
     let combo_owner = ui.combo_box_with_queue(window.as_com_ref(), &["first", "second"], ChoiceSelection::Selected(0), Some(queue.as_com_ref())).unwrap();
     let combo = combo_owner.handle();

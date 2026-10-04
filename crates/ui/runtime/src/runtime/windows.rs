@@ -73,9 +73,9 @@ enum WindowPlacement {
 /// Construction distinguishes window and popup contracts without erasing their queues.
 enum Placement {
     /// Ordinary placement and the one constructor-selected window receiver.
-    Window(WindowPlacement, Option<ComPtr<IWindowEventQueueAbi>>),
+    Window(WindowPlacement, Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>),
     /// Hidden auto-sized popup owned by a live ordinary window or dialog.
-    Popup(WindowHandle, Option<ComPtr<IPopupEventQueueAbi>>),
+    Popup(WindowHandle, Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>),
 }
 
 impl RuntimeStorage {
@@ -271,7 +271,7 @@ impl LogicalWindow {
         manager: &mut WindowManager,
         placement: WindowPlacement,
         window: Window,
-        queue: Option<ComPtr<IWindowEventQueueAbi>>,
+        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
     ) -> (ComPtr<IUnknown>, NativeSurface) {
         // A single cyclic initializer keeps weak setup, allocation and publication
         // common. Supplying a different FnOnce per placement had duplicated this
@@ -442,7 +442,7 @@ impl LogicalPopup {
     /// popup record; no receiver installation API escapes to applications.
     pub(super) fn create(
         runtime: Weak<RuntimeStorage>,
-        queue: Option<ComPtr<IPopupEventQueueAbi>>,
+        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
         register: impl FnOnce(Option<IPopupEventPort>) -> PopupHandle,
     ) -> (ComPtr<IUnknown>, NativeSurface) {
         let local = Self::into_local_cyclic::<IPopupAbi>(|origin| Self {

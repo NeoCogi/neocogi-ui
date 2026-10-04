@@ -21,7 +21,7 @@ selection-menu popup after receiving the popup's owning window.
 use neocogi_ui::{CrossSize, FlowDirection, IWindowAbi,
     LayoutTrack, LinearEdge, Rect, Ui};
 use neocogi_com::{ComPtr, ComRef, NcStatus};
-fn install(ui: &Ui, queue: ComRef<'_, neocogi_ui::CheckboxEventQueueAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+fn install(ui: &Ui, queue: ComRef<'_, neocogi_com::events::IEventReceiverAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
     let checkbox = ui.widgets().checkbox_with_queue("Enable preview", false, Some(queue))?;
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     column.insert(0, checkbox, LinearEdge::new(LayoutTrack::Content)).map_err(|(status, _candidate)| status)?;

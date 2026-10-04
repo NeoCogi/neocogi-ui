@@ -1,15 +1,10 @@
-> Current origin/lifetime contract: [typed event queues and weak origins](../../../../docs/contracts/CLASS_EVENT_STREAMS.md).
-> A receiver borrows the typed emitting object and event, then queues an owned
-> snapshot with a weak origin. One application COM queue can serve many widgets.
+# COM events and widget-owned dispatch
 
-# Typed events and widget-owned dispatch
-
-Widgets post typed facts to their constructor-selected application COM queue. A nested
-component consumes its children's messages and emits its own public results
-upward. The application consumes the final public messages. A concrete application queue
-can implement several `*EventQueue` traits and share one allocation across widgets
-through `*_with_queue`. Applications may use `Dispatcher<Processor>`; a behavioral composite owns its inbox
-and implements `IWidgetDispatcher::dispatch_next` on the same concrete widget.
+The [event object contract](../../../../docs/contracts/COM_EVENT_INTERFACES.md)
+defines a common `IEventReceiver`, exclusive `ComBox<IEvent>` transfer, and weak
+widget/service origins. Any number of widgets share the same receiver projection.
+The application owns its inbox; a behavioral composite can own a private inbox
+and expose `IWidgetDispatcher::dispatch_next` on its widget allocation.
 
 ## Application construction and frames
 
@@ -24,11 +19,10 @@ message, then removes the window while another activation waits in the inbox.
 The second fact still owns its payload, but its `WeakComBox<ButtonAbi>` origin
 has expired and the example model deliberately ignores it.
 
-Queue `post` receives `ComRef<'_, ButtonAbi>` and captures an exclusive observer
-with `origin.downgrade_box()?`. Shared services instead use `WeakComPtr` and
-`origin.downgrade()?`. Interface type alone does not select ownership policy;
-using shared downgrade for an exclusive Button returns `NC_E_INVALID_ARG`.
-A compile-only example cannot prove that runtime requirement.
+Queue `post` captures a checked `EventOrigin` and moves the COM event owner.
+An event stays readable when its source expires. Its handler decides whether to
+ignore a removed source or consume the captured fact. Event queries return weak
+projections; they cannot clone the event's ownership.
 
 Run the exact walkthrough from the workspace root:
 
@@ -56,56 +50,44 @@ event. `set_settings` remains the explicit whole-policy replacement. The combo's
 
 ## Construction and posting
 
-Declare cross-COM facts as concrete NCIDL structs/enums. The factory accepts
-`EventBinding<Object, Event>`; several event kinds are variants of one message, such as
-`TextboxEvent::Changed` and `TextboxEvent::Submitted`. Its behavioral parent
-supplies the typed receiver before construction. A published widget has no
-receiver-installation method, including through inherited projections.
-
-The Rust facade accepts the queue's concrete projection:
+Concrete event interfaces derive from `IEvent` and expose captured data through
+immutable getters. `EventBinding<Object, Event>` retains the source/native payload
+association for compiled Rust and authoring metadata; its Observed case always
+contains the common receiver. A published widget has no receiver-installation method.
 
 ```rust,no_run
-use neocogi_ui::{Ui, TextboxEventQueueAbi};
-use neocogi_com::{ComRef, NcStatus};
-fn example(ui: &Ui, queue: ComRef<'_, TextboxEventQueueAbi>) -> Result<(), NcStatus> {
+use neocogi_ui::Ui;
+use neocogi_com::{ComRef, NcStatus, events::IEventReceiverAbi};
+fn example(ui: &Ui, queue: ComRef<'_, IEventReceiverAbi>) -> Result<(), NcStatus> {
     let name = ui.widgets().textbox_with_queue("", Some(queue))?;
-    // Mount name in the view; the application owns the queue's receiver and model.
     Ok(())
 }
 ```
 
-`textbox_unobserved(text)` leaves the widget permanently unobserved and allocates
-no receiver. The old sender/mapper constructors and callback receiver helpers are
-removed. A queue implementation can match `Changed` and `Submitted` before posting
-if its application deliberately ignores one variant; validate both variants first.
+`textbox_unobserved(text)` permanently disables delivery and skips event allocation.
+The standard `events::channel()` helper receives `EventMessage` directly, with no
+widget-specific receiver implementation. A custom receiver may add an application
+envelope, but keeps the exclusive COM event until handling.
 
 ```text
-widget commits state
-  → calls post(origin, event) on its one concrete IEventQueue<Object, Event>
-  → application queue acquires the checked event and validates its domain
-  → queue captures a weak origin when later identity is needed
-  → Sender::send queues the owned private message
-  → runtime invokes the application's dispatch_next at a safe boundary
-  → Dispatcher receives one value and calls processor.handle(&mut self, value)
+widget commits state and captures immutable event
+  → transfers ComBox<IEvent> and weak origin through IEventReceiver
+  → receiver moves EventMessage into its inbox
+  → runtime reaches a safe dispatch boundary
+  → processor queries event interfaces and handles the message
 ```
 
-`post` runs synchronously inside the producer's call. It acquires input facts;
-UI behavior belongs in the later model handler. Store channel senders and any
-immutable queue policy directly in the concrete receiver. Keep mutable command
-selection in the application model and change it through `&mut self`. Never call
-back into the active emitting widget or retain the behavioral parent's model.
+Posting runs during the producer's call. Keep channel senders and immutable policy
+in the receiver; defer command selection and widget calls to the handler. Neither
+threads nor `Message: Send` are needed when endpoints stay on the UI thread.
+Capacity and overflow behavior belong to the application. A blocking bounded send
+would prevent that thread from reaching its receiver. Posting does not wake the host.
 
-The examples use `std::sync::mpsc::channel()` and one shared queue per behavioral
-inbox. Neither threads nor `Message: Send` are needed while endpoints stay on the
-UI thread. Channel capacity and overflow behavior belong to the application; a
-blocking bounded send could prevent that thread from reaching its receiver.
-Posting does not wake the host; external work still needs scheduling.
-
-One channel preserves its sequential UI-thread send order; separate channels
-have no global FIFO. Already queued facts retain their payload after producer
-closure. The repository's concrete queues treat a disconnected receiver as a
-successful no-op. An independent queue can report its own post error, which does
-not undo committed producer state. Owner destruction releases the widget queue even while weak editing handles survive. Explicit queue handles retain only their own fields.
+Each inbox preserves its sequential UI-thread order; separate inboxes have no
+global FIFO. The standard channel returns `NC_E_CLOSED` with the original event
+owner on disconnection. Other receivers choose their own error policy. Posting
+errors do not undo committed producer changes. Widget destruction releases the
+receiver even if weak editing handles survive.
 
 A weak origin identifies an allocation, not current form membership. Dropping the
 exclusive widget owner expires it, even if weak editing fields remain. Rebuilt controls
@@ -143,7 +125,7 @@ between siblings. Surface raising and callback topology changes invalidate that
 selection before another receiver runs. Every returned exit clears its weak entries;
 queue-free hosts skip collection entirely. No runtime or tree borrow spans a handler.
 
-Construct child controls with projections of the composite's concrete queue. The
+Construct child controls with the composite's common `IEventReceiver`. The
 composite emits declared public results into its enclosing behavioral parent's
 channel. Private messages do not automatically bubble through structural
 containers. One output stream still has one constructor-selected consumer.

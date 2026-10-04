@@ -90,7 +90,7 @@ pub struct ListItem {
     /// Mutable label displayed for the item.
     label: String,
     /// Single event slot; receives its destination during construction and is released when the widget is destroyed.
-    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::ListItemEventQueueAbi>,
+    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::ListItemAbi>,
 }
 
 impl ListItem {
@@ -176,7 +176,7 @@ impl Widget for ListItem {
         let label = self.label.clone();
         ctx.posted(
             self.events
-                .post(&neocogi_ui_nodes_contracts::ListItemEvent::Activated(crate::Activation { label })),
+                .post(neocogi_ui_nodes_contracts::ListItemEvent::Activated(crate::Activation { label })),
         );
 
         // Submitting preserves the label and icon used by intrinsic measurement.
@@ -292,7 +292,7 @@ impl ListItem {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         label: NcCopyFromBufferOffset<'_, u8>,
-        queue: Option<ComPtr<neocogi_ui_nodes_contracts::ListItemEventQueueAbi>>,
+        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<neocogi_com::ComBox<ListItemAbi>, NcStatus> {
         let mut value = Self::build(host, label, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.

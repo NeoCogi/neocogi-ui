@@ -19,9 +19,7 @@ pub mod nodes {
 }
 pub use neocogi_ui_nodes_contracts::{
     TextAreaEventBinding, CheckboxEventBinding, TextboxEventBinding, SliderEventBinding, NumberEventBinding, ListItemEventBinding, ListBoxEventBinding,
-    ScrollbarEventBinding, ButtonEventBinding, ComboEventBinding, SplitViewEventBinding, ComboEventQueueAbi, ButtonEventQueueAbi, CheckboxEventQueueAbi,
-    TextboxEventQueueAbi, TextAreaEventQueueAbi, SliderEventQueueAbi, NumberEventQueueAbi, ListItemEventQueueAbi, ListBoxEventQueueAbi, ScrollbarEventQueueAbi,
-    SplitViewEventQueueAbi, Button, ButtonAbi, Checkbox, CheckboxAbi, ChildCrossSize, ColorSwatch, ColorSwatchAbi, Combo, ComboAbi, ContentIcon, CrossSize, Disclosure, DisclosureAbi, DisclosureStyle, FillStates, FlowDirection, Grid, GridAbi, GridExtent, GridLimits, LayoutTrack, Linear,
+    ScrollbarEventBinding, ButtonEventBinding, ComboEventBinding, SplitViewEventBinding, Button, ButtonAbi, Checkbox, CheckboxAbi, ChildCrossSize, ColorSwatch, ColorSwatchAbi, Combo, ComboAbi, ContentIcon, CrossSize, Disclosure, DisclosureAbi, DisclosureStyle, FillStates, FlowDirection, Grid, GridAbi, GridExtent, GridLimits, LayoutTrack, Linear,
     LinearAbi, LinearEdge, ListBox, ListBoxAbi, ListItem, ListItemAbi, Number, NumberAbi, NumberOptions, ScrollArea, ScrollAreaAbi, ScrollAxis, ScrollRange,
     Scrollbar, ScrollbarAbi, Slider, FormAbi, SliderAbi, SliderOptions, SplitAxis, SplitChanged, SplitOptions, SplitView, SplitViewAbi, TextArea, TextAreaAbi,
     TextBlock, TextBlockAbi, Textbox, TextboxAbi, UiFactory, UiFactoryAbi,
@@ -397,7 +395,7 @@ impl WidgetFactory {
         text: &str,
         wrapping: TextWrapping,
         scrolling: bool,
-        queue: Option<ComRef<'_, TextAreaEventQueueAbi>>,
+        queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<OwnedWidget<TextAreaAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_text_area(
             NcCopyFromBufferOffset::new(0, text.as_bytes()),
@@ -407,7 +405,7 @@ impl WidgetFactory {
         )?))
     }
     /// Constructs an initialized, unmounted checkbox in this runtime.
-    pub fn checkbox_with_queue(&self, label: &str, checked: bool, queue: Option<ComRef<'_, CheckboxEventQueueAbi>>) -> Result<OwnedWidget<CheckboxAbi>, NcStatus> {
+    pub fn checkbox_with_queue(&self, label: &str, checked: bool, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<CheckboxAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_checkbox(
             checked,
             NcCopyFromBufferOffset::new(0, label.as_bytes()),
@@ -415,7 +413,7 @@ impl WidgetFactory {
         )?))
     }
     /// Constructs an initialized, unmounted textbox in this runtime.
-    pub fn textbox_with_queue(&self, text: &str, queue: Option<ComRef<'_, TextboxEventQueueAbi>>) -> Result<OwnedWidget<TextboxAbi>, NcStatus> {
+    pub fn textbox_with_queue(&self, text: &str, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<TextboxAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_textbox(
             NcCopyFromBufferOffset::new(0, text.as_bytes()),
             neocogi_com::NcValueRef::new(&TextboxEventBinding::from_queue(queue))?,
@@ -428,14 +426,14 @@ impl WidgetFactory {
         ))
     }
     /// Constructs an initialized, unmounted slider in this runtime.
-    pub fn slider_with_queue(&self, options: SliderOptions, queue: Option<ComRef<'_, SliderEventQueueAbi>>) -> Result<OwnedWidget<SliderAbi>, NcStatus> {
+    pub fn slider_with_queue(&self, options: SliderOptions, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<SliderAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_slider(
             options,
             neocogi_com::NcValueRef::new(&SliderEventBinding::from_queue(queue))?,
         )?))
     }
     /// Constructs an initialized, unmounted number in this runtime.
-    pub fn number_with_queue(&self, options: NumberOptions, queue: Option<ComRef<'_, NumberEventQueueAbi>>) -> Result<OwnedWidget<NumberAbi>, NcStatus> {
+    pub fn number_with_queue(&self, options: NumberOptions, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<NumberAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_number(
             options,
             neocogi_com::NcValueRef::new(&NumberEventBinding::from_queue(queue))?,
@@ -448,21 +446,21 @@ impl WidgetFactory {
         ))
     }
     /// Constructs an initialized, unmounted list item in this runtime.
-    pub fn list_item_with_queue(&self, label: &str, queue: Option<ComRef<'_, ListItemEventQueueAbi>>) -> Result<OwnedWidget<ListItemAbi>, NcStatus> {
+    pub fn list_item_with_queue(&self, label: &str, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<ListItemAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_list_item(
             NcCopyFromBufferOffset::new(0, label.as_bytes()),
             neocogi_com::NcValueRef::new(&ListItemEventBinding::from_queue(queue))?,
         )?))
     }
     /// Constructs an initialized, unmounted list box in this runtime.
-    pub fn list_box_with_queue(&self, label: &str, queue: Option<ComRef<'_, ListBoxEventQueueAbi>>) -> Result<OwnedWidget<ListBoxAbi>, NcStatus> {
+    pub fn list_box_with_queue(&self, label: &str, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<ListBoxAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_list_box(
             NcCopyFromBufferOffset::new(0, label.as_bytes()),
             neocogi_com::NcValueRef::new(&ListBoxEventBinding::from_queue(queue))?,
         )?))
     }
     /// Constructs an initialized, unmounted scrollbar in this runtime.
-    pub fn scrollbar_with_queue(&self, range: ScrollRange, queue: Option<ComRef<'_, ScrollbarEventQueueAbi>>) -> Result<OwnedWidget<ScrollbarAbi>, NcStatus> {
+    pub fn scrollbar_with_queue(&self, range: ScrollRange, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<ScrollbarAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_scrollbar(
             range,
             neocogi_com::NcValueRef::new(&ScrollbarEventBinding::from_queue(queue))?,
@@ -475,7 +473,7 @@ impl WidgetFactory {
     }
 
     /// Creates and initializes an unmounted button in one concrete API operation.
-    pub fn button_with_queue(&self, label: &str, queue: Option<ComRef<'_, ButtonEventQueueAbi>>) -> Result<OwnedWidget<ButtonAbi>, NcStatus> {
+    pub fn button_with_queue(&self, label: &str, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<ButtonAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_button(
             NcCopyFromBufferOffset::new(0, label.as_bytes()),
             neocogi_com::NcValueRef::new(&ButtonEventBinding::from_queue(queue))?,
@@ -587,7 +585,7 @@ impl Ui {
         parent: ComRef<'_, IWindowAbi>,
         items: &[Item],
         selection: ChoiceSelection,
-        queue: Option<ComRef<'_, ComboEventQueueAbi>>,
+        queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<OwnedWidget<ComboAbi>, NcStatus> {
         let (menu_text, entries) = encoded_combo_items(items)?;
         let combo = self.factory.interface.create_combo_box(
@@ -607,7 +605,7 @@ impl Ui {
         menu_text: &str,
         entries: &[ChoiceMenuEntry],
         selection: ChoiceSelection,
-        queue: Option<ComRef<'_, ComboEventQueueAbi>>,
+        queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<OwnedWidget<ComboAbi>, NcStatus> {
         let combo = self.factory.interface.create_combo_box(
             parent,
@@ -623,7 +621,7 @@ impl Ui {
     pub fn file_dialog_with_queue(
         &self,
         parent: ComRef<'_, IWindowAbi>,
-        queue: Option<ComRef<'_, IFileDialogEventQueueAbi>>,
+        queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<crate::FileDialog, NcStatus> {
         Ok(crate::FileDialog::from_interface(
             self.factory
@@ -663,7 +661,7 @@ impl Ui {
         title: &str,
         rect: Rect,
         root: W,
-        queue: Option<ComRef<'_, IWindowEventQueueAbi>>,
+        queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<ComPtr<IWindowAbi>, (NcStatus, W)> {
         let queue_binding = IWindowEventBinding::from_queue(queue);
         let binding = match neocogi_com::NcValueRef::new(&queue_binding) {
@@ -691,7 +689,7 @@ impl Ui {
         title: &str,
         rect: Rect,
         root: W,
-        queue: Option<ComRef<'_, IWindowEventQueueAbi>>,
+        queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<ComPtr<IWindowAbi>, (NcStatus, W)> {
         let queue_binding = IWindowEventBinding::from_queue(queue);
         let binding = match neocogi_com::NcValueRef::new(&queue_binding) {
@@ -720,7 +718,7 @@ impl Ui {
         title: &str,
         rect: Rect,
         root: W,
-        queue: Option<ComRef<'_, IWindowEventQueueAbi>>,
+        queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<ComPtr<IWindowAbi>, (NcStatus, W)> {
         let queue_binding = IWindowEventBinding::from_queue(queue);
         let binding = match neocogi_com::NcValueRef::new(&queue_binding) {
@@ -748,7 +746,7 @@ impl Ui {
         parent: ComRef<'_, IWindowAbi>,
         title: &str,
         root: W,
-        queue: Option<ComRef<'_, IPopupEventQueueAbi>>,
+        queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<ComPtr<IPopupAbi>, (NcStatus, W)> {
         let queue_binding = IPopupEventBinding::from_queue(queue);
         let binding = match neocogi_com::NcValueRef::new(&queue_binding) {

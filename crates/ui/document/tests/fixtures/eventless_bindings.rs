@@ -35,20 +35,20 @@ pub fn bind(
     };
     Ok(form)
 }
-/// Captured facts retain weak origins; resolve against current fields before dispatch.
-pub enum QueuedEvent {
-}
+/// A captured exclusive event and weak source, still readable after source removal.
+pub struct QueuedEvent(pub neocogi_com::events::EventMessage);
 impl QueuedEvent {
-    /// Resolve only after generation validation; expired or foreign origins return None.
-    /// Inspect the captured payload directly when its origin lifetime is irrelevant.
-    pub fn resolve(self, form: &Form) -> Result<Option<Event>, neocogi_com::NcStatus> {
-        let _ = &form;
-        match self {
-        }
+    /// Call only after generation validation. Removed or foreign sources return None.
+    /// Native decoding keeps the COM event owned by this message throughout the call.
+    pub fn resolve(&self, form: &Form) -> Result<Option<Event>, neocogi_com::NcStatus> {
+        let _ = form;
+        let neocogi_com::events::EventOrigin::Widget(origin) = &self.0.origin else { return Ok(None); };
+        if !origin.is_alive() { return Ok(None); }
+        Ok(None)
     }
 }
-/// Supplies shared queue projections before Loader or ReloadSlot creates widgets.
-/// Use the token issued by a slot constructed with the receiving application's ReloadIds.
+/// Supplies the common receiver before Loader or ReloadSlot creates widgets.
+/// Use the token issued by a slot in the receiving application's ReloadIds domain.
 pub fn events(generation: neocogi_ui_document::Generation, send: std::sync::mpsc::Sender<Message>) -> Result<neocogi_ui_document::EventBindings, neocogi_com::NcStatus> {
     let mut bindings = neocogi_ui_document::EventBindings::new();
     let _ = (generation, send, &mut bindings);

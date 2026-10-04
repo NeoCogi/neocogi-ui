@@ -113,7 +113,7 @@ pub struct Button {
     /// Initialization-only fill behavior.
     fill: WidgetFillOption,
     /// Single event slot; receives its destination during construction and is released when the widget is destroyed.
-    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::ButtonEventQueueAbi>,
+    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::ButtonAbi>,
 }
 
 impl Button {
@@ -217,7 +217,7 @@ impl Widget for Button {
         }
         // Pointer click, Enter, and Space converge on the button's single typed submission port.
         if self.events.is_bound() {
-            ctx.posted(self.events.post(&neocogi_ui_nodes_contracts::ButtonEvent::Activated(crate::Activation {
+            ctx.posted(self.events.post(neocogi_ui_nodes_contracts::ButtonEvent::Activated(crate::Activation {
                 label: self.com_label().to_owned(),
             })));
         }
@@ -330,7 +330,7 @@ impl Button {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         label: NcCopyFromBufferOffset<'_, u8>,
-        queue: Option<ComPtr<neocogi_ui_nodes_contracts::ButtonEventQueueAbi>>,
+        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<neocogi_com::ComBox<ButtonAbi>, NcStatus> {
         // The concrete provider chooses initial presentation. Facades and loaders
         // must not repeat this policy; explicit overrides use IWidget setters.

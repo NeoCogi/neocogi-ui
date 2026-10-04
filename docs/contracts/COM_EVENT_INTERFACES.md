@@ -79,7 +79,24 @@ validates semantic fields on construction and after reading foreign getters.
 Existing native event enums can select these conversions without becoming the
 common queue's transported representation. A custom widget can add a derived
 event interface, as the demo's `ICounterChangedEvent` does, without adding a new
-receiver interface.
+receiver interface. Native generated form handlers additionally require the custom
+payload's `EventPayload` implementation; direct COM handlers do not.
+
+## Construction and native form conveniences
+
+`events::channel()` returns one common receiver and an `EventMessage` inbox.
+All observed factories accept that same receiver projection. `EventBindings`
+registers it by authored key without a widget type parameter. The constructor
+binding still records the source/native payload association for metadata, but no
+per-source queue ABI or implementation trait is generated.
+
+Generated forms are optional native conveniences. Their one receiver adds a reload
+generation and keeps the exclusive event intact. Consumers check that generation
+before resolving the weak source against current form fields and decoding its
+native payload. Events from unrelated or removed controls cannot select a handler.
+The standard channel returns `NC_E_CLOSED` with the original event owner when its
+inbox is gone. Producer convenience APIs discard that rejected snapshot and return
+the status without rolling back committed widget changes.
 
 ## Validation
 
@@ -88,6 +105,15 @@ exercise both origin kinds, live and expired weak fields, successful and missing
 event interfaces, mismatched ABI revisions, exclusive event destruction, and
 return of the original event owner after a rejected post. The generated receiver
 and event getters are invoked through actual COM tables.
+
+The [snapshot and channel regressions](../../crates/ui/api/tests/event_snapshots.rs)
+also verify that the standard inbox preserves allocation identity, keeps facts
+readable after source destruction, and restores the same owner on disconnection.
+Each observed scalar event now requires an exclusive allocation. The existing
+[allocation probe](../../examples/com-plugin/examples/event_allocations.rs), run
+on October 4 with `--features monolith`, recorded 2 setup allocations and 10,323
+allocations for 10,000 scalar events including channel storage. This is an
+allocation count, not an elapsed-time benchmark.
 
 The [October 4 benchmark](../experiments/COM_EVENT_DOWNCAST_2026-10-04.md) measured
 shared `ComPtr` queries. Its exact timings do not measure this exclusive event

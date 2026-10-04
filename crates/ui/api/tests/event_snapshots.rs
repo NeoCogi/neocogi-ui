@@ -126,3 +126,29 @@ fn file_dialog_events_preserve_native_paths_and_cancellation() {
         Some(FileDialogCompletion::Cancelled)
     ));
 }
+
+/// The production channel moves the same allocation and restores it on rejection.
+#[test]
+fn common_channel_retains_exclusive_owner_and_returns_it_when_disconnected() {
+    use neocogi_com::{NcValueRef, NC_E_CLOSED};
+    use neocogi_com::events::{channel, EventOrigin, IEventReceiverAbi};
+    let (source, _source_inbox) = channel();
+    let origin = EventOrigin::Service(source.downgrade().unwrap().into_unknown());
+    let (mut queue, inbox) = channel();
+    let event = Activation { label: "captured".into() }.into_event().unwrap();
+    let allocation = event.as_raw();
+    let projection = downcast_event::<IActivatedEventAbi>(&event).unwrap().unwrap();
+    queue.post(NcValueRef::new(&origin).unwrap(), event).unwrap();
+    drop(source);
+    let message = inbox.try_recv().unwrap();
+    assert_eq!(message.event.as_raw(), allocation);
+    assert!(message.origin.service::<IEventReceiverAbi>().unwrap().unwrap().upgrade().unwrap().is_none());
+    assert_eq!(projection.label().unwrap().to_string().unwrap(), "captured");
+    drop(inbox);
+    let (status, returned) = queue.post(NcValueRef::new(&origin).unwrap(), message.event).unwrap_err();
+    assert_eq!(status, NC_E_CLOSED);
+    assert_eq!(returned.as_raw(), allocation);
+    assert_eq!(projection.label().unwrap().to_string().unwrap(), "captured");
+    drop(returned);
+    assert_eq!(projection.label().unwrap_err(), NC_E_DROPPED);
+}

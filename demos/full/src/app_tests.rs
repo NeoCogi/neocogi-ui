@@ -3,7 +3,7 @@ use super::*;
 use neocogi_ui::events::testing::TestApp;
 
 /// Selects Win 3.11 through the real nested menu and verifies publication on the following frame.
-fn select_win311_from_menu(host: &Host, app: &TestApp<State, Message>) -> Result<(), HostError> {
+fn select_win311_from_menu(host: &Host, app: &TestApp<State, neocogi_com::events::EventMessage>) -> Result<(), HostError> {
     let mut state = app.state();
     let size = host.window.size()?;
     let base = host.ui.assets()?;
@@ -107,7 +107,7 @@ fn construction_rejection_checks(ui: &Ui) -> Result<(), NcStatus> {
 }
 
 /// Exercises application-level composition against real runtime, platform and decoder objects.
-fn exercise() -> Result<(Host, TestApp<State, Message>), HostError> {
+fn exercise() -> Result<(Host, TestApp<State, neocogi_com::events::EventMessage>), HostError> {
     let (host, state, events) = create()?;
     construction_rejection_checks(&host.ui)?;
     let app = TestApp::new(state, events, State::update);

@@ -124,7 +124,7 @@ pub struct TextEditor {
     /// Shared scalar scroll data supports caret reveal without retaining a parent widget or tree.
     scroll_area: Option<std::rc::Rc<crate::ScrollModel>>,
     /// Single event slot shared by edits and submissions; the parent supplies its receiver during construction.
-    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::TextAreaEventQueueAbi>,
+    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::TextAreaAbi>,
 }
 
 /// Concrete fixed scrolling text-area class with one actual editor child.
@@ -297,13 +297,13 @@ impl TextEditor {
 
         // Emit complete immutable snapshots after the semantic update has committed cursor and text.
         if outcome.changed {
-            ctx.posted(self.events.post(&neocogi_ui_nodes_contracts::TextAreaEvent::Changed(crate::TextChanged {
+            ctx.posted(self.events.post(neocogi_ui_nodes_contracts::TextAreaEvent::Changed(crate::TextChanged {
                 text: self.buf.clone(),
                 cursor: self.cursor as u64,
             })));
         }
         if outcome.submitted {
-            ctx.posted(self.events.post(&neocogi_ui_nodes_contracts::TextAreaEvent::Submitted(crate::TextSubmitted {
+            ctx.posted(self.events.post(neocogi_ui_nodes_contracts::TextAreaEvent::Submitted(crate::TextSubmitted {
                 text: self.buf.clone(),
             })));
         }
@@ -820,7 +820,7 @@ impl TextArea {
         text: NcCopyFromBufferOffset<'_, u8>,
         wrapping: TextWrapping,
         scrolling: bool,
-        queue: Option<ComPtr<neocogi_ui_nodes_contracts::TextAreaEventQueueAbi>>,
+        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<neocogi_com::ComBox<TextAreaAbi>, NcStatus> {
         let (value, mut editor) = Self::build(host, text, wrapping, scrolling, Some(&resources))?;
         Self::into_box_cyclic::<TextAreaAbi>(move |origin| {

@@ -3,9 +3,9 @@ use super::*;
 use neocogi_ui_document::*;
 
 /// Prepares the single constructor binding used by these behavioral fixtures.
-fn receiver<C: neocogi_com::events::EventSource>(key: &str, queue: ComPtr<C::Queue>) -> Result<EventBindings, NcStatus> {
+fn receiver<C: neocogi_com::events::EventSource>(key: &str, queue: ComPtr<neocogi_com::events::IEventReceiverAbi>) -> Result<EventBindings, NcStatus> {
     let mut events = EventBindings::new();
-    events.insert_queue::<C>(key, queue.as_com_ref())?;
+    events.insert_queue(key, queue.as_com_ref())?;
     Ok(events)
 }
 
@@ -783,48 +783,39 @@ fn textbox_enum_stream_drives_form_action_and_public_sink() {
     assert!(matches!(events.try_recv(), Ok(neocogi_ui::textbox::Event::Submitted(value)) if value.text == "Ada"));
 }
 
-/// Constructor tables reject ambiguous ownership and incompatible event types before publication.
+/// Constructor tables reject ambiguous ownership and nonobservable keys before publication.
 #[test]
-fn construction_bindings_reject_duplicate_unknown_nonemitting_and_wrong_typed_sources() {
+fn construction_bindings_reject_duplicate_unknown_and_nonemitting_sources() {
     let fixture = Headless::standard();
     let loader = Loader::new(fixture.ui.clone(), None, Resources::new(), neocogi_ui::GridLimits { max_columns: 64, max_rows: 256 }).unwrap();
     let document = Document::new("constructor bindings");
-    for (key, wrong_type) in [("missing", false), ("title", false), ("save", true)] {
-        let (sender, messages) = std::sync::mpsc::channel::<()>();
+    for key in ["missing", "title"] {
+        let (queue, messages) = neocogi_com::events::channel();
         let mut events = EventBindings::new();
-        match wrong_type {
-            true => events
-                .insert_queue::<TextboxAbi>(
-                    key,
-                    neocogi_ui::test_event_queue!(textbox, (), sender, |_queue, _origin, _| ())
-                        .unwrap()
-                        .as_com_ref(),
-                )
-                .unwrap(),
-            false => events
-                .insert_queue::<ButtonAbi>(
-                    key,
-                    neocogi_ui::test_event_queue!(button, (), sender, |_queue, _origin, _| ()).unwrap().as_com_ref(),
-                )
-                .unwrap(),
-        }
+        events.insert_queue(key, queue.as_com_ref()).unwrap();
+        drop(queue);
         assert!(loader.compile_with_events(&document, events).is_err());
         assert!(
             matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Disconnected)),
             "rejected {key} mapping leaked"
         );
     }
+    // One common receiver is valid for any observable widget, regardless of kind.
+    let (queue, _messages) = neocogi_com::events::channel();
+    let mut common = EventBindings::new();
+    common.insert_queue("save", queue.as_com_ref()).unwrap();
+    assert!(loader.compile_with_events(&document, common).is_ok());
     let (sender, messages) = std::sync::mpsc::channel::<()>();
     let mut events = EventBindings::new();
     events
-        .insert_queue::<ButtonAbi>(
+        .insert_queue(
             "save",
             neocogi_ui::test_event_queue!(button, (), sender, |_queue, _origin, _| ()).unwrap().as_com_ref(),
         )
         .unwrap();
     let (replacement, rejected) = std::sync::mpsc::channel::<()>();
     assert_eq!(
-        events.insert_queue::<ButtonAbi>(
+        events.insert_queue(
             "save",
             neocogi_ui::test_event_queue!(button, (), replacement, |_queue, _origin, _| ())
                 .unwrap()

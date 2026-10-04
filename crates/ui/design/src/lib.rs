@@ -207,9 +207,9 @@ pub struct DesignEventQueue {
     /// Checked Rust implementation trait used when exporting a shared application queue.
     /// Its spelling cannot change the nominal identity or wire signature.
     pub rust_trait: String,
-    /// Closed generic IEventQueue<Object, Event> identity.
+    /// Common IEventReceiver identity.
     pub iid: [u8; 16],
-    /// Receiver ABI signature, including the complete event layout.
+    /// Common receiver ABI signature; concrete event interfaces negotiate separately.
     pub signature: [u8; 32],
     /// Exact generated message payload.
     pub message: String,

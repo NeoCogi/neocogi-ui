@@ -106,7 +106,7 @@ pub struct Textbox {
     /// Initialization-only font.
     font: FontRef,
     /// Single event slot; receives its destination during construction and is released when the widget is destroyed.
-    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::TextboxEventQueueAbi>,
+    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::TextboxAbi>,
 }
 
 impl Textbox {
@@ -196,10 +196,10 @@ impl Textbox {
         });
         let submitted = outcome.submitted.then(|| crate::TextSubmitted { text: self.buf.clone() });
         if let Some(event) = changed {
-            ctx.posted(self.events.post(&neocogi_ui_nodes_contracts::TextboxEvent::Changed(event)));
+            ctx.posted(self.events.post(neocogi_ui_nodes_contracts::TextboxEvent::Changed(event)));
         }
         if let Some(event) = submitted {
-            ctx.posted(self.events.post(&neocogi_ui_nodes_contracts::TextboxEvent::Submitted(event)));
+            ctx.posted(self.events.post(neocogi_ui_nodes_contracts::TextboxEvent::Submitted(event)));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(outcome.changed)
@@ -641,7 +641,7 @@ impl Textbox {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         text: NcCopyFromBufferOffset<'_, u8>,
-        queue: Option<ComPtr<neocogi_ui_nodes_contracts::TextboxEventQueueAbi>>,
+        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<neocogi_com::ComBox<TextboxAbi>, NcStatus> {
         let mut value = Self::build(host, text, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.

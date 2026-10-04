@@ -27,7 +27,7 @@ impl Menus {
         &self,
         window: ComRef<'_, IWindowAbi>,
         menu: &MenuBuilder,
-        queue: Option<ComRef<'_, neocogi_ui_core_contracts::IPopupEventQueueAbi>>,
+        queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<ComPtr<IPopupAbi>, NcStatus> {
         let events = neocogi_ui_core_contracts::IPopupEventBinding::from_queue(queue);
         self.interface
@@ -51,7 +51,7 @@ impl MenuBuilder {
         self.item_with_queue(label, None)
     }
     /// Constructs an item with its sole receiver before exposing its handle.
-    pub fn item_with_queue(&self, label: &str, queue: Option<ComRef<'_, neocogi_ui_core_contracts::IMenuItemEventQueueAbi>>) -> Result<MenuItem, NcStatus> {
+    pub fn item_with_queue(&self, label: &str, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<MenuItem, NcStatus> {
         Ok(MenuItem {
             interface: self.interface.item(
                 NcCopyFromBufferOffset::new(0, label.as_bytes()),

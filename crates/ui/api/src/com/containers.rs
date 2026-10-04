@@ -268,7 +268,7 @@ where
 
 impl WidgetFactory {
     /// Creates an empty split; insert panes in first/second ownership order.
-    pub fn split_view_with_queue(&self, settings: SplitOptions, queue: Option<ComRef<'_, SplitViewEventQueueAbi>>) -> Result<OwnedWidget<SplitViewAbi>, NcStatus> {
+    pub fn split_view_with_queue(&self, settings: SplitOptions, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<SplitViewAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_split_view(
             settings,
             neocogi_com::NcValueRef::new(&SplitViewEventBinding::from_queue(queue))?,

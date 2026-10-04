@@ -269,7 +269,7 @@ pub struct Scrollbar {
     pub(crate) axis_state: std::rc::Rc<ScrollAxisState>,
     /// Caller-authored options; dynamic range policy is resolved from the same shared state.
     /// Typed source for user-originated movement; programmatic requests remain silent.
-    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::ScrollbarEventQueueAbi>,
+    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::ScrollbarAbi>,
 }
 
 /// Coherent copied values shared by a real scrollbar and its co-packaged scroll layout.
@@ -429,7 +429,7 @@ impl Widget for Scrollbar {
         if self.offset() != previous {
             // Publish only user-originated movement. Programmatic setters intentionally remain
             // silent so owners can synchronize range and offset without recursive notifications.
-            ctx.posted(self.events.post(&neocogi_ui_nodes_contracts::ScrollbarEvent::Changed(crate::ScrollbarChanged {
+            ctx.posted(self.events.post(neocogi_ui_nodes_contracts::ScrollbarEvent::Changed(crate::ScrollbarChanged {
                 offset: self.offset(),
             })));
         }
@@ -565,7 +565,7 @@ impl Scrollbar {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         range: ScrollRange,
-        queue: Option<ComPtr<neocogi_ui_nodes_contracts::ScrollbarEventQueueAbi>>,
+        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<neocogi_com::ComBox<ScrollbarAbi>, NcStatus> {
         let mut value = Self::build(host, range, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.

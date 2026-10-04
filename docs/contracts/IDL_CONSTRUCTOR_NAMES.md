@@ -14,8 +14,8 @@ A method in the product's declaring module participates when it returns
 The binding is the ordinary `neocogi.com.events.EventBinding` library enum; an
 unrelated enum with a similar name does not acquire special meaning.
 
-Resolution checks the library binding's closed shape, its concrete `IEventQueue`
-specialization, and its origin/event identities. A participating constructor may
+Resolution checks the library binding's closed shape, its common `IEventReceiver`
+capability, and its origin/event identities. A participating constructor may
 accept only one binding; its origin must identify the returned product. All local
 constructors associated with a product must agree on the event identity. Invalid
 associations report `EIDL065` with source locations, before Rust generation.
@@ -33,9 +33,6 @@ For an associated product `Counter`, the resolved inventory is:
 | Name | Meaning | Emission condition |
 | --- | --- | --- |
 | `CounterEventBinding` | Alias for the closed constructor binding enum | Any associated constructor |
-| `CounterEventQueueAbi` | Alias for its concrete receiving COM interface | Any associated constructor |
-| `CounterEventQueue` | Readable application implementation trait | Any associated constructor |
-| `CounterEventQueueVtblFor` | Matching vtable provider re-export required by COM implementation macros | Any associated constructor |
 | `CounterEventPort` | Shared-service helper retaining the queue and a `WeakComPtr` origin | At least one associated constructor returns `ComPtr<Counter>` |
 
 `EventSource` and `IDL_INTERFACE.event_queue` use the same resolved association,
@@ -50,12 +47,12 @@ both shared and exclusive construction paths, it gets one port alias for the
 shared path, regardless of which factory resolves first. A shared constructor
 without a binding does not justify that alias.
 
-If the product has no associated constructor, none of these five names is
+If the product has no associated constructor, none of these two names is
 reserved. The resolver never bans an entire suffix family speculatively.
 
 ## Examples and diagnostics
 
-This shared product emits all five names:
+This shared product emits both names:
 
 ```rust,ignore
 extern neocogi.com.events;

@@ -83,7 +83,7 @@ pub struct Checkbox {
     /// Current checked value.
     checked: bool,
     /// Single lifetime event slot; the constructor fixes the parent receiver before publishing the widget.
-    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::CheckboxEventQueueAbi>,
+    events: crate::widget_object::WidgetEvents<neocogi_ui_nodes_contracts::CheckboxAbi>,
 }
 
 impl Checkbox {
@@ -155,7 +155,7 @@ impl Widget for Checkbox {
         let checked = self.checked;
         ctx.posted(
             self.events
-                .post(&neocogi_ui_nodes_contracts::CheckboxEvent::Changed(crate::CheckboxChanged { checked })),
+                .post(neocogi_ui_nodes_contracts::CheckboxEvent::Changed(crate::CheckboxChanged { checked })),
         );
 
         // The check mark changes paint only; both states reserve the same icon space.
@@ -225,7 +225,7 @@ impl Checkbox {
         resources: crate::widget_object::SharedAssets,
         checked: bool,
         label: NcCopyFromBufferOffset<'_, u8>,
-        queue: Option<ComPtr<neocogi_ui_nodes_contracts::CheckboxEventQueueAbi>>,
+        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<neocogi_com::ComBox<CheckboxAbi>, NcStatus> {
         let mut value = Self::build(host, checked, label, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.

@@ -65,7 +65,7 @@ fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
             )
         }
         /// Binding generation never constructs a live widget.
-        fn create(&self, _: &Ui, _: &[u8], _: Option<neocogi_com::ComPtr<neocogi_com::IUnknown>>) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
+        fn create(&self, _: &Ui, _: &[u8], _: Option<neocogi_com::ComPtr<neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
             Err(NC_E_INVALID_ARG)
         }
     }
@@ -115,8 +115,8 @@ fn custom_factory_cannot_omit_its_constructor_event_graph() {
         chain: &neocogi_demo_contracts::CounterAbi::INTERFACE_CHAIN,
         rust_abi: "neocogi_demo_contracts::CounterAbi",
         event_queue: Some(neocogi_com::design::IdlEventQueue {
-            rust_trait: "neocogi_demo_contracts::CounterEventQueue",
-            abi: &neocogi_demo_contracts::CounterEventQueueAbi::INTERFACE_DESCRIPTOR,
+            rust_trait: "neocogi_com::events::IEventReceiver",
+            abi: &neocogi_com::events::IEventReceiverAbi::INTERFACE_DESCRIPTOR,
             message: &neocogi_demo_contracts::CounterEvent::IDL_TYPE,
         }),
         values: &[],
@@ -129,7 +129,7 @@ fn custom_factory_cannot_omit_its_constructor_event_graph() {
             neocogi_ui_document::design::DesignWidgetManifest::from_idl("hidden.counter", vec![], &HIDDEN)
         }
         /// Registration rejects this provider before construction is possible.
-        fn create(&self, _: &Ui, _: &[u8], _: Option<neocogi_com::ComPtr<neocogi_com::IUnknown>>) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
+        fn create(&self, _: &Ui, _: &[u8], _: Option<neocogi_com::ComPtr<neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
             Err(NC_E_INVALID_ARG)
         }
     }
@@ -156,7 +156,7 @@ fn same_class_instances_share_one_queue_and_preserve_required_handlers() {
     let document = Document::from_json(include_bytes!("fixtures/shared.ui.json")).unwrap();
     let source = document.rust_bindings().unwrap();
     assert_eq!(source.matches("FormQueue::from_value").count(), 1);
-    assert_eq!(source.matches("impl neocogi_ui::nodes::IEventQueue").count(), 2);
+    assert_eq!(source.matches("impl neocogi_com::events::IEventReceiver").count(), 1);
     assert!(!source.contains("bindings.insert::<"));
     assert!(source.contains("on_first_1"));
     assert!(source.contains("on_second_2"));
@@ -205,7 +205,7 @@ fn shared_queues_allow_rust_aliases_but_reject_conflicting_revisions() {
             &self,
             _: &neocogi_ui::Ui,
             _: &[u8],
-            _: Option<neocogi_com::ComPtr<neocogi_com::IUnknown>>,
+            _: Option<neocogi_com::ComPtr<neocogi_com::events::IEventReceiverAbi>>,
         ) -> Result<neocogi_ui::OwnedWidget<neocogi_ui::IWidgetAbi>, neocogi_com::NcStatus> {
             Err(neocogi_com::NC_E_INVALID_ARG)
         }
@@ -228,11 +228,10 @@ fn shared_queues_allow_rust_aliases_but_reject_conflicting_revisions() {
         },
     );
     let source = document.rust_bindings_with(&registry).unwrap();
-    assert_eq!(source.matches("impl neocogi_ui::nodes::IEventQueue").count(), 2);
+    assert_eq!(source.matches("impl neocogi_com::events::IEventReceiver").count(), 1);
     fixture(source, "alias_bindings.rs", include_str!("fixtures/alias_bindings.rs"));
 
     metadata.interface.event_queue.as_mut().unwrap().signature[0] ^= 1;
     let mut incompatible = CustomWidgetRegistry::new();
-    incompatible.register(Rc::new(Catalog(metadata))).unwrap();
-    assert!(document.rust_bindings_with(&incompatible).unwrap_err().contains("conflicting ABI revisions"));
+    assert!(incompatible.register(Rc::new(Catalog(metadata))).unwrap_err().contains("incompatible IEventReceiver revision"));
 }

@@ -647,7 +647,7 @@ impl MenuSurface {
             MenuSlot::Item(item) if item.parameters.enabled => {
                 // Queue only the semantic event; WindowManager closes the complete path after this
                 // mutable surface borrow ends and before application dispatch begins.
-                let posted = item.submitted_event.post(&MenuItemSubmitted { label: item.parameters.label.clone() });
+                let posted = item.submitted_event.post(MenuItemSubmitted { label: item.parameters.label.clone() });
                 Some(MenuAction::SubmitAndClose(posted))
             }
             MenuSlot::Choice { enabled: false, .. } | MenuSlot::Item(_) | MenuSlot::Separator => None,
@@ -722,7 +722,7 @@ impl MenuSurface {
                 MenuSlot::Item(item) if item.parameters.enabled => {
                     // Emission only queues a typed value. Application code cannot run until the
                     // manager has consumed `SubmitAndClose` and released every surface borrow.
-                    let posted = item.submitted_event.post(&MenuItemSubmitted { label: item.parameters.label.clone() });
+                    let posted = item.submitted_event.post(MenuItemSubmitted { label: item.parameters.label.clone() });
                     Some(MenuAction::SubmitAndClose(posted))
                 }
                 MenuSlot::Choice { enabled: false, .. } | MenuSlot::Item(_) | MenuSlot::Separator => None,
