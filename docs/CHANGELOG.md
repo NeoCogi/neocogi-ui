@@ -2,6 +2,12 @@
 
 ## 0.0.0 (unreleased)
 
+- Add `LocalCom::downgrade` and `WeakLocalCom<T>::upgrade` for construction-proven
+  weak access to shared Rust implementations. Promotion preserves the existing
+  allocation, threading restrictions and COM borrow gate; final strong release
+  expires observers regardless of retained weak clones. UI runtime ownership is
+  unchanged pending a separate evaluation.
+
 - Rename application message behavior from `EventModel` to `MessageProcessor`
   and its inbox owner from `Controller` to `Dispatcher`. Typed local access uses
   `dispatcher.processor`; delivery remains synchronous and exclusively borrowed.
