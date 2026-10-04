@@ -106,7 +106,7 @@ sequenceDiagram
     Q->>I: send private message
     Q-->>B: return
     B-->>R: return from widget update
-    Note over R,A: Traversal has returned; dispatch boundary begins
+    Note over R,A: Traversal has returned. Dispatch boundary begins.
     R->>A: dispatch_next
     A->>I: try_recv
     I-->>A: one owned message
