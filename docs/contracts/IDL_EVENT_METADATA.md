@@ -25,9 +25,14 @@ owners, borrowed outputs and buffer operations are rejected. Getter names must
 be unique across the interface ancestry. These checks report `EIDL065` before
 Rust generation.
 
-An event's inherited getters are included once, in base-first order, with types
-resolved in the module where each getter was declared. Emitted-event lists belong
-to their declaring producer; a derived producer declares its own list. The compiler
+Diamond inheritance is supported. An event's inherited getters are included once
+per canonical interface IID, in base-first order, with types resolved in the module
+where each getter was declared. Separate consumer-local projections of the same
+closed generic interface contribute the same ancestor once; Rust declaration paths
+do not define distinct contracts. Conflicting signatures for the same IID remain
+invalid, and distinct interfaces with duplicate getter names remain ambiguous.
+Emitted-event lists belong to their declaring producer; a derived producer declares
+its own list. The compiler
 checks shape, while the provider is responsible for snapshot immutability and
 which events it actually emits. Hosts validate any domain constraints they rely on
 when consuming foreign getter results.
@@ -53,7 +58,10 @@ are ordinary legal declarations. Generic IDL values remain supported for other u
 The removed constructor-name contract documented machinery that no longer exists.
 [Resolver tests](../../crates/com/idl/tests/event_metadata.rs) cover attributes,
 inheritance, imported scopes, generics, malformed getters and removal of reserved
-helper names. [Compiled construction tests](../../crates/com/idl/tests/construction_events.rs)
+helper names. [Compiled diamond tests](../../crates/com/idl/tests/event_diamonds.rs)
+exercise ordinary and cross-module generic ancestry, real exclusive getter calls,
+canonical projection identity, imported value types and owned catalog round-trips.
+[Compiled construction tests](../../crates/com/idl/tests/construction_events.rs)
 exercise common bindings, real COM getters, weak origins and rejected owner transfers.
 [Relocated-contract tests](../../crates/com/idl/tests/rust_paths.rs) compile optional
 form fields and event getters across separate Cargo packages.
