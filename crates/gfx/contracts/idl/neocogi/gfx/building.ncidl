@@ -27,6 +27,8 @@ struct AssetAppearanceRevision {
 
 #[version(2)]
 /// One transactional font and image packing session with concrete named operations.
+/// Names contain 1 to 2048 UTF-8 bytes. Retained fonts and icons, including inherited assets,
+/// share a 16384-record bound; a crossing addition fails without changing the draft.
 interface IAssetBuilder {
     /// Adds a PNG icon under a distinct UTF-8 name and exact native path; byte offset is zero.
     fn add_icon(&self, name: &[u8], path: &INativePath) -> Result<()>;

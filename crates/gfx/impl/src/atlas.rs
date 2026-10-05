@@ -220,12 +220,9 @@ impl Builder {
     }
 
     /// Rejects duplicate and unrepresentable icon names before file I/O or packing.
-    fn check_icon_name(&self, name: &str) -> io::Result<()> {
-        if name.is_empty()
-            || name.len() > MAX_ASSET_NAMES as usize
-            || self.icons.len() >= MAX_ASSET_ICONS as usize
-            || self.icons.iter().any(|icon| icon.name == name)
-        {
+    pub(crate) fn check_icon_name(&self, name: &str) -> io::Result<()> {
+        self.check_named_addition(name)?;
+        if self.icons.iter().any(|icon| icon.name == name) {
             return Err(io::Error::other(format!("invalid or duplicate icon name `{name}`")));
         }
         Ok(())
@@ -307,16 +304,30 @@ impl Builder {
     }
 
     /// Rejects unusable font names and sizes before opening files or reserving rectangles.
-    fn check_font(&self, name: &str, size: usize) -> io::Result<()> {
-        if name.is_empty()
-            || name.len() > MAX_ASSET_NAMES as usize
-            || self.fonts.len() >= MAX_ASSET_FONTS as usize
-            || size == 0
+    pub(crate) fn check_font(&self, name: &str, size: usize) -> io::Result<()> {
+        self.check_named_addition(name)?;
+        if size == 0
             || size > i32::MAX as usize
             || self.fonts.iter().any(|font| font.name == name)
         {
             return Err(io::Error::other(format!("invalid or duplicate font `{name}` at size {size}")));
         }
+        // Every new font bakes 95 printable ASCII records. Count inherited Unicode records too,
+        // so relaxing the former font-only count cap cannot defer a known glyph overflow to finish.
+        check_glyph_budget(self.fonts.iter().map(|font| font.glyphs.len()).chain(std::iter::once(95)))?;
+        Ok(())
+    }
+
+    /// Checks shared font/icon admission before source reading, decoding or atlas mutation.
+    /// Inherited records already occupy these vectors; semantic replacements omitted by derivation
+    /// do not. The count and per-name bounds imply the combined publication name budget.
+    fn check_named_addition(&self, name: &str) -> io::Result<()> {
+        if name.is_empty() || name.len() > MAX_ASSET_NAME_BYTES as usize {
+            return Err(io::Error::other("asset name must contain 1 to 2048 UTF-8 bytes"));
+        }
+        self.fonts.len().checked_add(self.icons.len())
+            .filter(|&count| count < MAX_ASSETS as usize)
+            .ok_or_else(|| io::Error::other("asset count exceeds 16384 fonts and icons combined"))?;
         Ok(())
     }
 
@@ -426,14 +437,25 @@ impl Builder {
     }
 }
 
+/// Checks projected glyph storage without allocating or duplicating the builder's retained tables.
+fn check_glyph_budget(mut counts: impl Iterator<Item = usize>) -> io::Result<()> {
+    counts.try_fold(0usize, |total, count| total.checked_add(count))
+        .filter(|&total| total <= MAX_ASSET_GLYPHS as usize)
+        .ok_or_else(|| io::Error::other("asset glyph table exceeds its shared limit"))?;
+    Ok(())
+}
+
 /// Appends one bounded UTF-8 name while deriving its exact contiguous range.
 fn append_name(names: &mut Vec<u8>, name: &str) -> io::Result<AssetRange> {
+    if name.is_empty() || name.len() > MAX_ASSET_NAME_BYTES as usize {
+        return Err(io::Error::other("asset name must contain 1 to 2048 UTF-8 bytes"));
+    }
     let end = names
         .len()
         .checked_add(name.len())
         .ok_or_else(|| io::Error::other("asset name pool overflow"))?;
     if end > MAX_ASSET_NAMES as usize {
-        return Err(io::Error::other("asset name pool exceeds 4 MiB"));
+        return Err(io::Error::other("asset name pool exceeds its derived storage limit"));
     }
     let range = AssetRange {
         first: names.len() as u32,
@@ -446,6 +468,43 @@ fn append_name(names: &mut Vec<u8>, name: &str) -> io::Result<AssetRange> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// ASCII and multibyte UTF-8 must share one byte-based boundary for both asset types.
+    #[test]
+    fn asset_names_are_bounded_before_reading_or_packing() {
+        let builder = Builder::new(4, 4).unwrap();
+        for name in ["x".repeat(2047), "x".repeat(2048), "é".repeat(1024)] {
+            assert!(builder.check_icon_name(&name).is_ok());
+            assert!(builder.check_font(&name, 1).is_ok());
+        }
+        for name in [String::new(), "x".repeat(2049), "é".repeat(1025)] {
+            assert!(builder.check_icon_name(&name).is_err());
+            assert!(builder.check_font(&name, 1).is_err());
+        }
+    }
+
+    /// Drafts can be incomplete while counts remain authoritative across font and icon namespaces.
+    #[test]
+    fn fonts_and_icons_share_the_named_asset_count() {
+        let mut builder = Builder::new(4, 4).unwrap();
+        builder.fonts.push(Font { name: "body".into(), line_size: 1, baseline: 0, size: 1, glyphs: Vec::new() });
+        builder.icons = (0..MAX_ASSETS - 2).map(|index| Icon {
+            name: format!("icon{index}"), rect: Rect { x: 0, y: 0, width: 1, height: 1 },
+        }).collect();
+        assert!(builder.check_icon_name("last").is_ok());
+        assert!(builder.check_font("last", 1).is_ok());
+        builder.icons.push(Icon { name: "last".into(), rect: Rect { x: 0, y: 0, width: 1, height: 1 } });
+        assert!(builder.check_icon_name("crossing").is_err());
+        assert!(builder.check_font("crossing", 1).is_err());
+    }
+
+    /// The glyph table retains its existing independent cap, including inherited Unicode data.
+    #[test]
+    fn glyph_admission_checks_the_projected_total_without_exhaustion_allocations() {
+        assert!(check_glyph_budget([MAX_ASSET_GLYPHS as usize - 95, 95].into_iter()).is_ok());
+        assert!(check_glyph_budget([MAX_ASSET_GLYPHS as usize - 94, 95].into_iter()).is_err());
+        assert!(check_glyph_budget([usize::MAX, 95].into_iter()).is_err());
+    }
 
     /// A partially planned font must not consume atlas space or alter any live pixels.
     #[test]

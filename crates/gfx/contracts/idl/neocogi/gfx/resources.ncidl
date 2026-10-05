@@ -14,20 +14,20 @@ struct AssetInfo {
     schema: u32,
     /// Positive atlas dimensions, with exactly width * height * 4 RGBA bytes.
     size: Size,
-    /// Number of font records, bounded by MAX_ASSET_FONTS.
+    /// Number of font records; fonts plus icons must not exceed MAX_ASSETS (16384).
     fonts: u32,
-    /// Number of icon records, bounded by MAX_ASSET_ICONS.
+    /// Number of icon records sharing the MAX_ASSETS bound with fonts.
     icons: u32,
     /// Number of glyph records, bounded by MAX_ASSET_GLYPHS.
     glyphs: u32,
-    /// Combined UTF-8 name storage, bounded by MAX_ASSET_NAMES.
+    /// Combined UTF-8 name storage; at most 2048 bytes times the declared font-plus-icon count.
     names: u32,
 }
 
 #[version(1)]
 /// Font metrics and an exact partition of the bulk glyph table.
 struct AssetFont {
-    /// Nonempty UTF-8 font name, unique among fonts in this catalog.
+    /// Nonempty UTF-8 font name, at most MAX_ASSET_NAME_BYTES (2048), unique among fonts.
     name: AssetRange,
     /// Contiguous glyph records; fonts partition the table in declaration order.
     glyphs: AssetRange,
@@ -59,7 +59,7 @@ struct AssetGlyph {
 #[version(1)]
 /// A named positive atlas rectangle; the required white icon must be opaque white.
 struct AssetIcon {
-    /// Nonempty UTF-8 name, unique among icons in this catalog.
+    /// Nonempty UTF-8 name, at most MAX_ASSET_NAME_BYTES (2048), unique among icons.
     name: AssetRange,
     /// Positive rectangle wholly inside the atlas.
     rect: Rect,

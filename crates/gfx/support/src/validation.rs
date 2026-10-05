@@ -189,11 +189,11 @@ impl AssetTables {
 
     /// Resolves a bounded UTF-8 name without inventing a second resource namespace.
     pub fn name(&self, range: AssetRange) -> Result<&str, NcStatus> {
-        let end = range.first.checked_add(range.count).ok_or(NC_E_INVALID_ARG)?;
-        let bytes = self.names.get(range.first as usize..end as usize).ok_or(NC_E_INVALID_ARG)?;
-        if bytes.is_empty() {
+        if range.count == 0 || range.count > MAX_ASSET_NAME_BYTES {
             return Err(NC_E_INVALID_ARG);
         }
+        let end = range.first.checked_add(range.count).ok_or(NC_E_INVALID_ARG)?;
+        let bytes = self.names.get(range.first as usize..end as usize).ok_or(NC_E_INVALID_ARG)?;
         std::str::from_utf8(bytes).map_err(|_| NC_E_INVALID_ARG)
     }
 

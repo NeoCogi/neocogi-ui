@@ -1,7 +1,7 @@
 //! Bounded immutable ASCII acceleration; canonical tables own all Unicode glyph semantics.
 use crate::AssetTables;
 use neocogi_com::{NcStatus, NC_E_INVALID_ARG, NC_E_OUT_OF_MEMORY};
-use neocogi_gfx_contracts::MAX_ASSET_FONTS;
+use neocogi_gfx_contracts::MAX_ASSETS;
 
 /// One 512-byte index per font revision, with no global cache or mutable lookup state.
 /// Non-ASCII scalars retain canonical binary search; absence remains distinct from fallback.
@@ -14,9 +14,8 @@ impl AsciiGlyphIndex {
     /// Builds bounded indices from already validated, uniquely partitioned canonical tables.
     /// Checks range arithmetic and allocation admission before publishing the complete vector.
     pub fn build(tables: &AssetTables) -> Result<Vec<Self>, NcStatus> {
-        if tables.fonts.len() > MAX_ASSET_FONTS as usize {
-            return Err(NC_E_INVALID_ARG);
-        }
+        tables.fonts.len().checked_add(tables.icons.len())
+            .filter(|&count| count <= MAX_ASSETS as usize).ok_or(NC_E_INVALID_ARG)?;
         let mut indices = Vec::new();
         indices.try_reserve_exact(tables.fonts.len()).map_err(|_| NC_E_OUT_OF_MEMORY)?;
         for font in tables.fonts.iter() {

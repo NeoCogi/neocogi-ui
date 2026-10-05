@@ -126,6 +126,7 @@ impl IAssetBuilder for BuildSession {
     fn add_icon(&self, name: NcCopyFromBufferOffset<'_, u8>, path: ComRef<'_, INativePathAbi>) -> Result<(), NcStatus> {
         let mut edit = self.edit()?;
         let name = text(name)?;
+        edit.draft().builder.check_icon_name(name).map_err(|error| self.diagnostic.failure(error))?;
         let path = crate::path::decode(path)?;
         edit.draft()
             .builder
@@ -150,6 +151,7 @@ impl IAssetBuilder for BuildSession {
         if pixels == 0 || pixels > i32::MAX as u32 {
             return Err(NC_E_INVALID_ARG);
         }
+        edit.draft().builder.check_font(name, pixels as usize).map_err(|error| self.diagnostic.failure(error))?;
         let path = crate::path::decode(path)?;
         edit.draft()
             .builder
@@ -205,7 +207,7 @@ fn dimensions(size: Size) -> Result<(), NcStatus> {
 
 /// Accepts only complete, nonempty UTF-8 names within the shared metadata bound.
 fn text(input: NcCopyFromBufferOffset<'_, u8>) -> Result<&str, NcStatus> {
-    if input.offset() != 0 || input.is_empty() || input.len() > MAX_ASSET_NAMES as usize {
+    if input.offset() != 0 || input.is_empty() || input.len() > MAX_ASSET_NAME_BYTES as usize {
         return Err(NC_E_INVALID_ARG);
     }
     std::str::from_utf8(input.as_slice()).map_err(|_| NC_E_INVALID_ARG)

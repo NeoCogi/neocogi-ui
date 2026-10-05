@@ -253,10 +253,11 @@ separate and unchanged.
 | Storage | Bound and interpretation |
 | --- | --- |
 | Pixels | Positive `i32` dimensions; checked `width * height * 4`, at most 64 MiB; row-major uncompressed RGBA |
-| Fonts | 1–4096 distinct names; positive size and baseline spacing, checked native coordinate metrics |
+| Fonts | Nonempty; distinct names, positive size and baseline spacing, checked native coordinate metrics |
 | Glyphs | At most 1,048,576 records total; valid Unicode scalars, no duplicates within a font, mandatory `_` fallback |
-| Icons | 1–65,536 distinct names; positive rectangles wholly inside the atlas |
-| Names | At most 4 MiB of nonempty UTF-8 names, without terminators |
+| Icons | Nonempty; distinct names, positive rectangles wholly inside the atlas |
+| Named assets | Fonts and icons combined: at most 16,384 records, including retained inherited resources |
+| Names | Each nonempty UTF-8 name: at most 2,048 bytes, without terminators; total storage is bounded by the actual named-asset count times 2,048 (at most 32 MiB) |
 | Visuals | One generated named-state record per dense surface/control/menu/chrome role; control pointer states remain nested under enabled and focused branches |
 
 Fonts partition the glyph table in declaration order. Names partition their byte
@@ -268,6 +269,15 @@ nonnegative. Oversized opposing source slices remain valid and are retained as
 authored for the compositor's diagnostic rule below. Boolean bytes accept only zero or
 one; unknown caption and patch tags are rejected. Image patches refer to a
 bundle-local icon table position, never an opaque native handle.
+
+Builder admission checks the name length and combined font/icon count before
+source reading, decoding or packing. Derived drafts count the resources they
+retain; explicitly omitted semantic replacements free their slots. Font insertion
+also checks the inherited-plus-new glyph budget before rasterization. Rejected
+additions preserve the draft. The name-pool ceiling is derived from the count and
+per-name limits, so successful additions cannot violate a separate smaller pool
+budget at publication. Final validation remains mandatory and `finish` remains
+terminal, including failure due to missing required resources or other causes.
 
 GFX partitions each source and destination axis independently. Opposing sides
 that exceed an extent shrink proportionally, rounding the leading side once and

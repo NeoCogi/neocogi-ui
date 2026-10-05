@@ -108,27 +108,31 @@ pub const MAX_ASSET_PIXELS_BYTES: usize = neocogi_renderer_contracts::MAX_IMAGE_
 /// Maximum glyph records in a complete bundle, across every font.
 pub const MAX_ASSET_GLYPHS: u32 = 1024 * 1024;
 
-/// Maximum distinct font names in one bundle.
-pub const MAX_ASSET_FONTS: u32 = 4096;
+/// Maximum named assets in one bundle, counting font and icon records together.
+/// Glyphs belong to fonts and retain their separate `MAX_ASSET_GLYPHS` storage bound.
+pub const MAX_ASSETS: u32 = 16 * 1024;
 
-/// Maximum distinct icon names in one bundle.
-pub const MAX_ASSET_ICONS: u32 = 65536;
+/// Maximum UTF-8 bytes in each nonempty font or icon name, without a terminator.
+/// The bound counts bytes rather than Unicode characters.
+pub const MAX_ASSET_NAME_BYTES: u32 = 2048;
 
-/// Maximum combined UTF-8 bytes occupied by resource names.
-pub const MAX_ASSET_NAMES: u32 = 4 * 1024 * 1024;
+/// Maximum combined name storage, derived from the record count and per-name limits.
+/// Builders enforcing both admission limits cannot exceed this 32 MiB bound at finish.
+pub const MAX_ASSET_NAMES: u32 = MAX_ASSETS * MAX_ASSET_NAME_BYTES;
 
 impl AssetInfo {
     /// Checks the shared allocation policy before any consumer reserves or decodes storage.
     pub fn rgba_bytes(self) -> Result<usize, NcStatus> {
+        let assets = self.fonts.checked_add(self.icons).filter(|&count| count <= MAX_ASSETS)
+            .ok_or(neocogi_com::NC_E_INVALID_ARG)?;
         if self.schema != ASSET_SCHEMA_VERSION
             || self.size.width <= 0
             || self.size.height <= 0
             || self.fonts == 0
-            || self.fonts > MAX_ASSET_FONTS
             || self.icons == 0
-            || self.icons > MAX_ASSET_ICONS
             || self.glyphs > MAX_ASSET_GLYPHS
-            || self.names > MAX_ASSET_NAMES
+            // Check the actual declared count before a reader allocates the name byte table.
+            || self.names > assets * MAX_ASSET_NAME_BYTES
         {
             return Err(neocogi_com::NC_E_INVALID_ARG);
         }
@@ -242,6 +246,41 @@ impl Default for FlatPalette {
             disabled_background: Color { r: 50, g: 50, b: 50, a: 255 },
             disabled_foreground: Color { r: 230, g: 230, b: 230, a: 255 },
             disabled_title_foreground: Color { r: 240, g: 240, b: 240, a: 255 },
+        }
+    }
+}
+
+#[cfg(test)]
+mod limit_tests {
+    use super::*;
+    use neocogi_com::NC_E_INVALID_ARG;
+
+    /// These metadata headers exercise preallocation admission independently of table contents.
+    fn header(fonts: u32, icons: u32, names: u32) -> AssetInfo {
+        AssetInfo { schema: ASSET_SCHEMA_VERSION, size: Size { width: 1, height: 1 }, fonts, icons, glyphs: 0, names }
+    }
+
+    /// Both resource types share the same count, including exact and overflow boundaries.
+    #[test]
+    fn combined_asset_count_rejects_overflow_and_accepts_the_exact_limit() {
+        for fonts in [1, 4097, MAX_ASSETS / 2, MAX_ASSETS - 1] {
+            let icons = MAX_ASSETS - fonts;
+            assert_eq!(header(fonts, icons, MAX_ASSET_NAMES).rgba_bytes(), Ok(4));
+            assert_eq!(header(fonts, icons + 1, 0).rgba_bytes(), Err(NC_E_INVALID_ARG));
+        }
+        assert_eq!(header(u32::MAX, 1, 0).rgba_bytes(), Err(NC_E_INVALID_ARG));
+        assert_eq!(header(1, u32::MAX, 0).rgba_bytes(), Err(NC_E_INVALID_ARG));
+        assert_eq!(header(0, 1, 0).rgba_bytes(), Err(NC_E_INVALID_ARG));
+        assert_eq!(header(1, 0, 0).rgba_bytes(), Err(NC_E_INVALID_ARG));
+    }
+
+    /// A forged large name pool must fail before copying even when below the global 32 MiB maximum.
+    #[test]
+    fn name_pool_storage_is_derived_from_the_actual_declared_asset_count() {
+        for assets in [2, 10, MAX_ASSETS] {
+            let names = assets * MAX_ASSET_NAME_BYTES;
+            assert_eq!(header(1, assets - 1, names).rgba_bytes(), Ok(4));
+            assert_eq!(header(1, assets - 1, names + 1).rgba_bytes(), Err(NC_E_INVALID_ARG));
         }
     }
 }
