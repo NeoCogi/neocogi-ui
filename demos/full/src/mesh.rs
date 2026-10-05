@@ -123,7 +123,7 @@ impl LeafContent for Suzanne {
                 };
                 if delta.x != 0 || delta.y != 0 {
                     let center = Vec2i::new(rect.x + rect.width / 2, rect.y + rect.height / 2);
-                    self.view.update_drag(center, center + delta);
+                    self.view.update_drag(center, Vec2i::new(center.x.saturating_add(delta.x), center.y.saturating_add(delta.y)));
                 }
             }
             WidgetEvent::Text => {
@@ -232,5 +232,13 @@ mod viewport_tests {
         widget.paint(WidgetPaint { rect: full, clip: Rect::default(), ..WidgetPaint::default() }, &mut painter).unwrap();
         assert_eq!(transforms.borrow().len(), 1);
         assert_eq!(output.borrow().items.len(), 1);
+
+        // A thin visible strip can sit at the far end of an otherwise valid wide allocation.
+        // Keyboard orbit must saturate its synthetic endpoint rather than overflow that origin.
+        widget.update(crate::viewport_test_support::update_state(
+            Rect { x: 0, y: 0, width: i32::MAX, height: 1 },
+            Rect { x: i32::MAX - 1, y: 0, width: 1, height: 1 },
+        ), WidgetEvent::Key(KeyStroke { key: KeyCode::ArrowRight, value: 0, pressed: true, repeat: false, modifiers: 0 }), "").unwrap();
+        assert!(widget.view.pvm().col.iter().all(|column| [column.x, column.y, column.z, column.w].iter().all(|value| value.is_finite())));
     }
 }

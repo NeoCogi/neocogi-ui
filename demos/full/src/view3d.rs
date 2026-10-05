@@ -69,10 +69,19 @@ impl View3D {
         }
     }
 
+    /// Translates captured signed coordinates before float conversion, preserving small movements
+    /// even when the visible origin is near either integer limit.
+    fn viewport_position(&self, pos: &Vec2i) -> Vec2f {
+        Vec2f::new(
+            (i64::from(pos.x) - i64::from(self.origin.x)) as f32,
+            (i64::from(pos.y) - i64::from(self.origin.y)) as f32,
+        )
+    }
+
+    /// Maps positions relative to the same visible origin and dimensions used by projection.
     fn normalize_pointer_pos(&self, pos: &Vec2i) -> Vec2f {
         let dim_f = Vec2f::new(self.dimension.width as _, self.dimension.height as _);
-        // Subtract in floating point: capture can deliver the complete signed coordinate domain.
-        let pos_f = Vec2f::new(pos.x as f32 - self.origin.x as f32, pos.y as f32 - self.origin.y as f32);
+        let pos_f = self.viewport_position(pos);
 
         let mut norm_pos = 2.0 * pos_f / dim_f - Vec2f::new(1.0, 1.0);
 
@@ -100,8 +109,8 @@ impl View3D {
             }
 
             NavigationMode::Pan => {
-                let p = Vec2f::new(prev.x as f32 - self.origin.x as f32, prev.y as f32 - self.origin.y as f32);
-                let c = Vec2f::new(curr.x as f32 - self.origin.x as f32, curr.y as f32 - self.origin.y as f32);
+                let p = self.viewport_position(&prev);
+                let c = self.viewport_position(&curr);
                 self.camera = self.camera.pan(self.dimension, &p, &c);
                 UpdateResult::Handled
             }
@@ -229,10 +238,14 @@ mod viewport_tests {
     #[test]
     fn viewport_translation_keeps_its_center_at_normalized_zero() {
         let mut view = crate::grid::create_grid_view_3d();
-        view.set_viewport(Recti::new(0, 0, 80, 40));
-        view.set_viewport(Recti::new(120, 70, 80, 40));
-        let center = view.normalize_pointer_pos(&Vec2i::new(160, 90));
-        assert_eq!((center.x, center.y), (0., 0.));
+        for origin in [Vec2i::new(120, 70), Vec2i::new(i32::MAX - 80, i32::MIN)] {
+            view.set_viewport(Recti::new(0, 0, 80, 40));
+            view.set_viewport(Recti::new(origin.x, origin.y, 80, 40));
+            let center = view.normalize_pointer_pos(&(origin + Vec2i::new(40, 20)));
+            assert_eq!((center.x, center.y), (0., 0.));
+            let movement = view.viewport_position(&(origin + Vec2i::new(41, 21)));
+            assert_eq!((movement.x, movement.y), (41., 21.));
+        }
         let outside = view.normalize_pointer_pos(&Vec2i::new(i32::MIN, i32::MAX));
         assert!(outside.x.is_finite() && outside.y.is_finite());
     }
