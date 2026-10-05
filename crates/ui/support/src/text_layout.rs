@@ -55,6 +55,7 @@
 //! Text widgets and simple display widgets use these routines to keep UTF-8 line slicing,
 //! baseline alignment, and control text placement consistent. Measurement follows
 //! [`AtlasHandle::get_text_size`], including its missing-character fallback.
+use crate::atlas::TextRun;
 use crate::math::clamp_i64_to_i32;
 use crate::{vec2, AtlasHandle, Dimensioni, FontId, FontRef, Recti, Skin, Vec2i, WidgetOption};
 
@@ -81,7 +82,7 @@ pub struct TextLine {
     pub start: usize,
     /// Exclusive end byte offset in the source text.
     pub end: usize,
-    /// Measured line width in pixels.
+    /// Atlas-measured width of the exact source slice, clamped to drawable pixels.
     pub width: i32,
 }
 
@@ -117,60 +118,48 @@ fn push_wrapped_line(
 
     let mut offset = 0;
     let mut seg_start = 0;
-    let mut seg_width = 0_i32;
+    let mut run = TextRun::default();
     for word in line.split_inclusive(' ') {
         let word_len = word.len();
-        let word_width = atlas.get_text_size(font, word).width;
-        // Compare the mathematical sum before reducing it to the coordinate domain. Comparing two
-        // already-saturated i32 values would treat MAX + MAX as equal to MAX and fail to wrap.
-        if seg_width > 0 && i64::from(seg_width) + i64::from(word_width) > i64::from(max_width) {
-            // Split before the word that would overflow the current segment.
-            let seg_end = offset;
+        let mut candidate = run;
+        atlas.extend_text_run(font, word, &mut candidate);
+        if offset > seg_start && !candidate.fits(max_width) {
+            // Trial only the new token with the real pen. Summing isolated token ink widths
+            // would count overhang as spacing, causing both false breaks and wrong line widths.
             lines.push(TextLine {
                 start: line_start + seg_start,
-                end: line_start + seg_end,
-                width: seg_width,
+                end: line_start + offset,
+                width: run.width(),
             });
             seg_start = offset;
-            seg_width = 0;
+            run = TextRun::default();
+            candidate = run;
+            atlas.extend_text_run(font, word, &mut candidate);
         }
-        match wrap {
-            TextWrap::WordOrCharacter if word_width >= max_width => {
-                // Prefer the whole-word break above, then split a token only if
-                // its advances overflow an empty line. Check each advance before
-                // saturation, even if the token's reported width equals i32::MAX.
-                // Exact source ranges also serve selection and caret navigation.
-                let mut pen = i64::from(seg_width);
-                for (byte, character) in word.char_indices() {
-                    // Ink width and pen advance differ for overhanging or signed
-                    // glyph metrics. Keep them separate, just as atlas measurement
-                    // does, so splitting does not widen every character artificially.
-                    let mut advance = 0;
-                    let mut right = 0_i64;
-                    atlas.draw_string(font, &word[byte..byte + character.len_utf8()], vec2(0, 0), |_, step, destination, _| {
-                        advance = step.x;
-                        right = i64::from(destination.x) + i64::from(step.x.max(destination.width));
+        if wrap == TextWrap::WordOrCharacter && !candidate.fits(max_width) {
+            // Whole-word trial happens first. Oversized words use the identical accumulator
+            // one scalar at a time. Each glyph is visited a bounded number of times, so layout
+            // remains linear rather than repeatedly measuring growing prefixes.
+            for (byte, character) in word.char_indices() {
+                let scalar = &word[byte..byte + character.len_utf8()];
+                let position = offset + byte;
+                let mut next = run;
+                atlas.extend_text_run(font, scalar, &mut next);
+                if position > seg_start && !next.fits(max_width) {
+                    lines.push(TextLine {
+                        start: line_start + seg_start,
+                        end: line_start + position,
+                        width: run.width(),
                     });
-                    let position = offset + byte;
-                    if position > seg_start && pen.saturating_add(right).max(i64::from(seg_width)) > i64::from(max_width) {
-                        lines.push(TextLine {
-                            start: line_start + seg_start,
-                            end: line_start + position,
-                            width: seg_width,
-                        });
-                        seg_start = position;
-                        seg_width = 0;
-                        pen = 0;
-                    }
-                    // At least one complete character is always retained. This
-                    // also guarantees progress for a glyph wider than the line.
-                    seg_width = clamp_i64_to_i32(pen.saturating_add(right).max(i64::from(seg_width)));
-                    pen = pen.saturating_add(i64::from(advance));
+                    seg_start = position;
+                    next = TextRun::default();
+                    atlas.extend_text_run(font, scalar, &mut next);
                 }
+                // Retain at least one complete scalar even when it alone cannot fit.
+                run = next;
             }
-            TextWrap::None | TextWrap::Word | TextWrap::WordOrCharacter => {
-                seg_width = seg_width.saturating_add(word_width);
-            }
+        } else {
+            run = candidate;
         }
         offset += word_len;
     }
@@ -178,7 +167,7 @@ fn push_wrapped_line(
     lines.push(TextLine {
         start: line_start + seg_start,
         end: line_start + line.len(),
-        width: seg_width,
+        width: run.width(),
     });
 }
 
@@ -304,6 +293,78 @@ mod tests {
     //! Boundary tests for shared text measurement and wrapping arithmetic.
 
     use super::*;
+
+    /// Builds canonical signed/overhanging metrics without changing glyph source bounds.
+    fn metric_atlas(metrics: impl Fn(char) -> (i32, i32)) -> AtlasHandle {
+        let mut data = crate::test_support::test_asset_data_with_font_sizes(&[("body", 16)]);
+        for glyph in data.tables.glyphs.to_mut() {
+            let (offset, advance) = metrics(char::from_u32(glyph.scalar).unwrap());
+            glyph.offset_x = offset;
+            glyph.advance_x = advance;
+        }
+        AtlasHandle::from_validated_data(data, None).unwrap()
+    }
+
+    /// Both word policies must concatenate advances rather than the isolated token ink widths.
+    #[test]
+    fn interword_overhang_fits_and_reports_the_exact_slice_width() {
+        let atlas = metric_atlas(|_| (2, 4));
+        let font = atlas.font_id("body").unwrap();
+        assert_eq!(atlas.get_text_size(font, "a a").width, 14);
+        for wrap in [TextWrap::Word, TextWrap::WordOrCharacter] {
+            for width in [14, 16] {
+                let lines = build_text_lines("a a", wrap, width, font, &atlas);
+                assert_eq!(lines.len(), 1);
+                assert_eq!((lines[0].start, lines[0].end, lines[0].width), (0, 3, 14));
+            }
+            let lines = build_text_lines("a a", wrap, 13, font, &atlas);
+            assert_eq!(lines.iter().map(|l| (l.start, l.end, l.width)).collect::<Vec<_>>(), [(0, 2, 10), (2, 3, 6)]);
+        }
+    }
+
+    /// Signed advances, source overhang and coordinate cancellation follow atlas measurement.
+    #[test]
+    fn every_wrapped_slice_matches_atlas_measurement_for_signed_metrics() {
+        let metrics: [fn(char) -> (i32, i32); 5] = [
+            |_| (2, 4),
+            |ch| if ch == 'a' { (-3, -4) } else { (7, 9) },
+            |ch| if ch == 'a' { (i32::MIN, i32::MAX) } else { (i32::MAX, i32::MIN) },
+            |ch| if ch == 'b' { (i32::MAX, i32::MAX) } else { (i32::MIN, i32::MIN) },
+            |_| (-8, 0),
+        ];
+        for metric in metrics {
+            let atlas = metric_atlas(metric);
+            let font = atlas.font_id("body").unwrap();
+            for text in ["a a", "ab ba a", "a aaaaa b", "  aé 日本  b ", "a b\n\nété a\n", "a\rb a"] {
+                for wrap in [TextWrap::None, TextWrap::Word, TextWrap::WordOrCharacter] {
+                    for width in [0, 1, 10, 14, 40, i32::MAX] {
+                        let lines = build_text_lines(text, wrap, width, font, &atlas);
+                        let mut restored = String::new();
+                        for (index, line) in lines.iter().enumerate() {
+                            let slice = &text[line.start..line.end];
+                            assert_eq!(line.width, atlas.get_text_size(font, slice).width, "{text:?}, {wrap:?}, {width}");
+                            if index > 0 && text.as_bytes().get(lines[index - 1].end) == Some(&b'\n') {
+                                restored.push('\n');
+                            }
+                            restored.push_str(slice);
+                        }
+                        assert_eq!(restored, text, "wrapping must retain every original byte");
+                    }
+                }
+            }
+        }
+    }
+
+    /// A normal word followed by character fallback must use the same pen/extent policy.
+    #[test]
+    fn overhanging_words_transition_into_unicode_character_fallback() {
+        let atlas = metric_atlas(|_| (2, 4));
+        let font = atlas.font_id("body").unwrap();
+        let text = "a aéééé";
+        let lines = build_text_lines(text, TextWrap::WordOrCharacter, 14, font, &atlas);
+        let slices: Vec<_> = lines.iter().map(|l| (&text[l.start..l.end], l.width)).collect();
+        assert_eq!(slices, [("a ", 10), ("aéé", 14), ("éé", 10)]);
+    }
 
     /// Constructs a valid atlas whose fallback advance occupies the complete positive i32 range.
     fn extreme_advance_atlas() -> AtlasHandle {

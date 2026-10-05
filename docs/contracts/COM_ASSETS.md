@@ -278,6 +278,14 @@ authenticates its catalog and preserves its local resource identities.
 The native builder currently rasterizes printable ASCII. Prebuilt/other producers
 may supply any Unicode scalar, and runtime text substitutes `_` for a missing glyph.
 This boundary does not add text shaping, font fallback chains or grapheme handling.
+Text measurement and wrapping keep signed pen advance separate from glyph right
+extent. Both whole-word fit and character fallback append canonical metrics to
+the same horizontal run state; token ink widths are never added as spacing.
+Fit comparisons use the mathematical extent before saturation, while each
+reported line width equals atlas measurement of its exact UTF-8 source slice.
+Wrapping preserves ASCII-space boundaries, missing-character fallback and the
+editable trailing blank row. An individual oversized scalar remains indivisible.
+Trials scan only the new token or scalar, keeping layout linear in text length.
 The receiving GPU may impose a smaller texture dimension limit than the portable
 64 MiB policy; that upload is fallible and leaves the previous atlas installed.
 

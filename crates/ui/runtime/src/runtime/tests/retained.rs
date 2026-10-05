@@ -7,6 +7,7 @@ use std::{cell::RefCell, rc::Rc};
 
 mod persistence;
 mod split_view;
+mod text_layout;
 
 /// Stable drawable bounds allow independent windows and child-family overlap tests.
 const VIEW: Size = Size { width: 640, height: 400 };

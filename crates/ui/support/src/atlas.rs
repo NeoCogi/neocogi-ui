@@ -132,3 +132,4 @@ struct Atlas {
 pub struct AtlasHandle(Rc<Atlas>);
 
 mod runtime;
+pub(crate) use runtime::TextRun;

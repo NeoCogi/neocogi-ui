@@ -75,6 +75,15 @@ Use it for constrained messages containing long paths or identifiers. Measuremen
 paint, and editable caret ranges share the same breaks, and the source text stays
 unchanged. A single glyph wider than the line remains indivisible.
 
+Wrapping and atlas measurement distinguish signed pen movement from the glyph's
+right extent. An overhanging token does not add its ink width as interword spacing.
+For example, glyphs with a two-pixel right offset and four-pixel advance measure
+`"a a"` as 14 pixels; both word policies retain one row at a 14-pixel constraint.
+Each emitted row reports the atlas width of its exact source slice. Fit checks
+retain wide coordinates before saturation, so extreme advances still wrap and
+later signed advances can cancel correctly. Layout scans new tokens/scalars a
+bounded number of times rather than remeasuring growing prefixes.
+
 A compiled UI atlas must have a `body` font and the standard semantic icon names
 `close`, `expand`, `collapse`, `check`, `expand_down`, `open_folder`, `closed_folder`, and `file`.
 Every installable bundle has a validated opaque white tile named `white` for solid

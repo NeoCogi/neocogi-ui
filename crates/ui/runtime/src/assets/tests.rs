@@ -204,6 +204,38 @@ impl ITextMetrics for UnusedMetrics {
     }
 }
 
+/// Production text block and the text area's actual child use exact concatenated glyph widths.
+#[test]
+fn overhanging_text_widgets_measure_exact_source_slices_through_com() {
+    let mut data = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 16)]);
+    for glyph in data.tables.glyphs.to_mut() {
+        glyph.offset_x = 2;
+        glyph.advance_x = 4;
+    }
+    let source = data.into_bundle().unwrap();
+    let runtime = crate::test_support::runtime_from_assets(source.as_com_ref()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
+    let metrics: ComPtr<ITextMetricsAbi> = UnusedMetrics::from_value(UnusedMetrics).query().unwrap();
+    for wrapping in [TextWrapping::Word, TextWrapping::WordOrCharacter] {
+        let block = ui.widgets().text_block("a a", wrapping).unwrap();
+        let mut block_layout = block.as_interface().downgrade().query::<ILeafLayoutAbi>().unwrap();
+        let area = ui.widgets().text_area_unobserved("a a", wrapping, false).unwrap();
+        // Follow the public read-only topology to the sole editor. No concrete downcast or
+        // substitute implementation stands in for the production scrolling composition.
+        let topology = area.node_interface().unwrap().query::<IContainerLayoutAbi>().unwrap();
+        let surface = topology.children().unwrap().child(0).unwrap().query::<IContainerLayoutAbi>().unwrap();
+        let mut area_layout = surface.children().unwrap().child(0).unwrap().query::<ILeafLayoutAbi>().unwrap();
+        for width in [14, 16] {
+            let limits = LayoutLimits {
+                width: AxisLimit { kind: LimitKind::Finite, extent: width },
+                height: AxisLimit { kind: LimitKind::Unbounded, extent: 0 },
+            };
+            assert_eq!(block_layout.measure(limits, metrics.as_com_ref()).unwrap(), Size { width: 14, height: 16 });
+            assert_eq!(area_layout.measure(limits, metrics.as_com_ref()).unwrap(), Size { width: 14, height: 16 });
+        }
+    }
+}
+
 /// Observable renderer state contains only owned capabilities and ordinary single-threaded cells.
 struct Probe {
     /// Reentry must fail while the runtime owns its installation transaction.

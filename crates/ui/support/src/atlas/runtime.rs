@@ -18,6 +18,49 @@ fn clamp_text_coordinate(value: i128) -> i32 {
     value.clamp(i128::from(i32::MIN), i128::from(i32::MAX)) as i32
 }
 
+/// Right edge used by measurement after the drawable glyph origin has been clamped.
+fn measured_glyph_right(x: i32, advance: i32, width: i32) -> i32 {
+    x.saturating_add(advance.max(width))
+}
+
+/// Copyable horizontal run state shared by whole-word fit and character fallback.
+///
+/// Pen movement is independent of the right extent: overhang never becomes extra spacing.
+/// A UTF-8 string cannot contain enough signed i32 advances to overflow i128, so pen
+/// cancellation remains exact until a drawable coordinate is emitted. No text or resources
+/// are retained here; copying this state permits a bounded trial of the next token or scalar.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct TextRun {
+    /// Mathematical origin of the next glyph, including every signed advance.
+    pen: i128,
+    /// Nonnegative mathematical right extent, used for fit before coordinate saturation.
+    right: i128,
+    /// Width in the drawable i32 domain, identical to measurement of the exact run slice.
+    width: i32,
+}
+
+impl TextRun {
+    /// Appends canonical metrics, preserving the atlas's origin-then-edge clamping order.
+    fn push(&mut self, glyph: &AssetGlyph) {
+        let x = self.pen + i128::from(glyph.offset_x);
+        self.right = self.right.max(x + i128::from(glyph.advance_x.max(glyph.rect.width)));
+        self.width = self
+            .width
+            .max(measured_glyph_right(clamp_text_coordinate(x), glyph.advance_x, glyph.rect.width));
+        self.pen += i128::from(glyph.advance_x);
+    }
+
+    /// Tests the mathematical right extent, so saturation cannot hide overflow at i32::MAX.
+    pub(crate) fn fits(self, max_width: i32) -> bool {
+        self.right <= i128::from(max_width)
+    }
+
+    /// Returns the same bounded width as the atlas measurement of this exact slice.
+    pub(crate) fn width(self) -> i32 {
+        self.width
+    }
+}
+
 /// Converts the generated renderer rectangle into the runtime math rectangle at point of use.
 fn runtime_rect(value: AssetRect) -> Recti {
     // Both records use identical integer units; this is a transient API-boundary projection rather
@@ -302,6 +345,27 @@ impl AtlasHandle {
         self.0.tables.name(range).expect("validated asset name remains valid")
     }
 
+    /// Resolves the same underscore fallback for painting, measurement and wrapping.
+    fn glyph_or_fallback(&self, font_slot: usize, character: char) -> &AssetGlyph {
+        self.glyph(font_slot, character)
+            .or_else(|| self.glyph(font_slot, '_'))
+            .expect("validated asset font contains the underscore fallback")
+    }
+
+    /// Extends a horizontal trial without allocating or remeasuring its existing prefix.
+    ///
+    /// LF/CR reset the pen, preserving the atlas's multiline width policy. The line builder
+    /// splits on LF itself; widget storage normalizes CRLF and lone CR before layout.
+    pub(crate) fn extend_text_run(&self, font: FontId, text: &str, run: &mut TextRun) {
+        let slot = self.font_slot(font);
+        for character in text.chars() {
+            match character {
+                '\r' | '\n' => run.pen = 0,
+                _ => run.push(self.glyph_or_fallback(slot, character)),
+            }
+        }
+    }
+
     /// Walks glyphs with canonical metrics, baseline placement, and one run origin.
     fn walk_glyphs<F>(&self, font: FontId, text: &str, origin: Vec2i, mut draw: F)
     where
@@ -330,10 +394,7 @@ impl AtlasHandle {
                     baseline_y += line_height;
                 }
                 _ => {
-                    let glyph = self
-                        .glyph(font_slot, character)
-                        .or_else(|| self.glyph(font_slot, '_'))
-                        .expect("validated asset font contains the underscore fallback");
+                    let glyph = self.glyph_or_fallback(font_slot, character);
                     let source = runtime_rect(glyph.rect);
                     destination.width = source.width;
                     destination.height = source.height;
@@ -374,7 +435,7 @@ impl AtlasHandle {
 
         self.walk_glyphs(font, text, Vec2i::default(), |_, advance, destination, _, baseline_y| {
             saw_glyph = true;
-            result.width = max(result.width, destination.x.saturating_add(max(advance.x, destination.width)));
+            result.width = max(result.width, measured_glyph_right(destination.x, advance.x, destination.width));
             result.height = max(result.height, destination.y.saturating_add(destination.height));
             max_line_bottom = max(max_line_bottom, baseline_y.saturating_add(descent));
         });
