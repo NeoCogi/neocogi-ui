@@ -38,4 +38,5 @@ cp "$artifact" "$test_dir/$test_binary"
 echo "Staged application tests: $test_dir/$test_binary"
 if [[ "${NEOCOGI_TEST_BUILD_ONLY:-0}" == 1 ]]; then exit 0; fi
 cd "${TMPDIR:-/tmp}"
-"$test_dir/$test_binary" --include-ignored
+# SDL permits one event pump per process. Native window fixtures must own it in turn.
+"$test_dir/$test_binary" --include-ignored --test-threads=1

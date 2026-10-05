@@ -2,6 +2,108 @@
 use super::*;
 use neocogi_ui::events::testing::TestApp;
 
+/// Compiles shipped themes through the deployed services without requiring a GPU window.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+#[ignore = "requires the packaged native plugin graph and adjacent theme assets"]
+fn packaged_full_theme_loaders() {
+    neocogi_demo_host::initialize().unwrap();
+    let base = neocogi_demo_assets::load_bundle().unwrap();
+    for theme in Theme::ALL {
+        let loaded = theme
+            .load(base.as_com_ref())
+            .unwrap_or_else(|status| panic!("{} theme load failed: {status}", theme.label()));
+        loaded.metrics().unwrap();
+    }
+}
+
+/// Runs selection under the production host, including platform polling and native IME placement.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+#[ignore = "requires the packaged native plugin graph and a native GPU window"]
+fn packaged_full_host_selects_win311() {
+    /// Ordered input stages; the press remains held through installation on the release frame.
+    #[derive(Clone, Copy)]
+    enum Step {
+        /// Bring the demo above its sibling windows after initial construction.
+        Raise,
+        /// Focus its title after the first frame has committed layout.
+        Focus,
+        /// Open the View menu using the default theme's committed geometry.
+        OpenView,
+        /// Open View's nested Theme menu.
+        OpenTheme,
+        /// Press Windows 3.11; leave the mouse held at the end of this frame.
+        PressTheme,
+        /// Release on the frame that installs the theme prepared by the preceding dispatch.
+        ReleaseTheme,
+        /// Exercise another full platform/IME/render iteration after installation.
+        RenderInstalled,
+        /// Check the committed selection and stop the native loop.
+        Verify,
+    }
+    /// Owns the actual application and advances one pointer selection across frames.
+    struct Selection {
+        /// All controls and application behavior use the production state.
+        state: State,
+        /// A finite forward-only sequence ends by returning false from Verify.
+        steps: std::array::IntoIter<Step, 8>,
+    }
+    impl AppState for Selection {
+        type Message = neocogi_com::events::EventMessage;
+        /// Preserve the production application's queued COM event handling.
+        fn update(&mut self, message: Self::Message) -> Result<(), NcStatus> {
+            self.state.update(message)
+        }
+        /// Inject only through this window's UI interface, then run the actual frame callback.
+        fn frame(&mut self, host: &Host, size: Size, seconds: f64) -> Result<bool, NcStatus> {
+            let step = self.steps.next().expect("Verify must terminate the host loop");
+            match step {
+                Step::Raise => self.state.demo.raise()?,
+                Step::Focus | Step::OpenView | Step::OpenTheme | Step::PressTheme | Step::ReleaseTheme => {
+                    let area = self.state.demo.snapshot()?.rect;
+                    // Coordinates belong to the shipped default theme: 24-pixel title,
+                    // 28-pixel menu rows, and View's fourth row opens the Theme submenu.
+                    let (x, y) = match step {
+                        Step::Focus => (100, 10),
+                        Step::OpenView => (45, 39),
+                        Step::OpenTheme => (50, 152),
+                        Step::PressTheme | Step::ReleaseTheme => (205, 182),
+                        _ => unreachable!(),
+                    };
+                    let position = Point { x: area.x + x, y: area.y + y };
+                    host.ui.input(UiInput::Pointer(position), "")?;
+                    if !matches!(step, Step::ReleaseTheme) {
+                        host.ui.input(UiInput::Down { position, buttons: 1 }, "")?;
+                    }
+                    if !matches!(step, Step::PressTheme) {
+                        host.ui.input(UiInput::Up { position, buttons: 1 }, "")?;
+                    }
+                }
+                Step::RenderInstalled => {}
+                Step::Verify => {
+                    assert_eq!(self.state.themes[1].1.mark()?, MenuMark::Radio { selected: true });
+                    return Ok(false);
+                }
+            }
+            self.state.frame(host, size, seconds)
+        }
+    }
+    let (host, state, events) = create().unwrap();
+    let steps = [
+        Step::Raise,
+        Step::Focus,
+        Step::OpenView,
+        Step::OpenTheme,
+        Step::PressTheme,
+        Step::ReleaseTheme,
+        Step::RenderInstalled,
+        Step::Verify,
+    ]
+    .into_iter();
+    host.run(Selection { state, steps }, events).unwrap();
+}
+
 /// Selects Win 3.11 through the real nested menu and verifies publication on the following frame.
 fn select_win311_from_menu(host: &Host, app: &TestApp<State, neocogi_com::events::EventMessage>) -> Result<(), HostError> {
     let mut state = app.state();
@@ -83,7 +185,10 @@ fn construction_rejection_checks(ui: &Ui) -> Result<(), NcStatus> {
 
     let candidate = ui.widgets().button_unobserved("invalid weak-parent edge")?;
     let candidate_view = candidate.handle();
-    assert_eq!(append(&mut observed_parent, candidate, LayoutTrack::Fixed { extent: -1 }), Err(NC_E_INVALID_ARG));
+    assert_eq!(
+        append(&mut observed_parent, candidate, LayoutTrack::Fixed { extent: -1 }),
+        Err(NC_E_INVALID_ARG)
+    );
     assert!(!candidate_view.as_interface().is_alive());
     assert_eq!(parent.children()?.child_count()?, 1);
 
@@ -115,7 +220,7 @@ fn exercise() -> Result<(Host, TestApp<State, neocogi_com::events::EventMessage>
     let base = host.ui.assets()?;
     select_win311_from_menu(&host, &app)?;
     let mut state = app.state();
-    for theme in Theme::ALL {
+    for theme in Theme::ALL.into_iter().cycle().take(2 * Theme::ALL.len()) {
         state.select_theme(theme)?;
         // Publish the prepared assets before the host's single update for this frame.
         state.frame(&host, size, 0.)?;
@@ -130,6 +235,25 @@ fn exercise() -> Result<(Host, TestApp<State, neocogi_com::events::EventMessage>
         for (choice, item) in &state.themes {
             assert_eq!(item.mark()?, MenuMark::Radio { selected: *choice == theme });
         }
+        // Keep running after installation: lazy imports and timer-driven text edits must
+        // remain renderable after the frame that first publishes a theme revision.
+        for frame in 1..=4 {
+            state.frame(&host, size, f64::from(frame) / 4.)?;
+            drop(state);
+            app.update(&host.ui, size)?;
+            host.ui.render(size, host.renderer.as_com_ref())?;
+            state = app.state();
+        }
+        let original = state.demo.snapshot()?.rect;
+        for (width, height) in [(240, 300), (400, 300), (640, 480)] {
+            state.demo.set_rect(Rect { width, height, ..original })?;
+            state.frame(&host, size, 2.)?;
+            drop(state);
+            app.update(&host.ui, size)?;
+            host.ui.render(size, host.renderer.as_com_ref())?;
+            state = app.state();
+        }
+        state.demo.set_rect(original)?;
     }
     {
         state.select_theme(Theme::Default)?;
@@ -193,7 +317,11 @@ mod browser {
         /// The successful run renders two frames; the failing run rejects its first callback.
         fn frame(&mut self, _: &Host, _: Size, _: f64) -> Result<bool, NcStatus> {
             self.frames += 1;
-            if self.fail { Err(UI_E_RENDER) } else { Ok(self.frames < 3) }
+            if self.fail {
+                Err(UI_E_RENDER)
+            } else {
+                Ok(self.frames < 3)
+            }
         }
     }
     impl Drop for Stop {
