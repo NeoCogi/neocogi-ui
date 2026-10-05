@@ -11,6 +11,9 @@ mod polymesh;
 mod style_editor;
 mod view3d;
 
+#[cfg(test)]
+mod viewport_test_support;
+
 /// Runs the complete demo through the same facade on native and browser deployments.
 pub fn run() -> Result<(), neocogi_demo_host::HostError> {
     app::run()

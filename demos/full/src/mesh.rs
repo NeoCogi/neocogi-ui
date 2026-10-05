@@ -56,7 +56,7 @@ use neocogi_render_mesh_contracts::{IMeshScenesAbi, IMeshSceneAbi, MeshVertex, S
 
 /// Concrete camera behavior and cached interface projections share one renderer scene.
 pub(super) struct Suzanne {
-    /// Application camera changes only through routed input and committed allocations.
+    /// Camera uses the visible client area during both input and final paint traversal.
     view: View3D,
     /// Editing capability owns the uploaded mesh and accepts complete camera snapshots.
     scene: ComPtr<IMeshSceneAbi>,
@@ -98,17 +98,17 @@ impl LeafContent for Suzanne {
     fn measure(&self, _: LayoutLimits, _: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
         Ok(Size { width: 80, height: 24 })
     }
-    /// Applies orbit/zoom before publishing both matrices in one scene edit.
+    /// Applies orbit/zoom using the visible client; final scene publication belongs to paint.
     fn update(&mut self, state: WidgetUpdate, event: WidgetEvent, text: &str) -> Result<GeometryChange, NcStatus> {
-        let rect = state.rect;
+        let rect = state.clip;
         if rect.width <= 0 || rect.height <= 0 {
             return Ok(GeometryChange::NoChange);
         }
-        self.view.set_dimension(Dimensioni::new(rect.width, rect.height));
+        self.view.set_viewport(local_rect(rect));
         match event {
             WidgetEvent::Drag { position, delta, buttons } if buttons & 1 != 0 => {
                 let p = point(position);
-                self.view.update_drag(p - point(delta), p);
+                self.view.update_drag(Vec2i::new(p.x.saturating_sub(delta.x), p.y.saturating_sub(delta.y)), p);
             }
             WidgetEvent::Scroll { delta, .. } => {
                 self.view.apply_scroll(if delta.y != 0 { delta.y } else { delta.x } as f32);
@@ -122,7 +122,7 @@ impl LeafContent for Suzanne {
                     _ => Vec2i::default(),
                 };
                 if delta.x != 0 || delta.y != 0 {
-                    let center = Vec2i::new(rect.width / 2, rect.height / 2);
+                    let center = Vec2i::new(rect.x + rect.width / 2, rect.y + rect.height / 2);
                     self.view.update_drag(center, center + delta);
                 }
             }
@@ -141,14 +141,19 @@ impl LeafContent for Suzanne {
             }
             _ => {}
         }
+        Ok(GeometryChange::NoChange)
+    }
+    /// Publishes the final visible-area projection before recording the renderer-owned scene.
+    /// Scene edits do not change UI geometry; this covers layout that settles after input dispatch.
+    fn paint(&mut self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
+        if state.clip.width <= 0 || state.clip.height <= 0 {
+            return Ok(());
+        }
+        self.view.set_viewport(local_rect(state.clip));
         self.scene.set_transforms(SceneTransforms {
             pvm: self.view.pvm().into(),
             view_model: self.view.view_matrix().into(),
         })?;
-        Ok(GeometryChange::NoChange)
-    }
-    /// Rendering observes the scene without a native callback, native handle or borrowed GPU frame.
-    fn paint(&mut self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
         painter.item(state.rect, self.item.as_com_ref())
     }
 }
@@ -173,4 +178,59 @@ fn mesh_buffers(mesh: &PolyMesh) -> (Vec<MeshVertex>, Vec<u32>) {
         }
     }
     (vertices, indices)
+}
+
+#[cfg(test)]
+mod viewport_tests {
+    use super::*;
+    use neocogi_com::com_object;
+    use neocogi_render_mesh_contracts::{IMeshScene, IMeshSceneVtblFor};
+    use std::{cell::RefCell, rc::Rc};
+
+    #[com_object(interfaces(IMeshScene))]
+    /// Records actual generated scene edits independently of the application camera.
+    struct SceneProbe {
+        /// Shared observations remain borrow-free across the exclusive painter call.
+        transforms: Rc<RefCell<Vec<SceneTransforms>>>,
+    }
+    impl IRenderItem for SceneProbe {}
+    impl IMeshScene for SceneProbe {
+        /// Geometry upload is unnecessary for observing transform publication.
+        fn set_mesh(&self, _: NcCopyFromBufferOffset<'_, MeshVertex>, _: NcCopyFromBufferOffset<'_, u32>) -> Result<(), NcStatus> { Ok(()) }
+        /// Complete copied snapshots prove paint publishes the final settled aspect through COM.
+        fn set_transforms(&self, transforms: SceneTransforms) -> Result<(), NcStatus> {
+            self.transforms.borrow_mut().push(transforms); Ok(())
+        }
+    }
+
+    /// Final paint can have a smaller clip than update; the scene must change before item recording.
+    #[test]
+    fn paint_publishes_the_final_visible_aspect_and_skips_empty_clients() {
+        let transforms = Rc::new(RefCell::new(Vec::new()));
+        let scene: ComPtr<IMeshSceneAbi> = SceneProbe::from_value(SceneProbe { transforms: transforms.clone() }).query().unwrap();
+        let item = scene.query().unwrap();
+        let mut widget = Suzanne { view: crate::grid::create_grid_view_3d(), scene, item };
+        let full = Rect { x: 0, y: 0, width: 200, height: 100 };
+        widget.update(crate::viewport_test_support::update_state(full, full), WidgetEvent::None, "").unwrap();
+        let earlier_projection = widget.view.projection_matrix();
+        assert!(transforms.borrow().is_empty(), "input does not publish an intermediate projection");
+        let visible = Rect { x: 37, y: 23, width: 91, height: 57 };
+        let (recorder, output) = crate::viewport_test_support::recorder();
+        let mut painter = Painter::from_call(recorder.as_com_ref(), PaintScope { invocation: 1, clip: visible });
+        widget.paint(WidgetPaint { rect: full, clip: visible, ..WidgetPaint::default() }, &mut painter).unwrap();
+        let mut reference = crate::grid::create_grid_view_3d();
+        reference.set_viewport(local_rect(visible));
+        let expected: neocogi_render_mesh_contracts::Matrix4 = reference.pvm().into();
+        let edits = transforms.borrow();
+        assert_eq!(edits.len(), 1);
+        assert_ne!(earlier_projection.col[0].x, widget.view.projection_matrix().col[0].x);
+        assert_eq!(edits[0].pvm.m00, expected.m00);
+        assert_eq!(edits[0].pvm.m11, expected.m11);
+        drop(edits);
+        assert_eq!(output.borrow().items.len(), 1);
+        assert_eq!(output.borrow().items[0].width, full.width, "UI allocation remains full-sized");
+        widget.paint(WidgetPaint { rect: full, clip: Rect::default(), ..WidgetPaint::default() }, &mut painter).unwrap();
+        assert_eq!(transforms.borrow().len(), 1);
+        assert_eq!(output.borrow().items.len(), 1);
+    }
 }

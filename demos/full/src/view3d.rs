@@ -48,6 +48,8 @@ pub struct View3D {
     camera: Camera,
     nav_mode: NavigationMode,
     dimension: Dimensioni,
+    /// Visible client origin in widget-local coordinates; captured drags may lie outside it.
+    origin: Vec2i,
     scroll: f32,
     bounds: Box3f,
     pvm: Mat4f,
@@ -60,6 +62,7 @@ impl View3D {
             camera,
             nav_mode: NavigationMode::Orbit,
             dimension,
+            origin: Vec2i::default(),
             scroll,
             bounds,
             pvm: *camera.projection_matrix() * *camera.view_matrix(),
@@ -68,7 +71,8 @@ impl View3D {
 
     fn normalize_pointer_pos(&self, pos: &Vec2i) -> Vec2f {
         let dim_f = Vec2f::new(self.dimension.width as _, self.dimension.height as _);
-        let pos_f = Vec2f::new(pos.x as _, pos.y as _);
+        // Subtract in floating point: capture can deliver the complete signed coordinate domain.
+        let pos_f = Vec2f::new(pos.x as f32 - self.origin.x as f32, pos.y as f32 - self.origin.y as f32);
 
         let mut norm_pos = 2.0 * pos_f / dim_f - Vec2f::new(1.0, 1.0);
 
@@ -96,8 +100,8 @@ impl View3D {
             }
 
             NavigationMode::Pan => {
-                let p = Vec2f::new(prev.x as _, prev.y as _);
-                let c = Vec2f::new(curr.x as _, curr.y as _);
+                let p = Vec2f::new(prev.x as f32 - self.origin.x as f32, prev.y as f32 - self.origin.y as f32);
+                let c = Vec2f::new(curr.x as f32 - self.origin.x as f32, curr.y as f32 - self.origin.y as f32);
                 self.camera = self.camera.pan(self.dimension, &p, &c);
                 UpdateResult::Handled
             }
@@ -134,7 +138,8 @@ impl View3D {
         UpdateResult::Handled
     }
 
-    pub fn set_dimension(&mut self, dimension: Dimensioni) {
+    /// Updates the positive viewport size and projection; origin belongs to `set_viewport`.
+    fn set_dimension(&mut self, dimension: Dimensioni) {
         if (self.dimension.width, self.dimension.height) == (dimension.width, dimension.height) {
             return;
         }
@@ -142,6 +147,15 @@ impl View3D {
         let aspect = (self.dimension.width as f32) / (self.dimension.height as f32);
         self.camera = self.camera.with_aspect(aspect);
         self.refresh_projection();
+    }
+
+    /// Fits projection and input normalization to a nonempty visible widget-local client rectangle.
+    /// Callers skip empty clips. Paint also calls this after final layout, so a layout-only change
+    /// cannot leave the camera using dimensions from an earlier input traversal.
+    pub fn set_viewport(&mut self, viewport: Recti) {
+        debug_assert!(viewport.width > 0 && viewport.height > 0);
+        self.origin = Vec2i::new(viewport.x, viewport.y);
+        self.set_dimension(Dimensioni::new(viewport.width, viewport.height));
     }
 
     pub fn get_navigation_mode(&self) -> NavigationMode {
@@ -164,5 +178,62 @@ impl View3D {
 
     pub fn view_matrix(&self) -> Mat4f {
         *self.camera.view_matrix()
+    }
+}
+
+#[cfg(test)]
+mod viewport_tests {
+    use super::*;
+
+    /// Compares numerical output rather than camera bookkeeping or cached field values.
+    fn same_matrix(left: Mat4f, right: Mat4f) {
+        for (left, right) in left.col.iter().zip(right.col.iter()) {
+            for (left, right) in [left.x, left.y, left.z, left.w].into_iter().zip([right.x, right.y, right.z, right.w]) {
+                assert!((left - right).abs() < 0.00001, "{left} != {right}");
+            }
+        }
+    }
+
+    /// Projection and both navigation modes match an independently positioned visible client.
+    #[test]
+    fn visible_client_projection_and_drag_match_a_full_client_of_that_size() {
+        for viewport in [
+            Recti::new(100, 0, 100, 100),
+            Recti::new(0, 0, 100, 100),
+            Recti::new(0, 80, 200, 20),
+            Recti::new(0, 0, 200, 20),
+            Recti::new(37, 23, 91, 57),
+        ] {
+            for mode in [NavigationMode::Orbit, NavigationMode::Pan] {
+                let mut clipped = crate::grid::create_grid_view_3d();
+                let mut reference = crate::grid::create_grid_view_3d();
+                clipped.set_viewport(Recti::new(0, 0, 200, 100));
+                clipped.set_viewport(viewport);
+                reference.set_viewport(Recti::new(0, 0, viewport.width, viewport.height));
+                same_matrix(clipped.projection_matrix(), reference.projection_matrix());
+                same_matrix(clipped.pvm(), reference.pvm());
+                clipped.set_navigation_mode(mode);
+                reference.set_navigation_mode(mode);
+                let previous = Vec2i::new(viewport.width / 2, viewport.height / 2);
+                let current = previous + Vec2i::new(13, -7);
+                let origin = Vec2i::new(viewport.x, viewport.y);
+                clipped.update_drag(previous + origin, current + origin);
+                reference.update_drag(previous, current);
+                same_matrix(clipped.view_matrix(), reference.view_matrix());
+                same_matrix(clipped.pvm(), reference.pvm());
+            }
+        }
+    }
+
+    /// Moving the visible origin without resizing still changes pointer normalization.
+    #[test]
+    fn viewport_translation_keeps_its_center_at_normalized_zero() {
+        let mut view = crate::grid::create_grid_view_3d();
+        view.set_viewport(Recti::new(0, 0, 80, 40));
+        view.set_viewport(Recti::new(120, 70, 80, 40));
+        let center = view.normalize_pointer_pos(&Vec2i::new(160, 90));
+        assert_eq!((center.x, center.y), (0., 0.));
+        let outside = view.normalize_pointer_pos(&Vec2i::new(i32::MIN, i32::MAX));
+        assert!(outside.x.is_finite() && outside.y.is_finite());
     }
 }

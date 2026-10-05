@@ -109,15 +109,15 @@ impl LeafContent for GridWidget {
     }
     /// Synchronizes aspect before routing a local drag or wheel zoom.
     fn update(&mut self, state: WidgetUpdate, event: WidgetEvent, _: &str) -> Result<GeometryChange, NcStatus> {
-        if state.rect.width <= 0 || state.rect.height <= 0 {
+        if state.clip.width <= 0 || state.clip.height <= 0 {
             return Ok(GeometryChange::NoChange);
         }
         let mut grid = self.data.borrow_mut();
-        grid.view.set_dimension(Dimensioni::new(state.rect.width, state.rect.height));
+        grid.view.set_viewport(local_rect(state.clip));
         match event {
             WidgetEvent::Drag { position, delta, buttons } if buttons & 1 != 0 => {
                 let p = point(position);
-                grid.view.update_drag(p - point(delta), p);
+                grid.view.update_drag(Vec2i::new(p.x.saturating_sub(delta.x), p.y.saturating_sub(delta.y)), p);
             }
             WidgetEvent::Scroll { delta, .. } => {
                 let wheel = if delta.y != 0 { delta.y } else { delta.x };
@@ -130,14 +130,18 @@ impl LeafContent for GridWidget {
     }
     /// Reuses owned geometry without holding model or cache borrows across painter calls.
     fn paint(&mut self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
+        if state.clip.width <= 0 || state.clip.height <= 0 {
+            return Ok(());
+        }
         let (pvm, minor_lines, background) = {
-            let grid = self.data.borrow();
+            let mut grid = self.data.borrow_mut();
+            grid.view.set_viewport(local_rect(state.clip));
             (grid.view.pvm(), grid.minor_lines, grid.background)
         };
         painter.fill(state.rect, background)?;
         // Own the workspace during the COM call; no cache or application-model borrow crosses it.
         let mut vertices = self.vertices.take();
-        write_xy_grid_vertices(local_rect(state.rect), minor_lines, pvm, &mut vertices);
+        write_xy_grid_vertices(local_rect(state.clip), minor_lines, pvm, &mut vertices);
         let result = painter.colored_triangles(&vertices);
         self.vertices.set(vertices);
         result
@@ -353,6 +357,26 @@ fn write_xy_grid_vertices(area: Recti, show_minor_lines: bool, pvm: Mat4f, verti
 mod grid_tests {
     use super::*;
 
+    /// Paint uses final settled geometry even if input last saw a full-size allocation.
+    #[test]
+    fn clipped_grid_paint_matches_an_independent_visible_client() {
+        let data = Rc::new(RefCell::new(GridState::default()));
+        let mut widget = GridWidget::new(data);
+        let full = Rect { x: 0, y: 0, width: 200, height: 100 };
+        widget.update(crate::viewport_test_support::update_state(full, full), WidgetEvent::None, "").unwrap();
+        let visible = Rect { x: 37, y: 23, width: 91, height: 57 };
+        let (recorder, output) = crate::viewport_test_support::recorder();
+        let mut painter = Painter::from_call(recorder.as_com_ref(), PaintScope { invocation: 1, clip: visible });
+        widget.paint(WidgetPaint { rect: full, clip: visible, ..WidgetPaint::default() }, &mut painter).unwrap();
+        let expected = build_xy_grid_vertices(local_rect(visible), true, initial_grid_pvm(local_rect(visible)));
+        let output = output.borrow();
+        assert!(!output.vertices.is_empty());
+        assert_eq!(output.vertices.len(), expected.len());
+        for (actual, expected) in output.vertices.iter().zip(expected) {
+            assert_eq!((actual.x, actual.y, actual.rgba), (expected.x, expected.y, expected.rgba));
+        }
+    }
+
     /// Independent output vectors keep geometry comparisons readable while production reuses its buffer.
     fn build_xy_grid_vertices(area: Recti, show_minor_lines: bool, pvm: Mat4f) -> Vec<ColoredVertex> {
         let mut vertices = Vec::new();
@@ -363,7 +387,7 @@ mod grid_tests {
     /// Produces the same aspect-correct initial PVM used by the live fullscreen widget.
     fn initial_grid_pvm(area: Recti) -> Mat4f {
         let mut view = create_grid_view_3d();
-        view.set_dimension(Dimensioni::new(area.width.max(1), area.height.max(1)));
+        view.set_viewport(rect(area.x, area.y, area.width.max(1), area.height.max(1)));
         view.pvm()
     }
 
@@ -430,7 +454,7 @@ mod grid_tests {
     fn arcball_and_zoom_change_the_grid_projection_without_invalid_vertices() {
         let area = rect(0, 0, 800, 600);
         let mut view = create_grid_view_3d();
-        view.set_dimension(Dimensioni::new(area.width, area.height));
+        view.set_viewport(area);
         let before = build_xy_grid_vertices(area, false, view.pvm());
 
         let _ = view.update_drag(Vec2i::new(400, 300), Vec2i::new(460, 330));
