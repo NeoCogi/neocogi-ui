@@ -678,7 +678,8 @@ impl GfxCompositor for GfxCompositorObject {
         }
     }
 
-    /// Retains one renderer-owned texture and appends its final clipped quad.
+    /// Appends one complete clipped texture quad after both CPU buffers admit capacity.
+    /// Reservation failure leaves earlier geometry/batches intact and releases the temporary owner.
     fn texture(&mut self, clip: Rect, destination: Rect, source: TextureRegion, rgba: u32, texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
         self.charge(0, 4)?;
         source.validate()?;
@@ -701,9 +702,11 @@ impl GfxCompositor for GfxCompositorObject {
         }
         let retained = Rc::new(texture.add_ref());
         output.try_reserve(4).map_err(|_| NC_E_OUT_OF_MEMORY)?;
-        output.extend_from_slice(&vertices);
         let mut batches = self.storage.batches.borrow_mut();
         batches.try_reserve(1).map_err(|_| NC_E_OUT_OF_MEMORY)?;
+        // Capacity growth may survive a later reservation error, but recorded lengths may not.
+        // Commit the complete quad and its owner together, after both fallible reservations.
+        output.extend_from_slice(&vertices);
         batches.push(Batch::Texture { first, texture: retained });
         Ok(())
     }

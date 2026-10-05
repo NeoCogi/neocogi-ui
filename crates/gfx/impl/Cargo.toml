@@ -36,3 +36,5 @@ neocogi-com = { workspace = true, default-features = false, features = ["macros"
 neocogi-com = { workspace = true, features = ["static-runtime"] }
 neocogi-ui.workspace = true
 neocogi-ui-support.workspace = true
+# Allocation-failure regressions submit through the production CPU frame importer.
+neocogi-render-support.workspace = true
