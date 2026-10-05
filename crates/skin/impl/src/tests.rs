@@ -74,7 +74,7 @@ fn bundled_themes_cross_only_typed_gfx_capabilities() {
     for theme_name in ["windows-3.11", "windows-95", "mac-os-9"] {
         let path = NativePath::new(&root.join("themes").join(theme_name).join("theme.json"));
         let source = loader.load_theme(path.as_interface(), base.as_com_ref()).unwrap();
-        let loaded = ImportedAssets::read(source.as_com_ref(), Some(&imported)).unwrap();
+        let loaded = ImportedAssets::read(source.as_com_ref(), Some(&imported.catalog())).unwrap();
         assert_eq!(loaded.bundle().atlas().font_id("body"), imported.original().font_id("body"));
         assert_ne!(source.as_raw().object, base.as_raw().object);
     }

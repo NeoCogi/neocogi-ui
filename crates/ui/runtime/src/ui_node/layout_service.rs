@@ -99,7 +99,9 @@ impl ILayoutService for Layout {
         let constraints = constraints(limits)?;
         let mut children = access.frame().children.take()?;
         let node = children.get_mut(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
-        let resources = self.storage.resources.borrow();
+        // Child measurement invokes foreign widgets; retain the local immutable value
+        // and release the cache borrow before descending through their COM gates.
+        let resources = self.storage.resources.borrow().clone();
         let size = node.measure(resources.bundle().skin(), resources.bundle().atlas(), constraints)?;
         self.storage.size(size)
     }
@@ -112,7 +114,8 @@ impl ILayoutService for Layout {
         let frame = access.placement()?;
         let mut children = frame.children.take()?;
         let node = children.get_mut(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
-        let resources = self.storage.resources.borrow();
+        // Placement may recurse into foreign widgets with independent receivers.
+        let resources = self.storage.resources.borrow().clone();
         let size = frame.placement.as_mut().expect("placement was checked").layout_node_ref(
             node,
             resources.bundle().skin(),

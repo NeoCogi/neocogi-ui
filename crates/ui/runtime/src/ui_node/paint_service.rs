@@ -351,7 +351,7 @@ mod intake_tests {
         let bundle = crate::SkinBundle::from_atlas(crate::test_support::test_atlas());
         let source = crate::test_support::assets::export_bundle(&bundle).unwrap();
         let resources = crate::assets::ImportedAssets::read(source.as_com_ref(), None).unwrap();
-        let mut recorder = Recorder::new(std::rc::Rc::new(std::cell::RefCell::new(resources)));
+        let mut recorder = Recorder::new(std::rc::Rc::new(std::cell::RefCell::new(std::rc::Rc::new(resources))));
         let context = PaintContext {
             display_list: crate::render::DisplayList::new(),
             content_rect: crate::Recti::new(0, 0, 32, 32),

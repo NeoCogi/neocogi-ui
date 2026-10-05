@@ -62,8 +62,9 @@ impl IWidgetHost for WidgetHost {
     fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         self.check_open()?;
         let factory = self.state.factory.borrow().upgrade().ok_or(neocogi_com::NC_E_DROPPED)?;
-        let revision = factory.resources.borrow();
-        Ok(revision.source().add_ref())
+        // Retain the immutable local value first; no cache borrow spans foreign AddRef.
+        let revision = factory.resources.borrow().clone();
+        revision.source().try_add_ref()
     }
 
     /// Issues a private writer and distinct read-only view for a new empty collection.

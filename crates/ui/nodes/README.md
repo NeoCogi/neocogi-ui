@@ -34,6 +34,9 @@ or shared mutable request/model wrapper is needed.
 helpers. It contains no concrete widget or runtime. The only shared mutable resource cache in
 node phase plumbing is provider-local and serves separate concrete COM allocations; it is not
 core storage. Semantic fields remain ordinary concrete fields wherever ownership is exclusive.
+Refresh clones the immutable original catalog basis before calling providers, then rechecks
+the host before publishing. A distinct sibling can complete its refresh during those calls;
+stable phases reuse the resulting import. See the [resource refresh contract](../../../docs/contracts/COM_ASSETS.md).
 
 Node algorithm and picker tests stay beside the sources they exercise. Fixtures retain an actual
 production core runtime through public entrypoints, and the provider-boundary integration test

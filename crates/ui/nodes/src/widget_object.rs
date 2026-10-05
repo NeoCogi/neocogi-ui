@@ -5,7 +5,7 @@
 use crate::boundary::text;
 use neocogi_ui_core_contracts::*;
 use neocogi_ui_nodes_contracts::ContentIcon;
-use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
+use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcStatus, NC_E_BUSY, NC_E_INVALID_ARG};
 use std::{cell::RefCell, rc::Rc};
 use neocogi_ui::com::widget::WidgetState;
 use crate::WidgetOption;
@@ -66,16 +66,37 @@ impl WidgetRuntime {
     }
 
     /// Follows the host's installed immutable revision for every class and factory product.
+    /// Provider callbacks run without a cache borrow and may complete sibling refreshes.
+    /// Publish only a still-current candidate; a newer host revision returns Busy for
+    /// bounded retry, and an already-published matching sibling import wins unchanged.
     pub(crate) fn resources(&mut self) -> Result<SharedAssets, NcStatus> {
         let source = self.state.host().assets()?;
-        if self.resources.borrow().source().as_raw().object != source.as_raw().object {
-            // Authenticate and completely import the replacement before publishing it to siblings.
-            let replacement = {
-                let current = self.resources.borrow();
-                crate::assets::ImportedAssets::read(source.as_com_ref(), Some(&current))?
-            };
-            *self.resources.borrow_mut() = replacement;
+        let basis = {
+            let current = self.resources.borrow();
+            if current.source().as_raw().object == source.as_raw().object {
+                return Ok(self.resources.clone());
+            }
+            current.catalog()
+        };
+        // Only immutable local prerequisites cross the borrow boundary. Import may
+        // execute foreign getters and reenter another allocation sharing this cache.
+        let replacement = crate::assets::ImportedAssets::read(source.as_com_ref(), Some(&basis))?;
+        if self.state.host().assets()?.as_raw().object != source.as_raw().object {
+            // A provider installed a third revision. Keep any nested publication and
+            // let the next call import the current host, rather than publishing stale data.
+            return Err(NC_E_BUSY);
         }
+        let discarded = {
+            let mut current = self.resources.borrow_mut();
+            if current.source().as_raw().object == source.as_raw().object {
+                replacement
+            } else {
+                core::mem::replace(&mut *current, replacement)
+            }
+        };
+        // Neither a losing candidate nor retired COM owners may Release under a
+        // cache borrow: destruction can itself call a distinct sibling.
+        drop(discarded);
         Ok(self.resources.clone())
     }
 

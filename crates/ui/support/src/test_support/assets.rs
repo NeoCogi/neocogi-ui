@@ -17,7 +17,7 @@ pub fn export_imported_data(imported: &ImportedAssets, bundle: &SkinBundle) -> R
 impl ImportedAssets {
     /// Exports a locally derived bundle with the same authenticated catalog namespace.
     pub fn export_derived(&self, bundle: &SkinBundle) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
-        ResourceCatalog::new(self.original.clone())
+        ResourceCatalog::new(self.original().clone())
             .validate_bundle(bundle)
             .map_err(|_| NC_E_INVALID_ARG)?;
         export_imported_data(self, bundle)?.into_revision(self.source())

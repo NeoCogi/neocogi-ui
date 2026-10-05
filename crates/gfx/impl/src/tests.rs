@@ -201,7 +201,7 @@ fn derived_builder_preserves_catalog_and_can_add_private_resources() {
         )
         .unwrap();
     let source = builder.finish().unwrap();
-    let changed = ImportedAssets::read(source.as_com_ref(), Some(&imported)).unwrap();
+    let changed = ImportedAssets::read(source.as_com_ref(), Some(&imported.catalog())).unwrap();
     assert_eq!(imported.original().font_id("body"), changed.bundle().atlas().font_id("body"));
     assert!(changed.bundle().atlas().icon_id("theme-private").is_some());
     assert!(changed.original().icon_id("theme-private").is_none());

@@ -46,7 +46,7 @@ pub(crate) fn create_storage(assets: crate::assets::ImportedAssets, compositor: 
     let state = Rc::new(HostState::default());
     state.changes_pending.set(true);
     let host: ComPtr<IWidgetHostAbi> = WidgetHost::from_value(WidgetHost { state: state.clone() }).query().expect("host interface");
-    let resources = Rc::new(RefCell::new(assets));
+    let resources = Rc::new(RefCell::new(Rc::new(assets)));
     let metrics = Metrics::from_value(Metrics { resources: resources.clone() })
         .query()
         .expect("metrics interface");
@@ -247,7 +247,8 @@ impl UiRuntime for Runtime {
     /// Exposes an owned immutable revision without borrowing mutable tree state.
     fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         self.storage.open()?;
-        Ok(self.storage.factory.resources.borrow().source().add_ref())
+        let revision = self.storage.factory.resources.borrow().clone();
+        revision.source().try_add_ref()
     }
     /// Uses exclusive runtime access to prepare CPU state and the GPU upload before publication.
     fn install_assets(&mut self, source: ComRef<'_, IAssetBundleAbi>, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
@@ -257,26 +258,25 @@ impl UiRuntime for Runtime {
         // observation phase and exclusive context slot still reject layout/paint/upload reentry.
         let mut context = storage.context()?;
         let _phase = Observation::begin(&storage.factory.state);
-        let next = {
-            let previous = storage.factory.resources.borrow();
-            if previous.source().as_raw().object == source.as_raw().object {
-                None
-            } else {
-                Some(crate::assets::ImportedAssets::read(source, Some(&previous))?)
-            }
-        };
-        let Some(next) = next else {
+        let previous = storage.factory.resources.borrow().clone();
+        if previous.source().as_raw().object == source.as_raw().object {
             // The UI revision is already current. Only the explicitly supplied renderer may
             // need to switch back from another UI's atlas; do not invalidate unchanged geometry.
-            let resources = storage.factory.resources.borrow();
-            return renderer.prepare_atlas(resources.image());
-        };
+            return renderer.prepare_atlas(previous.image());
+        }
+        let basis = previous.catalog();
+        drop(previous);
+        // Keep only an owned immutable catalog basis across provider callbacks.
+        let next = crate::assets::ImportedAssets::read(source, Some(&basis))?;
         renderer.prepare_atlas(next.image())?;
         context.install_compositor_assets(source)?;
         // ImportedAssets has already proved every original identity survives. The COM backend's
         // atlas replacement is a local assignment; this commit performs no further foreign calls.
         context.set_skin_bundle(next.bundle()).map_err(|_| NC_E_INVALID_ARG)?;
-        storage.factory.resources.replace(next);
+        // RefCell::replace returns the old locally owned revision after ending its
+        // mutable borrow. Foreign destruction therefore cannot run inside that borrow.
+        let retired = storage.factory.resources.replace(Rc::new(next));
+        drop(retired);
         storage.pending.set(true);
         Ok(())
     }

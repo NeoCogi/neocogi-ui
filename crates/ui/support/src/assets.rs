@@ -6,6 +6,19 @@ use crate::{AtlasHandle, ResourceCatalog, Skin, SkinBundle};
 use neocogi_ui_core_contracts::*;
 use neocogi_ui::assets::AssetTables;
 use neocogi_com::{ComPtr, ComRef, IUnknown, NcStatus, NC_E_INVALID_ARG};
+use std::rc::Rc;
+
+/// Immutable original application namespace, independently owned during imports.
+/// Cloning this basis performs only local reference-count operations, so a cache
+/// can release its borrow before any provider callback. It contains no revision
+/// source, pixel image or mutable widget state.
+#[derive(Clone)]
+pub struct ImportedCatalog {
+    /// Local ownership of the canonical COM identity; cloning never invokes AddRef.
+    identity: Rc<ComPtr<IUnknown>>,
+    /// Original local names and IDs, shared without copying tables across revisions.
+    original: AtlasHandle,
+}
 
 /// One imported immutable revision and the original application catalog used by derived themes.
 pub struct ImportedAssets {
@@ -13,10 +26,8 @@ pub struct ImportedAssets {
     source: ComPtr<IAssetBundleAbi>,
     /// Narrow renderer projection avoids querying or exposing UI metadata during every frame.
     image: ComPtr<IRgbaImageAbi>,
-    /// Canonical namespace identity is checked before preserving any local resource ID.
-    identity: ComPtr<IUnknown>,
-    /// Original local resources; private theme artwork never enters the application catalog.
-    original: AtlasHandle,
+    /// Stable original namespace; private theme artwork never enters its named catalog.
+    catalog: ImportedCatalog,
     /// Complete validated local skin and matching font/icon lookup metadata.
     bundle: SkinBundle,
 }
@@ -24,7 +35,9 @@ pub struct ImportedAssets {
 impl ImportedAssets {
     /// Imports one complete revision. A replacement must retain the original catalog identity
     /// and every original resource name; same-named unrelated catalogs are rejected.
-    pub fn read(source: ComRef<'_, IAssetBundleAbi>, previous: Option<&Self>) -> Result<Self, NcStatus> {
+    /// The caller lends an owned catalog basis, not a borrow of its current cache.
+    /// Provider getters may reenter siblings while this unpublished import runs.
+    pub fn read(source: ComRef<'_, IAssetBundleAbi>, previous: Option<&ImportedCatalog>) -> Result<Self, NcStatus> {
         let catalog = source.catalog()?;
         let identity = catalog.query::<IUnknown>()?;
         let image = source.image()?;
@@ -40,13 +53,16 @@ impl ImportedAssets {
         let atlas = AtlasHandle::from_validated_tables(tables, previous.map(|previous| &previous.original))?;
         let skin = Skin::from_atlas(atlas.clone());
         let bundle = SkinBundle::from_skin(skin);
-        let original = previous.map_or(atlas, |previous| previous.original.clone());
+        let catalog = previous.cloned().unwrap_or_else(|| ImportedCatalog {
+            identity: Rc::new(identity),
+            original: atlas,
+        });
+        let original = &catalog.original;
         ResourceCatalog::new(original.clone()).validate_bundle(&bundle).map_err(|_| NC_E_INVALID_ARG)?;
         Ok(Self {
-            source: source.add_ref(),
+            source: source.try_add_ref()?,
             image,
-            identity,
-            original,
+            catalog,
             bundle,
         })
     }
@@ -68,7 +84,13 @@ impl ImportedAssets {
 
     /// Borrows the original catalog atlas; named application references must resolve here.
     pub fn original(&self) -> &AtlasHandle {
-        &self.original
+        &self.catalog.original
+    }
+
+    /// Owns the stable import prerequisites without retaining any cache borrow or
+    /// invoking foreign lifetime methods. A failed candidate cannot mutate this basis.
+    pub fn catalog(&self) -> ImportedCatalog {
+        self.catalog.clone()
     }
 }
 

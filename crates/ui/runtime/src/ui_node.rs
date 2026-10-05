@@ -58,7 +58,9 @@ pub(crate) use mounted_node::ComNode;
 pub(crate) use widget_host::{HostState, Observation, WidgetHost};
 mod runtime;
 pub(crate) use runtime::{UiRuntime, LayoutTraversal};
-/// The engine's single replaceable imported resource value, shared by its scoped services.
-/// These services are separate COM allocations; this narrow shared cache cannot be borrowed
-/// exclusively through one service receiver and never grants nodes access to runtime storage.
-pub(crate) type SharedAssets = std::rc::Rc<std::cell::RefCell<crate::assets::ImportedAssets>>;
+/// The engine's one replaceable revision, shared by independently allocated core services.
+/// One receiver cannot exclusively own their shared slot, which never exposes runtime storage.
+/// Each revision is immutable and locally owned through Rc, so a service can
+/// release the cache borrow before invoking a provider getter, AddRef or renderer.
+/// The outer Rc shares the replaceable slot; the inner Rc retains a selected value.
+pub(crate) type SharedAssets = std::rc::Rc<std::cell::RefCell<std::rc::Rc<crate::assets::ImportedAssets>>>;

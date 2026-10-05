@@ -182,6 +182,28 @@ The `RefCell` is intentional here because independent COM objects share the cach
 generated receivers cannot borrow one factory mutably for every product's lifetime. Semantic
 widget fields continue to use exclusive `&mut self` methods.
 
+Refresh takes a short cache borrow to copy an owned `ImportedCatalog`: the
+authenticated original namespace and original local names/IDs. Its clones use
+local `Rc` operations, including for the retained COM identity, so acquiring the
+basis invokes no foreign lifetime method. It retains no obsolete bundle/image
+and copies no metadata tables. The cache borrow ends before `catalog`, `image`,
+bulk getters or renderer preparation run. Core installation uses the same owned
+basis. The core cache holds an immutable revision through a local `Rc`; host
+getters clone that local owner before foreign `AddRef`, and identical-bundle
+renderer preparation uses it after releasing the cache borrow. The slot and
+the selected immutable value have separate lifetimes, without duplicating tables.
+
+During lazy node refresh, a provider getter may reenter a different widget sharing
+the cache. That sibling may finish and publish immediately. The outer import
+rechecks the installed host identity before publication and preserves an already
+published matching sibling revision. If a getter installs a third host revision,
+the stale outer candidate is discarded and returns `NC_E_BUSY`; the next call
+imports or reuses the current source. There is no retry loop inside the getter.
+Failed candidates publish nothing and do not roll back a nested sibling commit.
+Replaced or losing values are dropped after releasing the cache borrow because
+provider destruction can also reenter a sibling. With a stable host, later sibling
+setters, measurement and paint reuse the completed import without decoding again.
+
 Bundle producers must keep **every** method result immutable for the allocation's
 lifetime. Mutation requires a new bundle object, even when pixels alone change.
 Keep bundles and catalog identities independent of UI trees, application handlers

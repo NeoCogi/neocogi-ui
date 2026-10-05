@@ -113,16 +113,16 @@ fn derived_identity_is_preserved_but_unrelated_and_incomplete_catalogs_are_rejec
     skin.metrics_mut().padding += 7;
     let changed = SkinBundle::from_skin(skin);
     let revision = first.export_derived(&changed).unwrap();
-    let second = ImportedAssets::read(revision.as_com_ref(), Some(&first)).unwrap();
+    let second = ImportedAssets::read(revision.as_com_ref(), Some(&first.catalog())).unwrap();
     assert_eq!(first.bundle().atlas().font_id("application"), second.bundle().atlas().font_id("application"));
     assert_eq!(second.bundle().skin().metrics().padding, changed.skin().metrics().padding);
     assert_ne!(first.bundle().skin().revision(), second.bundle().skin().revision());
 
     let unrelated = export_bundle(&bundle()).unwrap();
-    assert!(matches!(ImportedAssets::read(unrelated.as_com_ref(), Some(&first)), Err(UI_E_OWNER)));
+    assert!(matches!(ImportedAssets::read(unrelated.as_com_ref(), Some(&first.catalog())), Err(UI_E_OWNER)));
     let incomplete = SkinBundle::from_atlas(crate::test_support::test_atlas());
     let incomplete = export_bundle_data(&incomplete).unwrap().into_revision(source.as_com_ref()).unwrap();
-    assert!(matches!(ImportedAssets::read(incomplete.as_com_ref(), Some(&first)), Err(NC_E_INVALID_ARG)));
+    assert!(matches!(ImportedAssets::read(incomplete.as_com_ref(), Some(&first.catalog())), Err(NC_E_INVALID_ARG)));
 }
 
 /// Malformed Unicode, partitions, pixels, dimensions and tagged geometry fail before native construction.
@@ -440,7 +440,7 @@ fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision
         source.as_raw().object,
         "deriving a candidate cannot publish or schedule a UI edit"
     );
-    let imported = ImportedAssets::read(candidate.as_com_ref(), Some(&original)).unwrap();
+    let imported = ImportedAssets::read(candidate.as_com_ref(), Some(&original.catalog())).unwrap();
     let mut expected = export_imported_data(&original, original.bundle()).unwrap();
     expected.tables.metrics = metrics;
     equivalent(&export_imported_data(&imported, imported.bundle()).unwrap(), &expected);
@@ -450,7 +450,7 @@ fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision
         ..crate::FlatPalette::default()
     };
     let flat = compiler.derive_style(source.as_com_ref(), metrics, PaletteEdit::Flat(palette)).unwrap();
-    let imported = ImportedAssets::read(flat.as_com_ref(), Some(&original)).unwrap();
+    let imported = ImportedAssets::read(flat.as_com_ref(), Some(&original.catalog())).unwrap();
     let mut skin = original.bundle().skin().clone();
     skin.metrics_mut().padding = metrics.padding;
     skin.apply_flat_palette(palette);
