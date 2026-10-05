@@ -1352,6 +1352,7 @@ mod component_events;
 mod event_queues;
 mod events;
 mod document_events;
+mod list_item_events;
 mod widget_dispatch;
 
 mod combo;

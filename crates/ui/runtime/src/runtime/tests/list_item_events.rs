@@ -1,0 +1,115 @@
+//! List-item capture respects delivery policy at the real COM update boundary.
+use super::*;
+use neocogi_ui::IActivatedEventAbi;
+
+/// Supplies valid local geometry and focus for either a click or keyboard activation.
+fn state(clicked: bool) -> WidgetUpdate {
+    let rect = Rect { x: 0, y: 0, width: 100, height: 20 };
+    WidgetUpdate {
+        in_hover_root: true,
+        rect,
+        clip: rect,
+        screen: rect,
+        hovered: true,
+        focused: true,
+        clicked,
+        active: false,
+        action: WidgetAction::Activate,
+        mouse_buttons: 0,
+        modifiers: 0,
+    }
+}
+
+/// Exercises all three inputs that converge on the row's semantic activation branch.
+fn activations() -> [WidgetEvent; 3] {
+    let key = |key| {
+        WidgetEvent::Key(KeyStroke {
+            key,
+            value: 0,
+            pressed: true,
+            repeat: false,
+            modifiers: 0,
+        })
+    };
+    [WidgetEvent::None, key(KeyCode::Enter), key(KeyCode::Space)]
+}
+
+/// Calls the generated widget ABI; eventless input represents an eligible pointer click.
+fn activate(widget: &mut WeakComBox<IWidgetAbi>, input: WidgetEvent) -> Result<GeometryChange, NcStatus> {
+    widget.update(state(matches!(input, WidgetEvent::None)), input, NcCopyFromBufferOffset::new(0, b""))
+}
+
+/// Absent receivers avoid all capture work, including the old intermediate label copy.
+#[test]
+fn unobserved_list_item_activations_allocate_nothing() {
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    for label in ["", "a", "Unicode row: αβγ 🦀"] {
+        let item = ui.widgets().list_item_unobserved(label).unwrap();
+        let mut widget = item.as_interface().query_weak::<IWidgetAbi>().unwrap();
+        // Resource import and each activation path are warmed outside observation.
+        for input in activations() {
+            activate(&mut widget, input).unwrap();
+        }
+        let measurement = crate::test_support::AllocationMeasurement::begin();
+        for _ in 0..100 {
+            for input in activations() {
+                activate(&mut widget, input).unwrap();
+            }
+        }
+        let count = measurement.finish();
+        assert_eq!(count.events, 0, "unobserved label {label:?}: {count:?}");
+        assert_eq!(count.bytes, 0);
+    }
+}
+
+/// Direct capture preserves FIFO facts and weak source identity after edits and destruction.
+#[test]
+fn observed_list_item_captures_each_label_without_retaining_its_source() {
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let (queue, messages) = neocogi_com::events::channel();
+    let item = ui.widgets().list_item_with_queue("initial", Some(queue.as_com_ref())).unwrap();
+    let mut row = item.handle();
+    let mut widget = row.as_interface().query::<IWidgetAbi>().unwrap();
+    let labels = ["pointer snapshot", "Enter snapshot", "Space snapshot: α"];
+    let mut captured = Vec::new();
+    for (input, label) in activations().into_iter().zip(labels) {
+        row.set_text(label).unwrap();
+        assert!(messages.try_recv().is_err(), "programmatic text replacement stays silent");
+        activate(&mut widget, input).unwrap();
+        // Leave the event owned by the test, without interpreting it in the receiver.
+        let message = messages.try_recv().unwrap();
+        let origin = message.origin.widget::<ListItemAbi>().unwrap().unwrap();
+        assert!(origin.same_object(row.as_interface()));
+        row.set_text("later live label").unwrap();
+        assert_eq!(
+            message.downcast::<IActivatedEventAbi>().unwrap().unwrap().label().unwrap().to_string().unwrap(),
+            label
+        );
+        assert!(messages.try_recv().is_err(), "exactly one fact per activation");
+        captured.push(message);
+    }
+    drop(item);
+    for (message, label) in captured.iter().zip(labels) {
+        assert!(!message.origin.widget::<ListItemAbi>().unwrap().unwrap().is_alive());
+        assert_eq!(
+            message.downcast::<IActivatedEventAbi>().unwrap().unwrap().label().unwrap().to_string().unwrap(),
+            label
+        );
+    }
+}
+
+/// Delivery rejection reports closure while preserving the row's authoritative state.
+#[test]
+fn disconnected_list_item_receiver_does_not_change_the_label() {
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let (queue, messages) = neocogi_com::events::channel();
+    let item = ui.widgets().list_item_with_queue("retained", Some(queue.as_com_ref())).unwrap();
+    let row = item.handle();
+    let mut widget = row.as_interface().query::<IWidgetAbi>().unwrap();
+    drop(messages);
+    for input in activations() {
+        assert_eq!(activate(&mut widget, input), Err(neocogi_com::NC_E_CLOSED));
+        assert_eq!(row.text().unwrap(), "retained");
+        assert!(row.as_interface().is_alive());
+    }
+}

@@ -172,9 +172,11 @@ impl Widget for ListItem {
         if ctx.action(input, self.keyboard_behavior()) != Some(KeyboardAction::Activate) {
             return crate::Change::NoChange;
         }
-        // Clone before emission so queues receive an immutable selection snapshot.
-        let label = self.label.clone();
-        ctx.posted(neocogi_ui_core_contracts::events::activated(&label).and_then(|event| self.events.post(event)));
+        if self.events.is_bound() {
+            // The constructor captures the label before posting. Borrow it directly
+            // so observed rows make one copy and unobserved rows do no snapshot work.
+            ctx.posted(neocogi_ui_core_contracts::events::activated(&self.label).and_then(|event| self.events.post(event)));
+        }
 
         // Submitting preserves the label and icon used by intrinsic measurement.
         crate::Change::NoChange

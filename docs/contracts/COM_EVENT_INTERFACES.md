@@ -76,7 +76,9 @@ string or path capability.
 Rust constructors such as `events::text_changed(text, cursor)` and
 `events::numeric_changed(value)` return `Result<ComBox<IEventAbi>, NcStatus>`
 directly. They validate finite numeric values, nonnegative geometry and UTF-8
-cursor boundaries. Unobserved producers skip construction. String snapshots store
+cursor boundaries. Unobserved producers skip construction before copying labels
+or other snapshot data. Observed controls pass borrowed text directly to the
+snapshot constructor, which captures it before delivery. String snapshots store
 one immutable string capability; repeated getters add references without copying
 its contents. Foreign getter results remain subject to the consumer's domain checks.
 There are no native widget output enums or conversion traits.
@@ -121,6 +123,11 @@ allocations for 10,000 scalar events including channel storage. The unobserved
 path performed 10,000 updates with zero allocations. These are
 allocation counts, not an elapsed-time benchmark. See the
 [migration validation](../validation/COM_EVENTS_ONLY_2026-10-04.md).
+
+[Built-in list-item regressions](../../crates/ui/runtime/src/runtime/tests/list_item_events.rs)
+also measure empty, nonempty and Unicode labels through real COM updates for
+pointer, Enter and Space activation. They verify no silent capture allocations,
+immutable labels after edits/destruction and state preservation on rejected delivery.
 
 The [October 4 benchmark](../experiments/COM_EVENT_DOWNCAST_2026-10-04.md) measured
 shared `ComPtr` queries. Its exact timings do not measure this exclusive event
