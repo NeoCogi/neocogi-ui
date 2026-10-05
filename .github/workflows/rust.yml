@@ -46,7 +46,8 @@ jobs:
         features: ["", "gfx", "publisher", "builder", "save-to-rust", "builder,publisher,save-to-rust"]
     steps:
       - uses: actions/checkout@v6
-      - run: cargo test -p neocogi-gfx-impl --no-default-features --features '${{ matrix.features }}' --lib
+      # Allocation failures run in their own executable, alongside every library feature selection.
+      - run: cargo test -p neocogi-gfx-impl --no-default-features --features '${{ matrix.features }}' --lib --test texture_reservation
 
   # Authoring tests need a real renderer and embedded assets, not just a successful library build.
   authoring:

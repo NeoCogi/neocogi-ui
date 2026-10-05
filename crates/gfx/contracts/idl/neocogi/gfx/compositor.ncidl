@@ -48,7 +48,8 @@ struct NinePatchDraw {
 /// aliases that session; it does not create independent state. Share GfxPluginFactory
 /// to create separate sessions. UI runtimes keep their compositor capability private.
 ///
-/// A failed draw preserves complete vertex/batch coverage and leaves the frame active.
+/// Within an active frame, a failed draw preserves complete vertex/batch coverage
+/// and keeps that frame active.
 /// Earlier complete primitives may remain, including a prefix of a multi-primitive draw;
 /// the caller may continue or submit them, or cancel. Attempted draws keep their budget
 /// charges. begin requires the previous frame to end through submit or cancel.
@@ -69,7 +70,7 @@ factory GfxCompositor: IGfxDiagnostics {
     /// Centers one bundle-local icon slot inside a destination and appends its visible quad.
     fn icon(&mut self, clip: Rect, icon: u32, destination: Rect, rgba: u32) -> Result<()>;
     /// Retains and appends one renderer-owned texture with normalized source coordinates.
-    /// CPU reservation failure appends neither its quad nor its batch and retains no texture owner.
+    /// CPU reservation failure appends neither its quad nor its batch and retains no additional texture owner.
     fn texture(&mut self, clip: Rect, destination: Rect, source: TextureRegion, rgba: u32, texture: &ITexture) -> Result<()>;
     /// Retains backend-specific work at this exact painter-order position.
     fn item(&mut self, clip: Rect, content: Rect, item: &IRenderItem) -> Result<()>;

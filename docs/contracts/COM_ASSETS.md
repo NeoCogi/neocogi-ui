@@ -135,7 +135,9 @@ with unrelated asset catalogs.
 
 Standalone GFX clients can still call `gfx.create_compositor(assets)` directly.
 Cloning a compositor reference aliases one mutable session; it does not copy the
-session. A compositor can no longer be supplied to UI construction. Migrate former
+session. Draw errors preserve complete vertex/batch coverage; direct-client
+continuation and frame cleanup follow the [render contract](RENDER_SURFACES.md).
+A compositor can no longer be supplied to UI construction. Migrate former
 `create_runtime(assets, compositor)` calls to `create_runtime(assets, gfx)` and remove
 the caller's compositor allocation. `UiPluginFactory` is now version 3, so rebuild
 the application and plugins together. Shared libraries, native monoliths, and

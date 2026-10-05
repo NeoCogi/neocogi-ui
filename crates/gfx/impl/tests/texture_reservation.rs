@@ -71,6 +71,8 @@ struct Capture {
     batches: RefCell<Vec<RenderBatch>>,
     /// Actual retained texture identities resolved only after partition validation.
     textures: RefCell<Vec<usize>>,
+    /// Optional renderer error occurs after CPU validation, independently of allocation injection.
+    failure: Cell<Option<NcStatus>>,
 }
 #[com_object(interfaces(IRenderer))]
 /// Validates the actual CPU stream before capturing it; no native GPU is needed for this defect.
@@ -103,7 +105,10 @@ impl IRenderer for Renderer {
             .collect();
         self.capture.calls.set(self.capture.calls.get() + 1);
         frame.clear();
-        Ok(())
+        match self.capture.failure.get() {
+            Some(status) => Err(status),
+            None => Ok(()),
+        }
     }
 }
 
@@ -249,5 +254,70 @@ fn texture_reservation_errors_preserve_earlier_frame_and_ownership() {
         failed.compositor.submit(failed.renderer.as_com_ref()).unwrap();
         assert_frame(&failed.capture, failure.prefix());
         assert_eq!(failed.earlier_drops.get(), 1);
+    }
+}
+
+/// A later successful draw in the same frame follows earlier work without a gap or stale texture.
+#[test]
+fn texture_reservation_errors_allow_same_frame_retry() {
+    for failure in [Failure::Vertices, Failure::Batches] {
+        let mut failed = fail_draw(failure);
+        let (retry, drops) = texture();
+        let identity = retry.as_raw().object as usize;
+        draw(&mut failed.compositor, retry.as_com_ref()).unwrap();
+        drop(retry);
+        assert_eq!(drops.get(), 0);
+        failed.compositor.submit(failed.renderer.as_com_ref()).unwrap();
+        assert_frame(&failed.capture, failure.prefix() + 1);
+        assert_eq!(failed.capture.textures.borrow().last(), Some(&identity));
+        assert_eq!(drops.get(), 1);
+        assert_eq!(failed.earlier_drops.get(), 1);
+        assert_new_frame(&mut failed);
+    }
+}
+
+/// New begin resets contents and budget; one fresh quad starts at zero and releases its owner.
+fn assert_new_frame(recording: &mut Recording) {
+    let calls = recording.capture.calls.get();
+    recording.compositor.begin(Size { width: 16, height: 16 }, 0xff000000).unwrap();
+    let (next, drops) = texture();
+    let identity = next.as_raw().object as usize;
+    draw(&mut recording.compositor, next.as_com_ref()).unwrap();
+    drop(next);
+    assert_eq!(drops.get(), 0);
+    recording.compositor.submit(recording.renderer.as_com_ref()).unwrap();
+    assert_eq!(recording.capture.calls.get(), calls + 1);
+    assert_eq!(recording.capture.vertices.borrow().len(), 4);
+    let batches = recording.capture.batches.borrow();
+    assert_eq!(batches.len(), 1);
+    assert!(matches!(batches[0], RenderBatch::Texture { first: 0 }));
+    assert_eq!(&*recording.capture.textures.borrow(), &[identity]);
+    assert_eq!(drops.get(), 1);
+}
+
+/// Cancellation releases earlier capabilities, stays idempotent and permits a clean next frame.
+#[test]
+fn texture_reservation_errors_allow_cancel_and_new_begin() {
+    for failure in [Failure::Vertices, Failure::Batches] {
+        let mut failed = fail_draw(failure);
+        failed.compositor.cancel().unwrap();
+        assert_eq!(failed.earlier_drops.get(), 1);
+        assert_eq!(failed.capture.calls.get(), 0);
+        failed.compositor.cancel().unwrap();
+        assert_new_frame(&mut failed);
+    }
+}
+
+/// A renderer error after a recoverable draw failure still ends the frame and releases its owners.
+#[test]
+fn texture_reservation_errors_allow_failed_submit_and_next_frame() {
+    for failure in [Failure::Vertices, Failure::Batches] {
+        let mut failed = fail_draw(failure);
+        failed.capture.failure.set(Some(neocogi_com::NC_E_NOT_FOUND));
+        assert_eq!(failed.compositor.submit(failed.renderer.as_com_ref()), Err(neocogi_com::NC_E_NOT_FOUND));
+        assert_frame(&failed.capture, failure.prefix());
+        assert_eq!(failed.earlier_drops.get(), 1);
+        failed.capture.failure.set(None);
+        assert_new_frame(&mut failed);
     }
 }
