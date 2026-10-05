@@ -12,7 +12,7 @@ struct AssetDeriveOptions {
 struct AssetImagePlacement {
     /// Index valid only in the bundle produced by the originating session.
     index: u32,
-    /// Positive decoded image dimensions used to validate authored source slicing.
+    /// Positive decoded image dimensions providing source geometry and authoring diagnostic context.
     size: Size,
 }
 

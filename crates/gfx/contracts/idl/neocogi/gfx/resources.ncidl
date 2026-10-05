@@ -293,7 +293,8 @@ enum AssetPatch: u8 {
     Image {
         /// Index in this bundle's icon table, never a native texture handle.
         icon: u32,
-        /// Source-space slicing thickness.
+        /// Nonnegative source slices. Oversized opposing slices shrink proportionally;
+        /// GFX overlays visible image cells with pink at 0.5 opacity when source shrinking occurs.
         source: Insets,
         /// Color modulation applied to every sampled cell.
         tint: u32,

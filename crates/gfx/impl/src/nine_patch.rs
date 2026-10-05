@@ -13,6 +13,9 @@ const PATCH_AXIS_CELLS: usize = 3;
 /// Number of cells in one complete three-by-three patch.
 const PATCH_CELL_COUNT: usize = PATCH_AXIS_CELLS * PATCH_AXIS_CELLS;
 
+/// Straight-alpha pink (#FFC0CB) diagnostic, with 0.5 rounded to the 8-bit alpha domain.
+const SHRUNK_SOURCE_OVERLAY_RGBA: u32 = u32::from_le_bytes([255, 192, 203, 128]);
+
 /// One visible atlas rectangle produced from a validated semantic patch.
 #[derive(Clone, Copy)]
 pub(super) struct AtlasCell {
@@ -28,14 +31,29 @@ pub(super) struct AtlasCell {
 pub(super) struct ExpandedPatch {
     /// Geometric cell slots in row-major order; invisible cells remain explicitly absent.
     cells: [Option<AtlasCell>; PATCH_CELL_COUNT],
+    /// Authenticated white tile for a pink overlay when source slices required shrinking.
+    /// None means ordinary image/flat rendering; destination-only shrinking never sets this.
+    diagnostic_white: Option<Rect>,
 }
 
 impl ExpandedPatch {
     /// Consumes the fixed grid and yields only cells that can contribute atlas pixels.
     pub(super) fn visible_cells(self) -> impl Iterator<Item = AtlasCell> {
-        // Array iteration preserves row-major painter order while `flatten` removes semantic
-        // omissions without allocating a secondary command list.
-        self.cells.into_iter().flatten()
+        // Keep each diagnostic immediately after its image cell in painter order. Sampling the
+        // white tile adds pink with source-over blending even on black artwork; tint modulation
+        // alone could not do that. Empty/hidden cells remain absent and no allocation is needed.
+        self.cells.into_iter().flatten().flat_map(move |cell| {
+            [
+                Some(cell),
+                self.diagnostic_white.map(|source| AtlasCell {
+                    destination: cell.destination,
+                    source,
+                    rgba: SHRUNK_SOURCE_OVERLAY_RGBA,
+                }),
+            ]
+            .into_iter()
+            .flatten()
+        })
     }
 }
 
@@ -52,7 +70,7 @@ pub(super) fn expand(destination: Rect, draw: NinePatchDraw, white: Rect, icons:
     }
 
     let destinations = partition_rectangle(destination, draw.insets);
-    let (sources, colors) = match draw.patch {
+    let (sources, colors, diagnostic_white) = match draw.patch {
         AssetPatch::Flat {
             top_left,
             top,
@@ -69,6 +87,7 @@ pub(super) fn expand(destination: Rect, draw: NinePatchDraw, white: Rect, icons:
             (
                 [[white; PATCH_AXIS_CELLS]; PATCH_AXIS_CELLS],
                 [top_left, top, top_right, left, center, right, bottom_left, bottom, bottom_right],
+                None,
             )
         }
         AssetPatch::Image { icon, source: source_insets, tint } => {
@@ -76,7 +95,15 @@ pub(super) fn expand(destination: Rect, draw: NinePatchDraw, white: Rect, icons:
             // operation therefore cannot append a prefix of an otherwise malformed patch.
             validate_insets(source_insets)?;
             let source_rectangle = icons.get(icon as usize).ok_or(NC_E_OUT_OF_RANGE)?.rect;
-            (partition_rectangle(source_rectangle, source_insets), [tint; PATCH_CELL_COUNT])
+            // Retain authored slices until expansion, so stored and direct patches share
+            // proportional normalization and diagnostics. Widen before adding opposing sides.
+            let source_shrinks = i64::from(source_insets.left) + i64::from(source_insets.right) > i64::from(source_rectangle.width)
+                || i64::from(source_insets.top) + i64::from(source_insets.bottom) > i64::from(source_rectangle.height);
+            (
+                partition_rectangle(source_rectangle, source_insets),
+                [tint; PATCH_CELL_COUNT],
+                source_shrinks.then_some(white),
+            )
         }
     };
 
@@ -97,7 +124,7 @@ pub(super) fn expand(destination: Rect, draw: NinePatchDraw, white: Rect, icons:
         }
         cells[index] = Some(AtlasCell { destination, source, rgba });
     }
-    Ok(ExpandedPatch { cells })
+    Ok(ExpandedPatch { cells, diagnostic_white })
 }
 
 /// Rejects negative slice thickness before any geometry or resource lookup occurs.
@@ -186,23 +213,22 @@ fn partition_rectangle(outer: Rect, insets: Insets) -> [[Rect; PATCH_AXIS_CELLS]
 
 /// Divides one non-negative extent into leading, stretchable, and trailing lengths.
 fn partition_axis(extent: i32, leading: i32, trailing: i32) -> [i32; PATCH_AXIS_CELLS] {
-    // Callers have already validated insets. A zero destination or source axis has no drawable
-    // cells, while an ordinary axis assigns every unclaimed pixel to its center.
-    if extent <= 0 {
+    // Callers have validated nonnegative extent and sides. Empty axes have no drawable cells;
+    // ordinary axes assign every unclaimed pixel to the center. Widen before adding the sides
+    // so the true ratio is preserved over the entire accepted destination/source domain.
+    if extent == 0 {
         return [0, 0, 0];
     }
-    let requested = leading.saturating_add(trailing);
-    if requested <= extent {
-        return [leading, extent - requested, trailing];
-    }
-    if requested == 0 {
-        return [0, extent, 0];
+    let requested = i64::from(leading) + i64::from(trailing);
+    if requested <= i64::from(extent) {
+        return [leading, (i64::from(extent) - requested) as i32, trailing];
     }
 
     // When fixed sides do not fit, scale them proportionally using wide arithmetic. Rounding the
     // leading side and assigning the exact remainder to the trailing side preserves full coverage.
-    let scaled_leading = ((i64::from(extent) * i64::from(leading) + i64::from(requested) / 2) / i64::from(requested)) as i32;
-    let scaled_leading = scaled_leading.clamp(0, extent);
+    // requested > extent > 0 and leading <= requested bound the rounded quotient to 0..=extent.
+    // Even MAX*MAX + requested/2 fits i64. Narrow only this bounded final cell.
+    let scaled_leading = ((i64::from(extent) * i64::from(leading) + requested / 2) / requested) as i32;
     [scaled_leading, 0, extent - scaled_leading]
 }
 
@@ -218,6 +244,105 @@ fn partition_origins(origin: i32, lengths: [i32; PATCH_AXIS_CELLS]) -> [i32; PAT
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Boundary partitions retain exact coverage and round the leading proportional side once.
+    #[test]
+    fn extreme_and_boundary_partitions_preserve_proportions_and_coverage() {
+        let cases = [
+            (0, i32::MAX, i32::MAX, [0, 0, 0]),
+            (100, 0, 0, [0, 100, 0]),
+            (100, 4, 6, [4, 90, 6]),
+            (5, 4, 6, [2, 0, 3]),
+            (100, i32::MAX, i32::MAX, [50, 0, 50]),
+            (100, 1_500_000_000, 1_000_000_000, [60, 0, 40]),
+            (100, i32::MAX, 0, [100, 0, 0]),
+            (100, 0, i32::MAX, [0, 0, 100]),
+            (i32::MAX, i32::MAX / 2, i32::MAX / 2, [i32::MAX / 2, 1, i32::MAX / 2]),
+            (i32::MAX, i32::MAX / 2, i32::MAX / 2 + 1, [i32::MAX / 2, 0, i32::MAX / 2 + 1]),
+            (i32::MAX, i32::MAX / 2 + 1, i32::MAX / 2 + 1, [1_073_741_824, 0, 1_073_741_823]),
+            (i32::MAX, i32::MAX, i32::MAX, [1_073_741_824, 0, 1_073_741_823]),
+            (1, i32::MAX, i32::MAX, [1, 0, 0]),
+        ];
+        for (extent, leading, trailing, expected) in cases {
+            let actual = partition_axis(extent, leading, trailing);
+            assert_eq!(actual, expected, "extent={extent}, sides={leading}/{trailing}");
+            assert!(actual.into_iter().all(|cell| (0..=extent).contains(&cell)));
+            assert_eq!(actual.into_iter().map(i64::from).sum::<i64>(), i64::from(extent));
+        }
+        // Adjacent combinations exercise the rounding invariant without duplicating the
+        // production quotient. The leading cell's ratio error cannot exceed half a pixel.
+        for extent in [0, 1, 5, 100, i32::MAX] {
+            for leading in [0, 1, 4, i32::MAX / 2, i32::MAX] {
+                for trailing in [0, 1, 6, i32::MAX / 2 + 1, i32::MAX] {
+                    let cells = partition_axis(extent, leading, trailing);
+                    assert!(cells.into_iter().all(|cell| cell >= 0 && cell <= extent));
+                    assert_eq!(cells.into_iter().map(i64::from).sum::<i64>(), i64::from(extent));
+                    let requested = i128::from(leading) + i128::from(trailing);
+                    if requested > i128::from(extent) {
+                        assert_eq!(cells[1], 0);
+                        let error = (i128::from(cells[0]) * requested - i128::from(extent) * i128::from(leading)).abs();
+                        assert!(error * 2 <= requested);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Either source axis triggers the overlay; hidden/empty/transparent geometry stays absent.
+    #[test]
+    fn source_shrink_diagnostics_follow_both_axes_and_visibility() {
+        let white = Rect { x: 0, y: 0, width: 4, height: 4 };
+        let icons = [AssetIcon { name: Default::default(), rect: white }];
+        for (source, sides, original_cells) in [
+            (
+                Insets {
+                    left: i32::MAX,
+                    right: i32::MAX,
+                    top: 0,
+                    bottom: 0,
+                },
+                Insets { left: 50, right: 50, top: 0, bottom: 0 },
+                2,
+            ),
+            (
+                Insets {
+                    left: 0,
+                    right: 0,
+                    top: i32::MAX,
+                    bottom: i32::MAX,
+                },
+                Insets { left: 0, right: 0, top: 50, bottom: 50 },
+                2,
+            ),
+            (Insets::uniform(i32::MAX), Insets::uniform(50), 4),
+        ] {
+            let destination = Rect { x: 0, y: 0, width: 100, height: 100 };
+            let draw = NinePatchDraw {
+                insets: sides,
+                center_visible: 0,
+                patch: AssetPatch::Image { icon: 0, source, tint: 0xffffffff },
+            };
+            let cells: Vec<_> = expand(destination, draw, white, &icons).unwrap().visible_cells().collect();
+            assert_eq!(cells.len(), original_cells * 2);
+            for pair in cells.chunks_exact(2) {
+                assert_eq!(components(pair[0].destination), components(pair[1].destination));
+                assert_eq!(pair[0].rgba, 0xffffffff);
+                assert_eq!(pair[1].rgba, u32::from_le_bytes([255, 192, 203, 128]));
+                assert_eq!(components(pair[1].source), components(white));
+                let source = pair[0].source;
+                assert!(source.x >= 0 && source.y >= 0 && source.x + source.width <= 4 && source.y + source.height <= 4);
+            }
+            let invisible = NinePatchDraw {
+                patch: AssetPatch::Image { icon: 0, source, tint: 0 },
+                ..draw
+            };
+            assert_eq!(expand(destination, invisible, white, &icons).unwrap().visible_cells().count(), 0);
+            assert_eq!(
+                expand(Rect { width: 0, ..destination }, draw, white, &icons).unwrap().visible_cells().count(),
+                0
+            );
+        }
+    }
 
     /// Converts one rectangle into an equality-friendly tuple for focused geometry assertions.
     fn components(rectangle: Rect) -> (i32, i32, i32, i32) {

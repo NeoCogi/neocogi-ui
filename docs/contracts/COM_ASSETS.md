@@ -245,6 +245,11 @@ those rules requires a schema bump even when the C record layout is unchanged. T
 ordinary neocogi-com interface signatures separately validate the actual
 pointer/vtable/record ABI.
 
+The current bulk asset schema is **3**. Schema 3 replaces source-slice rejection
+with proportional shrinking and a visible diagnostic in GFX. Older semantic
+schemas are rejected before table allocation. The authoring JSON schema remains
+separate and unchanged.
+
 | Storage | Bound and interpretation |
 | --- | --- |
 | Pixels | Positive `i32` dimensions; checked `width * height * 4`, at most 64 MiB; row-major uncompressed RGBA |
@@ -259,9 +264,28 @@ table in font-then-icon order. Gaps, overlapping ranges, arithmetic overflow,
 invalid UTF-8/Unicode and duplicate keys are rejected. Glyph rectangles may be empty
 but must remain nonnegative and inside the atlas; icons must be positive. Every pixel
 in the white tile must be opaque white. Portable layout and slicing dimensions are
-nonnegative; source slices must fit their image. Boolean bytes accept only zero or
+nonnegative. Oversized opposing source slices remain valid and are retained as
+authored for the compositor's diagnostic rule below. Boolean bytes accept only zero or
 one; unknown caption and patch tags are rejected. Image patches refer to a
 bundle-local icon table position, never an opaque native handle.
+
+GFX partitions each source and destination axis independently. Opposing sides
+that exceed an extent shrink proportionally, rounding the leading side once and
+assigning the exact remainder to the trailing side. The requested sum, rounded
+product and division stay in `i64`; only bounded final cells narrow to `i32`.
+This applies even to two `i32::MAX` sides, without reducing the accepted domain.
+
+When either **source** axis requires shrinking, each surviving visible image cell
+is followed by a straight-alpha pink (`#FFC0CB`) overlay sampled from the validated
+opaque-white tile. Opacity 0.5 is rounded to alpha byte 128 (128/255). The image's
+original tint is preserved; source-over blending makes pink visible even on black
+artwork. Destination-only shrinking and exact source fits receive no overlay.
+Empty, hidden-center, zero-source and alpha-zero image cells remain absent; the
+diagnostic covers surviving cells, including transparent pixels inside them.
+It creates no missing source pixels or new stretchable center. Image and diagnostic
+quads are staged and appended atomically with the existing clipping/budget rules.
+Stored appearances, authored themes and direct `NinePatchDraw` operations share
+this behavior; negative insets and invalid image indices still fail validation.
 
 All copy offsets and lengths count elements of the declared type; name/pixel offsets
 therefore count bytes. Producers validate the entire range before writing any

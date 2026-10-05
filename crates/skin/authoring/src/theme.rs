@@ -153,7 +153,7 @@ pub enum ThemeLoadError {
     },
     /// The document's display name is empty or whitespace-only.
     EmptyName,
-    /// Destination or source slice insets are negative or do not fit their source image.
+    /// Destination or source slice insets contain a negative component.
     InvalidInsets {
         /// Semantic appearance key containing the invalid value.
         appearance: String,
@@ -161,7 +161,7 @@ pub enum ThemeLoadError {
         field: &'static str,
         /// Complete rejected inset value.
         insets: SliceInsets,
-        /// Optional image dimensions used for source-bound validation.
+        /// Optional image dimensions providing context for a negative source slice diagnostic.
         image_size: Option<(i32, i32)>,
     },
     /// One resolved font or image resource could not be read from the selected source.
@@ -1788,16 +1788,11 @@ fn validate_non_negative(appearance: &str, field: &'static str, insets: SliceIns
     Ok(())
 }
 
-/// Rejects source insets that are negative or overlap inside their PNG rectangle.
+/// Rejects negative source slices while preserving oversized requests for GFX diagnostics.
 fn validate_source_insets(appearance: &str, insets: SliceInsets, width: i32, height: i32) -> Result<(), ThemeLoadError> {
-    // Unlike destinations, a PNG source has fixed pixels and cannot proportionally invent a valid
-    // center when opposing source slices exceed its dimensions.
-    let invalid = insets.left < 0
-        || insets.top < 0
-        || insets.right < 0
-        || insets.bottom < 0
-        || insets.left.saturating_add(insets.right) > width
-        || insets.top.saturating_add(insets.bottom) > height;
+    // GFX alone owns proportional source partitioning and the pink overlay. Keep the original
+    // nonnegative request in compiled artwork so every producer/consumer follows that same rule.
+    let invalid = insets.left < 0 || insets.top < 0 || insets.right < 0 || insets.bottom < 0;
     if invalid {
         return Err(ThemeLoadError::InvalidInsets {
             appearance: appearance.to_owned(),

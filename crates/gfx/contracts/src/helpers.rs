@@ -99,7 +99,8 @@ impl Default for Insets {
 
 /// Bulk asset semantic schema, including role order and structured appearance interpretation.
 /// Bump when role ordering, named appearance fields, or mandatory resource meaning changes.
-pub const ASSET_SCHEMA_VERSION: u32 = 2;
+/// Schema 3 permits oversized nonnegative image slices and requires shrink diagnostics.
+pub const ASSET_SCHEMA_VERSION: u32 = 3;
 
 /// Maximum uncompressed RGBA storage accepted by all asset consumers.
 pub const MAX_ASSET_PIXELS_BYTES: usize = neocogi_renderer_contracts::MAX_IMAGE_BYTES;

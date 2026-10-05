@@ -99,7 +99,8 @@ pub struct NinePatchCells {
 pub struct NinePatchImage {
     /// Atlas capability whose rectangle contains all nine source cells.
     pub icon: IconId,
-    /// Fixed source rows and columns measured inside the icon rectangle.
+    /// Nonnegative source rows and columns; GFX shrinks oversized opposing slices and
+    /// overlays the surviving image cells with pink at 0.5 opacity.
     pub source_insets: SliceInsets,
     /// RGBA modulation applied uniformly to all nine sampled cells.
     pub tint: Color,

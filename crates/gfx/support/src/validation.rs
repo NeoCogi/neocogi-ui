@@ -179,12 +179,9 @@ impl AssetTables {
             }
             if let AssetPatch::Image { icon, source, .. } = visual.patch {
                 validate_insets(source)?;
-                let rect = self.icons.get(icon as usize).ok_or(NC_E_INVALID_ARG)?.rect;
-                if source.left.checked_add(source.right).ok_or(NC_E_INVALID_ARG)? > rect.width
-                    || source.top.checked_add(source.bottom).ok_or(NC_E_INVALID_ARG)? > rect.height
-                {
-                    return Err(NC_E_INVALID_ARG);
-                }
+                self.icons.get(icon as usize).ok_or(NC_E_INVALID_ARG)?;
+                // Retain oversized slices as authored. GFX shrinks them proportionally and
+                // overlays pink; stored data follows the same rule as direct drawing input.
             }
         }
         Ok(())

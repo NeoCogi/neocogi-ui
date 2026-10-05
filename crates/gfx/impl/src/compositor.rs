@@ -74,8 +74,9 @@ struct FrameState {
     budget: neocogi_renderer_contracts::FrameBudget,
 }
 
-/// Maximum triangle vertices staged by the nine cells of one patch.
-const MAX_NINE_PATCH_VERTICES: usize = 9 * 6;
+/// Nine image/flat cells plus at most nine source-shrink diagnostic overlays, six vertices each.
+/// The complete operation stages on the stack and commits through one fallible append.
+const MAX_NINE_PATCH_VERTICES: usize = 9 * 2 * 6;
 
 /// Owned painter-order record retained until the synchronous renderer call finishes.
 enum Batch {
@@ -607,7 +608,9 @@ impl GfxCompositor for GfxCompositorObject {
 
     /// Resolves and appends one complete typed patch through current bundle resources.
     fn nine_patch(&mut self, clip: Rect, destination: Rect, draw: NinePatchDraw) -> Result<(), NcStatus> {
-        self.charge(0, 54)?;
+        // Reserve the bounded worst case, including source diagnostics, in the same single
+        // operation admission. Even fully clipped patches cannot bypass work accounting.
+        self.charge(0, MAX_NINE_PATCH_VERTICES)?;
         self.append_nine_patch(clip, destination, draw)
     }
 

@@ -163,9 +163,13 @@ relative to the JSON file; omitted image tint is opaque white, and omitted sourc
 role's destination `insets`.
 
 `insets` controls destination layout and stretching. `source_insets` divides the PNG and defaults to
-the role's destination insets. Source insets must be non-negative and opposing values must fit
-inside the PNG. Destination insets may be larger than a runtime control; the renderer reduces
-opposing sides proportionally for tiny destinations.
+the role's destination insets. Source insets must be nonnegative. If opposing
+source slices exceed the PNG, GFX shrinks them proportionally and overlays the
+surviving image cells with pink (`#FFC0CB`) at 0.5 opacity, represented by alpha
+byte 128. The compiler retains the original slices so the diagnostic survives
+publication. Destination insets may also exceed a runtime control; GFX reduces
+those sides proportionally without pink when the source slices fit. Exact fits
+remain untinted, negative slices are errors, and hidden/empty cells stay absent.
 
 ## Skin fields
 

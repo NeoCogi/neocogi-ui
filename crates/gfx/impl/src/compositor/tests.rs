@@ -52,6 +52,127 @@ impl IRenderer for CaptureRenderer {
     }
 }
 
+/// Reads actual screen extents of one complete emitted quad, independently of vertex ordering.
+fn quad_bounds(vertices: &[RenderVertex]) -> (f32, f32, f32, f32) {
+    assert_eq!(vertices.len(), 6);
+    (
+        vertices.iter().map(|v| v.x).fold(f32::INFINITY, f32::min),
+        vertices.iter().map(|v| v.y).fold(f32::INFINITY, f32::min),
+        vertices.iter().map(|v| v.x).fold(f32::NEG_INFINITY, f32::max),
+        vertices.iter().map(|v| v.y).fold(f32::NEG_INFINITY, f32::max),
+    )
+}
+
+/// Accepted extreme insets preserve both colored sides through real COM expansion and submission.
+#[test]
+fn compositor_extreme_patch_sides_cover_an_ordinary_destination() {
+    let bundle = test_bundle();
+    let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
+    let capture = std::rc::Rc::new(RenderCapture::default());
+    let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { capture: capture.clone() }).query().unwrap();
+    let destination = Rect { x: 5, y: 7, width: 100, height: 10 };
+    let red = u32::from_le_bytes([255, 0, 0, 255]);
+    let blue = u32::from_le_bytes([0, 0, 255, 255]);
+    for (leading, trailing, split) in [(i32::MAX, i32::MAX, 55.0), (1_500_000_000, 1_000_000_000, 65.0)] {
+        compositor.begin(Size { width: 120, height: 40 }, 0).unwrap();
+        compositor.nine_patch(destination, destination, NinePatchDraw {
+            insets: Insets { left: leading, right: trailing, top: 0, bottom: 0 },
+            center_visible: 1,
+            patch: AssetPatch::Flat {
+                top_left: 0, top: 0, top_right: 0, left: red, center: 0, right: blue,
+                bottom_left: 0, bottom: 0, bottom_right: 0,
+            },
+        }).unwrap();
+        compositor.submit(renderer.as_com_ref()).unwrap();
+        let vertices = capture.vertices.borrow();
+        assert_eq!(vertices.len(), 12);
+        assert!(vertices[..6].iter().all(|v| v.rgba == red));
+        assert!(vertices[6..].iter().all(|v| v.rgba == blue));
+        assert_eq!(quad_bounds(&vertices[..6]), (5.0, 7.0, split, 17.0));
+        assert_eq!(quad_bounds(&vertices[6..]), (split, 7.0, 105.0, 17.0));
+        assert_eq!(capture.batches.borrow().len(), 1);
+    }
+}
+
+/// Stored and direct image patches share shrinking, unchanged tint and ordered pink overlays.
+#[test]
+fn compositor_source_shrink_overlays_pink_and_preserves_valid_frame_work() {
+    let base = test_bundle();
+    let info = base.info().unwrap();
+    assert_eq!(info.schema, 3);
+    assert!(info.rgba_bytes().is_ok());
+    assert_eq!(AssetInfo { schema: 2, ..info }.rgba_bytes(), Err(NC_E_INVALID_ARG));
+    let mut stored = data(&base);
+    let icon = stored.tables.icons.iter().position(|i| stored.tables.name(i.name) == Ok("close")).unwrap() as u32;
+    let destination = Rect { x: 0, y: 0, width: 100, height: 20 };
+    let visual = AssetVisual {
+        insets: Insets { left: 50, right: 50, top: 0, bottom: 0 },
+        center_visible: 1,
+        content_color: 0,
+        patch: AssetPatch::Image {
+            icon,
+            source: Insets { left: i32::MAX, right: i32::MAX, top: 0, bottom: 0 },
+            tint: 0xff000000,
+        },
+    };
+    stored.tables.surfaces.to_mut()[SurfaceRole::Panel.raw() as usize].normal = visual;
+    stored.validate().unwrap();
+    let source = stored.into_revision(base.as_com_ref()).unwrap();
+    // Import through the actual bulk COM reader, preserving the original oversized source request.
+    let imported = data(&source);
+    let stored_visual = imported.tables.surfaces[SurfaceRole::Panel.raw() as usize].normal;
+    assert_eq!(stored_visual.patch, visual.patch);
+    let mut compositor = GfxCompositorObject::create(source.as_com_ref()).unwrap();
+    let capture = std::rc::Rc::new(RenderCapture::default());
+    let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { capture: capture.clone() }).query().unwrap();
+    for visual in [visual, stored_visual] {
+        compositor.begin(Size { width: 100, height: 20 }, 0).unwrap();
+        let draw = NinePatchDraw { insets: visual.insets, center_visible: visual.center_visible, patch: visual.patch };
+        compositor.nine_patch(destination, destination, draw).unwrap();
+        // An invalid later patch must leave the complete earlier image/overlay operation intact.
+        let bad = AssetPatch::Image { icon, source: Insets { left: -1, ..Insets::default() }, tint: 0xffffffff };
+        assert_eq!(compositor.nine_patch(destination, destination, NinePatchDraw { patch: bad, ..draw }), Err(NC_E_INVALID_ARG));
+        compositor.submit(renderer.as_com_ref()).unwrap();
+        let vertices = capture.vertices.borrow();
+        assert_eq!(vertices.len(), 24);
+        for (index, quad) in vertices.chunks_exact(6).enumerate() {
+            let expected_color = if index % 2 == 0 { 0xff000000 } else { u32::from_le_bytes([255, 192, 203, 128]) };
+            assert!(quad.iter().all(|v| v.rgba == expected_color));
+            let expected = if index < 2 { (0.0, 0.0, 50.0, 20.0) } else { (50.0, 0.0, 100.0, 20.0) };
+            assert_eq!(quad_bounds(quad), expected);
+            if index % 2 == 1 {
+                assert!(quad.iter().all(|v| v.u == 0.0 || v.u == 1.0));
+                assert!(quad.iter().all(|v| v.v == 0.0 || v.v == 1.0));
+            }
+        }
+        assert_eq!(capture.batches.borrow().len(), 1);
+    }
+    // Diagnostics use the same effective clip as the image, with no unbounded overlay quad.
+    compositor.begin(Size { width: 100, height: 20 }, 0).unwrap();
+    let clip = Rect { x: 20, y: 0, width: 60, height: 20 };
+    compositor.nine_patch(clip, destination, NinePatchDraw {
+        insets: visual.insets, center_visible: visual.center_visible, patch: visual.patch,
+    }).unwrap();
+    compositor.submit(renderer.as_com_ref()).unwrap();
+    let clipped = capture.vertices.borrow();
+    assert_eq!(clipped.len(), 24);
+    for (index, quad) in clipped.chunks_exact(6).enumerate() {
+        let expected = if index < 2 { (20.0, 0.0, 50.0, 20.0) } else { (50.0, 0.0, 80.0, 20.0) };
+        assert_eq!(quad_bounds(quad), expected);
+    }
+    drop(clipped);
+    // Destination-only shrinking, including an exact source fit, must remain untinted.
+    compositor.begin(Size { width: 100, height: 20 }, 0).unwrap();
+    compositor.nine_patch(destination, destination, NinePatchDraw {
+        insets: Insets { left: i32::MAX, right: i32::MAX, top: 0, bottom: 0 },
+        center_visible: 1,
+        patch: AssetPatch::Image { icon, source: Insets { left: 2, right: 2, top: 0, bottom: 0 }, tint: 0xff000000 },
+    }).unwrap();
+    compositor.submit(renderer.as_com_ref()).unwrap();
+    assert_eq!(capture.vertices.borrow().len(), 12);
+    assert!(capture.vertices.borrow().iter().all(|v| v.rgba == 0xff000000));
+}
+
 /// GFX expands one typed image patch atomically and rejects malformed semantic payloads.
 #[test]
 fn compositor_expands_typed_image_patch_and_rejects_invalid_payloads() {

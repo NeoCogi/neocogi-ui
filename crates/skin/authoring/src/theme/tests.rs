@@ -977,6 +977,27 @@ fn negative_state_insets_are_rejected_before_publication() {
     ));
 }
 
+/// Authored oversized image slices survive compilation for the receiving GFX diagnostic.
+#[test]
+fn image_patch_compilation_preserves_oversized_slices_and_rejects_negative_components() {
+    let path = PathBuf::from("panel.png");
+    let images = BTreeMap::from([(path.clone(), AssetImagePlacement { index: 1, size: Size { width: 4, height: 4 } })]);
+    let oversized = Insets::uniform(i32::MAX);
+    let patch = PatchDocument::Image { path: path.clone(), source_insets: Some(oversized), tint: None };
+    assert_eq!(patch.compile(&images, "panel", Insets::ZERO).unwrap(), AssetPatch::Image { icon: 1, source: oversized, tint: 0xffffffff });
+    // Omitted source slices use the same oversized destination recipe, without normalizing away
+    // the request and its diagnostic before GFX receives it.
+    let inherited = PatchDocument::Image { path: path.clone(), source_insets: None, tint: None };
+    assert_eq!(inherited.compile(&images, "panel", oversized).unwrap(), AssetPatch::Image { icon: 1, source: oversized, tint: 0xffffffff });
+    for source in [
+        Insets { left: -1, ..Insets::ZERO }, Insets { top: -1, ..Insets::ZERO },
+        Insets { right: -1, ..Insets::ZERO }, Insets { bottom: -1, ..Insets::ZERO },
+    ] {
+        let patch = PatchDocument::Image { path: path.clone(), source_insets: Some(source), tint: None };
+        assert!(matches!(patch.compile(&images, "panel", Insets::ZERO), Err(ThemeLoadError::InvalidInsets { field: "source_insets", .. })));
+    }
+}
+
 /// Live appearance edits reuse resources; repeated rebuilds keep the stable application catalog.
 #[test]
 fn live_compiler_reuses_resources_and_never_accumulates_generated_images() {

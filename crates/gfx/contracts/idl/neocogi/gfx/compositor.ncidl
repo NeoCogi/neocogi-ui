@@ -28,7 +28,7 @@ struct DrawPoint {
 /// source slicing, empty-cell removal, clipping, and batching remain private to
 /// the receiving compositor.
 struct NinePatchDraw {
-    /// Destination-space thickness of the fixed outer columns and rows.
+    /// Nonnegative destination borders; opposing sides shrink proportionally when they do not fit.
     insets: Insets,
     /// Whether the stretchable center cell contributes geometry, zero or one.
     center_visible: u8,
@@ -56,7 +56,8 @@ factory GfxCompositor: IGfxDiagnostics {
     fn solid_triangles(&mut self, clip: Rect, vertices: &[SolidVertex]) -> Result<()>;
     /// Appends complete atlas triangles whose UV coordinates are already normalized.
     fn atlas_triangles(&mut self, clip: Rect, vertices: &[RenderVertex]) -> Result<()>;
-    /// Expands one typed three-by-three patch through current bundle resources.
+    /// Expands one typed patch atomically. Oversized nonnegative image source slices shrink
+    /// and receive a pink 0.5-opacity overlay; destination-only shrinking remains untinted.
     fn nine_patch(&mut self, clip: Rect, destination: Rect, draw: NinePatchDraw) -> Result<()>;
     /// Expands one UTF-8 run through a bundle-local font slot and appends its visible glyphs.
     fn text(&mut self, clip: Rect, font: u32, origin: DrawPoint, rgba: u32, text: &[u8]) -> Result<()>;
