@@ -127,7 +127,7 @@ impl ReloadSlot {
     /// Checks both slot identity and published attempt before applying message effects.
     /// The sender and this slot must share one ReloadIds domain. Rejected attempts,
     /// previous forms and other slots in that domain cannot match the active pair.
-    /// This is an attempt filter, not a substitute for generated weak-origin checks.
+    /// Call DocumentEvent::event_for to check the current widget's weak origin as well.
     pub fn accepts(&self, generation: Generation) -> bool {
         self.active.as_ref().is_some_and(|(active, _)| *active == generation)
     }

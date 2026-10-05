@@ -132,7 +132,7 @@ interface ColorSwatch: IWidget + ILeafLayout {
 }
 
 #[version(3)]
-/// Constructible labelled row; generic application data remains in the static event adapter.
+/// Constructible labelled row; application-specific data belongs to its consumer.
 #[events(IActivatedEvent)]
 class ListItem: IWidget + ILeafLayout {
     /// Returns an independently owned immutable UTF-8 label snapshot.

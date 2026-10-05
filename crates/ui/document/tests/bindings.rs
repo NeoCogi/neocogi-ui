@@ -42,7 +42,7 @@ fn empty_public_contract_generates_a_valid_module() {
     );
 }
 
-/// Generated custom fields and handlers read their event contract from the COM interface.
+/// Generated custom fields and catalog event metadata use the actual COM interface.
 #[test]
 fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
     use neocogi_com::{NcStatus, NC_E_INVALID_ARG};
@@ -107,7 +107,7 @@ fn custom_factory_cannot_omit_its_event_getter_value_graph() {
     use neocogi_ui_document::{CustomWidgetFactory, CustomWidgetRegistry};
     use std::rc::Rc;
 
-    /// Fabricated metadata omits the reachable definitions for its real typed receiver.
+    /// Fabricated metadata omits reachable value definitions for the declared event getters.
     static HIDDEN: IdlInterface = IdlInterface {
         abi: &neocogi_demo_contracts::CounterAbi::INTERFACE_DESCRIPTOR,
         chain: &neocogi_demo_contracts::CounterAbi::INTERFACE_CHAIN,

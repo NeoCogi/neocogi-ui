@@ -29,19 +29,20 @@ providers also check direct calls. See [document resource admission](../../../do
 
 A `Document` contains a tree of built-in widget constructors, styles, resources,
 and parent-owned layout edges. Each node has a unique stable key. Its physical
-event port count is zero or one. A text editor's single port carries the whole
-`TextboxEvent` or `TextAreaEvent` enum, including `Changed` and `Submitted`.
-An event stream has one receiver selected by the behavioral parent during
-construction. Generated forms prepare a shared typed queue before the loader creates
-widgets. There is no later attachment method, intermediate loader queue, or form
-relay. An omitted receiver chooses permanent non-delivery.
+event port count is zero or one. Every observed port transfers a weak origin and
+an exclusive `ComBox<IEventAbi>` snapshot through the common `IEventReceiver`.
+Text editors emit separate `ITextChangedEvent` and `ITextSubmittedEvent` snapshots
+through that same port. The behavioral parent selects its receiver before the
+loader constructs widgets, using `EventBindings`. An omitted receiver chooses
+permanent non-delivery.
 
-The application owns event behavior. Every event-producing node is represented
-by one required method in the generated `Handlers` trait. The application
-implements that trait in its own source file and dispatches accepted events at
-its normal update boundary. This is where button-to-textbox behavior, validation,
-state transitions, and application-specific commands belong. Revision 6 has no
-serialized visual output-to-input graph, route expression, or route editor.
+The application owns event behavior and handles accepted messages at its normal
+update boundary. It queries each snapshot's concrete COM interface and reads its
+captured getters. This is where button-to-textbox behavior, validation, state
+transitions, and application-specific commands belong. Optional generated forms
+provide checked widget fields; they contain no event handlers or dispatch code.
+The current document schema has no serialized visual output-to-input graph,
+route expression, or route editor.
 
 ## Loading and typed widget access
 
@@ -72,9 +73,10 @@ There is no separate command record, setter receiver, named input lookup, or
 through `as_interface_mut()`; the designer does not maintain a catalog of custom setters.
 
 These calls validate and apply changes synchronously and return their result.
-Event queues have a different role: they acquire emitted facts and enqueue the
-behavioral parent's mapped messages. Getters and ordinary state setters do not
-publish user-interaction events. Application code decides when a state change
+Event queues acquire the original COM event owner and weak origin for deferred
+handling. The application selects commands after dequeueing and checking the
+origin. Getters and ordinary state setters do not publish user-interaction events.
+Application code decides when a state change
 should also trigger application behavior.
 
 A component can advertise optional `IUiComponentMetadata`. Its
@@ -109,9 +111,15 @@ ordinals to avoid punctuation/keyword collisions; runtime keys remain exact lite
 Event handling requires no generated queue, event enum or handler trait. Applications
 can also use `component.widget::<ButtonAbi>("save")` directly without generating fields.
 
-For reloadable documents, share a `Sender<DocumentEvent>` across attempts. Construct
-a library receiver carrying each attempt's generation and bind all emitting widgets:
+For reloadable documents, share a `Sender<DocumentEvent>` across attempts. Import
+`document_receiver`, `EventBindings` and `DocumentEvent` from `neocogi_ui_document`,
+`IActivatedEventAbi` from `neocogi_ui`, and `INcStringComPtrExt` from `neocogi_com`
+for the string getter below. This example uses the `title` and `save` nodes created
+by `Document::new`, their exported fields, and an already mounted `ReloadSlot`.
+Construct a library receiver carrying each attempt's generation and bind all
+emitting widgets:
 
+<!-- checked-example: document-reload -->
 ```rust,ignore
 let mut candidate_form = None;
 slot.reload(&document, resources,
@@ -121,12 +129,13 @@ slot.reload(&document, resources,
     },
     |component, _| { candidate_form = Some(generated::bind(component)?); Ok(()) },
 )?;
-let form = candidate_form.unwrap();
+let mut form = candidate_form.unwrap();
 ```
 
 At the application dispatch boundary, authenticate generation and current widget
 identity before querying the concrete event:
 
+<!-- checked-example: document-dispatch -->
 ```rust,ignore
 for envelope in receiver.try_iter() {
     if let Some(message) = envelope.event_for(&slot, "save")? {
@@ -145,6 +154,10 @@ application ownership. Disconnection returns the same event owner to the produce
 
 Use `EventBindings::insert_queue` to observe selected keys. Non-reloading consumers
 can supply `events::channel()` directly. No generated Rust is required for either path.
+The [walkthrough regression](../runtime/src/runtime/tests/documentation.rs)
+compiles these exact blocks with fresh generated fields and executes activation,
+captured-label reads, replacement and stale-event rejection. Run it with
+`cargo test --offline -p neocogi-ui-runtime --lib documented_form_reload`.
 
 ## Reload, ownership, and authored state
 
@@ -165,7 +178,7 @@ Every attempt gets a copied `Generation` containing `(slot_id, attempt)`, includ
 failed attempts. Slot IDs are never recycled; attempts advance before receiver
 creation. Exhaustion returns an error without wrapping or changing the active form.
 The token owns no widgets and adds no allocation/reference counting. `accepts`
-compares the complete pair; generated dispatch also validates the weak origin.
+compares the complete pair; `DocumentEvent::event_for` also validates the weak origin.
 Allocator mutation uses `&mut self`. Concurrent slot creation must serialize access
 to the same allocator. Copied tokens need no synchronization beyond the channel's
 ordinary transport.
@@ -258,5 +271,5 @@ export uses its active registry.
 Custom widgets are currently leaf nodes in authored forms. A custom container
 needs a separate child attachment contract before it can own authored children.
 The Run-mode preview renders custom widgets but does not generically decode
-plugin-defined events for its status trace; the generated application binding
-still receives the complete typed stream.
+plugin-defined events for its status trace. Applications receive the same common
+COM stream and query plugin event interfaces directly.

@@ -35,8 +35,8 @@ cargo test -p neocogi-ui-runtime --lib documented_button_walkthrough
 Getters and setters belong to the concrete widget class or its appropriate COM
 interface. A getter returns a current snapshot; a setter validates and applies
 an application request synchronously, returning its result. Event queues receive
-facts emitted by the widget and enqueue the behavioral parent's owned messages. Similar argument types do not make these
-contracts interchangeable. Ordinary state setters do not synthesize user edits.
+the original COM event owner and weak origin for deferred application handling.
+Ordinary state setters do not synthesize user edits.
 
 Selective operations preserve the widget's other current settings. Use
 `set_flags`/`clear_flags` for requested interaction bits rather than writing a
@@ -99,12 +99,11 @@ receive their sole optional queue during construction. No public operation can
 install or replace it later. Teardown releases it permanently; an unobserved
 preview discards events for its entire lifetime.
 
-Generated forms prepare constructor bindings targeting the application's queue,
-then query the completed component's concrete widget fields. The loader supplies
-no intermediate receiver and performs no visual actions. The application
-implements required handler methods and checks reload generations before
-dispatching queued facts. See
-[class event streams](../../../../docs/contracts/CLASS_EVENT_STREAMS.md).
+Applications prepare `EventBindings` targeting their common receiver before
+document construction. Optional generated forms query the completed component's
+concrete widget fields. The application checks reload generations and weak origins,
+queries concrete event interfaces, and handles queued facts at its dispatch boundary.
+See [class event streams](../../../../docs/contracts/CLASS_EVENT_STREAMS.md).
 
 ## Composite ownership
 
@@ -239,9 +238,10 @@ drops the previous root; there is no separate teardown result.
 
 ## Static and dynamic linkage
 
-Concrete queue implementations, channels and models compile into the binary that owns them.
-`IWidget` and the single-method `IApplicationDispatcher` belong to UI core
-contracts. Closed queue specializations belong alongside their event types.
+Concrete receivers, channels and message processors compile into the binary that
+owns them. `IEvent` and `IEventReceiver` belong to COM; concrete snapshot interfaces
+belong to the UI core, nodes or plugin contracts that define their facts. `IWidget`
+and the single-method `IApplicationDispatcher` belong to UI core contracts.
 The COM process runtime has no UI event loop. Hosts and plugins use the same
 contracts and must be rebuilt together after this ABI change.
 
