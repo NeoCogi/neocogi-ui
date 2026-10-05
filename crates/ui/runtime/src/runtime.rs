@@ -11,8 +11,8 @@ use std::{
 use crate::ui_node::paint_service::{Metrics, PaintService};
 use crate::{Dimensioni, runtime_context::RuntimeContext};
 pub(crate) mod choices;
-mod menus;
 mod dispatch_widgets;
+mod menus;
 use dispatch_widgets::DispatchWidgets;
 mod windows;
 use windows::NativeSurface;
@@ -453,19 +453,49 @@ impl Runtime {
         self.dispatch_boundary(dispatcher, dimensions, &mut remaining, widgets)?;
         let mut first = true;
         loop {
-            let updated = {
+            if remaining == 0 {
+                return Err(UI_E_EVENT_LIMIT);
+            }
+            let input = storage.context()?.window_manager.next_input_event();
+            // The event owns its text while context is back in storage. A bookkeeping
+            // callback never overlaps a traversal borrow, and queued event owners can
+            // preserve these markers when a later handler aborts the update.
+            let attempted = (|| -> Result<bool, NcStatus> {
+                if let (Some(input), Some(mut owner)) = (&input, dispatcher) {
+                    let (event, _) = crate::ui_node::input_contract::event(Some(input));
+                    owner.input_boundary(InputBoundary::Begin { event })?;
+                }
                 storage.open()?;
-                let mut context = storage.context()?;
-                let updated = context.window_manager.update_cycle_step(first)?;
-                context.window_manager.event_result()?;
-                storage.phase_result()?;
-                updated
+                let updated = {
+                    let mut context = storage.context()?;
+                    let updated = context.window_manager.update_cycle_step(input.as_ref(), first)?;
+                    context.window_manager.event_result()?;
+                    storage.phase_result()?;
+                    updated
+                };
+                if updated {
+                    self.dispatch_boundary(dispatcher, dimensions, &mut remaining, widgets)?;
+                }
+                // An input scope invokes foreign callbacks even if it posts no messages.
+                // Charge it so bookkeeping cannot keep an eventful update alive indefinitely.
+                if input.is_some() && dispatcher.is_some() {
+                    spend_dispatch_budget(&mut remaining)?;
+                }
+                Ok(updated)
+            })();
+            let ended = match (&input, dispatcher) {
+                (Some(_), Some(mut owner)) => owner.input_boundary(InputBoundary::End),
+                _ => Ok(()),
             };
+            // Always attempt End; an earlier failure remains the authoritative cause.
+            let updated = attempted?;
+            ended?;
+            storage.open()?;
+            storage.phase_result()?;
             first = false;
             if !updated {
                 break;
             }
-            self.dispatch_boundary(dispatcher, dimensions, &mut remaining, widgets)?;
         }
         storage.context()?.window_manager.finish_update_cycle(dimensions);
         storage.dimensions.set(size);
@@ -539,8 +569,10 @@ impl Runtime {
                     if surface_changed { self.storage.factory.state.dispatch_order_changed.set(true); }
                     if surface_changed || self.storage.factory.state.changes_pending.get() || self.storage.factory.state.dispatch_order_changed.get() {
                         spend_dispatch_budget(remaining)?;
-                    } else { return Ok(()); }
-                },
+                    } else {
+                        return Ok(());
+                    }
+                }
                 // Raw enum constructors admit unknown values; match the generated ABI's
                 // invalid-tag rejection rather than authorizing continued input.
                 _ => return Err(NC_E_INVALID_TAG),

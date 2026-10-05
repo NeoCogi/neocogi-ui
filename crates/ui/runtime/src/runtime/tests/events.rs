@@ -588,6 +588,10 @@ fn real_lifecycle_cascade_is_deferred_until_each_consumer_returns() {
 /// A foreign consumer fails while the runtime is settling the frame.
 struct FailingOwner;
 impl IApplicationDispatcher for FailingOwner {
+    /// This fixture fails dispatch rather than input bookkeeping.
+    fn input_boundary(&mut self, _: InputBoundary) -> Result<(), NcStatus> {
+        Ok(())
+    }
     /// Propagates the consumer failure through the actual COM dispatcher boundary.
     fn dispatch_next(&mut self) -> Result<ApplicationDispatch, NcStatus> {
         Err(NC_E_INVALID_ARG)

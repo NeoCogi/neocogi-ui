@@ -2,7 +2,7 @@
 
 use neocogi_com::{ComPtr, ComRef, LocalCom, LocalMut, NcStatus};
 use crate::{
-    IApplicationDispatcherAbi, Size, Ui,
+    IApplicationDispatcherAbi, InputBoundary, Size, Ui,
     events::{ApplyOutcome, Dispatcher, MessageProcessor},
 };
 use std::{
@@ -28,6 +28,8 @@ struct Processor<State, Message, Context> {
     context: Context,
     /// Captureless hook exercises production deferred publication under dispatcher admission.
     apply_pending_changes: fn(&mut State, &Context) -> Result<ApplyOutcome, NcStatus>,
+    /// Optional captureless observer uses the same ownership/gate as production input scopes.
+    input_boundary: fn(&mut State, InputBoundary, &Context) -> Result<(), NcStatus>,
 }
 impl<State: 'static, Message: 'static, Context: 'static> MessageProcessor for Processor<State, Message, Context> {
     type Message = Message;
@@ -38,6 +40,10 @@ impl<State: 'static, Message: 'static, Context: 'static> MessageProcessor for Pr
     /// Delegates one dequeued value without introducing another borrow boundary.
     fn handle(&mut self, message: Message) -> Result<(), NcStatus> {
         (self.handle)(&mut self.state, message)
+    }
+    /// Fixture state observes scopes without borrowing it through a separate cell.
+    fn input_boundary(&mut self, boundary: InputBoundary) -> Result<(), NcStatus> {
+        (self.input_boundary)(&mut self.state, boundary, &self.context)
     }
 }
 impl<State: 'static, Message: 'static> TestApp<State, Message> {
@@ -61,11 +67,17 @@ impl<State: 'static, Message: 'static, Context: 'static> TestApp<State, Message,
                 handle,
                 context,
                 apply_pending_changes,
+                input_boundary: |_, _, _| Ok(()),
             },
             messages,
         ));
         let owner = local.query().expect("Dispatcher declares IApplicationDispatcher");
         Self { local, owner }
+    }
+    /// Installs an owned-state observer before driving any input through the fixture.
+    pub fn with_input_boundary(self, observer: fn(&mut State, InputBoundary, &Context) -> Result<(), NcStatus>) -> Self {
+        self.local.try_borrow_mut().expect("fixture setup must be idle").processor.input_boundary = observer;
+        self
     }
     /// Borrows the cached projection without querying or incrementing its reference count.
     pub fn as_interface(&self) -> ComRef<'_, IApplicationDispatcherAbi> {

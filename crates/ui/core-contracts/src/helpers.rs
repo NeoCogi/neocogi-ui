@@ -165,7 +165,8 @@ impl WidgetUpdate {
     }
 }
 
-/// Shared COM callback budget for one runtime dispatch boundary and cascade sweep.
+/// Shared work budget across one outer update: private/application dispatch,
+/// reconciliation and consumed input scopes with application bookkeeping.
 pub const EVENT_DISPATCH_LIMIT: u32 = 1_000_000;
 
 /// Initial native-picker geometry shared by static request defaults and hidden plugin construction.

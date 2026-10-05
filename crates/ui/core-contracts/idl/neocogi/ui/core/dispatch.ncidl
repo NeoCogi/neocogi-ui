@@ -9,7 +9,16 @@ enum ApplicationDispatch: u8 {
     PendingChangesApplied = 2,
 }
 
-#[version(2)]
+#[version(1)]
+/// Ordered scope of one consumed input, including all descendant/application work it produces.
+enum InputBoundary: u8 {
+    /// A normalized screen-space event is about to route; Text carries its kind, not text bytes.
+    Begin { event: WidgetEvent },
+    /// The attempted input's work has settled or failed; later programmatic work is outside it.
+    End,
+}
+
+#[version(3)]
 /// Application-owned message execution, borrowed for one UI update only.
 /// The application is not a widget. Its inbox may span several windows and
 /// is never mounted, retained, or closed by the widget tree.
@@ -20,4 +29,10 @@ interface IApplicationDispatcher {
     /// A handler error consumes only that message. The caller owns the inbox
     /// lifetime and must release any local mutable guard before entering UI update.
     fn dispatch_next(&mut self) -> Result<ApplicationDispatch>;
+    /// Records input ownership outside traversal borrows; actual edits use dispatch_next.
+    /// Begin/End bracket one input and its descendant dispatch, even when Begin or routing fails.
+    /// A failed Begin consumes that attempted input; later inputs remain queued. The first failure
+    /// wins if End also fails. Notifications must not mutate UI geometry or enqueue more UI input.
+    /// Owned queues may retain these markers alongside event snapshots for error recovery.
+    fn input_boundary(&mut self, boundary: InputBoundary) -> Result<()>;
 }

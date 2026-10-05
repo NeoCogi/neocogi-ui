@@ -99,8 +99,15 @@ pub trait AppState: 'static {
     }
 
     /// Observes one ordered native event before UI dispatch, outside the platform call.
-    /// Concrete editors use pointer boundaries to group live edits into one undo operation.
+    /// Polling may run ahead of routing; use input_boundary for per-command ownership.
     fn input(&mut self, _event: UiInput, _text: &str) -> Result<(), NcStatus> {
+        Ok(())
+    }
+
+    /// Observes one consumed UI input scope and its settled descendant messages, outside traversal.
+    /// Raw input polling can run ahead; use these ordered markers to associate authoring commands.
+    /// Record bookkeeping only here. Begin/End remain paired after a failed input attempt.
+    fn input_boundary(&mut self, _boundary: InputBoundary) -> Result<(), NcStatus> {
         Ok(())
     }
 
@@ -303,6 +310,10 @@ struct Application<State: AppState> {
 }
 impl<State: AppState> neocogi_ui::events::MessageProcessor for Application<State> {
     type Message = State::Message;
+    /// Preserves actual UI routing order instead of deriving command ownership from the poll tail.
+    fn input_boundary(&mut self, boundary: InputBoundary) -> Result<(), NcStatus> {
+        self.state.input_boundary(boundary)
+    }
     /// Uses the real application gate while the outer UI has released traversal ownership.
     fn apply_pending_changes(&mut self) -> Result<ApplyOutcome, NcStatus> {
         self.state.apply_pending_changes(&self.host, self.size)

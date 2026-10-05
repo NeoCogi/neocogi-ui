@@ -44,7 +44,7 @@ wrapper no longer exist. The existing widget mount claim still rejects movement
 or second attachment.
 
 The application is not required to be a widget. `IApplicationDispatcher` has
-only `dispatch_next`; the runtime borrows it for one update and retains nothing.
+`dispatch_next` and ordered input bookkeeping; the runtime borrows it for one update and retains nothing.
 The application-owned Dispatcher has ordinary processor/receiver fields and no
 attachment/retirement phases.
 
@@ -125,7 +125,7 @@ work returns `ApplyOutcome::ChangesApplied`. This is an empty-inbox operation,
 not a once-per-frame callback: it can run before the first raw input and after
 each input, several times per update. Repeated idle calls must not create work.
 
-`IApplicationDispatcher` version 2 returns the generated `ApplicationDispatch`
+`IApplicationDispatcher` version 3 returns the generated `ApplicationDispatch`
 enum: `MessageHandled`, `PendingChangesApplied`, or `Idle`. Both work outcomes
 charge the shared budget and revisit child dispatch/layout before later input,
 even when applying changes only posts a private message without a geometry edit.
@@ -138,6 +138,31 @@ Tools apply publication under the existing application mutable gate. The demo ho
 calls one outer update. Its `after_update` hook performs
 independent preview rendering and paint-only cache publication. `LeafContent::paint`
 receives `&mut self` for these caches; host observation still rejects geometry edits.
+
+### Ordered input bookkeeping
+
+`input_boundary(InputBoundary)` brackets each consumed raw input with Begin and
+End. Begin carries the normalized screen-space `WidgetEvent`; Text identifies
+the kind without copying its UTF-8 bytes. Both notifications run outside runtime
+context/traversal borrows under the application mutable gate. They record
+bookkeeping only: geometry edits and enqueuing more raw input belong outside
+these hooks. The default Rust processor/host hook does nothing.
+
+After Begin, the runtime routes that input and settles all descendant and
+application messages before End. End is attempted even if Begin, routing or
+dispatch fails; the first failure remains authoritative. A failed Begin consumes
+the attempted input without routing it; later input stays queued. An eventless
+update and initial pending-work dispatch have no input scope. One consumed scope
+charges one unit of the shared dispatch budget when an application is present,
+including inputs that post no messages.
+
+Applications that defer decoding can enqueue these markers in the same owned
+FIFO as semantic events. Each decoded command then carries its own input identity,
+instead of consulting native polling state that may already describe a later
+gesture. The theme editor uses this rule for Undo groups. Semantic events still
+travel as their original `ComBox<IEvent>` and weak widget origin; bookkeeping
+does not translate or wrap their payload interfaces. ABI version 3 requires
+rebuilding application and UI components together.
 
 Runtime dispatch snapshots contain weak handles and cannot retain removed values.
 Owner Drop rejects new calls and destroys the complete owned value before returning.

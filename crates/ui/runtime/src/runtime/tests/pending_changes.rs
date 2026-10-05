@@ -80,6 +80,10 @@ fn pending_changes_charge_the_budget_and_preserve_unattempted_requests() {
 /// Returns an unknown outcome through valid raw integer storage, without invalid Rust values.
 struct UnknownOutcome;
 impl IApplicationDispatcher for UnknownOutcome {
+    /// Unknown dispatch outcomes remain independent of otherwise valid input scopes.
+    fn input_boundary(&mut self, _: InputBoundary) -> Result<(), NcStatus> {
+        Ok(())
+    }
     /// The Rust raw constructor admits unknown values; generated ABI output checks reject them.
     fn dispatch_next(&mut self) -> Result<ApplicationDispatch, NcStatus> {
         Ok(ApplicationDispatch::from_raw(3))

@@ -2,7 +2,7 @@
 
 use std::sync::mpsc::{Receiver, TryRecvError};
 use neocogi_com::{NcStatus, com_object};
-use neocogi_ui_core_contracts::{ApplicationDispatch, IApplicationDispatcher, IApplicationDispatcherAbi, IApplicationDispatcherVtblFor};
+use neocogi_ui_core_contracts::{ApplicationDispatch, InputBoundary, IApplicationDispatcher, IApplicationDispatcherAbi, IApplicationDispatcherVtblFor};
 
 /// Result of applying application-owned pending changes at an empty-inbox boundary.
 /// This local processor result is mapped to the generated application dispatcher outcome.
@@ -27,7 +27,15 @@ pub trait MessageProcessor: 'static {
     /// Report ChangesApplied only after consuming pending work. Geometry/topology edits still
     /// need their ordinary notifications. Native rendering belongs after the completed UI update.
     /// Errors stop the update without undoing changes already committed; the processor owns retry state.
-    fn apply_pending_changes(&mut self) -> Result<ApplyOutcome, NcStatus> { Ok(ApplyOutcome::NothingPending) }
+    fn apply_pending_changes(&mut self) -> Result<ApplyOutcome, NcStatus> {
+        Ok(ApplyOutcome::NothingPending)
+    }
+    /// Records the exact consumed input scope before routing and after its messages settle.
+    /// Runs outside traversal under the processor gate. Keep UI edits in handle/pending changes.
+    /// End is attempted on errors too; queued snapshots can retain their original input identity.
+    fn input_boundary(&mut self, _boundary: InputBoundary) -> Result<(), NcStatus> {
+        Ok(())
+    }
     /// Handles one message with exclusive processor access and no retained traversal borrow.
     fn handle(&mut self, message: Self::Message) -> Result<(), NcStatus>;
 }
@@ -49,6 +57,10 @@ impl<Processor: MessageProcessor> Dispatcher<Processor> {
     }
 }
 impl<Processor: MessageProcessor> IApplicationDispatcher for Dispatcher<Processor> {
+    /// The same local/foreign gate protects bookkeeping and message handling.
+    fn input_boundary(&mut self, boundary: InputBoundary) -> Result<(), NcStatus> {
+        self.processor.input_boundary(boundary)
+    }
     /// Busy COM entry cannot dequeue; handler errors preserve unattempted successors.
     fn dispatch_next(&mut self) -> Result<ApplicationDispatch, NcStatus> {
         let message = match self.messages.try_recv() {
@@ -95,8 +107,10 @@ mod tests {
         {
             let held = local.try_borrow_mut().unwrap();
             assert_eq!(events.dispatch_next(), Err(neocogi_com::NC_E_BUSY));
+            assert_eq!(events.input_boundary(InputBoundary::End), Err(neocogi_com::NC_E_BUSY));
             assert!(held.processor.0.is_empty());
         }
+        assert_eq!(events.input_boundary(InputBoundary::End), Ok(()));
         assert_eq!(events.dispatch_next(), Err(neocogi_com::NC_E_INVALID_ARG));
         assert_eq!(events.dispatch_next(), Ok(ApplicationDispatch::MessageHandled));
         assert_eq!(events.dispatch_next(), Ok(ApplicationDispatch::Idle));

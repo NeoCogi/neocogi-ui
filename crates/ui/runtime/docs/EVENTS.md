@@ -12,6 +12,16 @@ The application owns its processor and receiver in one persistent dispatcher. Re
 its `IApplicationDispatcher` projection once and borrow it for each
 `ui.update_with_events(size, dispatcher.as_com_ref())` call.
 
+`MessageProcessor::input_boundary` is optional Rust bookkeeping backed by
+`IApplicationDispatcher` version 3. Begin/End follow actual consumed input, not
+the host's earlier polling callback. Descendant and application dispatch settles
+before End; End is attempted after failures too, preserving the first error.
+These hooks record ownership only, without geometry edits or more UI input.
+For deferred decoding, put markers and event snapshots in the same concrete
+FIFO and capture each command's group before consuming later markers. Eventless
+work has no scope. Each consumed scope with an application costs one unit of
+the shared update budget. See the [dispatch contract](../../../../docs/contracts/WIDGET_EVENT_DISPATCH.md).
+
 The [complete Button walkthrough](../../api/docs/button_events.rs) is the exact
 source included in the facade's `events` rustdoc and compiled into the runtime
 regression. It mounts a real Button, routes Tab/Space input, dispatches its
@@ -154,7 +164,7 @@ application dispatcher:
 2. Visit optional private dispatchers in actual ancestry order, child first. After one message, settle topology and geometry
    before reconsidering descendants.
 3. When widget work is quiet, call the optional `IApplicationDispatcher` once.
-   Its version 2 result distinguishes `MessageHandled`, `PendingChangesApplied`,
+   Its version 3 result distinguishes `MessageHandled`, `PendingChangesApplied`,
    and `Idle`. The dispatcher handles one message, or calls the processor's pending-change
    hook when no message is available. Both work outcomes consume budget and revisit
    private work/layout before another application visit or later raw input. `Idle`
@@ -217,7 +227,7 @@ alone disconnects it without posting a new result. Already queued application
 facts retain their captured values.
 
 One update-wide budget covers handled messages, topology-changing dispatch calls
-and menu reconciliation. Exhaustion returns `UI_E_EVENT_LIMIT` before further
+menu reconciliation and consumed input scopes with application bookkeeping. Exhaustion returns `UI_E_EVENT_LIMIT` before further
 work, even if the last message emptied an inbox. Unattempted messages and later
 raw input remain queued; state mutations are not rolled back. Reentrant update
 or render returns `UI_E_BUSY`; conflicting widget COM calls return `NC_E_BUSY`.

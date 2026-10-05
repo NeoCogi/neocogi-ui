@@ -225,7 +225,17 @@ failed updates; allocation capacity is reused. There is no separate ready-mailbo
 registry. Consequently, a positive private-dispatcher count can require polling
 idle receivers; the zero-count path skips collection and private calls.
 
-One shared budget bounds private work, application work and reconciliation across
+`IApplicationDispatcher::input_boundary` brackets each consumed input with Begin
+and End outside traversal borrows. All dispatch caused by that input precedes
+End; End is attempted on failure too. These hooks record ownership facts only,
+without geometry edits or more raw input. Native polling may run ahead, so a
+deferred consumer retains the markers in the same FIFO as its original COM
+events and stamps each decoded command before consuming later markers. The
+[theme-editor contract](../contracts/THEME_EDITOR_TRANSACTIONS.md) specifies its
+pointer/keyboard Undo groups. Eventless work has no input scope.
+
+One shared budget bounds private work, application work, reconciliation and
+consumed input scopes with application bookkeeping across
 the complete update. Exhaustion returns `UI_E_EVENT_LIMIT` before another dequeue.
 Reaching the exact limit also returns that error, even if the last message emptied
 an inbox: the runtime cannot establish that fact without another visit.

@@ -12,13 +12,19 @@ impl WindowManager {
         self.layout_update_cycle(dimensions)
     }
 
-    /// Applies one queued input, or exactly one initial eventless update when no raw event is pending.
+    /// Transfers one normalized input to the update owner before it invokes an application scope.
+    /// Held state advances with this dequeue; no manager/traversal borrow spans that notification.
+    pub(crate) fn next_input_event(&mut self) -> Option<UiInputEvent> {
+        self.input.pop_event()
+    }
+
+    /// Applies the owned input, or exactly one initial eventless update when no raw event is pending.
     /// Returning releases all traversal borrows before the caller dispatches application events.
-    pub(crate) fn update_cycle_step(&mut self, first: bool) -> Result<bool, neocogi_com::NcStatus> {
+    pub(crate) fn update_cycle_step(&mut self, event: Option<&UiInputEvent>, first: bool) -> Result<bool, neocogi_com::NcStatus> {
         let atlas = self.bundle.atlas().clone();
-        if let Some(event) = self.input.pop_event() {
+        if let Some(event) = event {
             let input = self.input.snapshot();
-            self.update_for_event(&atlas, &event, input)?;
+            self.update_for_event(&atlas, event, input)?;
             Ok(true)
         } else if first {
             let input = self.input.snapshot();

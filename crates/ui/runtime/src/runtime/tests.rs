@@ -10,6 +10,7 @@ mod dispatch_errors;
 mod recovery;
 mod dispatch_geometry;
 mod pending_changes;
+mod input_boundaries;
 mod shutdown;
 mod documentation;
 mod resource_refresh;
