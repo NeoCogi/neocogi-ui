@@ -224,3 +224,7 @@ fn blob(input: NcCopyFromBufferOffset<'_, u8>) -> Result<&[u8], NcStatus> {
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "asset_limits_tests.rs"]
+mod limit_tests;
