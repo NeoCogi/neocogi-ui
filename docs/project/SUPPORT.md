@@ -7,9 +7,13 @@ not yet make.
 
 ## Rust toolchain
 
-The crate uses Rust 2024 edition but does not publish a minimum supported Rust version (MSRV).
-Development and CI target the current stable Rust toolchain. Dependency updates or a pre-1.0 minor
-release may therefore require a newer stable compiler.
+The workspace uses Rust 2024 edition. The COM core, facade, runtime, macros and
+IDL compiler declare Rust **1.85** as their minimum supported Rust version. The
+inspector and normative ABI snippets are also exercised by the
+[minimum-version suite](../../crates/com/scripts/test-msrv.sh), which has a
+dedicated CI job. Compile-test tooling is pinned to a floor-compatible version.
+The UI, renderer, editors and other workspace tools target current stable; the
+COM floor does not promise that the entire workspace builds on Rust 1.85.
 
 The [cargo-neocogi command](../../tools/cargo-neocogi/README.md) builds ordinary native
 assemblies with stable or explicitly selected nightly Cargo. Its bundled `min-size`

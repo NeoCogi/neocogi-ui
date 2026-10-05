@@ -67,6 +67,16 @@ jobs:
           SDL_VIDEODRIVER: offscreen
         run: cargo test -p neocogi-ui-designer -p neocogi-theme-editor --lib --features neocogi-ui-designer/monolith,neocogi-ui-designer/embed-assets,neocogi-theme-editor/monolith,neocogi-theme-editor/embed-assets -- --include-ignored --skip benchmark --test-threads=1
 
+  # The declared compiler floor is separate from the rolling stable/nightly matrix.
+  com-msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: rustup toolchain install 1.85.0 --profile minimal
+      # The workspace lock is intentionally untracked; resolve it with the floor compiler.
+      - run: cargo +1.85.0 generate-lockfile
+      - run: bash crates/com/scripts/test-msrv.sh
+
   com:
     runs-on: ubuntu-latest
     steps:
