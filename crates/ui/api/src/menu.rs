@@ -29,7 +29,7 @@ impl Menus {
         menu: &MenuBuilder,
         queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<ComPtr<IPopupAbi>, NcStatus> {
-        let events = neocogi_com::events::EventBinding::from_queue(queue);
+        let events = neocogi_com::events::EventBinding::from_queue(queue)?;
         self.interface
             .create_popup(window, menu.interface.as_com_ref(), neocogi_com::NcValueRef::new(&events)?)
     }
@@ -55,7 +55,7 @@ impl MenuBuilder {
         Ok(MenuItem {
             interface: self.interface.item(
                 NcCopyFromBufferOffset::new(0, label.as_bytes()),
-                neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::from_queue(queue))?,
+                neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::from_queue(queue)?)?,
             )?,
         })
     }

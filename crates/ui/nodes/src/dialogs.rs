@@ -413,7 +413,7 @@ impl FileDialog {
         })?;
         let windows = services.windows.clone();
         let window_sink = dialog.try_borrow()?.model.nodes.queue.clone();
-        let window_binding = neocogi_com::events::EventBinding::from_queue(Some(window_sink.as_com_ref()));
+        let window_binding = neocogi_com::events::EventBinding::from_queue(Some(window_sink.as_com_ref()))?;
         let mut observer = dialog.downgrade();
         let root = dialog.into_interface::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?;
         let window = windows.create_dialog(

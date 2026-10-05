@@ -14,6 +14,56 @@ impl Drop for Lifetime {
     }
 }
 
+#[com_object(interfaces(neocogi_com::events::IEventReceiver), ownership = exclusive)]
+/// Valid exclusive receiver used to test rejection before UI ownership transfer.
+struct ExclusiveReceiver;
+impl neocogi_com::events::IEventReceiver for ExclusiveReceiver {
+    fn post(
+        &mut self,
+        _origin: neocogi_com::NcValueRef<'_, neocogi_com::events::EventOrigin>,
+        event: ComBox<neocogi_com::events::IEventAbi>,
+    ) -> Result<(), (NcStatus, ComBox<neocogi_com::events::IEventAbi>)> {
+        Err((neocogi_com::NC_E_CLOSED, event))
+    }
+}
+
+/// Widget/menu capture is fallible, and all mounting facades return the same root for retry.
+#[test]
+fn exclusive_receiver_rejection_preserves_unmounted_roots() {
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let receiver = ExclusiveReceiver::into_box(ExclusiveReceiver)
+        .query::<neocogi_com::events::IEventReceiverAbi>()
+        .unwrap();
+    let queue = Some(receiver.as_com_ref());
+    assert!(matches!(ui.widgets().button_with_queue("rejected", queue), Err(NC_E_INVALID_ARG)));
+    assert!(matches!(ui.widgets().textbox_with_queue("rejected", queue), Err(NC_E_INVALID_ARG)));
+    let menus = ui.menus().unwrap();
+    let menu = menus.create("retry").unwrap();
+    assert!(matches!(menu.item_with_queue("rejected", queue), Err(NC_E_INVALID_ARG)));
+    menu.item("accepted").unwrap();
+
+    let parent = ui.window("parent", RECT, ui.widgets().button_unobserved("parent").unwrap()).unwrap();
+    for case in 0..4 {
+        let root = ui.widgets().button_unobserved("root").unwrap();
+        let origin = root.as_interface().downgrade();
+        let result = match case {
+            0 => ui.window_with_queue("rejected", RECT, root, queue).map(|_| ()),
+            1 => ui.child_window_with_queue(parent.as_com_ref(), "rejected", RECT, root, queue).map(|_| ()),
+            2 => ui.dialog_with_queue(parent.as_com_ref(), "rejected", RECT, root, queue).map(|_| ()),
+            _ => ui.popup_with_queue(parent.as_com_ref(), "rejected", root, queue).map(|_| ()),
+        };
+        let (status, root) = result.unwrap_err();
+        assert_eq!(status, NC_E_INVALID_ARG);
+        assert!(origin.is_alive());
+        // The rejected root still belongs to the caller and can be mounted normally.
+        let window = ui.window("retry", RECT, root).unwrap();
+        window.close().unwrap();
+        assert!(!origin.is_alive());
+    }
+    assert!(receiver.downgrade().is_alive());
+    parent.close().unwrap();
+}
+
 /// Independent producer ports share an application FIFO without installing observers later.
 #[test]
 fn construction_queue_preserves_fifo_and_owned_snapshots() {

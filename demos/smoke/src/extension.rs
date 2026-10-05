@@ -58,7 +58,7 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     assert_eq!(b_view.children().unwrap_err(), neocogi_com::NC_E_DROPPED);
 
     let (queue, events) = neocogi_com::events::channel();
-    let binding = neocogi_com::events::EventBinding::from_queue(Some(queue.as_com_ref()));
+    let binding = neocogi_com::events::EventBinding::from_queue(Some(queue.as_com_ref()))?;
     let counter_owner = provider.counter(host.as_com_ref(), neocogi_com::NcValueRef::new(&binding)?)?;
     let mut counter = counter_owner.downgrade();
     let probe: neocogi_com::WeakComBox<IWidgetProbeAbi> = counter.query()?;

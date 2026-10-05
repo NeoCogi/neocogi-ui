@@ -96,6 +96,14 @@ All observed factories accept that same receiver projection. `EventBindings`
 registers it by authored key without a widget type parameter. The constructor
 binding selects only delivery policy. It does not encode an event type.
 
+`EventBinding::from_queue(Option<ComRef<IEventReceiverAbi>>)` returns a `Result`.
+It retains a shared receiver using fallible acquisition: a valid borrow from an
+exclusive receiver returns `NC_E_INVALID_ARG`, preserving its sole owner.
+`None` succeeds as `Unobserved`; a concrete shared handle can also move directly
+into `EventBinding::Observed`. UI constructors propagate acquisition failures
+before publication. Window, child, dialog and popup facades return the original
+unmounted root with the error, so the caller can retry with another receiver.
+
 Optional generated forms contain typed widget fields and `bind(component)` only.
 `document_receiver(generation, sender)` is a shared library receiver that tags the
 same exclusive event with a reload generation. `EventBindings::all` can select all
