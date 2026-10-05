@@ -44,6 +44,8 @@ impl Theme {
     }
     /// Loads a pristine theme into the original catalog, keeping existing widget resource handles valid.
     /// Native callers must register the skin plugin first; its JSON loader owns all theme compilation.
+    /// Failed native theme compilation prints the loader's owned diagnostic to stderr before
+    /// releasing that service, while returning the exact original COM status to the caller.
     pub fn load(self, base: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         if self == Self::Default {
             return Ok(base.add_ref());
@@ -74,7 +76,21 @@ impl Theme {
             let publisher = gfx.asset_publisher()?;
             let factory = runtime.activate_plugin_factory::<SkinPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.skin.runtime"))?;
             let loader = factory.theme_loader(assets.as_com_ref(), publisher.as_com_ref())?;
-            loader.load_theme(NativePath::new(&path).as_interface(), base)
+            loader.load_theme(NativePath::new(&path).as_interface(), base).inspect_err(|status| {
+                // The theme ABI returns a status only. Preserve the loader's owned diagnostic
+                // before this short-lived service is released, so native demo failures retain
+                // their JSON/resource/GFX cause instead of reporting only NC_E_INVALID_ARG.
+                let detail = loader
+                    .query::<neocogi_ui::ISkinDiagnosticsAbi>()
+                    .and_then(|diagnostics| diagnostics.diagnostic())
+                    .and_then(|text| neocogi_com::INcStringComPtrExt::to_string(&text))
+                    .unwrap_or_default();
+                if detail.is_empty() {
+                    eprintln!("Loading {} from {} failed: {status}", self.label(), path.display());
+                } else {
+                    eprintln!("Loading {} from {} failed: {status}: {detail}", self.label(), path.display());
+                }
+            })
         }
     }
 }

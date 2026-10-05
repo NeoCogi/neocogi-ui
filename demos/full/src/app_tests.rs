@@ -104,6 +104,90 @@ fn packaged_full_host_selects_win311() {
     host.run(Selection { state, steps }, events).unwrap();
 }
 
+/// Checks phase attribution and the original error chain through the actual native driver.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+#[ignore = "requires the packaged native plugin graph and a native GPU window"]
+fn packaged_full_host_preserves_rejecting_operation() {
+    /// Each injected rejection belongs to a distinct production driver boundary.
+    #[derive(Clone, Copy)]
+    enum Failure {
+        /// Direct application preparation before event dispatch.
+        Preparation,
+        /// Pending changes invoked through the UI's real COM application dispatcher.
+        Dispatch,
+        /// Application work after successful dispatch and layout.
+        AfterUpdate,
+        /// IME rectangle selection after the frame updates have completed.
+        TextArea,
+    }
+    impl Failure {
+        /// Expected context belongs to the host operation that invokes this hook.
+        fn operation(self) -> &'static str {
+            match self {
+                Self::Preparation => "application frame preparation",
+                Self::Dispatch => "event and layout update",
+                Self::AfterUpdate => "application frame update",
+                Self::TextArea => "text input placement",
+            }
+        }
+    }
+    /// Keeps production widget ownership and callbacks, rejecting only the selected hook.
+    struct Reject {
+        /// Owns every real application control until host teardown.
+        state: State,
+        /// The sole hook allowed to produce this test's NC_E_INVALID_ARG.
+        failure: Failure,
+    }
+    impl AppState for Reject {
+        type Message = neocogi_com::events::EventMessage;
+        /// Preserve ordinary event handling for hooks that are not under test.
+        fn update(&mut self, message: Self::Message) -> Result<(), NcStatus> {
+            self.state.update(message)
+        }
+        /// Direct frame rejection retains its status before any UI update.
+        fn frame(&mut self, host: &Host, size: Size, seconds: f64) -> Result<bool, NcStatus> {
+            match self.failure {
+                Failure::Preparation => Err(NC_E_INVALID_ARG),
+                _ => self.state.frame(host, size, seconds),
+            }
+        }
+        /// Dispatch failure crosses the generated checked COM interface and returns to the host.
+        fn apply_pending_changes(&mut self, host: &Host, size: Size) -> Result<ApplyOutcome, NcStatus> {
+            match self.failure {
+                Failure::Dispatch => Err(NC_E_INVALID_ARG),
+                _ => self.state.apply_pending_changes(host, size),
+            }
+        }
+        /// Post-layout rejection is distinguishable from the preceding COM dispatch failure.
+        fn after_update(&mut self, host: &Host, size: Size) -> Result<(), NcStatus> {
+            match self.failure {
+                Failure::AfterUpdate => Err(NC_E_INVALID_ARG),
+                _ => self.state.after_update(host, size),
+            }
+        }
+        /// IME preparation keeps its context instead of masquerading as a renderer failure.
+        fn text_input_area(&self, host: &Host) -> Result<TextInputArea, NcStatus> {
+            match self.failure {
+                Failure::TextArea => Err(NC_E_INVALID_ARG),
+                _ => self.state.text_input_area(host),
+            }
+        }
+    }
+    for failure in [Failure::Preparation, Failure::Dispatch, Failure::AfterUpdate, Failure::TextArea] {
+        let (host, state, events) = create().unwrap();
+        let error = host
+            .run(Reject { state, failure }, events)
+            .expect_err("the selected hook must reject this frame");
+        assert!(
+            matches!(error, HostError::Operation { operation, status } if operation == failure.operation() && status == NC_E_INVALID_ARG),
+            "{error}"
+        );
+        assert_eq!(error.to_string(), format!("{} failed: {NC_E_INVALID_ARG}", failure.operation()));
+        assert_eq!(std::error::Error::source(&error).unwrap().to_string(), NC_E_INVALID_ARG.to_string());
+    }
+}
+
 /// Selects Win 3.11 through the real nested menu and verifies publication on the following frame.
 fn select_win311_from_menu(host: &Host, app: &TestApp<State, neocogi_com::events::EventMessage>) -> Result<(), HostError> {
     let mut state = app.state();

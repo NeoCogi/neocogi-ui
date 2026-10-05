@@ -21,6 +21,13 @@ pub enum HostError {
     Io(std::io::Error),
     /// A checked interface rejected the requested operation.
     Status(NcStatus),
+    /// One frame operation failed with its original checked-interface status.
+    Operation {
+        /// Static host phase identifies the rejecting boundary without retaining application state.
+        operation: &'static str,
+        /// Exact cause remains available through Error::source.
+        status: NcStatus,
+    },
     /// Package validation or native renderer detail is available as owned text.
     Message(String),
 }
@@ -42,16 +49,18 @@ impl fmt::Display for HostError {
         match self {
             Self::Io(error) => error.fmt(output),
             Self::Status(error) => error.fmt(output),
+            Self::Operation { operation, status } => write!(output, "{operation} failed: {status}"),
             Self::Message(message) => output.write_str(message),
         }
     }
 }
 impl std::error::Error for HostError {
-    /// Native IO errors retain their normal inspection chain.
+    /// IO and checked-interface errors retain their original cause, including contextual statuses.
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Io(error) => Some(error),
             Self::Status(error) => Some(error),
+            Self::Operation { status, .. } => Some(status),
             Self::Message(_) => None,
         }
     }
@@ -142,12 +151,12 @@ pub struct Host {
     input: ComPtr<IInputSinkAbi>,
 }
 impl Host {
-    /// Preserves backend detail for failures from either an embedded surface or final composition.
+    /// Names the failing frame operation and preserves detail from native renderer failures.
     /// All renderer projections from this window share its device diagnostic. Other statuses
     /// retain their original error instead of acquiring a potentially stale renderer message.
-    fn render_error(&self, phase: &str, status: NcStatus) -> HostError {
+    fn frame_error(&self, phase: &'static str, status: NcStatus) -> HostError {
         if status != UI_E_RENDER {
-            return HostError::Status(status);
+            return HostError::Operation { operation: phase, status };
         }
         let detail = self
             .renderer
@@ -333,30 +342,54 @@ impl<State: AppState> Driver<State> {
     fn frame(&mut self, seconds: f64) -> Result<FrameOutcome, HostError> {
         let host = &self.host;
         loop {
-            let status = host.window.poll(host.input.as_com_ref())?;
-            let size = host.window.size()?;
+            let status = host
+                .window
+                .poll(host.input.as_com_ref())
+                .map_err(|status| host.frame_error("platform input polling", status))?;
+            let size = host.window.size().map_err(|status| host.frame_error("window size query", status))?;
             if size.width <= 0 || size.height <= 0 {
                 if !self.suspended {
                     self.suspended = true;
                     // End host gestures and reset UI held state once. Events
                     // received while minimized have no drawable target and are
                     // discarded instead of accumulating behind a skipped update.
-                    self.state.try_borrow_mut()?.processor.state.input(UiInput::Cancel, "")?;
-                    host.ui.input(UiInput::Cancel, "")?;
+                    self.state
+                        .try_borrow_mut()?
+                        .processor
+                        .state
+                        .input(UiInput::Cancel, "")
+                        .map_err(|status| host.frame_error("application input cancellation", status))?;
+                    host.ui
+                        .input(UiInput::Cancel, "")
+                        .map_err(|status| host.frame_error("UI input cancellation", status))?;
                 }
                 for _ in host.observations.try_iter() {}
             } else {
                 self.suspended = false;
                 for observation in host.observations.try_iter() {
-                    self.state.try_borrow_mut()?.processor.state.input(observation.event, &observation.text)?;
-                    host.ui.input(observation.event, &observation.text)?;
+                    self.state
+                        .try_borrow_mut()?
+                        .processor
+                        .state
+                        .input(observation.event, &observation.text)
+                        .map_err(|status| host.frame_error("application input observation", status))?;
+                    host.ui
+                        .input(observation.event, &observation.text)
+                        .map_err(|status| host.frame_error("UI input intake", status))?;
                 }
             }
             match status {
                 PollStatus::Event => continue,
                 PollStatus::Idle => break,
                 PollStatus::Close => {
-                    if self.state.try_borrow_mut()?.processor.state.close_requested()? {
+                    if self
+                        .state
+                        .try_borrow_mut()?
+                        .processor
+                        .state
+                        .close_requested()
+                        .map_err(|status| host.frame_error("application close request", status))?
+                    {
                         return Ok(FrameOutcome::Stopped);
                     }
                     break;
@@ -364,27 +397,45 @@ impl<State: AppState> Driver<State> {
                 _ => return Err(HostError::Message("unknown platform polling result".to_owned())),
             }
         }
-        let size = host.window.size()?;
+        let size = host.window.size().map_err(|status| host.frame_error("window size query", status))?;
         if size.width <= 0 || size.height <= 0 {
             return Ok(FrameOutcome::Suspended);
         }
         // Apply frame edits before consuming the input just polled. Handlers can prepare work for
         // the next frame callback; this frame's direct edits and nested events settle in one update.
         self.state.try_borrow_mut()?.processor.size = size;
-        if !self.state.try_borrow_mut()?.processor.state.frame(host, size, seconds)? {
+        if !self
+            .state
+            .try_borrow_mut()?
+            .processor
+            .state
+            .frame(host, size, seconds)
+            .map_err(|status| host.frame_error("application frame preparation", status))?
+        {
             return Ok(FrameOutcome::Stopped);
         }
-        host.ui.update_with_events(size, self.owner.as_com_ref())?;
+        host.ui
+            .update_with_events(size, self.owner.as_com_ref())
+            .map_err(|status| host.frame_error("event and layout update", status))?;
         self.state
             .try_borrow_mut()?
             .processor
             .state
             .after_update(host, size)
-            .map_err(|status| host.render_error("application frame update", status))?;
-        host.window.text_input(self.state.try_borrow()?.processor.state.text_input_area(host)?)?;
+            .map_err(|status| host.frame_error("application frame update", status))?;
+        let text_area = self
+            .state
+            .try_borrow()?
+            .processor
+            .state
+            .text_input_area(host)
+            .map_err(|status| host.frame_error("text input placement", status))?;
+        host.window
+            .text_input(text_area)
+            .map_err(|status| host.frame_error("native text input", status))?;
         host.ui
             .render(size, host.renderer.as_com_ref())
-            .map_err(|status| host.render_error("frame", status))?;
+            .map_err(|status| host.frame_error("frame rendering", status))?;
         if let Some(remaining) = self.remaining {
             self.remaining = Some(remaining - 1);
             return Ok(match remaining {
