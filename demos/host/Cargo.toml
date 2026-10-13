@@ -28,7 +28,7 @@ neocogi-ui.workspace = true
 neocogi-com = { workspace = true, features = ["std", "macros"] }
 neocogi-ui-runtime = { path = "../../crates/ui/runtime", optional = true }
 neocogi-ui-nodes = { workspace = true, optional = true }
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "a41c99018b5406a4561bb6759646961f023c991e", optional = true, default-features = false }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "1569121dbef4893a16f70a781592dcb0998a833a", optional = true, default-features = false }
 neocogi-gfx = { workspace = true, optional = true, default-features = false }
 neocogi-skin = { workspace = true, optional = true, default-features = false }
 

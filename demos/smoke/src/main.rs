@@ -77,8 +77,9 @@ fn register_plugins(runtime: &neocogi_com::Runtime, directory: &std::path::Path)
             return Err("plugin manifest entry must be a file name".into());
         }
         // SAFETY: The build driver stages these trusted, matching workspace plugin assemblies.
-        let module = unsafe { runtime.load_plugin_library(directory.join(path)) };
-        println!("loaded {}", module.qualified_name());
+        let plugin_id = unsafe { runtime.load_plugin_library(directory.join(path)) };
+        let info = runtime.inspection().plugin_info(plugin_id)?.ok_or("loaded plugin missing")?;
+        println!("loaded {}", info.qualified_name);
     }
     Ok(())
 }
