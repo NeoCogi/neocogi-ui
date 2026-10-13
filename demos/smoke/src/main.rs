@@ -78,7 +78,7 @@ fn register_plugins(runtime: &neocogi_com::Runtime, directory: &std::path::Path)
         }
         // SAFETY: The build driver stages these trusted, matching workspace plugin assemblies.
         let plugin_id = unsafe { runtime.load_plugin_library(directory.join(path)) };
-        let info = runtime.inspection().plugin_info(plugin_id)?.ok_or("loaded plugin missing")?;
+        let info = runtime.plugin_info(plugin_id)?.ok_or("loaded plugin missing")?;
         println!("loaded {}", info.qualified_name);
     }
     Ok(())
