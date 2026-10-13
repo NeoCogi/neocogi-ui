@@ -499,25 +499,25 @@ fn register() -> Result<(), HostError> {
     let available = [
         StaticPlugin {
             package: "neocogi-ui-runtime",
-            description: nc_ui::factory_plugin_description(),
+            description: nc_ui::plugin_descriptor(),
         },
         StaticPlugin {
             package: "neocogi-ui-nodes",
-            description: nc_ui_nodes::factory_plugin_description(),
+            description: nc_ui_nodes::plugin_descriptor(),
         },
         StaticPlugin {
             package: "neocogi-render-plugin",
-            description: nc_render::factory_plugin_description(),
+            description: nc_render::plugin_descriptor(),
         },
         #[cfg(any(target_arch = "wasm32", feature = "monolith-gfx"))]
         StaticPlugin {
             package: "neocogi-gfx",
-            description: nc_gfx::factory_plugin_description(),
+            description: nc_gfx::plugin_descriptor(),
         },
         #[cfg(feature = "skin")]
         StaticPlugin {
             package: "neocogi-skin",
-            description: nc_skin::factory_plugin_description(),
+            description: nc_skin::plugin_descriptor(),
         },
     ];
     let selected = static_plugins::select(&available, option_env!("NEOCOGI_ASSEMBLY_PLUGINS")).map_err(HostError::Message)?;
@@ -525,7 +525,7 @@ fn register() -> Result<(), HostError> {
     for plugin in selected {
         // SAFETY: Generated descriptions, contracts, and code remain linked for the process lifetime.
         unsafe {
-            runtime.register_factory_plugin_description(plugin.description)?;
+            runtime.register_plugin_descriptor(plugin.description)?;
         }
     }
     Ok(())

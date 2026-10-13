@@ -91,35 +91,35 @@ fn register_plugins(runtime: &neocogi_com::Runtime, _directory: &std::path::Path
     let available = [
         StaticPlugin {
             package: "neocogi-ui-runtime",
-            description: nc_ui::factory_plugin_description(),
+            description: nc_ui::plugin_descriptor(),
         },
         StaticPlugin {
             package: "neocogi-ui-nodes",
-            description: nc_ui_nodes::factory_plugin_description(),
+            description: nc_ui_nodes::plugin_descriptor(),
         },
         StaticPlugin {
             package: "neocogi-render-plugin",
-            description: nc_render::factory_plugin_description(),
+            description: nc_render::plugin_descriptor(),
         },
         StaticPlugin {
             package: "neocogi-gfx",
-            description: nc_gfx::factory_plugin_description(),
+            description: nc_gfx::plugin_descriptor(),
         },
         StaticPlugin {
             package: "neocogi-skin",
-            description: nc_skin::factory_plugin_description(),
+            description: nc_skin::plugin_descriptor(),
         },
         #[cfg(feature = "extension")]
         StaticPlugin {
             package: "neocogi-example-ui-extension",
-            description: nc_ui_extension::factory_plugin_description(),
+            description: nc_ui_extension::plugin_descriptor(),
         },
     ];
     let selected = static_plugins::select(&available, option_env!("NEOCOGI_ASSEMBLY_PLUGINS"))?;
     for plugin in selected {
         // SAFETY: Every generated descriptor and implementation remains linked for process lifetime.
         unsafe {
-            runtime.register_factory_plugin_description(plugin.description)?;
+            runtime.register_plugin_descriptor(plugin.description)?;
         }
     }
     Ok(())

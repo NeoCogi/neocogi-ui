@@ -260,8 +260,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     // SAFETY: These linked descriptors and their code/data remain in this
     // executable for the entire registry lifetime, including benchmark teardown.
     unsafe {
-        runtime.register_factory_plugin_description(nc_gfx::factory_plugin_description())?;
-        runtime.register_factory_plugin_description(nc_ui_nodes::factory_plugin_description())?;
+        runtime.register_plugin_descriptor(nc_gfx::plugin_descriptor())?;
+        runtime.register_plugin_descriptor(nc_ui_nodes::plugin_descriptor())?;
     }
     let loaded = start.elapsed();
     let start = Instant::now();

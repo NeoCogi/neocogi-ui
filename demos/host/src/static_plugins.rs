@@ -1,5 +1,5 @@
 //! Assembly selection over concrete linked factory descriptors, before runtime registration.
-use neocogi_com::NcFactoryPluginDescription;
+use neocogi_com::NcPluginDescriptor;
 use std::collections::BTreeSet;
 
 /// One available implementation; its package name matches the assembly component declaration.
@@ -7,7 +7,7 @@ pub struct StaticPlugin {
     /// Cargo package selected by the packager, independent of the plugin's backend-specific ID.
     pub package: &'static str,
     /// Actual generated descriptor passed to registration, never a parallel factory-name list.
-    pub description: &'static NcFactoryPluginDescription,
+    pub description: &'static NcPluginDescriptor,
 }
 
 /// Selects the exact assembled set from available linked implementations, preserving catalog order.
@@ -44,8 +44,8 @@ mod tests {
     /// Uses the actual generated runtime and nodes descriptors selected by host registration.
     fn catalog() -> [StaticPlugin; 2] {
         [
-            StaticPlugin { package: "neocogi-ui-runtime", description: nc_ui::factory_plugin_description() },
-            StaticPlugin { package: "neocogi-ui-nodes", description: nc_ui_nodes::factory_plugin_description() },
+            StaticPlugin { package: "neocogi-ui-runtime", description: nc_ui::plugin_descriptor() },
+            StaticPlugin { package: "neocogi-ui-nodes", description: nc_ui_nodes::plugin_descriptor() },
         ]
     }
 
@@ -54,8 +54,8 @@ mod tests {
     fn assembly_selection_uses_linked_descriptors_and_catalog_order() {
         let available = catalog();
         let selected = select(&available, Some("neocogi-ui-nodes,neocogi-ui-runtime")).unwrap();
-        assert!(std::ptr::eq(selected[0].description, nc_ui::factory_plugin_description()));
-        assert!(std::ptr::eq(selected[1].description, nc_ui_nodes::factory_plugin_description()));
+        assert!(std::ptr::eq(selected[0].description, nc_ui::plugin_descriptor()));
+        assert!(std::ptr::eq(selected[1].description, nc_ui_nodes::plugin_descriptor()));
         assert_eq!(select(&available, Some("neocogi-ui-nodes")).unwrap().len(), 1);
         assert!(select(&available, Some("")).unwrap().is_empty());
         assert_eq!(select(&available, None).unwrap().len(), 2);

@@ -12,7 +12,7 @@ use neocogi_ui_core_contracts::{AssetFont, AssetGlyph, AssetIcon, AssetRange, In
 pub fn gfx_factory() -> neocogi_com::ComPtr<neocogi_ui::GfxPluginFactoryAbi> {
     let registry = neocogi_com::Runtime::global();
     // SAFETY: The description and all referenced code/data remain in the test executable.
-    unsafe { registry.register_factory_plugin_description(nc_gfx::factory_plugin_description()) }.expect("linked GFX plugin must register");
+    unsafe { registry.register_plugin_descriptor(nc_gfx::plugin_descriptor()) }.expect("linked GFX plugin must register");
     registry
         .acquire_plugin_factory(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
         .expect("linked GFX factory acquisition must succeed")

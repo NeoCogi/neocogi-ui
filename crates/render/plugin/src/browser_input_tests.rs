@@ -148,10 +148,10 @@ fn static_com_editing_and_webgl() {
     let runtime = Runtime::global();
     // SAFETY: All descriptions and referenced code/data live in this statically linked wasm.
     unsafe {
-        runtime.register_factory_plugin_description(nc_ui::factory_plugin_description()).unwrap();
-        runtime.register_factory_plugin_description(nc_ui_nodes::factory_plugin_description()).unwrap();
-        runtime.register_factory_plugin_description(nc_gfx::factory_plugin_description()).unwrap();
-        runtime.register_factory_plugin_description(crate::factory_plugin_description()).unwrap();
+        runtime.register_plugin_descriptor(nc_ui::plugin_descriptor()).unwrap();
+        runtime.register_plugin_descriptor(nc_ui_nodes::plugin_descriptor()).unwrap();
+        runtime.register_plugin_descriptor(nc_gfx::plugin_descriptor()).unwrap();
+        runtime.register_plugin_descriptor(crate::plugin_descriptor()).unwrap();
     }
     let platform = runtime
         .acquire_plugin_factory::<PlatformAbi>(neocogi_com::guid_from_qualified_name("neocogi.render.webgl"))

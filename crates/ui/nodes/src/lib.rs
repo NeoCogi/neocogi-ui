@@ -101,7 +101,7 @@ neocogi_com::factory_plugin! {
     factory = NodesPluginFactoryObject,
 }
 
-// Static consumers call `factory_plugin_description` directly. Only a final dynamic artifact
+// Static consumers call `plugin_descriptor` directly. Only a final dynamic artifact
 // exposes the loader entrypoint, avoiding duplicate exports in monolithic applications.
 #[cfg(feature = "dynamic-plugin")]
 neocogi_com::export_factory_plugin!();
