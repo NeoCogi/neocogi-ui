@@ -15,7 +15,7 @@ pub(super) fn asset_path(relative: &str) -> std::io::Result<std::path::PathBuf> 
 pub fn load_bundle() -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
     let directory = asset_path("").map_err(|_| neocogi_com::NC_E_LOAD_FAILED)?;
     let factory =
-        neocogi_com::Runtime::global().activate_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+        neocogi_com::Runtime::global().acquire_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
     let loader = factory.asset_loader()?;
     let builder = loader.create_builder(
         Size {

@@ -68,7 +68,7 @@ pub(crate) use neocogi_ui_support::widget_context;
 
 /// Binds this package's concrete built-in nodes to a core runtime for static tests and monoliths.
 ///
-/// Dynamic deployments activate `neocogi.ui.nodes.runtime` and call its generated `NodesPluginFactory`
+/// Dynamic deployments acquire the factory of `neocogi.ui.nodes.runtime` and call its generated `NodesPluginFactory`
 /// instead. This helper performs the same typed binding without a loader and does not make the
 /// core runtime object expose or construct `UiFactory`.
 pub fn bind_builtin_nodes(runtime: neocogi_com::ComPtr<neocogi_ui_core_contracts::UiRuntimeAbi>) -> Result<neocogi_ui::Ui, neocogi_com::NcStatus> {

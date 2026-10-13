@@ -14,8 +14,8 @@ pub fn gfx_factory() -> neocogi_com::ComPtr<neocogi_ui::GfxPluginFactoryAbi> {
     // SAFETY: The description and all referenced code/data remain in the test executable.
     unsafe { registry.register_factory_plugin_description(nc_gfx::factory_plugin_description()) }.expect("linked GFX plugin must register");
     registry
-        .activate_plugin_factory(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
-        .expect("linked GFX factory must activate")
+        .acquire_plugin_factory(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
+        .expect("linked GFX factory acquisition must succeed")
 }
 
 /// Required semantic icon names make the small fixture a valid complete asset catalog.

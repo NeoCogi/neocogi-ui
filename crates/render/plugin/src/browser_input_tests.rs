@@ -154,7 +154,7 @@ fn static_com_editing_and_webgl() {
         runtime.register_factory_plugin_description(crate::factory_plugin_description()).unwrap();
     }
     let platform = runtime
-        .activate_plugin_factory::<PlatformAbi>(neocogi_com::guid_from_qualified_name("neocogi.render.webgl"))
+        .acquire_plugin_factory::<PlatformAbi>(neocogi_com::guid_from_qualified_name("neocogi.render.webgl"))
         .unwrap();
     let assets = neocogi_demo_assets::load_bundle().unwrap();
     let atlas = assets.image().unwrap();
@@ -170,14 +170,14 @@ fn static_com_editing_and_webgl() {
     canvas.style().set_css_text("width:640px;height:400px");
     let renderer: ComPtr<IRendererAbi> = native.query().unwrap();
     let factory = runtime
-        .activate_plugin_factory::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))
+        .acquire_plugin_factory::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))
         .unwrap();
     let gfx = runtime
-        .activate_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
+        .acquire_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
         .unwrap();
     let core = factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref()).unwrap();
     let nodes = runtime
-        .activate_plugin_factory::<NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))
+        .acquire_plugin_factory::<NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))
         .unwrap();
     let widgets = nodes.bind(core.as_com_ref()).unwrap();
     let ui = neocogi_ui::Ui::from_interfaces(core, widgets).unwrap();

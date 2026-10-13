@@ -20,7 +20,7 @@ fn key(ui: &Ui, key: KeyCode) {
     .unwrap();
 }
 
-/// Core and nodes activate separately, authenticate binding, and preserve typed event delivery.
+/// Core and nodes factories are acquired separately, authenticate binding, and preserve typed event delivery.
 #[test]
 fn independently_activated_nodes_bind_only_to_their_core_host_and_deliver_events() {
     let registry = Runtime::global();
@@ -35,10 +35,10 @@ fn independently_activated_nodes_bind_only_to_their_core_host_and_deliver_events
         registry.register_factory_plugin_description(nodes_description).unwrap();
     }
     let core = registry
-        .activate_plugin_factory::<UiPluginFactoryAbi>(guid_from_qualified_name("neocogi.ui.runtime"))
+        .acquire_plugin_factory::<UiPluginFactoryAbi>(guid_from_qualified_name("neocogi.ui.runtime"))
         .unwrap();
     let nodes = registry
-        .activate_plugin_factory::<NodesPluginFactoryAbi>(guid_from_qualified_name("neocogi.ui.nodes.runtime"))
+        .acquire_plugin_factory::<NodesPluginFactoryAbi>(guid_from_qualified_name("neocogi.ui.nodes.runtime"))
         .unwrap();
     let source =
         neocogi_ui_support::test_support::assets::export_bundle(&neocogi_ui_support::SkinBundle::from_atlas(neocogi_ui_support::test_support::test_atlas()))
