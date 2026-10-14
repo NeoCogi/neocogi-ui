@@ -336,6 +336,14 @@ reported line width equals atlas measurement of its exact UTF-8 source slice.
 Wrapping preserves ASCII-space boundaries, missing-character fallback and the
 editable trailing blank row. An individual oversized scalar remains indivisible.
 Trials scan only the new token or scalar, keeping layout linear in text length.
+Cursor hit testing uses one early-stoppable canonical glyph walk, sharing drawing's
+fallback, signed advance, origin clamping and right-edge calculation. It retains
+the running maximum extent of the preceding source prefix; glyph overhang is not
+extra pen advance. A strict target-before-edge comparison selects the nearest
+UTF-8 scalar boundary, with midpoint ties choosing the following boundary.
+Nonpositive x and empty input return the leading boundary before resolving a font.
+Display-line callers add their original source offset. LF/CR/CRLF retain canonical
+line reset behavior; this does not add grapheme segmentation or a width cache.
 The receiving GPU may impose a smaller texture dimension limit than the portable
 64 MiB policy; that upload is fallible and leaves the previous atlas installed.
 

@@ -394,44 +394,12 @@ pub(crate) fn cursor_from_x(line: &TextLine, buf: &str, target_x: i32, font: Fon
     if target_x <= 0 {
         return line.start;
     }
-    let slice = &buf[line.start..line.end];
-    let mut last_width = 0;
-    for (idx, ch) in slice.char_indices() {
-        let next = idx + ch.len_utf8();
-        let width = atlas.get_text_size(font, &slice[..next]).width;
-        if target_x < width {
-            // Snap to whichever side of the glyph midpoint the target falls on.
-            let midpoint = (i64::from(last_width) + i64::from(width)) / 2;
-            if i64::from(target_x) < midpoint {
-                return line.start + idx;
-            }
-            return line.start + next;
-        }
-        last_width = width;
-    }
-    line.end
+    line.start + atlas.text_cursor_at_x(font, &buf[line.start..line.end], target_x)
 }
 
 /// Converts a target x coordinate in single-line text into the nearest UTF-8 cursor position.
 pub(crate) fn cursor_from_text_x(buf: &str, target_x: i32, font: FontId, atlas: &AtlasHandle) -> usize {
-    if target_x <= 0 {
-        return 0;
-    }
-
-    let mut last_width = 0;
-    for (idx, ch) in buf.char_indices() {
-        let next = idx + ch.len_utf8();
-        let width = atlas.get_text_size(font, &buf[..next]).width;
-        if target_x < width {
-            let midpoint = (i64::from(last_width) + i64::from(width)) / 2;
-            if i64::from(target_x) < midpoint {
-                return idx;
-            }
-            return next;
-        }
-        last_width = width;
-    }
-    buf.len()
+    atlas.text_cursor_at_x(font, buf, target_x)
 }
 
 /// Paints a selected source span using the existing focused-item appearance and text contrast.
@@ -458,6 +426,108 @@ mod tests {
 
     use super::*;
     use crate::{Key, KeyEvent, Modifiers};
+
+    /// Display-line hits keep the original source offset; single-line hits keep UTF-8 ties.
+    #[test]
+    fn cursor_hits_preserve_line_offsets_and_unicode_midpoints() {
+        let atlas = neocogi_ui_support::test_support::test_atlas();
+        let font = atlas.font_id("body").unwrap();
+        let text = "éaΩb☃";
+        let line = TextLine { start: 2, end: 6, width: 24 };
+        for (target, expected) in [(-1, 0), (0, 0), (3, 0), (4, 1), (8, 1), (12, 3), (16, 3), (20, 4), (24, 4), (i32::MAX, 4)] {
+            assert_eq!(cursor_from_text_x("aΩb", target, font, &atlas), expected);
+            assert_eq!(cursor_from_x(&line, text, target, font, &atlas), 2 + expected);
+        }
+        let empty = TextLine { start: 2, end: 2, width: 0 };
+        assert_eq!(cursor_from_x(&empty, text, 1, font, &atlas), 2);
+    }
+
+    /// Matched CPU-only workloads for cursor cost and the ordinary glyph-walk consumers.
+    ///
+    /// Run in release mode with `--ignored --nocapture`; timings are evidence, not assertions.
+    /// Fixtures and allocation stay outside timing for cursor/measurement/drawing. Wrapping
+    /// intentionally includes its normal output allocation. Each row reports median ns/call
+    /// from seven batches, after warmup, with results consumed to prevent dead-code removal.
+    #[test]
+    #[ignore = "manual matched performance measurement"]
+    fn cursor_hit_test_measurement() {
+        use std::{hint::black_box, time::Instant};
+
+        fn median_ns(mut operation: impl FnMut(), iterations: u32) -> u128 {
+            for _ in 0..iterations { operation(); }
+            let mut samples = [0; 7];
+            for sample in &mut samples {
+                let start = Instant::now();
+                for _ in 0..iterations {
+                    operation();
+                }
+                *sample = start.elapsed().as_nanos() / u128::from(iterations);
+            }
+            samples.sort_unstable();
+            samples[3]
+        }
+
+        let atlas = neocogi_ui_support::test_support::test_atlas();
+        let font = atlas.font_id("body").unwrap();
+        for length in [64, 512, 2048] {
+            let text: String = "aΩb ".chars().cycle().take(length).collect();
+            let line = TextLine {
+                start: 0,
+                end: text.len(),
+                width: atlas.get_text_size(font, &text).width,
+            };
+            assert_eq!(cursor_from_text_x(&text, i32::MAX, font, &atlas), text.len());
+            assert_eq!(cursor_from_x(&line, &text, i32::MAX, font, &atlas), text.len());
+            let end_text = median_ns(
+                || {
+                    black_box(cursor_from_text_x(black_box(&text), i32::MAX, font, &atlas));
+                },
+                16,
+            );
+            let end_line = median_ns(
+                || {
+                    black_box(cursor_from_x(&line, black_box(&text), i32::MAX, font, &atlas));
+                },
+                16,
+            );
+            let leading = median_ns(
+                || {
+                    black_box(cursor_from_text_x(black_box(&text), 1, font, &atlas));
+                },
+                4096,
+            );
+            let measure = median_ns(
+                || {
+                    black_box(atlas.get_text_size(font, black_box(&text)));
+                },
+                256,
+            );
+            let draw = median_ns(
+                || {
+                    atlas.draw_string(font, black_box(&text), crate::Vec2i::default(), |ch, advance, destination, source| {
+                        black_box((ch, advance, destination, source));
+                    });
+                },
+                256,
+            );
+            let wrap = median_ns(
+                || {
+                    black_box(crate::text_layout::build_text_lines(
+                        black_box(&text),
+                        crate::TextWrap::WordOrCharacter,
+                        160,
+                        font,
+                        &atlas,
+                    ));
+                },
+                256,
+            );
+            println!(
+                "scalars={length} bytes={} end_text={end_text} end_line={end_line} leading={leading} measure={measure} draw={draw} wrap={wrap} ns/call",
+                text.len()
+            );
+        }
+    }
 
     #[test]
     fn text_input_clamps_external_cursor_to_utf8_boundary() {

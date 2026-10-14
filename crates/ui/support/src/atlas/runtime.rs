@@ -371,6 +371,19 @@ impl AtlasHandle {
     where
         F: FnMut(char, Vec2i, Recti, Recti, i32),
     {
+        self.walk_glyphs_until(font, text, origin, |_, character, advance, destination, source, baseline_y| {
+            draw(character, advance, destination, source, baseline_y);
+            std::ops::ControlFlow::Continue(())
+        });
+    }
+
+    /// Walks the same canonical geometry, stopping as soon as the visitor selects a boundary.
+    /// The byte offset always belongs to the originally requested scalar, including fallback.
+    /// Line endings reset the pen without invoking the visitor, just as the full walk does.
+    fn walk_glyphs_until<F>(&self, font: FontId, text: &str, origin: Vec2i, mut draw: F)
+    where
+        F: FnMut(usize, char, Vec2i, Recti, Recti, i32) -> std::ops::ControlFlow<()>,
+    {
         let font_slot = self.font_slot(font);
         let font = self.0.tables.fonts[font_slot];
         let mut destination = Recti::default();
@@ -379,12 +392,18 @@ impl AtlasHandle {
         let mut baseline_y = baseline;
         let mut pen_x = 0_i128;
         let mut characters = text.chars().peekable();
+        let mut source_offset = 0;
 
         while let Some(character) = characters.next() {
+            // Offset tracking is used only by cursor visitors. Ordinary drawing/measurement
+            // visitors ignore it, so their monomorphized walk retains the compact Chars iterator.
+            let offset = source_offset;
+            source_offset += character.len_utf8();
             match character {
                 '\r' => {
                     if characters.peek() == Some(&'\n') {
                         characters.next();
+                        source_offset += 1;
                     }
                     pen_x = 0;
                     baseline_y += line_height;
@@ -401,13 +420,18 @@ impl AtlasHandle {
                     destination.x = clamp_text_coordinate(i128::from(origin.x) + pen_x + i128::from(glyph.offset_x));
                     destination.y = clamp_text_coordinate(i128::from(origin.y) + baseline_y - i128::from(glyph.offset_y) - i128::from(glyph.rect.height));
                     let advance = Vec2i::new(glyph.advance_x, glyph.advance_y);
-                    draw(
+                    if draw(
+                        offset,
                         character,
                         advance,
                         destination,
                         source,
                         clamp_text_coordinate(i128::from(origin.y) + baseline_y),
-                    );
+                    )
+                    .is_break()
+                    {
+                        return;
+                    }
                     pen_x += i128::from(glyph.advance_x);
                 }
             }
@@ -422,6 +446,37 @@ impl AtlasHandle {
         self.walk_glyphs(font, text, origin, |character, advance, destination, source, _| {
             draw(character, advance, destination, source);
         });
+    }
+
+    /// Chooses the nearest scalar byte boundary using the same prefix extent as text measurement.
+    ///
+    /// Signed advances, glyph overhang and coordinate saturation contribute to a running maximum
+    /// exactly as they do in `get_text_size`. A hit stops the canonical walk immediately; no
+    /// prefix is remeasured, no widths are cached, and unread trailing scalars are not visited.
+    /// Midpoint ties choose the following byte boundary. Nonpositive x and empty text return
+    /// zero before resolving the font. Multiline input retains the maximum preceding extent;
+    /// text widgets normally call this on a single display-line slice.
+    pub fn text_cursor_at_x(&self, font: FontId, text: &str, target_x: i32) -> usize {
+        if target_x <= 0 || text.is_empty() {
+            return 0;
+        }
+        let mut result = text.len();
+        let mut previous_width = 0;
+        self.walk_glyphs_until(font, text, Vec2i::default(), |offset, character, advance, destination, _, _| {
+            let width = max(previous_width, measured_glyph_right(destination.x, advance.x, destination.width));
+            if target_x < width {
+                let midpoint = (i64::from(previous_width) + i64::from(width)) / 2;
+                result = if i64::from(target_x) < midpoint {
+                    offset
+                } else {
+                    offset + character.len_utf8()
+                };
+                return std::ops::ControlFlow::Break(());
+            }
+            previous_width = width;
+            std::ops::ControlFlow::Continue(())
+        });
+        result
     }
 
     /// Measures text with the exact glyph walk used for drawing.
@@ -551,5 +606,94 @@ mod tests {
         let crlf = atlas.get_text_size(font, "_\r\n_");
         let lf = atlas.get_text_size(font, "_\n_");
         assert_eq!((crlf.width, crlf.height), (lf.width, lf.height));
+    }
+}
+
+#[cfg(test)]
+mod cursor_tests {
+    use super::*;
+
+    /// Independent reference retains the previous complete-prefix public measurement behavior.
+    fn reference_cursor(atlas: &AtlasHandle, font: FontId, text: &str, target: i32) -> usize {
+        if target <= 0 {
+            return 0;
+        }
+        let mut previous = 0;
+        for (offset, ch) in text.char_indices() {
+            let end = offset + ch.len_utf8();
+            let width = atlas.get_text_size(font, &text[..end]).width;
+            if target < width {
+                let midpoint = (i64::from(previous) + i64::from(width)) / 2;
+                return if i64::from(target) < midpoint { offset } else { end };
+            }
+            previous = width;
+        }
+        text.len()
+    }
+
+    /// Crosses the canonical validator and compares UTF-8, fallback and extreme signed metrics.
+    #[test]
+    fn cursor_matches_prefix_measurement_with_signed_overhang_and_saturation() {
+        let values = [i32::MIN, -19, -1, 0, 1, 9, 23, i32::MAX];
+        let texts = ["", "a", "ab", "aba_b", "aΩb☃🦀", "\r\n", "a\nb", "a\r\nb", "ba\r_☃\naba"];
+        for (i, advance) in values.iter().enumerate() {
+            for (j, offset) in values.iter().enumerate() {
+                let mut data = crate::test_support::test_asset_data_with_font_sizes(&[("body", 16)]);
+                for (k, glyph) in data.tables.glyphs.to_mut().iter_mut().enumerate() {
+                    glyph.advance_x = if k == 1 { *advance } else { values[(i + k) % values.len()] };
+                    glyph.offset_x = if k == 1 { *offset } else { values[(j + k) % values.len()] };
+                    if (i + j + k) % 2 == 0 {
+                        glyph.rect.width = 0;
+                        glyph.rect.height = 0;
+                    }
+                }
+                let atlas = AtlasHandle::from_validated_data(data, None).unwrap();
+                let font = atlas.font_id("body").unwrap();
+                for text in texts {
+                    for target in (-2..=128).chain([i32::MAX / 2, i32::MAX - 1, i32::MAX]) {
+                        let actual = atlas.text_cursor_at_x(font, text, target);
+                        assert_eq!(
+                            actual,
+                            reference_cursor(&atlas, font, text, target),
+                            "metrics=({advance},{offset}), text={text:?}, target={target}"
+                        );
+                        assert!(text.is_char_boundary(actual));
+                    }
+                }
+            }
+        }
+    }
+
+    /// Concrete midpoint and equality examples retain source byte positions for missing Unicode.
+    #[test]
+    fn cursor_keeps_midpoint_ties_and_unicode_boundaries() {
+        let atlas = crate::test_support::test_atlas();
+        let font = atlas.font_id("body").unwrap();
+        for (target, expected) in [(0, 0), (3, 0), (4, 1), (8, 1), (12, 3), (16, 3), (20, 4), (24, 4)] {
+            assert_eq!(atlas.text_cursor_at_x(font, "aΩb", target), expected);
+        }
+    }
+
+    /// Empty/leading hits return before resolving a resource, matching the original helpers.
+    #[test]
+    fn empty_or_leading_cursor_hit_does_not_resolve_font() {
+        let atlas = crate::test_support::test_atlas();
+        let other = crate::test_support::test_atlas();
+        let foreign_font = other.font_id("body").unwrap();
+        assert_eq!(atlas.text_cursor_at_x(foreign_font, "", 1), 0);
+        assert_eq!(atlas.text_cursor_at_x(foreign_font, "abc", 0), 0);
+    }
+
+    /// A selected leading glyph must not require visiting an arbitrarily long unread suffix.
+    #[test]
+    fn canonical_walk_stops_after_selected_boundary() {
+        let atlas = crate::test_support::test_atlas();
+        let font = atlas.font_id("body").unwrap();
+        let mut visited = 0;
+        atlas.walk_glyphs_until(font, &"a".repeat(8192), Vec2i::default(), |_, _, _, _, _, _| {
+            visited += 1;
+            std::ops::ControlFlow::Break(())
+        });
+        assert_eq!(visited, 1);
     }
 }
