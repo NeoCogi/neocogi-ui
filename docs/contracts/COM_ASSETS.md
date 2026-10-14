@@ -351,6 +351,23 @@ the builder does not retain those source bytes. Native filesystem paths retain
 exact Unix bytes or Windows UTF-16. A failed edit restores the draft. `finish()`
 consumes it even when final validation fails; later calls return `GFX_E_CLOSED`.
 Calls reentered from a supplied path object return `GFX_E_BUSY`.
+`add_artwork_bytes(png)` accepts the same complete bounded PNG but lets GFX choose
+a deterministic unused icon name and returns its session-local placement. The
+builder owns the full retained namespace, including application and earlier draft
+icons; Skin does not invent or coordinate private keys. No prefix is reserved from
+applications. In particular, a valid original `@neocogi-theme-image/0` survives
+its first image-backed theme unchanged.
+
+The current allocator selects the first unused canonical numeric suffix under
+its artwork naming convention. It derives a bounded occupancy view in one pass:
+with N icons, one of N+1 candidates is free. It keeps no persistent secondary name
+index or counter to roll back. Existing combined font/icon admission runs before
+allocation; decoding, naming and packing commit together. Malformed images and
+capacity/packing failures leave a reusable draft and do not claim a name.
+`IAssetBuilder` declaration revision 3 adds this operation; runtime/descriptor
+discovery v1, core ABI17 and bulk asset schema3 are unchanged. Rebuild GFX, Skin
+and their consumers together through the ordinary generated contract graph.
+
 `derive_builder(size, base, options)` copies a validated base catalog into a new
 packing area. Its closed options value explicitly chooses whether the semantic
 font or icon catalogs will be replaced; unrelated application resources remain.
@@ -359,9 +376,10 @@ and chrome plus exactly one record per fixed role, validates all resource refere
 and publishes a same-catalog revision. It exposes neither Skin's JSON model nor
 GFX's storage.
 
-The Skin compiler converts validated JSON into one `ThemeRecipe`: canonical semantic names,
-anchored paths, output dimensions, replacement options, deterministic private image names, and
-appearance policy. One executor reads each bounded file immediately before its GFX call, so the
+The Skin compiler converts validated JSON into one `ThemeRecipe`: typed semantic roles,
+anchored paths, output dimensions, replacement options and appearance policy. Semantic icon
+names derive from their role; artwork requests contain no parallel name string. GFX returns
+the placement consumed by appearance compilation. One executor reads each bounded file immediately before its GFX call, so the
 recipe does not retain every encoded font and PNG simultaneously. Runtime loading uses supplied
 GFX capabilities. Offline `builder` mode statically constructs those same concrete services and
 reads the final immutable bundle into `AssetData`; lightweight `theme-json` deployments do not

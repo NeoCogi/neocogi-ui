@@ -144,6 +144,13 @@ impl IAssetBuilder for BuildSession {
             .add_icon_bytes_named(name, Path::new(name), png)
             .map_err(|error| self.diagnostic.failure(error))
     }
+    /// Lets the namespace owner choose a free artwork name within the same draft
+    /// transaction as decoding/packing. Errors restore the entire owned draft.
+    fn add_artwork_bytes(&self, png: NcCopyFromBufferOffset<'_, u8>) -> Result<AssetImagePlacement, NcStatus> {
+        let mut edit = self.edit()?;
+        let png = blob(png)?;
+        edit.draft().builder.add_artwork_bytes(png).map_err(|error| self.diagnostic.failure(error))
+    }
     /// Rasterizes named font data without constructing any UI runtime resource IDs.
     fn add_font(&self, name: NcCopyFromBufferOffset<'_, u8>, path: ComRef<'_, INativePathAbi>, pixels: u32) -> Result<(), NcStatus> {
         let mut edit = self.edit()?;
@@ -151,7 +158,10 @@ impl IAssetBuilder for BuildSession {
         if pixels == 0 || pixels > i32::MAX as u32 {
             return Err(NC_E_INVALID_ARG);
         }
-        edit.draft().builder.check_font(name, pixels as usize).map_err(|error| self.diagnostic.failure(error))?;
+        edit.draft()
+            .builder
+            .check_font(name, pixels as usize)
+            .map_err(|error| self.diagnostic.failure(error))?;
         let path = crate::path::decode(path)?;
         edit.draft()
             .builder

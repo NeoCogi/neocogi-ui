@@ -219,6 +219,34 @@ impl Builder {
         Ok(AssetImagePlacement { index, size: image.size })
     }
 
+    /// Decodes artwork after allocating an unused name from the complete retained
+    /// icon namespace. The prefix is a convention, never a restriction on callers.
+    /// Both name and placement commit only through successful normal icon insertion.
+    pub fn add_artwork_bytes(&mut self, bytes: &[u8]) -> io::Result<AssetImagePlacement> {
+        const PREFIX: &str = "@neocogi-theme-image/";
+        self.check_asset_capacity()?;
+        // With N existing icons, one of 0..=N is free. Derive a bounded occupancy
+        // view in one pass rather than repeatedly scanning every name per candidate
+        // or maintaining a second mutable name registry/counter across failures.
+        let mut occupied = vec![false; self.icons.len() + 1];
+        for icon in &self.icons {
+            let Some(suffix) = icon.name.strip_prefix(PREFIX) else { continue };
+            // Only canonical decimal names can equal a generated candidate.
+            // Leading zeroes, signs and overflowing application suffixes stay legal.
+            if suffix.is_empty() || (suffix.len() > 1 && suffix.starts_with('0')) || !suffix.bytes().all(|byte| byte.is_ascii_digit()) {
+                continue;
+            }
+            if let Ok(index) = suffix.parse::<usize>()
+                && let Some(slot) = occupied.get_mut(index)
+            {
+                *slot = true;
+            }
+        }
+        let index = occupied.iter().position(|used| !used).expect("N icons cannot occupy N+1 candidate names");
+        let name = format!("{PREFIX}{index}");
+        self.add_icon_bytes_named(&name, Path::new("artwork PNG"), bytes)
+    }
+
     /// Rejects duplicate and unrepresentable icon names before file I/O or packing.
     pub(crate) fn check_icon_name(&self, name: &str) -> io::Result<()> {
         self.check_named_addition(name)?;
@@ -306,10 +334,7 @@ impl Builder {
     /// Rejects unusable font names and sizes before opening files or reserving rectangles.
     pub(crate) fn check_font(&self, name: &str, size: usize) -> io::Result<()> {
         self.check_named_addition(name)?;
-        if size == 0
-            || size > i32::MAX as usize
-            || self.fonts.iter().any(|font| font.name == name)
-        {
+        if size == 0 || size > i32::MAX as usize || self.fonts.iter().any(|font| font.name == name) {
             return Err(io::Error::other(format!("invalid or duplicate font `{name}` at size {size}")));
         }
         // Every new font bakes 95 printable ASCII records. Count inherited Unicode records too,
@@ -325,7 +350,14 @@ impl Builder {
         if name.is_empty() || name.len() > MAX_ASSET_NAME_BYTES as usize {
             return Err(io::Error::other("asset name must contain 1 to 2048 UTF-8 bytes"));
         }
-        self.fonts.len().checked_add(self.icons.len())
+        self.check_asset_capacity()
+    }
+
+    /// Rejects a crossing record before name allocation, decoding or packing.
+    fn check_asset_capacity(&self) -> io::Result<()> {
+        self.fonts
+            .len()
+            .checked_add(self.icons.len())
             .filter(|&count| count < MAX_ASSETS as usize)
             .ok_or_else(|| io::Error::other("asset count exceeds 16384 fonts and icons combined"))?;
         Ok(())
@@ -439,7 +471,8 @@ impl Builder {
 
 /// Checks projected glyph storage without allocating or duplicating the builder's retained tables.
 fn check_glyph_budget(mut counts: impl Iterator<Item = usize>) -> io::Result<()> {
-    counts.try_fold(0usize, |total, count| total.checked_add(count))
+    counts
+        .try_fold(0usize, |total, count| total.checked_add(count))
         .filter(|&total| total <= MAX_ASSET_GLYPHS as usize)
         .ok_or_else(|| io::Error::other("asset glyph table exceeds its shared limit"))?;
     Ok(())
@@ -487,13 +520,25 @@ mod tests {
     #[test]
     fn fonts_and_icons_share_the_named_asset_count() {
         let mut builder = Builder::new(4, 4).unwrap();
-        builder.fonts.push(Font { name: "body".into(), line_size: 1, baseline: 0, size: 1, glyphs: Vec::new() });
-        builder.icons = (0..MAX_ASSETS - 2).map(|index| Icon {
-            name: format!("icon{index}"), rect: Rect { x: 0, y: 0, width: 1, height: 1 },
-        }).collect();
+        builder.fonts.push(Font {
+            name: "body".into(),
+            line_size: 1,
+            baseline: 0,
+            size: 1,
+            glyphs: Vec::new(),
+        });
+        builder.icons = (0..MAX_ASSETS - 2)
+            .map(|index| Icon {
+                name: format!("icon{index}"),
+                rect: Rect { x: 0, y: 0, width: 1, height: 1 },
+            })
+            .collect();
         assert!(builder.check_icon_name("last").is_ok());
         assert!(builder.check_font("last", 1).is_ok());
-        builder.icons.push(Icon { name: "last".into(), rect: Rect { x: 0, y: 0, width: 1, height: 1 } });
+        builder.icons.push(Icon {
+            name: "last".into(),
+            rect: Rect { x: 0, y: 0, width: 1, height: 1 },
+        });
         assert!(builder.check_icon_name("crossing").is_err());
         assert!(builder.check_font("crossing", 1).is_err());
     }

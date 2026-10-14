@@ -19,6 +19,10 @@ impl INativePath for ReenterPath {
     /// A nested finish must report BUSY without consuming or exposing the outer draft.
     fn encoding(&self) -> Result<PathEncoding, NcStatus> {
         assert_eq!(self.builder.finish().unwrap_err(), GFX_E_BUSY);
+        assert_eq!(
+            self.builder.add_artwork_bytes(NcCopyFromBufferOffset::new(0, b"not PNG")).unwrap_err(),
+            GFX_E_BUSY
+        );
         self.calls.set(self.calls.get() + 1);
         self.path.as_interface().encoding()
     }
@@ -270,4 +274,54 @@ fn incomplete_png_rejection_preserves_the_builder_transaction() {
     assert_eq!(actual.pixels, expected.pixels);
     assert_eq!(actual.tables.names, expected.tables.names);
     assert_eq!(actual.tables.icons, expected.tables.icons);
+}
+
+/// Artwork allocation sees inherited and newly added names, skips canonical
+/// occupied slots, and claims a name only when decoding/packing succeeds.
+#[test]
+fn artwork_names_are_allocated_inside_the_owned_builder_namespace() {
+    let base = test_bundle();
+    let loader: ComPtr<AssetLoaderAbi> = AssetLoaderObject::from_value(AssetLoaderObject::default()).query().unwrap();
+    let builder = loader
+        .derive_builder(
+            Size { width: 512, height: 256 },
+            base.as_com_ref(),
+            AssetDeriveOptions {
+                replace_semantic_fonts: false,
+                replace_semantic_icons: false,
+            },
+        )
+        .unwrap();
+    let png = include_bytes!("../../../../assets/WHITE.png");
+    let occupied = ["0", "1", "3", "9999", "01", "+2", "unrelated", "99999999999999999999999999999999999"];
+    for suffix in occupied {
+        let name = format!("@neocogi-theme-image/{suffix}");
+        builder
+            .add_icon_bytes(NcCopyFromBufferOffset::new(0, name.as_bytes()), NcCopyFromBufferOffset::new(0, png))
+            .unwrap();
+    }
+    assert_eq!(
+        builder.add_artwork_bytes(NcCopyFromBufferOffset::new(0, b"invalid PNG")).unwrap_err(),
+        NC_E_INVALID_ARG
+    );
+    let first = builder.add_artwork_bytes(NcCopyFromBufferOffset::new(0, png)).unwrap();
+    assert_eq!(
+        builder.add_artwork_bytes(NcCopyFromBufferOffset::new(0, &png[..png.len() - 4])).unwrap_err(),
+        NC_E_INVALID_ARG
+    );
+    let second = builder.add_artwork_bytes(NcCopyFromBufferOffset::new(0, png)).unwrap();
+    let published = data(&builder.finish().unwrap());
+    assert_eq!(
+        published.name(published.tables.icons[first.index as usize].name).unwrap(),
+        "@neocogi-theme-image/2"
+    );
+    assert_eq!(
+        published.name(published.tables.icons[second.index as usize].name).unwrap(),
+        "@neocogi-theme-image/4"
+    );
+    for suffix in occupied {
+        let name = format!("@neocogi-theme-image/{suffix}");
+        assert!(published.tables.icons.iter().any(|icon| published.name(icon.name).unwrap() == name));
+    }
+    assert_eq!(builder.add_artwork_bytes(NcCopyFromBufferOffset::new(0, png)).unwrap_err(), GFX_E_CLOSED);
 }

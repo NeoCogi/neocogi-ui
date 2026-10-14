@@ -28,6 +28,7 @@ neocogi-platform-contracts.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
 
 [dev-dependencies]
+tempfile.workspace = true
 neocogi-gfx-impl = { workspace = true, features = ["builder", "publisher"] }
 neocogi-ui.workspace = true
 neocogi-ui-support.workspace = true

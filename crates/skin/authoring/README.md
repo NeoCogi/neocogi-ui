@@ -3,6 +3,12 @@
 `neocogi-skin-authoring` owns the theme schema and compilation policy shared by
 the Skin plugin and tools. It consumes the generated GFX loader and publisher
 interfaces; GFX still owns decoding, rasterization, packing, and bundle storage.
+It also owns artwork name allocation through `IAssetBuilder::add_artwork_bytes`.
+Skin records a semantic icon role or an artwork purpose and uses the returned
+placement; no generated private name string is retained in its recipe. Valid
+application keys are preserved, including keys resembling artwork names. Failed
+insertions consume neither names nor packing space. Offline and supplied-service
+compilation use this same deterministic builder operation.
 
 The default build has no GFX implementation dependency. Offline exporters may
 enable `builder` to instantiate the same services locally. Existing callers of

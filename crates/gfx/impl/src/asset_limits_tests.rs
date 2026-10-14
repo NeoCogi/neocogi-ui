@@ -176,6 +176,7 @@ fn inherited_counts_share_one_limit_and_rejection_preserves_terminal_publication
             .unwrap_err(),
         neocogi_com::NC_E_INVALID_ARG
     );
+    assert_eq!(builder.add_artwork_bytes(NcCopyFromBufferOffset::new(0, &png)).unwrap_err(), neocogi_com::NC_E_INVALID_ARG);
     let result = builder.finish().unwrap();
     let info = result.info().unwrap();
     assert_eq!(info.fonts + info.icons, MAX_ASSETS);

@@ -289,8 +289,6 @@ struct FontResourceRecipe {
 /// One image insertion and its Skin-side placement purpose.
 #[derive(Clone, Debug, PartialEq)]
 struct ImageResourceRecipe {
-    /// Canonical semantic name or deterministic private appearance name.
-    name: String,
     /// Anchored source path read only when the recipe executes.
     path: PathBuf,
     /// Whether the returned placement participates in appearance compilation.
@@ -298,10 +296,10 @@ struct ImageResourceRecipe {
 }
 
 /// Typed disposition of the placement returned for one image insertion.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum ImagePurpose {
     /// Semantic icons are resolved later by their canonical resource names.
-    Semantic,
+    Semantic(IconRole),
     /// Appearance images must retain their placement under this exact anchored path.
     Appearance,
 }
@@ -825,16 +823,14 @@ impl ResourceRecipe {
                 };
                 let mut images = match icons {
                     Some(icons) => Vec::from(icons.into_entries().map(|(role, icon)| ImageResourceRecipe {
-                        name: icon_role_name(role).to_owned(),
                         path: icon.path,
-                        purpose: ImagePurpose::Semantic,
+                        purpose: ImagePurpose::Semantic(role),
                     })),
                     None => Vec::new(),
                 };
                 images.reserve(appearance_paths.len());
-                for (index, path) in appearance_paths.into_iter().enumerate() {
+                for path in appearance_paths {
                     images.push(ImageResourceRecipe {
-                        name: format!("@neocogi-theme-image/{index}"),
                         path,
                         purpose: ImagePurpose::Appearance,
                     });
@@ -897,14 +893,13 @@ impl DerivedResourceRecipe {
         let mut placements = BTreeMap::new();
         for image in self.images {
             let bytes = read_resource(source, &image.path)?;
-            let placement = builder
-                .add_icon_bytes(
-                    NcCopyFromBufferOffset::new(0, image.name.as_bytes()),
-                    NcCopyFromBufferOffset::new(0, bytes.as_slice()),
-                )
-                .map_err(|status| gfx_failure("image decoding", Some(image.path.clone()), status, builder_diagnostics.as_ref()))?;
+            let png = NcCopyFromBufferOffset::new(0, bytes.as_slice());
+            let placement = match image.purpose {
+                ImagePurpose::Semantic(role) => builder.add_icon_bytes(NcCopyFromBufferOffset::new(0, icon_role_name(role).as_bytes()), png),
+                ImagePurpose::Appearance => builder.add_artwork_bytes(png),
+            }.map_err(|status| gfx_failure("image decoding", Some(image.path.clone()), status, builder_diagnostics.as_ref()))?;
             match image.purpose {
-                ImagePurpose::Semantic => {}
+                ImagePurpose::Semantic(_) => {}
                 ImagePurpose::Appearance => {
                     let previous = placements.insert(image.path, placement);
                     debug_assert!(previous.is_none(), "appearance paths were deduplicated while resolving the recipe");
@@ -1136,7 +1131,7 @@ fn compile_visual(
             visual.content_color = rgba(content_color);
         }
         if let Some(patch) = &authored.patch {
-            visual.patch = patch.compile(images, name, visual.insets)?.into();
+            visual.patch = patch.compile(images, name, visual.insets)?;
         }
     }
     Ok(visual)
