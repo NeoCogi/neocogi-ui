@@ -24,14 +24,20 @@ impl RgbaImage {
 
     /// Applies a caller's aggregate resource budget before allocating decoded frame storage.
     fn decode_bounded(bytes: &[u8], limit: usize) -> io::Result<Self> {
-        use ::png::{BitDepth, ColorType, Decoder, Transformations};
+        use ::png::{BitDepth, ColorType, DecodeOptions, Decoder, Transformations};
 
         // Bound encoded input independently of the decoded image so both callers use
         // the same policy before handing bytes to the PNG implementation.
         if bytes.is_empty() || bytes.len() > MAX_ASSET_PIXELS_BYTES {
             return Err(io::Error::other("PNG input must be nonempty and at most 64 MiB"));
         }
-        let mut decoder = Decoder::new(Cursor::new(bytes));
+        let mut input = Cursor::new(bytes);
+        let mut options = DecodeOptions::default();
+        options.set_ignore_checksums(false);
+        options.set_skip_ancillary_crc_failures(false);
+        // Cursor implements BufRead directly: its position advances by the parser's
+        // consumed bytes, without an outer buffer's read-ahead hiding trailing input.
+        let mut decoder = Decoder::new_with_options(&mut input, options);
         decoder.set_transformations(Transformations::normalize_to_color8());
         let mut reader = decoder.read_info().map_err(io::Error::other)?;
         let width = reader.info().width;
@@ -68,6 +74,13 @@ impl RgbaImage {
         };
         if info.line_size != width as usize * channels || info.buffer_size() != output_len {
             return Err(io::Error::other("PNG output does not contain complete packed rows"));
+        }
+        // Pixel-frame completion does not consume IEND's CRC or later metadata.
+        // Validate the complete stream before either RGBA publication branch.
+        reader.finish().map_err(io::Error::other)?;
+        drop(reader);
+        if input.position() != bytes.len() as u64 {
+            return Err(io::Error::other("PNG input must contain exactly one complete image"));
         }
         if channels == 4 {
             return Ok(Self { size, pixels: decoded });
@@ -115,7 +128,8 @@ impl PngDecoder for PngDecoderObject {
         if png.offset() != 0 {
             return Err(self.diagnostic.failure("PNG input must start at offset zero"));
         }
-        let image = RgbaImage::decode_bounded(png.as_slice(), rgba_limit.min(MAX_ASSET_PIXELS_BYTES as u64) as usize).map_err(|error| self.diagnostic.failure(error))?;
+        let image = RgbaImage::decode_bounded(png.as_slice(), rgba_limit.min(MAX_ASSET_PIXELS_BYTES as u64) as usize)
+            .map_err(|error| self.diagnostic.failure(error))?;
         // Upload borrows the final CPU allocation only for this synchronous call.
         target
             .create_texture(image.size, NcCopyFromBufferOffset::new(0, &image.pixels))
@@ -245,21 +259,28 @@ mod tests {
             NcCopyFromBufferOffset::new(0, &[]),
             NcCopyFromBufferOffset::new(0, b"invalid PNG"),
         ] {
-            assert_eq!(decoder.upload(input, MAX_ASSET_PIXELS_BYTES as u64, factory.as_com_ref()).unwrap_err(), NC_E_INVALID_ARG);
+            assert_eq!(
+                decoder.upload(input, MAX_ASSET_PIXELS_BYTES as u64, factory.as_com_ref()).unwrap_err(),
+                NC_E_INVALID_ARG
+            );
         }
         // Even valid compressed input cannot allocate/upload past the caller's remaining budget.
         assert!(decoder.upload(NcCopyFromBufferOffset::new(0, png), 0, factory.as_com_ref()).is_err());
         assert_eq!(calls.get(), 0);
         fail.set(true);
         assert_eq!(
-            decoder.upload(NcCopyFromBufferOffset::new(0, png), MAX_ASSET_PIXELS_BYTES as u64, factory.as_com_ref()).unwrap_err(),
+            decoder
+                .upload(NcCopyFromBufferOffset::new(0, png), MAX_ASSET_PIXELS_BYTES as u64, factory.as_com_ref())
+                .unwrap_err(),
             RENDER_E_BACKEND
         );
         let failure = diagnostics.diagnostic().unwrap();
         let message = failure.to_string().unwrap();
         assert!(!message.is_empty());
         fail.set(false);
-        let texture = decoder.upload(NcCopyFromBufferOffset::new(0, png), MAX_ASSET_PIXELS_BYTES as u64, factory.as_com_ref()).unwrap();
+        let texture = decoder
+            .upload(NcCopyFromBufferOffset::new(0, png), MAX_ASSET_PIXELS_BYTES as u64, factory.as_com_ref())
+            .unwrap();
         assert!(texture.size().unwrap().width > 0);
         assert_eq!(calls.get(), 2);
         assert_eq!(failure.to_string().unwrap(), message);
@@ -277,6 +298,117 @@ mod tests {
             }
         }
         !crc
+    }
+
+    /// Inserts a valid text chunk after IDAT, before the encoded image's IEND.
+    /// This independently checks end-of-file handling without rejecting legal metadata.
+    fn with_post_image_text(bytes: &[u8]) -> Vec<u8> {
+        let end = bytes.len() - 12;
+        assert_eq!(&bytes[end + 4..end + 8], b"IEND");
+        let text = b"Note\0valid post-IDAT text";
+        let mut decorated = bytes[..end].to_vec();
+        decorated.extend_from_slice(&(text.len() as u32).to_be_bytes());
+        let checksum_start = decorated.len();
+        decorated.extend_from_slice(b"tEXt");
+        decorated.extend_from_slice(text);
+        let checksum = png_crc32(&decorated[checksum_start..]);
+        decorated.extend_from_slice(&checksum.to_be_bytes());
+        decorated.extend_from_slice(&bytes[end..]);
+        decorated
+    }
+
+    /// Every prefix and corrupt ending rejects before a real generated factory
+    /// call, including both direct RGBA reuse and normalized-color expansion.
+    #[test]
+    fn complete_input_validation_precedes_factory_publication() {
+        let decoder: ComPtr<PngDecoderAbi> = PngDecoderObject::from_value(PngDecoderObject::default()).query().unwrap();
+        let calls = Rc::new(Cell::new(0));
+        let factory: ComPtr<ITextureFactoryAbi> = Factory::from_value(Factory {
+            calls: calls.clone(),
+            fail: Rc::new(Cell::new(false)),
+            diagnostics: decoder.query().unwrap(),
+        })
+        .query()
+        .unwrap();
+        for (color, pixels) in [
+            (::png::ColorType::Rgba, &[255; 4][..]),
+            (::png::ColorType::Rgb, &[255; 3][..]),
+            (::png::ColorType::Grayscale, &[255][..]),
+        ] {
+            let plain = encoded(color, pixels, false);
+            let with_text = with_post_image_text(&plain);
+            for valid in [&plain, &with_text] {
+                let before = calls.get();
+                for end in 0..valid.len() {
+                    assert_eq!(
+                        decoder
+                            .upload(
+                                NcCopyFromBufferOffset::new(0, &valid[..end]),
+                                MAX_ASSET_PIXELS_BYTES as u64,
+                                factory.as_com_ref()
+                            )
+                            .unwrap_err(),
+                        NC_E_INVALID_ARG,
+                        "{color:?}: prefix {end}"
+                    );
+                }
+                let mut corrupt = valid.clone();
+                *corrupt.last_mut().unwrap() ^= 1;
+                let mut trailing = valid.clone();
+                trailing.extend_from_slice(b"trailing");
+                let mut concatenated = valid.clone();
+                concatenated.extend_from_slice(&plain);
+                for invalid in [corrupt, trailing, concatenated] {
+                    assert_eq!(
+                        decoder
+                            .upload(NcCopyFromBufferOffset::new(0, &invalid), MAX_ASSET_PIXELS_BYTES as u64, factory.as_com_ref())
+                            .unwrap_err(),
+                        NC_E_INVALID_ARG
+                    );
+                }
+                assert_eq!(calls.get(), before, "malformed inputs never enter foreign factory code");
+                decoder
+                    .upload(NcCopyFromBufferOffset::new(0, valid), MAX_ASSET_PIXELS_BYTES as u64, factory.as_com_ref())
+                    .unwrap();
+                assert_eq!(calls.get(), before + 1);
+            }
+            let mut corrupt_text = with_text.clone();
+            // The four bytes immediately before IEND are the tEXt chunk's CRC.
+            let crc = corrupt_text.len() - 13;
+            corrupt_text[crc] ^= 1;
+            let before = calls.get();
+            assert_eq!(
+                decoder
+                    .upload(
+                        NcCopyFromBufferOffset::new(0, &corrupt_text),
+                        MAX_ASSET_PIXELS_BYTES as u64,
+                        factory.as_com_ref()
+                    )
+                    .unwrap_err(),
+                NC_E_INVALID_ARG
+            );
+            assert_eq!(calls.get(), before);
+        }
+    }
+
+    /// A valid PNG chunk CRC cannot conceal a corrupt zlib checksum inside IDAT.
+    #[test]
+    fn compressed_checksum_is_validated_independently_of_chunk_crc() {
+        let mut bytes = encoded(::png::ColorType::Rgba, &[255; 4], false);
+        let mut chunk = 8;
+        loop {
+            let len = u32::from_be_bytes(bytes[chunk..chunk + 4].try_into().unwrap()) as usize;
+            let end = chunk + 8 + len;
+            if &bytes[chunk + 4..chunk + 8] == b"IDAT" {
+                assert!(len > 6);
+                bytes[end - 1] ^= 1;
+                let crc = png_crc32(&bytes[chunk + 4..end]);
+                bytes[end..end + 4].copy_from_slice(&crc.to_be_bytes());
+                break;
+            }
+            chunk = end + 4;
+        }
+        assert!(RgbaImage::decode(&bytes).is_err());
     }
 
     /// Rewrites a PNG fixture's IHDR extent and repairs that chunk's checksum.

@@ -217,3 +217,57 @@ fn test_bundle() -> ComPtr<IAssetBundleAbi> {
         .into_bundle()
         .unwrap()
 }
+
+/// Rejected PNG bytes cannot claim a name, consume packing space or poison the
+/// COM draft. A later successful insertion must match an untouched control.
+#[test]
+fn incomplete_png_rejection_preserves_the_builder_transaction() {
+    let base = test_bundle();
+    let loader: ComPtr<AssetLoaderAbi> = AssetLoaderObject::from_value(AssetLoaderObject::default()).query().unwrap();
+    let derive = || {
+        loader
+            .derive_builder(
+                Size { width: 512, height: 256 },
+                base.as_com_ref(),
+                AssetDeriveOptions {
+                    replace_semantic_fonts: false,
+                    replace_semantic_icons: false,
+                },
+            )
+            .unwrap()
+    };
+    let draft = derive();
+    let control = derive();
+    let png = include_bytes!("../../../../assets/WHITE.png");
+    let name = NcCopyFromBufferOffset::new(0, b"complete-png");
+    for end in 0..png.len() {
+        assert_eq!(
+            draft.add_icon_bytes(name, NcCopyFromBufferOffset::new(0, &png[..end])).unwrap_err(),
+            NC_E_INVALID_ARG,
+            "prefix {end}"
+        );
+    }
+    let mut corrupt = png.to_vec();
+    *corrupt.last_mut().unwrap() ^= 1;
+    let mut trailing = png.to_vec();
+    trailing.extend_from_slice(b"trailing");
+    let mut concatenated = png.to_vec();
+    concatenated.extend_from_slice(png);
+    for invalid in [corrupt, trailing, concatenated] {
+        assert_eq!(
+            draft.add_icon_bytes(name, NcCopyFromBufferOffset::new(0, &invalid)).unwrap_err(),
+            NC_E_INVALID_ARG
+        );
+    }
+    let actual = draft.add_icon_bytes(name, NcCopyFromBufferOffset::new(0, png)).unwrap();
+    let expected = control.add_icon_bytes(name, NcCopyFromBufferOffset::new(0, png)).unwrap();
+    assert_eq!(
+        (actual.index, actual.size.width, actual.size.height),
+        (expected.index, expected.size.width, expected.size.height)
+    );
+    let actual = data(&draft.finish().unwrap());
+    let expected = data(&control.finish().unwrap());
+    assert_eq!(actual.pixels, expected.pixels);
+    assert_eq!(actual.tables.names, expected.tables.names);
+    assert_eq!(actual.tables.icons, expected.tables.icons);
+}

@@ -33,6 +33,20 @@ original status, and `IGfxDiagnostics` returns an owned failure snapshot. No
 factory or temporary decoded buffer is retained after the call. Calls may reenter
 diagnostics because the decoder holds no mutable borrow across the upload.
 
+The supplied buffer is exactly one PNG: header, image data and all remaining chunks
+through IEND must complete with valid chunk CRCs and a valid compressed-stream
+checksum. Ancillary CRC failures are errors as well. Trailing bytes, padding and
+concatenated PNGs are rejected. Legal ancillary chunks after IDAT remain accepted.
+Successful pixel-frame decoding alone does not establish successful input validation.
+
+The GFX-owned decoder finishes the PNG before either returning CPU pixels to the
+builder or invoking a foreign texture factory. Its borrowed `Cursor` implements
+`BufRead` directly, so the consumed position after parser completion is the actual
+PNG endpoint rather than a buffering layer's read-ahead position. Failed image
+admission leaves a builder's name, pixels and packing state unchanged and permits
+a later valid retry. These rules share the existing encoded/decoded budgets and
+do not introduce a second PNG parser in Skin, UI or upload callers.
+
 `neocogi-skin` registers `StyleCompiler`; its optional `theme-json` feature adds
 `ThemeLoader` for external schema and appearance compilation. `StyleCompiler`
 retains a narrow GFX `AssetPublisher`; `ThemeLoader` additionally retains the
