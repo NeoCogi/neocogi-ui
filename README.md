@@ -41,6 +41,12 @@ cargo install --path tools/cargo-neocogi
 cargo neocogi run --assembly full
 ```
 
+Without installing the tool, run the Vulkan release package directly from this checkout:
+
+```sh
+cargo run -p cargo-neocogi -- run --assembly full --variant vulkan --release
+```
+
 Use `--variant vulkan` or `--variant wgpu` to select another renderer; the default
 is Glow. Other assemblies are `simple`, `calculator`, `backend-frame-cube`, and
 `smoke`. Use `--release` for an ordinary release package, or `build` instead of
@@ -54,7 +60,9 @@ versioned crates.io components, standalone TOML, and lockfiles.
 The [package guide](docs/guides/COM_NATIVE.md) covers dependencies, nightly min-size builds,
 optional assets, actual GPU tests and executable-relative loading. A native demo
 needs its adjacent runtime and plugin manifest; direct `cargo run` on the demo
-package does not assemble those files.
+package does not assemble those files. Cargo features are additive: `--features vulkan`
+alone also retains the default Glow feature. The [native guide](docs/guides/COM_NATIVE.md)
+shows the explicit single-backend, monolithic command for direct Cargo execution.
 
 ## Workspace layout
 
