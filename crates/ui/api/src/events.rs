@@ -1,6 +1,6 @@
 //! Immutable COM event snapshots and deferred application dispatch.
 //! One common receiver serves every widget kind. The inbox owns each event as
-//! ComBox<IEventAbi> until its handler queries derived event interfaces.
+//! `ComBox<IEventAbi>` until its handler queries derived event interfaces.
 //!
 //! The walkthrough below uses an initialized, otherwise empty UI. Its keyboard
 //! input exercises actual activation, then removal with an application event queued.

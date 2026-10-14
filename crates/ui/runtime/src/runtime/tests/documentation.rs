@@ -22,10 +22,10 @@ fn example<'a>(document: &'a str, label: &str) -> &'a str {
     body.split_once("\n```").expect("example has a closing fence").0
 }
 
-/// The exact reload/dispatch blocks must compile with newly generated fields and
-/// handle live snapshots while rejecting a queued fact from a replaced form.
+/// Root onboarding and reload/dispatch blocks compile with newly generated fields.
+/// They execute real input, owned events, weak-origin expiry and stale-form filtering.
 #[test]
-fn documented_form_reload_and_event_dispatch_execute() {
+fn documented_onboarding_reload_and_event_dispatch_execute() {
     let readme = include_str!("../../../../document/README.md");
     let document = neocogi_ui_document::Document::new("README events");
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").canonicalize().unwrap();
@@ -62,6 +62,16 @@ fn documented_form_reload_and_event_dispatch_execute() {
         assert!(implementation.contains(&marker), "fixture must exercise {label}");
         implementation = implementation.replace(&marker, example(readme, label));
     }
+    let mut onboarding = include_str!("fixtures/application_readme.rs").to_owned();
+    let root_readme = include_str!("../../../../../../README.md");
+    for label in ["application-install", "application-events", "application-update"] {
+        let marker = format!("/* checked-example: {label} */");
+        assert!(onboarding.contains(&marker), "fixture must exercise {label}");
+        onboarding = onboarding.replace(&marker, example(root_readme, label));
+    }
+    implementation.push_str("\n#[cfg(test)]\nmod application_readme {\n");
+    implementation.push_str(&onboarding);
+    implementation.push_str("\n}\n");
     fs::write(project.path().join("src/lib.rs"), implementation).unwrap();
     let output = Command::new("cargo")
         .args(["test", "--offline", "--manifest-path"])
@@ -74,6 +84,10 @@ fn documented_form_reload_and_event_dispatch_execute() {
         "{}\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("test application_readme::documented_application_onboarding ... ok"),
+        "the root onboarding blocks must execute, not just compile"
     );
     assert!(
         String::from_utf8_lossy(&output.stdout).contains("test tests::documented_reload ... ok"),
