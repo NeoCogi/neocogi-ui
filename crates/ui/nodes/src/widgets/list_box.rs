@@ -64,7 +64,7 @@ impl ListBoxParameters {
     }
 }
 
-#[neocogi_com::com_class(neocogi_ui_nodes_contracts::ListBox, ownership = exclusive)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::ListBox, ownership = exclusive)]
 /// Concrete retained list box and dynamically constructible COM object.
 pub struct ListBox {
     /// Non-semantic COM lifecycle and host-backed phase resources.

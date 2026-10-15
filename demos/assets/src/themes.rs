@@ -71,10 +71,10 @@ impl Theme {
             };
             let path = super::files::asset_path(path).map_err(|_| neocogi_com::NC_E_LOAD_FAILED)?;
             let runtime = neocogi_com::Runtime::global();
-            let gfx = runtime.acquire_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+            let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
             let assets = gfx.asset_loader()?;
             let publisher = gfx.asset_publisher()?;
-            let factory = runtime.acquire_plugin_factory::<SkinPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.skin.runtime"))?;
+            let factory = runtime.acquire_plugin_root::<SkinPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.skin.runtime"))?;
             let loader = factory.theme_loader(assets.as_com_ref(), publisher.as_com_ref())?;
             loader.load_theme(NativePath::new(&path).as_interface(), base).inspect_err(|status| {
                 // The theme ABI returns a status only. Preserve the loader's owned diagnostic

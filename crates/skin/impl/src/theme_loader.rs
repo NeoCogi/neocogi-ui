@@ -1,13 +1,13 @@
 //! Typed Skin-to-GFX composition for external JSON theme construction.
 
 use super::Diagnostic;
-use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcStatus, com_factory};
+use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcStatus, com_object};
 use neocogi_gfx_contracts::{AssetLoaderAbi, AssetPublisherAbi, IAssetBundleAbi};
 use neocogi_platform_contracts::INativePathAbi;
 use neocogi_skin_contracts::{ISkinDiagnostics, ThemeLoader};
 
 /// External theme compiler retaining the one explicit GFX construction capability it needs.
-#[com_factory(neocogi_skin_contracts::ThemeLoader)]
+#[com_object(neocogi_skin_contracts::ThemeLoader)]
 pub struct ThemeLoaderObject {
     /// GFX owns all PNG decoding, font rasterization, atlas packing, and bundle construction.
     assets: ComPtr<AssetLoaderAbi>,

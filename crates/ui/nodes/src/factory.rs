@@ -2,7 +2,7 @@
 
 use neocogi_ui_core_contracts::*;
 use neocogi_ui_nodes_contracts::*;
-use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, com_factory};
+use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, com_object};
 use std::rc::Rc;
 
 /// Public-COM services and one shared imported resource cache used by all standard node products.
@@ -34,7 +34,7 @@ impl NodeServices {
     }
 }
 
-#[com_factory(neocogi_ui_nodes_contracts::UiFactory)]
+#[com_object(neocogi_ui_nodes_contracts::UiFactory)]
 /// Dynamically linked construction shorthand retaining its products' host and one asset value.
 pub struct UiFactory {
     /// Cohesive typed dependencies captured once when this provider binds to a runtime.

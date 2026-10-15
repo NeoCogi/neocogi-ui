@@ -132,7 +132,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let directory = executable.parent().ok_or("executable has no parent")?;
     let runtime = neocogi_com::Runtime::global();
     register_plugins(runtime, directory)?;
-    let platform = runtime.acquire_plugin_factory::<PlatformAbi>(neocogi_com::guid_from_qualified_name(renderer_plugin_name()))?;
+    let platform = runtime.acquire_plugin_root::<PlatformAbi>(neocogi_com::guid_from_qualified_name(renderer_plugin_name()))?;
     let assets = neocogi_demo_assets::load_bundle()?;
     let atlas = assets.image()?;
     let native = platform.create_window(
@@ -141,15 +141,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         atlas.as_com_ref(),
     )?;
     let renderer: ComPtr<IRendererAbi> = native.query()?;
-    let gfx = runtime.acquire_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
-    let runtime_factory = runtime.acquire_plugin_factory::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
+    let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+    let runtime_factory = runtime.acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
     let ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
-    let node_provider = runtime.acquire_plugin_factory::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
+    let node_provider = runtime.acquire_plugin_root::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
     let node_factory = node_provider.bind(ui_runtime.as_com_ref())?;
     let mut ui = Ui::from_interfaces(ui_runtime, node_factory)?;
     if options.rebuild_assets {
         // The optional builder owns packing/font/PNG implementation; the host sees only typed roots.
-        let gfx = runtime.acquire_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+        let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
         let loader = gfx
             .asset_loader()
             .map_err(|status| format!("--rebuild-assets requires a files package: {status}"))?;
@@ -167,10 +167,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     if let Some(path) = &options.theme {
         // Relative paths belong to the staged package, so startup remains independent of cwd.
         let path = if path.is_absolute() { path.clone() } else { directory.join(path) };
-        let gfx = runtime.acquire_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+        let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
         let assets_loader = gfx.asset_loader().map_err(|status| format!("--theme requires a GFX files package: {status}"))?;
         let publisher = gfx.asset_publisher().map_err(|status| format!("--theme requires GFX publication: {status}"))?;
-        let skin = runtime.acquire_plugin_factory::<SkinPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.skin.runtime"))?;
+        let skin = runtime.acquire_plugin_root::<SkinPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.skin.runtime"))?;
         let loader = skin
             .theme_loader(assets_loader.as_com_ref(), publisher.as_com_ref())
             .map_err(|status| format!("--theme requires a Skin files package: {status}"))?;

@@ -53,7 +53,7 @@ struct NinePatchDraw {
 /// Earlier complete primitives may remain, including a prefix of a multi-primitive draw;
 /// the caller may continue or submit them, or cancel. Attempted draws keep their budget
 /// charges. begin requires the previous frame to end through submit or cancel.
-factory GfxCompositor: IGfxDiagnostics {
+interface GfxCompositor: IGfxDiagnostics {
     /// Imports a complete compatible resource revision before the UI publishes matching style state.
     fn install_assets(&mut self, assets: &IAssetBundle) -> Result<()>;
     /// Clears retained command output and starts one frame with positive drawable dimensions.

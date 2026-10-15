@@ -8,7 +8,7 @@ use neocogi_ui::com::widget::WidgetState;
 use neocogi_ui_core_contracts::*;
 use neocogi_demo_contracts::*;
 use neocogi_ui::Painter;
-use neocogi_com::{ComBox, WeakComBox, ComPtr, ComRef, NcCopyFromBufferOffset, NcOutputWriter, NcStatus, NC_E_INVALID_ARG, com_factory, com_object};
+use neocogi_com::{ComBox, WeakComBox, ComPtr, ComRef, NcCopyFromBufferOffset, NcOutputWriter, NcStatus, NC_E_INVALID_ARG, com_object};
 use neocogi_ui_design::DesignWidgetManifest;
 use neocogi_ui_document_contracts::IDesignWidgetCatalog;
 
@@ -96,7 +96,7 @@ macro_rules! widget {
     };
 }
 
-#[neocogi_com::com_class(neocogi_demo_contracts::Counter, ownership = exclusive)]
+#[neocogi_com::com_object(neocogi_demo_contracts::Counter, ownership = exclusive)]
 /// Private implementation of the externally declared counter class.
 struct CounterObject {
     /// Common options are authoritative here, without a duplicate presentation copy.
@@ -110,7 +110,8 @@ struct CounterObject {
 }
 impl CounterObject {
     /// Validates runtime authority and publishes one fully initialized counter identity.
-    fn create(host: ComRef<'_, IWidgetHostAbi>, queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>, settings: settings::Settings) -> Result<ComBox<CounterAbi>, NcStatus> {
+    fn create(host: ComRef<'_, IWidgetHostAbi>, queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>, settings: settings::Settings,
+    ) -> Result<ComBox<CounterAbi>, NcStatus> {
         host.check_mutation()?;
         Self::into_box_cyclic::<CounterAbi>(move |origin| Self {
             common: Common::new(host, WidgetOptions::FRAME),
@@ -149,8 +150,7 @@ impl CounterObject {
                 use neocogi_com::events::EventOrigin;
                 let origin = EventOrigin::Widget(origin.clone().into_unknown());
                 queue.post(neocogi_com::NcValueRef::new(&origin)?, event).map_err(|(status, _event)| status)
-            },
-        }
+            }}
     }
 }
 // Focus=1, Tab=2, Enter=4 and Space=8 are the canonical WidgetProperties keyboard bits.
@@ -318,7 +318,7 @@ fn shrink(mut limit: AxisLimit, inset: i32) -> AxisLimit {
     limit
 }
 
-#[com_factory(neocogi_demo_contracts::ExtensionProvider)]
+#[com_object(neocogi_demo_contracts::ExtensionProvider)]
 /// Stateless shorthand factory creates the interface-based inset container.
 pub struct ExtensionProviderObject;
 impl IDesignWidgetCatalog for ExtensionProviderObject {
@@ -367,7 +367,8 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
         .query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)
     }
     /// The draft uses the designer's control factory while configuration stays inside this plugin.
-    fn create_editor(&self, index: u32, widgets: ComRef<'_, neocogi_ui::UiFactoryAbi>, settings: NcCopyFromBufferOffset<'_, u8>) -> Result<ComBox<neocogi_ui_document_contracts::IDesignSettingsEditorAbi>, NcStatus> {
+    fn create_editor(&self, index: u32, widgets: ComRef<'_, neocogi_ui::UiFactoryAbi>, settings: NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<ComBox<neocogi_ui_document_contracts::IDesignSettingsEditorAbi>, NcStatus> {
         if index != 0 || settings.offset() != 0 { return Err(NC_E_INVALID_ARG); }
         settings::create(widgets, settings.as_slice())
     }
@@ -396,10 +397,7 @@ impl ExtensionProvider for ExtensionProviderObject {
         .query().map_err(|(status, _unpublished)| status)
     }
 }
-neocogi_com::factory_plugin! {
-    name = "neocogi.example.ui-extension",
-    version = "0.0.0",
-    factory = ExtensionProviderObject,
-}
-#[cfg(feature = "dynamic-plugin")]
-neocogi_com::export_factory_plugin!();
+/// Acquires one owned root; object construction remains on its typed methods.
+#[neocogi_com::plugin(name = "neocogi.example.ui-extension")]
+fn acquire_root() -> Result<neocogi_com::ComPtr<neocogi_demo_contracts::ExtensionProviderAbi>, neocogi_com::NcStatus> {
+    ExtensionProviderObject::from_value(ExtensionProviderObject).query()}

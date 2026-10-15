@@ -1,6 +1,6 @@
 //! CPU PNG decoding and renderer upload share one bounded RGBA representation.
 use super::Diagnostic;
-use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, com_factory};
+use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, com_object};
 use neocogi_gfx_contracts::*;
 use neocogi_renderer_contracts::*;
 use neocogi_gfx_contracts::MAX_ASSET_PIXELS_BYTES;
@@ -115,7 +115,7 @@ impl RgbaImage {
     }
 }
 
-#[com_factory(neocogi_gfx_contracts::PngDecoder)]
+#[com_object(neocogi_gfx_contracts::PngDecoder)]
 #[derive(Default)]
 /// Decodes PNGs independently of the optional font rasterizer and JSON compiler.
 pub struct PngDecoderObject {

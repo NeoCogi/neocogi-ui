@@ -295,7 +295,6 @@ application dispatcher's own mutable COM gate still protects the active handler.
 
 These are implementation boundaries, not three application layers. The
 `WeakLocalCom` foundation exists, but replacing this storage arrangement or boxing
-its context remains an [optimization under evaluation](../optimizations/OPPORTUNITIES.md#p2-runtime-context-checkout-repeatedly-moves-its-inline-payload).
 The source is [runtime.rs](../../crates/ui/runtime/src/runtime.rs) and
 [runtime_context.rs](../../crates/ui/runtime/src/runtime_context.rs).
 

@@ -4,7 +4,7 @@ mod tests {
     use neocogi_com::{ComRef, NcCopyFromBufferOffset, NcStatus};
     use neocogi_com::{ComPtr, ComBox, IUnknown, NcString, NC_E_INVALID_ARG};
 
-    #[neocogi_com::com_class(neocogi_ui::nodes::Button, ownership = exclusive)]
+    #[neocogi_com::com_object(neocogi_ui::nodes::Button, ownership = exclusive)]
     /// Concrete stand-in for a plugin button, using the same COM macro and ownership path.
     struct TestButton {
         /// Plugin-local UTF-8 storage; its Rust layout never crosses the boundary.

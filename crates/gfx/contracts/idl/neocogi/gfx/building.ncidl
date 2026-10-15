@@ -52,7 +52,7 @@ interface IAssetBuilder {
 
 #[version(2)]
 /// Constructible CPU resource root; UI and hosts need no linked font or PNG implementation.
-factory AssetLoader: IGfxDiagnostics {
+interface AssetLoader: IGfxDiagnostics {
     /// Starts a fresh atlas using an opaque-white PNG tile; dimensions are validated before reading files.
     fn create_builder(&self, size: Size, white: &INativePath) -> Result<ComPtr<IAssetBuilder>>;
     /// Copies an existing bundle into a new packing area while retaining its catalog namespace.
@@ -62,7 +62,7 @@ factory AssetLoader: IGfxDiagnostics {
 
 #[version(1)]
 /// Resource-preserving immutable revision service available without font or image construction.
-factory AssetPublisher: IGfxDiagnostics {
+interface AssetPublisher: IGfxDiagnostics {
     /// Replaces only appearance-owned records while preserving a base bundle's resources and catalog.
     /// Each slice starts at offset zero and contains exactly one record per corresponding dense role.
     /// GFX validates image indices, source slices, metrics, and the complete candidate before publication.

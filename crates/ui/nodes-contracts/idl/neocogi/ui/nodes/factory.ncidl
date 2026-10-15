@@ -1,7 +1,7 @@
 #[version(3)]
-/// Constructible button class with only its shared widget and leaf-layout protocols separated.
+/// Constructible button interface with only its shared widget and leaf-layout protocols separated.
 #[events(IActivatedEvent)]
-class Button: IWidget + ILeafLayout {
+interface Button: IWidget + ILeafLayout {
 
     /// Replaces the complete UTF-8 label; the logical input offset must be zero.
     fn set_label(&mut self, label: &[u8]) -> Result<()>;
@@ -36,7 +36,7 @@ class Button: IWidget + ILeafLayout {
 
 #[version(6)]
 /// Runtime-bound construction shorthand over concrete built-in node contracts and compositions.
-factory UiFactory: IConstructionHost + IFileDialogs {
+interface UiFactory: IConstructionHost + IFileDialogs {
 
     /// Creates a fixed scrolling multiline editor; CRLF and CR normalize to LF and the cursor starts at the end.
     fn create_text_area(&self, text: &[u8], wrapping: TextWrapping, scrolling: bool, events: &EventBinding) -> Result<ComBox<TextArea>>;
@@ -93,7 +93,7 @@ factory UiFactory: IConstructionHost + IFileDialogs {
 
 #[version(1)]
 /// Stateless activation root for the independently deployed built-in nodes plugin.
-factory NodesPluginFactory {
-    /// Binds one concrete node factory to public services exposed by the supplied core runtime.
+interface NodesPluginFactory {
+    /// Binds one concrete node interface to public services exposed by the supplied core runtime.
     fn bind(&self, runtime: &UiRuntime) -> Result<ComPtr<UiFactory>>;
 }

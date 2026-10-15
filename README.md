@@ -88,7 +88,7 @@ other provider's Rust implementation, and there is no extra runtime-plugin wrapp
 The core runtime and built-in nodes are deliberately separate plugins. A host creates the core
 runtime, activates `neocogi.ui.nodes.runtime`, and binds its `NodesPluginFactory` to that exact
 runtime. The core never exposes or constructs `UiFactory`; host identity validation prevents a
-factory bound to one runtime from being paired with another. External leaves and containers use
+interface bound to one runtime from being paired with another. External leaves and containers use
 the same typed protocols and cached hot-path capabilities as built-ins.
 
 Platform-normalized input, polling, native text-input placement, and window

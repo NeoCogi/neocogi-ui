@@ -36,7 +36,7 @@ interface IWidgetProbe {
 #[version(3)]
 /// A custom control with one enum-valued event port and a concrete editing interface.
 #[events(IActivatedEvent, ICounterChangedEvent)]
-class Counter: IWidget + ILeafLayout + IWidgetProbe {
+interface Counter: IWidget + ILeafLayout + IWidgetProbe {
     /// Reads the actual current activation count.
     fn count(&self) -> Result<u32>;
     /// Silently replaces the displayed count and invalidates its preferred text size when changed.
@@ -54,8 +54,8 @@ interface IInset: IContainer {
 }
 
 #[version(2)]
-/// Stateless plugin factory receiving runtime authority explicitly for each custom object.
-factory ExtensionProvider: IDesignWidgetCatalog {
+/// Stateless plugin interface receiving runtime authority explicitly for each custom object.
+interface ExtensionProvider: IDesignWidgetCatalog {
     /// Creates a counter whose complete state belongs to the returned COM identity.
     fn counter(&self, host: &IWidgetHost, events: &EventBinding) -> Result<ComBox<Counter>>;
     /// Creates an empty custom container; child attachment follows the same rules as built-ins.

@@ -2,6 +2,10 @@
 
 ## 0.0.0 (unreleased)
 
+- Consolidate current adversarial findings, decisions, investigations and
+  Archive superseded reports and make issue/optimization pages navigation only;
+  retain native probes and independent rerun evidence.
+
 - Complete the COM-only event migration: remove native widget output enums,
   conversion traits, generic constructor associations, product helper aliases and
   generated form dispatch scaffolding. Producers construct exclusive snapshots;

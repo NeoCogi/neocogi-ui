@@ -1,9 +1,9 @@
 #[version(3)]
-/// Process entry factory for the retained UI implementation plugin.
-factory UiPluginFactory {
-    /// Imports immutable resources and asks the shareable GFX factory for a fresh compositor.
+/// Process entry interface for the retained UI implementation plugin.
+interface UiPluginFactory {
+    /// Imports immutable resources and asks the shareable GFX interface for a fresh compositor.
     /// The returned runtime privately owns that compositor, including its resource revision and
-    /// frame state. Callers may reuse this factory and the bundle across independent runtimes.
+    /// frame state. Callers may reuse this interface and the bundle across independent runtimes.
     /// Failed UI import or compositor creation publishes no runtime and changes no existing UI.
     fn create_runtime(&self, assets: &IAssetBundle, gfx: &GfxPluginFactory) -> Result<ComPtr<UiRuntime>>;
 }

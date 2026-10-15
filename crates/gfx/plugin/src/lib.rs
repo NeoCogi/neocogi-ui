@@ -13,7 +13,7 @@ use neocogi_com::{ComPtr, NcStatus};
 use neocogi_gfx_contracts::*;
 
 /// Stateless activation root for cohesive CPU graphics construction services.
-#[neocogi_com::com_factory(neocogi_gfx_contracts::GfxPluginFactory)]
+#[neocogi_com::com_object(neocogi_gfx_contracts::GfxPluginFactory)]
 struct GfxPluginFactoryObject;
 
 impl GfxPluginFactory for GfxPluginFactoryObject {
@@ -45,12 +45,9 @@ impl GfxPluginFactory for GfxPluginFactoryObject {
     }
 }
 
-neocogi_com::factory_plugin! {
-    name = "neocogi.gfx.runtime",
-    version = "0.0.0",
-    factory = GfxPluginFactoryObject,
-}
+/// Acquires one owned root; object construction remains on its typed methods.
+#[neocogi_com::plugin(name = "neocogi.gfx.runtime")]
+fn acquire_root() -> Result<neocogi_com::ComPtr<neocogi_gfx_contracts::GfxPluginFactoryAbi>, neocogi_com::NcStatus> {
+    GfxPluginFactoryObject::from_value(GfxPluginFactoryObject).query()}
 
 // Exports the dynamic entrypoint only from an assembly-generated native library.
-#[cfg(feature = "dynamic-plugin")]
-neocogi_com::export_factory_plugin!();

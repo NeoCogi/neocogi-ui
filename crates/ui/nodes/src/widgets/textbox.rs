@@ -92,7 +92,7 @@ impl TextboxParameters {
     }
 }
 
-#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Textbox, ownership = exclusive)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Textbox, ownership = exclusive)]
 /// Concrete retained textbox and dynamically constructible COM object.
 pub struct Textbox {
     /// Non-semantic COM lifecycle and host-backed phase resources.

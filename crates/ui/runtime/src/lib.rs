@@ -149,7 +149,7 @@ pub(crate) use ui_node::UiRuntime;
 pub use runtime::{Runtime, create_runtime_from_assets};
 
 /// Stateless process entry that creates independent retained UI runtimes.
-#[neocogi_com::com_factory(neocogi_ui_core_contracts::UiPluginFactory)]
+#[neocogi_com::com_object(neocogi_ui_core_contracts::UiPluginFactory)]
 struct UiPluginFactoryObject;
 
 impl neocogi_ui_core_contracts::UiPluginFactory for UiPluginFactoryObject {
@@ -164,13 +164,12 @@ impl neocogi_ui_core_contracts::UiPluginFactory for UiPluginFactoryObject {
     }
 }
 
-neocogi_com::factory_plugin! {
-    name = "neocogi.ui.runtime",
-    version = "0.0.0",
-    factory = UiPluginFactoryObject,
+/// Acquires one owned root; object construction remains on its typed methods.
+#[neocogi_com::plugin(name = "neocogi.ui.runtime")]
+fn acquire_root() -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::UiPluginFactoryAbi>,
+    neocogi_com::NcStatus> {
+    UiPluginFactoryObject::from_value(UiPluginFactoryObject).query()
 }
 
 // Static consumers call `plugin_descriptor` directly. Only a final dynamic artifact
 // exposes the loader entrypoint, avoiding duplicate exports in monolithic applications.
-#[cfg(feature = "dynamic-plugin")]
-neocogi_com::export_factory_plugin!();

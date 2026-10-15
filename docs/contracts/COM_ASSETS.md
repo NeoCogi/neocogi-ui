@@ -30,7 +30,7 @@ registers `AssetLoader`. `PngDecoder::upload` accepts one complete, nonempty PNG
 a 64 MiB ceiling; dimensions are checked before pixel allocation and animated PNG
 is rejected. Invalid input never calls the factory. Factory errors preserve their
 original status, and `IGfxDiagnostics` returns an owned failure snapshot. No
-factory or temporary decoded buffer is retained after the call. Calls may reenter
+interface or temporary decoded buffer is retained after the call. Calls may reenter
 diagnostics because the decoder holds no mutable borrow across the upload.
 
 The supplied buffer is exactly one PNG: header, image data and all remaining chunks
@@ -123,14 +123,14 @@ let native = platform.create_window(
 )?;
 let renderer = native.query::<IRendererAbi>()?;
 let runtime = neocogi_com::Runtime::global();
-let gfx = runtime.acquire_plugin_factory::<GfxPluginFactoryAbi>(
+let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(
     neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"),
 )?;
-let runtime_factory = runtime.acquire_plugin_factory::<UiPluginFactoryAbi>(
+let runtime_factory = runtime.acquire_plugin_root::<UiPluginFactoryAbi>(
     neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"),
 )?;
 let ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
-let node_provider = runtime.acquire_plugin_factory::<NodesPluginFactoryAbi>(
+let node_provider = runtime.acquire_plugin_root::<NodesPluginFactoryAbi>(
     neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"),
 )?;
 let factory = node_provider.bind(ui_runtime.as_com_ref())?;

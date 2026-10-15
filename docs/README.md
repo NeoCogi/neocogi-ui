@@ -8,8 +8,8 @@ IDL, plugins, retained UI, rendering and authoring tools. Start with the
 
 | Folder | Contents |
 | --- | --- |
-| [Issues](issues/README.md) | Unresolved correctness findings and incomplete contracts |
-| [Optimization opportunities](optimizations/README.md) | Performance investigations and optional simplifications, with evidence and acceptance criteria |
+| [Issues](issues/README.md) | Navigation to findings and investigations in the consolidated review |
+| [Optimization opportunities](optimizations/README.md) | Navigation to performance and simplification work in the consolidated review |
 | [Contracts](contracts/README.md) | Current API, ABI, ownership, event, document and resource rules |
 | [Experiments](experiments/README.md) | Prototype reports, hypotheses, outcomes and implementation status |
 | Measurements | Historical performance/size results, raw data, fixtures and reproduction commands |
@@ -24,6 +24,7 @@ purpose; this directory contains only the main index.
 
 ## Common starting points
 
+  owns current findings, investigations, decisions and simplification work.
 - [Widget and event architecture](architecture/WIDGET_EVENT_MODEL.md) explains
   ownership, message flow and how an update reaches a renderable state.
 - [COM author contracts](contracts/COM_AUTHORS.md),
@@ -39,12 +40,12 @@ purpose; this directory contains only the main index.
 
 ## Keeping the categories current
 
-Issues and optimization opportunities each have one maintained register. Fixes
-update their owning contracts/tests and remove the resolved entry. Experiment
-reports record the revision actually tested and distinguish prototypes from
-applied changes. Measurements retain their workload, artifacts and limits.
+One consolidated review owns current findings, investigations, decisions and
+optimization opportunities. Issue and optimization pages link into it. Fixes
+update its disposition and the owning contracts/tests. Experiment reports record
+the revision actually tested and distinguish prototypes from applied changes;
+measurements retain workloads, artifacts and limits.
 
-New reviews go in `reviews/`. Once reconciled, move unresolved findings into the
-appropriate register and retire the report; preserve useful reproduction data
-under `external run artifacts`. Completed plans and duplicate historical review ledgers
-do not remain as competing descriptions of current behavior.
+Reconcile future reviews into one current report under `reviews/` and archive
+superseded snapshots. Retain useful evidence under `external run artifacts`; do not maintain
+competing current ledgers.

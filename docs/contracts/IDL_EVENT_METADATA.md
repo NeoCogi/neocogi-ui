@@ -10,8 +10,8 @@ use neocogi.com.events::{IEvent, EventBinding};
 #[version(1)] interface IChanged: IEvent {
     fn value(&self) -> Result<u32>;
 }
-#[version(1)] #[events(IChanged)] class Counter {}
-#[version(1)] factory Counters {
+#[version(1)] #[events(IChanged)] interface Counter {}
+#[version(1)] interface Counters {
     fn create(&self, events: &EventBinding) -> Result<ComBox<Counter>>;
 }
 ```

@@ -1,7 +1,7 @@
 #[version(5)]
 /// Constructible single-line editor whose complete concrete API is the class contract.
 #[events(ITextChangedEvent, ITextSubmittedEvent)]
-class Textbox: IWidget + ILeafLayout {
+interface Textbox: IWidget + ILeafLayout {
     /// Returns an independently owned immutable UTF-8 snapshot.
     fn text(&self) -> Result<ComPtr<INcString>>;
     /// Replaces complete UTF-8 text after applying the single-line normalization policy.
@@ -37,7 +37,7 @@ interface TextBlock: IWidget + ILeafLayout {
 #[version(3)]
 /// Constructible boolean control with no redundant Checkbox-only interface.
 #[events(ICheckboxChangedEvent)]
-class Checkbox: IWidget + ILeafLayout {
+interface Checkbox: IWidget + ILeafLayout {
 
     /// Returns the current boolean value.
     fn checked(&self) -> Result<bool>;
@@ -83,7 +83,7 @@ struct NumberOptions {
 #[version(3)]
 /// Constructible bounded numeric control whose concrete API is one class contract.
 #[events(INumericChangedEvent)]
-class Slider: IWidget + ILeafLayout {
+interface Slider: IWidget + ILeafLayout {
     /// Returns the current finite value after range clamping and step snapping.
     fn value(&self) -> Result<f32>;
     /// Replaces a finite value silently after applying the configured range and step.
@@ -100,7 +100,7 @@ class Slider: IWidget + ILeafLayout {
 #[version(3)]
 /// Constructible unbounded numeric editor whose concrete API is one class contract.
 #[events(INumericChangedEvent)]
-class Number: IWidget + ILeafLayout {
+interface Number: IWidget + ILeafLayout {
     /// Returns the current finite value.
     fn value(&self) -> Result<f32>;
     /// Replaces a finite value silently using the configured precision.
@@ -134,7 +134,7 @@ interface ColorSwatch: IWidget + ILeafLayout {
 #[version(3)]
 /// Constructible labelled row; application-specific data belongs to its consumer.
 #[events(IActivatedEvent)]
-class ListItem: IWidget + ILeafLayout {
+interface ListItem: IWidget + ILeafLayout {
     /// Returns an independently owned immutable UTF-8 label snapshot.
     fn text(&self) -> Result<ComPtr<INcString>>;
     /// Replaces the complete UTF-8 label and invalidates preferred size when changed.
@@ -153,7 +153,7 @@ class ListItem: IWidget + ILeafLayout {
 #[version(3)]
 /// Constructible button-like list entry with direct label, image, and activation operations.
 #[events(IActivatedEvent)]
-class ListBox: IWidget + ILeafLayout {
+interface ListBox: IWidget + ILeafLayout {
     /// Returns an independently owned immutable UTF-8 label snapshot.
     fn text(&self) -> Result<ComPtr<INcString>>;
     /// Replaces the complete UTF-8 label and invalidates preferred size when changed.
@@ -194,7 +194,7 @@ struct ScrollRange {
 #[version(3)]
 /// Constructible scrollbar with its concrete editing and event surface in one class contract.
 #[events(IScrollbarChangedEvent)]
-class Scrollbar: IWidget + ILeafLayout {
+interface Scrollbar: IWidget + ILeafLayout {
 
     /// Returns a coherent copied range snapshot.
     fn range(&self) -> Result<ScrollRange>;
@@ -244,9 +244,9 @@ bitenum FillStates: u8 {
 }
 
 #[version(5)]
-/// Constructible fixed scrolling editor whose class forwards to one actual internal editor.
+/// Constructible fixed scrolling editor whose interface forwards to one actual internal editor.
 #[events(ITextChangedEvent, ITextSubmittedEvent)]
-class TextArea: IWidget + IContainerLayout + IScrolling {
+interface TextArea: IWidget + IContainerLayout + IScrolling {
     /// Returns an independently owned immutable UTF-8 snapshot from the actual editor.
     fn text(&self) -> Result<ComPtr<INcString>>;
     /// Replaces normalized text on the actual editor and schedules caret reveal.
@@ -269,7 +269,7 @@ class TextArea: IWidget + IContainerLayout + IScrolling {
 #[version(4)]
 /// Runtime-owned combo box whose header, item model, popup, and interaction state form one control.
 #[events(IChoiceChangedEvent)]
-class Combo: IWidget + ILeafLayout {
+interface Combo: IWidget + ILeafLayout {
     /// Returns the committed stable leaf identity, preserving `None` independently of every ID.
     fn selection(&self) -> Result<ChoiceSelection>;
     /// Returns the exact rendered header text: the selected label or the configured placeholder.

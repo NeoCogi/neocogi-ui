@@ -83,7 +83,7 @@ use neocogi_ui_nodes_contracts::{NodesPluginFactory, UiFactoryAbi};
 /// Hard provider dependency retained by the assembly planner before node-provider activation.
 const UI_RUNTIME_PLUGIN_ID: NcGuid = guid_from_qualified_name("neocogi.ui.runtime");
 
-#[neocogi_com::com_factory(neocogi_ui_nodes_contracts::NodesPluginFactory)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::NodesPluginFactory)]
 /// Stateless activation root that binds concrete nodes to one independently created core runtime.
 struct NodesPluginFactoryObject;
 
@@ -94,16 +94,14 @@ impl NodesPluginFactory for NodesPluginFactoryObject {
     }
 }
 
-neocogi_com::factory_plugin! {
-    name = "neocogi.ui.nodes.runtime",
-    version = "0.0.0",
+/// Acquires one owned root; object construction remains on its typed methods.
+#[neocogi_com::plugin(name = "neocogi.ui.nodes.runtime",
     dependencies = [UI_RUNTIME_PLUGIN_ID],
-    factory = NodesPluginFactoryObject,
+    )]
+fn acquire_root() -> Result<neocogi_com::ComPtr<neocogi_ui_nodes_contracts::NodesPluginFactoryAbi>, neocogi_com::NcStatus> {
+    NodesPluginFactoryObject::from_value(NodesPluginFactoryObject).query()
 }
 
 // Static consumers call `plugin_descriptor` directly. Only a final dynamic artifact
 // exposes the loader entrypoint, avoiding duplicate exports in monolithic applications.
-#[cfg(feature = "dynamic-plugin")]
-neocogi_com::export_factory_plugin!();
-
 pub(crate) use widget::{Widget, LeafWidget, WidgetFillOption};

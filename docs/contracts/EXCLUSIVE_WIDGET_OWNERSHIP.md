@@ -55,11 +55,11 @@ same checked projection path.
 
 ## Ownership is a concrete class policy
 
-Use `#[com_class(Button, ownership = exclusive)]` (or the same option on
+Use `#[com_object(Button, ownership = exclusive)]` (or the same option on
 `com_object`) for widgets and other unique owners. Shared services use the default
 `ownership = shared`. These are separate concrete implementation policies;
 an interface does not determine ownership. A class cannot expose both constructor
-families. `com_factory` rejects exclusive ownership because factory handles are
+families. `com_object` rejects exclusive ownership because factory handles are
 shared services.
 
 Shared classes use their existing strong count and borrow gate. Exclusive classes

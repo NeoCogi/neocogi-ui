@@ -16,7 +16,7 @@ use neocogi_skin_contracts::*;
 const GFX_PLUGIN_ID: NcGuid = guid_from_qualified_name("neocogi.gfx.runtime");
 
 /// Stateless activation root for cohesive skin compilation services.
-#[neocogi_com::com_factory(neocogi_skin_contracts::SkinPluginFactory)]
+#[neocogi_com::com_object(neocogi_skin_contracts::SkinPluginFactory)]
 struct SkinPluginFactoryObject;
 
 impl SkinPluginFactory for SkinPluginFactoryObject {
@@ -39,13 +39,11 @@ impl SkinPluginFactory for SkinPluginFactoryObject {
     }
 }
 
-neocogi_com::factory_plugin! {
-    name = "neocogi.skin.runtime",
-    version = "0.0.0",
+/// Acquires one owned root; object construction remains on its typed methods.
+#[neocogi_com::plugin(name = "neocogi.skin.runtime",
     dependencies = [GFX_PLUGIN_ID],
-    factory = SkinPluginFactoryObject,
-}
+    )]
+fn acquire_root() -> Result<neocogi_com::ComPtr<neocogi_skin_contracts::SkinPluginFactoryAbi>, neocogi_com::NcStatus> {
+    SkinPluginFactoryObject::from_value(SkinPluginFactoryObject).query()}
 
 // Exports the dynamic entrypoint only from an assembly-generated native library.
-#[cfg(feature = "dynamic-plugin")]
-neocogi_com::export_factory_plugin!();

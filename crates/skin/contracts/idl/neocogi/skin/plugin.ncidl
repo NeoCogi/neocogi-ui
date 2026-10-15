@@ -1,6 +1,6 @@
 #[version(2)]
 /// Process entry for coarse-grained appearance compilation and external themes.
-factory SkinPluginFactory {
+interface SkinPluginFactory {
     /// Creates one typed palette and metric compiler using the narrow GFX revision capability.
     fn style_compiler(&self, publisher: &AssetPublisher) -> Result<ComPtr<StyleCompiler>>;
     /// Creates the optional external JSON compiler with explicit GFX construction and publication capabilities.

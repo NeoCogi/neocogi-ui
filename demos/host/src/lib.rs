@@ -182,16 +182,16 @@ impl Host {
     pub fn new(title: &str, size: Size, assets: ComPtr<IAssetBundleAbi>) -> Result<Self, HostError> {
         initialize()?;
         let runtime = neocogi_com::Runtime::global();
-        let platform = runtime.acquire_plugin_factory::<PlatformAbi>(neocogi_com::guid_from_qualified_name(renderer_plugin_name()))?;
+        let platform = runtime.acquire_plugin_root::<PlatformAbi>(neocogi_com::guid_from_qualified_name(renderer_plugin_name()))?;
         let atlas = assets.image()?;
         let window = platform.create_window(NcCopyFromBufferOffset::new(0, title.as_bytes()), size, atlas.as_com_ref())?;
         let renderer = window.query()?;
-        let gfx = runtime.acquire_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
-        let runtime_factory = runtime.acquire_plugin_factory::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
+        let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+        let runtime_factory = runtime.acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
         let mut ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
         ui_runtime.set_clipboard(window.query::<neocogi_ui::com::ITextClipboardAbi>()?.as_com_ref())?;
         let node_provider =
-            runtime.acquire_plugin_factory::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
+            runtime.acquire_plugin_root::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
         let factory = node_provider.bind(ui_runtime.as_com_ref())?;
         let ui = Ui::from_interfaces(ui_runtime, factory)?;
         let (send, observations) = std::sync::mpsc::channel();
@@ -252,7 +252,7 @@ impl Host {
     #[cfg(feature = "png-assets")]
     pub fn png_texture_bounded(&self, png: &[u8], rgba_limit: usize) -> Result<ComPtr<ITextureAbi>, HostError> {
         let runtime = neocogi_com::Runtime::global();
-        let gfx = runtime.acquire_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+        let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
         let decoder = gfx.png_decoder()?;
         let target = self.renderer.query::<ITextureFactoryAbi>()?;
         decoder

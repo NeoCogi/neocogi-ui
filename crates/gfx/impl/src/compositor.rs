@@ -7,7 +7,7 @@
 use super::Diagnostic;
 use neocogi_com::{
     ComPtr, ComRef, INcStringAbi, NC_E_BUSY, NC_E_INVALID_ARG, NC_E_OUT_OF_MEMORY, NC_E_OUT_OF_RANGE, NcCopyFromBufferOffset, NcOutputWriter, NcStatus,
-    com_factory, com_object,
+    com_object,
 };
 use neocogi_gfx_contracts::*;
 use neocogi_gfx_support::{AssetTables, AsciiGlyphIndex};
@@ -279,7 +279,7 @@ impl Edge {
     }
 }
 
-#[com_factory(neocogi_gfx_contracts::GfxCompositor)]
+#[com_object(neocogi_gfx_contracts::GfxCompositor)]
 /// Concrete GFX-owned compositor with reusable geometry and no backend-native state.
 pub struct GfxCompositorObject {
     /// Current validated resource namespace and revision.

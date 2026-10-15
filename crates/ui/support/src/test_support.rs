@@ -14,7 +14,7 @@ pub fn gfx_factory() -> neocogi_com::ComPtr<neocogi_ui::GfxPluginFactoryAbi> {
     // SAFETY: The description and all referenced code/data remain in the test executable.
     unsafe { registry.register_plugin_descriptor(nc_gfx::plugin_descriptor()) }.expect("linked GFX plugin must register");
     registry
-        .acquire_plugin_factory(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
+        .acquire_plugin_root(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
         .expect("linked GFX factory acquisition must succeed")
 }
 

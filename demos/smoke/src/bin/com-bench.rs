@@ -268,10 +268,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let assets = neocogi_demo_assets::load_bundle()?;
     let decoded = start.elapsed();
     let start = Instant::now();
-    let runtime_factory = runtime.acquire_plugin_factory::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
-    let gfx = runtime.acquire_plugin_factory::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+    let runtime_factory = runtime.acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
+    let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
     let ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
-    let node_provider = runtime.acquire_plugin_factory::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
+    let node_provider = runtime.acquire_plugin_root::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
     let node_factory = node_provider.bind(ui_runtime.as_com_ref())?;
     let ui = Ui::from_interfaces(ui_runtime, node_factory)?;
     let created = start.elapsed();

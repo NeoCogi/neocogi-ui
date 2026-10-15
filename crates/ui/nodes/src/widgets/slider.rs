@@ -119,7 +119,7 @@ impl SliderParameters {
     }
 }
 
-#[neocogi_com::com_class(neocogi_ui_nodes_contracts::Slider, ownership = exclusive)]
+#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Slider, ownership = exclusive)]
 /// Concrete retained slider and dynamically constructible COM object.
 pub struct Slider {
     /// Non-semantic COM lifecycle and host-backed phase resources.
