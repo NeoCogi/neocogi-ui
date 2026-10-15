@@ -17,7 +17,7 @@ runtime. The editors use these same components for live theme and UI previews.
 
 All workspace packages use version **0.0.0**, pre-alpha. APIs and binary contracts may change
 without compatibility layers. The imported neocogi-com implementation is maintained in
-this workspace. Concrete controls such as `Button` are callable COM class contracts;
+this workspace. Concrete controls such as `Button` have callable COM interface contracts;
 shared protocols such as `IWidget` and `ILeafLayout` remain interfaces on the same
 object and state.
 
@@ -25,8 +25,7 @@ The project is **NeoCogi UI**, hosted at
 [`NeoCogi/ui`](https://github.com/NeoCogi/neocogi-ui). Cargo packages keep
 descriptive `neocogi-*` names, while deployed libraries use the short `nc_*`
 targets (`nc` means NeoCogi). See the [shared-library mapping](docs/guides/COM_NATIVE.md#profiles-and-output)
-and [executable mapping](docs/guides/EXAMPLES.md) for exact outputs. The assembly command
-remains `cargo neocogi`.
+and [executable mapping](docs/guides/EXAMPLES.md) for exact outputs.
 
 | Windows 3.11 | Mac OS 9 |
 | :--: | :--: |
@@ -34,35 +33,31 @@ remains `cargo neocogi`.
 
 ## Run the demos
 
-Install the assembly tool from this checkout, then build and run a complete native package:
+The checkout pins nightly Cargo for native artifact dependencies. Build and run
+the selected application directly:
 
 ```sh
-cargo install --path tools/cargo-neocogi
-cargo neocogi run --assembly full
+cargo run -p neocogi-demo-full
+cargo run -p neocogi-demo-full --release --no-default-features --features dynamic,vulkan
+cargo run -p neocogi-demo-basic --bin neocogi-demo-calculator
+cargo run -p neocogi-demo-smoke -- --smoke
 ```
 
-Without installing the tool, run the Vulkan release package directly from this checkout:
+Cargo builds the shared runtime and selected plugins, provides their exact paths,
+and prepares loader paths for execution. Native defaults are `dynamic,glow`;
+features are additive, so another renderer or `monolith` requires disabling
+defaults. For a static application with compiled resources:
 
 ```sh
-cargo run -p cargo-neocogi -- run --assembly full --variant vulkan --release
+cargo run -p neocogi-demo-full --no-default-features --features monolith,glow,embed-assets
 ```
 
-Use `--variant vulkan` or `--variant wgpu` to select another renderer; the default
-is Glow. Other assemblies are `simple`, `calculator`, `backend-frame-cube`, and
-`smoke`. Use `--release` for an ordinary release package, or `build` instead of
-`run` to stage without launching. The command prints the resulting directory.
-Native assets are external by default; keep the staged `assets` and `themes`
-directories with the executable. Add `--variant embedded` after the renderer
-variant for an explicit embedded deployment. Assembly definitions live in
-`[workspace.metadata.neocogi]` in [Cargo.toml](Cargo.toml).
-The [tool reference](tools/cargo-neocogi/README.md) documents configuration,
-versioned crates.io components, standalone TOML, and lockfiles.
-The [package guide](docs/guides/COM_NATIVE.md) covers dependencies, nightly min-size builds,
-optional assets, actual GPU tests and executable-relative loading. A native demo
-needs its adjacent runtime and plugin manifest; direct `cargo run` on the demo
-package does not assemble those files. Cargo features are additive: `--features vulkan`
-alone also retains the default Glow feature. The [native guide](docs/guides/COM_NATIVE.md)
-shows the explicit single-backend, monolithic command for direct Cargo execution.
+Development demos read resources from this checkout or explicitly embed them.
+Cargo artifact paths are build-tree paths; distribution installation remains a
+separate concern. The [native guide](docs/guides/COM_NATIVE.md) explains ownership,
+linkage, resources, browser builds and remaining Cargo costs. The optional
+[cargo-neocogi tool](tools/cargo-neocogi/README.md) manages NCIDL module authoring;
+it no longer builds assemblies.
 
 ## Workspace layout
 
@@ -73,7 +68,7 @@ Build-time IDL tooling lives in `neocogi-idl` under `crates/com/idl`, which owns
 parsing, resolution, fingerprints, Rust generation, and reusable contract-crate
 `build.rs` integration. Contract examples live under `tools/idl`. The reusable tooling remains
 separate from `tools/cargo-neocogi` so ordinary Cargo builds can regenerate
-contracts without invoking the assembly CLI.
+contracts without invoking an external compiler command.
 UI code follows the same role-based layout under `crates/ui`: `core-contracts` contains
 shared node, layout, popup, menu, and window protocols; `nodes-contracts` owns the concrete
 built-in widget/container classes and their typed factory; and `api` is the application facade.

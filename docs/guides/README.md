@@ -1,6 +1,6 @@
 # Guides
 
-- [Native packaging](COM_NATIVE.md) — assembly, startup, shared/static linkage and
+- [Native Cargo builds](COM_NATIVE.md) — artifacts, startup, shared/static linkage and
   renderer checks.
 - [Examples](EXAMPLES.md) — runnable demos and integration samples.
 - [WebGL](WEB.md) — build, serve, input and browser deployment.

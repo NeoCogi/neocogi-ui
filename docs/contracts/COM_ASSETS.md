@@ -470,25 +470,19 @@ file exposes `AtlasHandle`, native IDs, UI implementation storage or parser APIs
 
 ```sh
 cargo run -p neocogi-asset-tools --bin neocogi-atlas-export -- --output bundle.rs
-cargo neocogi build --assembly full --variant glow
-cargo neocogi build --assembly full --variant glow --variant embedded
+cargo build -p neocogi-demo-full
+cargo build -p neocogi-demo-full --features embed-assets
 ```
 
-The command prints its managed staging directory under `target/neocogi`. Native
-file assets are the default: the assembly contains the runtime, UI, renderer, GFX,
-and skin libraries plus adjacent assets. The Skin plugin reads JSON and external
-resource files, then delegates font/icon atlas construction to the one GFX plugin;
-the host does not embed the photo, mesh or compiled atlases. Register
-the plugin catalog before loading a bundle. Resource paths resolve against the
-executable, so the complete staged directory can run from another working directory.
+Native Cargo compositions explicitly select source-checkout resources through
+`workspace-assets`. GFX owns decoding and resource baking; Skin owns appearance
+and external JSON compilation. Register providers before loading a bundle.
+These development resource paths are independent of the working directory and
+are not an installed package layout.
 
-`embedded` explicitly enables the demo's `embed-assets` Cargo feature. It compiles
-atlases and themes during the build and embeds the full demo's photo and mesh.
-The full demo still ships the GFX plugin's PNG decoder for the photograph and the
-skin plugin's typed style compiler for live edits. GFX keeps its small
-`AssetPublisher` in that deployment while omitting the font rasterizer and atlas
-builder. Its compiled themes need no JSON loader; simpler embedded demos need
-the compact GFX compositor but neither its builder nor the optional Skin plugin.
+`embed-assets` compiles atlases and themes and embeds the full demo's photo and
+mesh. Dynamic composition keeps its selected GFX/Skin services even in this mode;
+there is no assembly-specific feature overlay trimming those implementations.
 Browser `webgl` explicitly enables embedding.
 The shared recipe gives both modes identical resource names and font sizes.
 

@@ -8,23 +8,18 @@
 | [full](../../demos/full/src/app.rs) | Menus, dialogs, editing, images, themes, containers and custom graphics. |
 | [smoke](../../demos/smoke/src/main.rs) | Independent dynamic loading and explicit runtime/renderer boundary checks. |
 
-After installing the [assembly tool](../../tools/cargo-neocogi), build and run a complete native package:
+Build and run the selected application directly:
 
 ```sh
-cargo neocogi run --assembly calculator
+cargo run -p neocogi-demo-basic --bin neocogi-demo-calculator
+cargo run -p neocogi-demo-full --release --no-default-features --features dynamic,vulkan
 ```
 
-Choose `full`, `simple`, `calculator`, `backend-frame-cube` or `smoke` with
-`--assembly`. Glow is the default; `--variant vulkan` and `--variant wgpu` select
-the other renderers. A direct `cargo run` on a native demo does not assemble
-its required adjacent plugins. The [package guide](COM_NATIVE.md) is the canonical
-reference for release/min-size builds, system dependencies, optional assets,
-finite runs, independent test packaging and browser workflows.
+Native defaults select `dynamic,glow`. The [native guide](COM_NATIVE.md) explains
+Cargo artifact dependencies, monoliths, resources and browser builds. `-p` selects
+the Cargo package and `--bin` selects one executable:
 
-Assembly selectors stay concise; deployed executables use explicit NeoCogi
-names. Cargo's `-p` selects the package, while `--bin` selects the executable:
-
-| Cargo package | Executable | Assembly selector |
+| Cargo package | Executable | Selection |
 | --- | --- | --- |
 | `neocogi-demo-full` | `neocogi-demo-full` | `full` |
 | `neocogi-demo-basic` | `neocogi-demo-simple` | `simple` |
@@ -42,10 +37,9 @@ names. Cargo's `-p` selects the package, while `--bin` selects the executable:
 | `cargo-neocogi` | `cargo-neocogi` | Invoked as `cargo neocogi` |
 
 Windows adds `.exe`. Browser binary targets use the same base names with `.wasm`.
-For example, `cargo neocogi build --assembly calculator` stages
-`neocogi-demo-calculator`; direct Cargo selection is
-`cargo build -p neocogi-demo-basic --bin neocogi-demo-calculator`.
-The native assembly includes the [short component libraries](COM_NATIVE.md#profiles-and-output).
+For example, `cargo build -p neocogi-demo-basic --bin neocogi-demo-calculator`
+builds the calculator and its native Cargo dependencies. The
+[short native library names](COM_NATIVE.md#profiles-and-output) remain unchanged.
 
 The full demo preserves the fullscreen layer-zero X-Y grid beneath content-clipped
 floating children. Left-drag the grid to orbit, use its wheel to zoom, or choose

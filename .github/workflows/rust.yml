@@ -23,12 +23,6 @@ jobs:
       - uses: actions/checkout@v6
       - run: cargo test -p cargo-neocogi
       - run: cargo clippy -p cargo-neocogi --all-targets -- -D warnings
-      - name: Install nightly standard-library sources
-        if: runner.os == 'Linux'
-        run: rustup toolchain install nightly --profile minimal --component rust-src
-      - name: Independent nightly min-size consumer and cache reuse
-        if: runner.os == 'Linux'
-        run: cargo test -p cargo-neocogi --test native nightly_min_size -- --ignored
 
   # The UI consumes resolved resources; optional construction features belong to assets.
   ui:
@@ -59,6 +53,12 @@ jobs:
       - name: Validate linked static factory selection
         run: cargo test -p neocogi-demo-host --features monolith-gfx,glow
       # Optional benchmark clients must compile after every ownership/ABI migration.
+      - name: Static native composition with the independent extension
+        env:
+          SDL_VIDEODRIVER: offscreen
+        run: cargo run -p neocogi-demo-smoke --no-default-features --features monolith-extension,glow,embed-assets -- --smoke
+      - name: Shared runtime identity through a Cargo-built probe DLL
+        run: cargo test -p neocogi-demo-plugins --features glow,skin,extension
       - name: Compile the real COM performance harness
         run: cargo check -p neocogi-demo-smoke --no-default-features --features benchmark,glow --bin neocogi-com-bench
       - name: Build the independent provider before designer discovery
@@ -66,7 +66,7 @@ jobs:
       - name: Exercise the real designer and theme editor
         env:
           SDL_VIDEODRIVER: offscreen
-        run: cargo test -p neocogi-ui-designer -p neocogi-theme-editor --lib --features neocogi-ui-designer/monolith,neocogi-ui-designer/embed-assets,neocogi-theme-editor/monolith,neocogi-theme-editor/embed-assets -- --include-ignored --skip benchmark --test-threads=1
+        run: cargo test -p neocogi-ui-designer -p neocogi-theme-editor --lib --no-default-features --features neocogi-ui-designer/glow,neocogi-ui-designer/monolith,neocogi-ui-designer/embed-assets,neocogi-theme-editor/glow,neocogi-theme-editor/monolith,neocogi-theme-editor/embed-assets -- --include-ignored --skip benchmark --test-threads=1
 
   # The declared compiler floor is separate from the rolling stable/nightly matrix.
   com-msrv:
@@ -74,8 +74,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: rustup toolchain install 1.85.0 --profile minimal
-      # The workspace lock is intentionally untracked; resolve it with the floor compiler.
-      - run: cargo +1.85.0 generate-lockfile
+      # The library source fixture owns a floor-compatible independent lockfile.
       - run: bash crates/com/scripts/test-msrv.sh
 
   com:
@@ -147,7 +146,7 @@ jobs:
       - name: Check demo and platform warnings for this backend
         env:
           NC_COM_RUNTIME_LINK_DIR: ${{ github.workspace }}/target/debug
-        run: cargo clippy -p neocogi-demo-full -p neocogi-demo-basic -p neocogi-render-plugin --all-targets --no-default-features --features ${{ matrix.backend }} -- -D warnings
+        run: cargo clippy -p neocogi-demo-full -p neocogi-demo-basic -p neocogi-render-plugin --all-targets --no-default-features --features dynamic,${{ matrix.backend }} -- -D warnings
 
   # These jobs validate the native loader/package shape without assuming a hosted runner has a GPU desktop.
   native-platform:
@@ -170,8 +169,8 @@ jobs:
           vcpkg install sdl2:x64-windows
           "LIB=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\lib;$env:LIB" >> $env:GITHUB_ENV
           "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin" >> $env:GITHUB_PATH
-      - name: Package independently compiled Glow application
-        run: cargo run -p cargo-neocogi -- build --assembly full
+      - name: Build Cargo-owned native Glow artifacts
+        run: cargo build -p neocogi-demo-full
       - name: Platform-neutral contracts and facade behavior
         run: cargo test -p neocogi-ui-core-contracts -p neocogi-ui --features neocogi-ui/static-runtime
 

@@ -15,7 +15,7 @@ crate-type = ["rlib", "cdylib"]
 
 [features]
 default = []
-dynamic-plugin = []
+dynamic-plugin = ["dep:com-library"]
 
 [dependencies]
 neocogi-ui-core-contracts.workspace = true
@@ -24,3 +24,8 @@ neocogi-ui-design.workspace = true
 neocogi-ui-document-contracts.workspace = true
 neocogi-ui.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.build-dependencies]
+# Shared-mode facade features may be unified by the host. Every DLL that can
+# import runtime APIs consumes the same Cargo-owned runtime artifact path.
+com-library = { package = "neocogi-com-runtime", git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "9d85aca5180f343d75ed14a3d1082f71482824e9", artifact = "cdylib", target = "target", optional = true }

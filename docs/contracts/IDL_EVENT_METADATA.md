@@ -45,7 +45,7 @@ the IID, signature, and getter fields across COM. Catalog admission checks ident
 duplicates, field types, finite graphs and size limits. Event signatures negotiate
 against actual event objects at query time; the constructor receiver remains common.
 
-Event references contribute to canonical module signatures (encoding v9). They
+Event references contribute to canonical module signatures (encoding v10). They
 are semantic dependencies, not widget vtable inheritance. Changing event declarations
 or their transitive contracts requires rebuilding consumers. Core object ABI and
 Cargo source-graph schema are unchanged by this metadata change.

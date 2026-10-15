@@ -1,0 +1,32 @@
+[package]
+name = "neocogi-demo-plugins"
+version = "0.0.0"
+publish = false
+edition.workspace = true
+license.workspace = true
+
+# This native composition owns only Cargo artifact references and registration.
+# Keeping it separate lets the host select normal Rust providers for static builds
+# without naming the same dependency twice (Cargo rejects that combination).
+[features]
+default = []
+glow = ["render-library/glow"]
+vulkan = ["render-library/vulkan"]
+wgpu = ["render-library/wgpu"]
+skin = ["dep:skin-library"]
+extension = ["dep:extension-library"]
+
+[dependencies]
+neocogi-com = { workspace = true, features = ["runtime"] }
+ui-library = { package = "neocogi-ui-runtime", path = "../../crates/ui/runtime", artifact = "cdylib", features = ["dynamic-plugin"] }
+nodes-library = { package = "neocogi-ui-nodes", path = "../../crates/ui/nodes", artifact = "cdylib", features = ["dynamic-plugin"] }
+render-library = { package = "neocogi-render-plugin", git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "bd17f500188cc214a6f52eb28e5d66f5817aded5", artifact = "cdylib", default-features = false, features = ["dynamic-plugin"] }
+gfx-library = { package = "neocogi-gfx", path = "../../crates/gfx/plugin", artifact = "cdylib", default-features = false, features = ["dynamic-plugin", "builder"] }
+skin-library = { package = "neocogi-skin", path = "../../crates/skin/plugin", artifact = "cdylib", default-features = false, features = ["dynamic-plugin", "theme-json"], optional = true }
+extension-library = { package = "neocogi-example-ui-extension", path = "../../examples/ui-extension", artifact = "cdylib", features = ["dynamic-plugin"], optional = true }
+
+[build-dependencies]
+com-library = { package = "neocogi-com-runtime", git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "9d85aca5180f343d75ed14a3d1082f71482824e9", artifact = "cdylib", target = "target" }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+runtime-probe = { package = "neocogi-cargo-runtime-probe", path = "tests/runtime-probe", artifact = "cdylib", features = ["dynamic-plugin"] }

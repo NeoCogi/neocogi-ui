@@ -11,14 +11,19 @@ publish = false
 [lib]
 # The Rust target also defines the deployed shared-library name on each platform.
 name = "nc_gfx"
-crate-type = ["rlib"]
+crate-type = ["rlib", "cdylib"]
 
 [features]
 default = []
 builder = ["neocogi-gfx-impl/builder"]
-dynamic-plugin = []
+dynamic-plugin = ["dep:com-library"]
 
 [dependencies]
 neocogi-gfx-impl = { workspace = true, features = ["gfx", "publisher"] }
 neocogi-gfx-contracts.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.build-dependencies]
+# Shared-mode facade features may be unified by the host. Every DLL that can
+# import runtime APIs consumes the same Cargo-owned runtime artifact path.
+com-library = { package = "neocogi-com-runtime", git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "9d85aca5180f343d75ed14a3d1082f71482824e9", artifact = "cdylib", target = "target", optional = true }

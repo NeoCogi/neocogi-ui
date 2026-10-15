@@ -12,16 +12,17 @@ IDL compiler declare Rust **1.85** as their minimum supported Rust version. The
 inspector and normative ABI snippets are also exercised by the
 [minimum-version suite](../../crates/com/scripts/test-msrv.sh), which has a
 dedicated CI job. Compile-test tooling is pinned to a floor-compatible version.
-The UI, renderer, editors and other workspace tools target current stable; the
-COM floor does not promise that the entire workspace builds on Rust 1.85.
+The development workspace pins nightly Cargo because its native compositions use
+artifact dependencies. External COM/IDL consumers retain the Rust 1.85 floor.
+The stable/MSRV and cross-compiler suites copy the library source boundary into
+a temporary test workspace, excluding development-only artifact manifests.
+This fixture builds no production assembly. UI and renderer dependency versions
+are not covered by the COM compiler floor.
 
-The [cargo-neocogi command](../../tools/cargo-neocogi/README.md) builds ordinary native
-assemblies with stable or explicitly selected nightly Cargo. Its bundled `min-size`
-preset requires nightly plus `rust-src` and currently targets x86_64 Linux GNU.
-Foreign-target assembly is rejected because descriptor validation loads native
-plugins. Registry components are supported through ordinary Cargo resolution;
-the repository's pre-alpha component releases must be published separately before
-users can select those versions from crates.io.
+The [native guide](../guides/COM_NATIVE.md) documents ordinary Cargo application
+builds and their current constraints. `cargo-neocogi` retains module authoring;
+its assembly builder and native descriptor-inspection child are removed. The
+workspace's separate min-size alias requires nightly and `rust-src`.
 
 ## Platforms and renderers
 
@@ -31,9 +32,9 @@ COM capabilities and drive the copied input/update/render sequence; Rust SDL/GPU
 owners stay inside the renderer implementation.
 
 The workspace includes native SDL/Glow, Vulkan and WGPU assemblies and a static
-browser assembly using WebGL2 and DOM input/IME. Linux CI runs the real packaged
+browser assembly using WebGL2 and DOM input/IME. Linux CI runs the real Cargo-built
 full-demo and independent-extension tests for all three native renderers. Browser
-CI checks actual Chromium input and lifecycle behavior. macOS/Windows packaging
+CI checks actual Chromium input and lifecycle behavior. macOS/Windows native Cargo build
 jobs are configured, but local Linux results do not establish those OSes' runtime
 behavior. The [native guide](../guides/COM_NATIVE.md) records dependencies and driver limits;
 the [browser guide](../guides/WEB.md) records text input and native-filesystem restrictions.

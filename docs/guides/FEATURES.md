@@ -8,6 +8,7 @@ retained UI imports resources and submits composed frames. Applications opt into
 
 | Crate | Feature | Effect |
 | --- | --- | --- |
+| Native demos | `dynamic` (default) | Build and load Cargo cdylib artifacts against one shared runtime. |
 | Native demos | `monolith` | Link the runtime plus only the UI, renderer, GFX, and Skin implementations selected by that assembly. |
 | `neocogi-com` | defaults: `std`, `macros` | Local object/data helpers and event contracts/adapters without linking a runtime. |
 | `neocogi-com` | `macros` | Procedural macros and built-in event contracts, usable without `std` or allocation; IDL is a build dependency. |
@@ -58,40 +59,30 @@ and 4 MiB of committed text. On overflow it drops the incomplete backlog,
 queues cancellation, then retains the newest transition. An individual text
 commit above 4 MiB is rejected before copying.
 
-Build native applications through the package driver so each plugin gets its own
-feature selection and the executable receives its adjacent runtime/manifest:
+Cargo owns native artifact and feature selection:
 
 ```sh
-cargo neocogi build --assembly full --variant glow
-cargo neocogi build --assembly full --variant glow --profile min-size
-cargo neocogi build --assembly full --variant vulkan --profile min-size
-cargo neocogi build --assembly full --variant vulkan --variant monolith --release
+cargo run -p neocogi-demo-full
+cargo run -p neocogi-demo-full --no-default-features --features dynamic,vulkan
+cargo run -p neocogi-demo-full --no-default-features --features monolith,vulkan,embed-assets
 ```
 
-Generated ABI signatures are build-tool-computed SHA-256 values derived from
-the exact module fingerprint and declaration ID. This is part of the contract
-ABI, not an assembly feature or variant, and rustc performs no contract
-hashing. Dynamic plugins and monolithically linked descriptions therefore
-receive the same exact signature checks. The `monolith` variant stages no
-Neocogi shared libraries or `plugins.txt` because the executable registers its
-linked descriptors directly.
+Native defaults are `dynamic,glow`. Choose one renderer and one linkage; Cargo
+adds requested features to defaults unless `--no-default-features` is supplied.
+`dynamic` requests DLL artifacts through `neocogi-demo-plugins`; `monolith`
+registers normal Rust dependencies. Browser `webgl` uses static registration and
+embedded resources. Never enable both linkage modes in one build.
 
-`glow`, `vulkan`, `wgpu` and `webgl` on demo packages select host behavior. They are
-separate from implementation-library features. A direct demo build does not stage
-its dynamic dependencies. See [native packaging](COM_NATIVE.md) and [WebGL](WEB.md).
+Generated interface signatures are computed by the IDL library. Rust macro
+expansion does not hash contracts. Both linkage modes perform the same exact
+interface negotiation against one runtime authority.
 
-Native demos load executable-relative font/icon, theme, photo and mesh files by
-default. The GFX plugin owns decoding and resource baking; the skin plugin owns
-appearance and external-theme compilation. The host retains only typed COM bundles
-and resource capabilities. `cargo neocogi` stages both plugins for file-backed
-assemblies and selects their implementation features independently.
-
-Use `--variant embedded` to explicitly select `embed-assets`. Cargo's host build
-then processes fonts, PNGs and JSON into generated source under `OUT_DIR`, tracking
-the recipe inputs. The target expands bounded compressed RGBA and uses compiled
-metadata; it also embeds the photo and mesh. Browser `webgl` selects this mode.
-Neither native resource choice links a UI implementation or theme parser into the
-application's normal dependency graph.
+The demo host explicitly selects source-checkout resources with `workspace-assets`.
+`embed-assets` instead processes fonts, PNGs and JSON into generated Rust under
+`OUT_DIR`. Dynamic composition currently retains the GFX builder and selected
+Skin JSON support even with embedded resources; the former assembly-specific
+feature overlays are removed. This is a simpler fixed composition rather than
+an automatic size optimizer. See [native Cargo builds](COM_NATIVE.md).
 
 `neocogi-demo-assets/full-demo` adds theme choices, photo and mesh access.
 The asset compiler is an optional host build dependency enabled by `embed-assets`. Both storage

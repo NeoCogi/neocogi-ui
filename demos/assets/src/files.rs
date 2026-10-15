@@ -3,11 +3,26 @@ use super::recipe_data as data;
 use neocogi_ui::{GfxPluginFactoryAbi, IAssetBundleAbi, NativePath, Size};
 use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcStatus};
 
-/// Resolves a package-relative resource independently of the process working directory.
+/// Resolves an explicit resource policy independently of the process working directory.
+/// Cargo development hosts select checkout paths with `workspace-assets`; other
+/// users retain executable-relative resources. Neither policy searches or falls
+/// back to the other after a missing file.
 pub(super) fn asset_path(relative: &str) -> std::io::Result<std::path::PathBuf> {
-    let executable = std::env::current_exe()?;
-    let directory = executable.parent().ok_or_else(|| std::io::Error::other("executable has no parent"))?;
-    Ok(directory.join(relative))
+    #[cfg(feature = "workspace-assets")]
+    {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let relative = match relative {
+            "assets/FACEPALM.png" => "demos/full/assets/FACEPALM.png",
+            path => path,
+        };
+        Ok(root.join(relative))
+    }
+    #[cfg(not(feature = "workspace-assets"))]
+    {
+        let executable = std::env::current_exe()?;
+        let directory = executable.parent().ok_or_else(|| std::io::Error::other("executable has no parent"))?;
+        Ok(directory.join(relative))
+    }
 }
 
 /// Constructs the default bundle after the host registers its adjacent plugins.

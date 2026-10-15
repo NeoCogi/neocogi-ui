@@ -8,7 +8,8 @@ edition.workspace = true
 license.workspace = true
 
 [features]
-default = ["glow"]
+dynamic = ["neocogi-demo-host/dynamic"]
+default = ["glow", "dynamic"]
 glow = ["neocogi-demo-host/glow"]
 vulkan = ["neocogi-demo-host/vulkan"]
 wgpu = ["neocogi-demo-host/wgpu"]

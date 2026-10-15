@@ -9,10 +9,15 @@ repository.workspace = true
 
 [features]
 default = []
+# Cargo builds these DLLs; no Rust implementation is linked into a dynamic host.
+dynamic = ["dep:neocogi-demo-plugins"]
+dynamic-skin = ["dynamic", "neocogi-demo-plugins/skin"]
+dynamic-extension = ["dynamic", "neocogi-demo-plugins/extension"]
+monolith-extension = ["monolith", "dep:neocogi-example-ui-extension"]
 # Native selection belongs to the separately built renderer plugin.
-glow = ["neocogi-render-plugin?/glow"]
-vulkan = ["neocogi-render-plugin?/vulkan"]
-wgpu = ["neocogi-render-plugin?/wgpu"]
+glow = ["neocogi-render-plugin?/glow", "neocogi-demo-plugins?/glow"]
+vulkan = ["neocogi-render-plugin?/vulkan", "neocogi-demo-plugins?/vulkan"]
+wgpu = ["neocogi-render-plugin?/wgpu", "neocogi-demo-plugins?/wgpu"]
 webgl = ["dep:neocogi-ui-runtime", "dep:neocogi-ui-nodes", "dep:neocogi-render-plugin", "dep:neocogi-gfx", "neocogi-render-plugin/webgl"]
 # Expose PNG upload through the GFX plugin selected by the owning application.
 png-assets = []
@@ -20,19 +25,22 @@ png-assets = []
 skin = ["dep:neocogi-skin"]
 # Native monoliths retain only the implementations selected by their assembly.
 monolith = ["neocogi-com/static-runtime", "dep:neocogi-ui-runtime", "dep:neocogi-ui-nodes", "dep:neocogi-render-plugin"]
-monolith-gfx = ["monolith", "dep:neocogi-gfx"]
+monolith-gfx = ["monolith", "dep:neocogi-gfx", "neocogi-gfx/builder"]
 monolith-skin = ["monolith", "skin", "neocogi-skin/theme-json"]
 
 [dependencies]
+neocogi-demo-assets = { workspace = true, features = ["workspace-assets"] }
 neocogi-ui.workspace = true
 neocogi-com = { workspace = true, features = ["std", "macros"] }
 neocogi-ui-runtime = { path = "../../crates/ui/runtime", optional = true }
 neocogi-ui-nodes = { workspace = true, optional = true }
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "eef495f01bab0c70144820985f838d0ffbe36e93", optional = true, default-features = false }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "bd17f500188cc214a6f52eb28e5d66f5817aded5", optional = true, default-features = false }
 neocogi-gfx = { workspace = true, optional = true, default-features = false }
 neocogi-skin = { workspace = true, optional = true, default-features = false }
+neocogi-example-ui-extension = { path = "../../examples/ui-extension", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+neocogi-demo-plugins = { path = "../plugins", optional = true }
 neocogi-com = { workspace = true, features = ["runtime"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

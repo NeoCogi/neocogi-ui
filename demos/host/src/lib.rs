@@ -9,7 +9,7 @@ use neocogi_com::{com_object, ComPtr, NcCopyFromBufferOffset, NcStatus};
 use std::fmt;
 
 /// Validates assembly selections against actual statically linked factory descriptors.
-pub mod static_plugins;
+
 
 #[cfg(target_arch = "wasm32")]
 mod browser;
@@ -458,6 +458,15 @@ impl<State: AppState> Driver<State> {
     }
 }
 
+#[cfg(all(not(target_arch = "wasm32"), feature = "dynamic", feature = "monolith"))]
+compile_error!("select one native linkage: dynamic or monolith; disable defaults when selecting monolith");
+
+#[cfg(all(not(target_arch = "wasm32"), not(any(feature = "dynamic", feature = "monolith"))))]
+/// Reports missing linkage selection without entering the runtime.
+fn register() -> Result<(), HostError> {
+    Err(HostError::Message("select dynamic or monolith for native execution".to_owned()))
+}
+
 /// Registers the process plugin catalog before loading assets or constructing windows.
 /// Repeated calls reuse the first result; Host::new also calls this for callers supplying their own bundle.
 pub fn initialize() -> Result<(), HostError> {
@@ -469,64 +478,32 @@ pub fn initialize() -> Result<(), HostError> {
         .map_err(|error| HostError::Message(error.clone()))
 }
 
-/// Loads the dependency-ordered dynamic manifest adjacent to the executable.
-#[cfg(all(not(target_arch = "wasm32"), not(feature = "monolith")))]
+/// Loads the exact native artifacts Cargo built for this composition.
+/// Registration order is explicit because Nodes and Skin declare hard provider requirements.
+#[cfg(all(not(target_arch = "wasm32"), feature = "dynamic", not(feature = "monolith")))]
 fn register() -> Result<(), HostError> {
-    let executable = std::env::current_exe()?;
-    let directory = executable
-        .parent()
-        .ok_or_else(|| HostError::Message("executable has no parent directory".to_owned()))?;
-    let manifest = std::fs::read_to_string(directory.join("plugins.txt"))?;
-    let runtime = neocogi_com::Runtime::global();
-    for name in manifest.lines() {
-        let path = std::path::Path::new(name);
-        if path.components().count() != 1 || !matches!(path.components().next(), Some(std::path::Component::Normal(_))) {
-            return Err(HostError::Message("plugin manifest entries must be file names".to_owned()));
-        }
-        // SAFETY: cargo-neocogi stages these trusted workspace assemblies and their matching runtime.
-        // Required live activation follows neocogi-com's documented abort policy on invalid binaries.
-        unsafe {
-            runtime.load_plugin_library(directory.join(path));
-        }
-    }
+    neocogi_demo_plugins::register();
     Ok(())
 }
 
-/// Registers descriptors linked into a browser module or native monolith.
+/// Registers the implementation descriptors selected by static Cargo features.
 #[cfg(any(target_arch = "wasm32", feature = "monolith"))]
 fn register() -> Result<(), HostError> {
-    use static_plugins::StaticPlugin;
-    let available = [
-        StaticPlugin {
-            package: "neocogi-ui-runtime",
-            description: nc_ui::plugin_descriptor(),
-        },
-        StaticPlugin {
-            package: "neocogi-ui-nodes",
-            description: nc_ui_nodes::plugin_descriptor(),
-        },
-        StaticPlugin {
-            package: "neocogi-render-plugin",
-            description: nc_render::plugin_descriptor(),
-        },
+    let descriptors = [
+        nc_ui::plugin_descriptor(),
+        nc_ui_nodes::plugin_descriptor(),
+        nc_render::plugin_descriptor(),
+        #[cfg(feature = "monolith-extension")]
+        nc_ui_extension::plugin_descriptor(),
         #[cfg(any(target_arch = "wasm32", feature = "monolith-gfx"))]
-        StaticPlugin {
-            package: "neocogi-gfx",
-            description: nc_gfx::plugin_descriptor(),
-        },
+        nc_gfx::plugin_descriptor(),
         #[cfg(feature = "skin")]
-        StaticPlugin {
-            package: "neocogi-skin",
-            description: nc_skin::plugin_descriptor(),
-        },
+        nc_skin::plugin_descriptor(),
     ];
-    let selected = static_plugins::select(&available, option_env!("NEOCOGI_ASSEMBLY_PLUGINS")).map_err(HostError::Message)?;
     let runtime = neocogi_com::Runtime::global();
-    for plugin in selected {
-        // SAFETY: Generated descriptions, contracts, and code remain linked for the process lifetime.
-        unsafe {
-            runtime.register_plugin_descriptor(plugin.description)?;
-        }
+    for descriptor in descriptors {
+        // SAFETY: descriptors and provider code remain linked for process lifetime.
+        unsafe { runtime.register_plugin_descriptor(descriptor)?; }
     }
     Ok(())
 }

@@ -11,10 +11,8 @@ categories = ["gui", "rendering"]
 
 [lib]
 # Keep direct Cargo builds and packaged shared libraries under the same short name.
-# cargo-neocogi wraps this implementation rlib in the assembly's deployable
-# cdylib root, avoiding an additional shared-library link for the same code.
 name = "nc_ui"
-crate-type = ["rlib"]
+crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 neocogi-ui-support.workspace = true
@@ -27,7 +25,7 @@ rs-math3d.workspace = true
 
 [dev-dependencies]
 neocogi-ui-document.workspace = true
-neocogi-idl-example-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "712d19578b63218c0d0d4949442ee7b8a7856d7f" }
+neocogi-idl-example-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "9d85aca5180f343d75ed14a3d1082f71482824e9" }
 neocogi-ui-nodes.workspace = true
 neocogi-ui-nodes-contracts.workspace = true
 neocogi-ui-support = { workspace = true, features = ["test-support"] }
@@ -44,4 +42,9 @@ trybuild.workspace = true
 [features]
 default = []
 # A final dynamic artifact owns the loader entrypoint; static clients use the descriptor directly.
-dynamic-plugin = []
+dynamic-plugin = ["dep:com-library"]
+
+[target.'cfg(not(target_arch = "wasm32"))'.build-dependencies]
+# Shared-mode facade features may be unified by the host. Every DLL that can
+# import runtime APIs consumes the same Cargo-owned runtime artifact path.
+com-library = { package = "neocogi-com-runtime", git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "9d85aca5180f343d75ed14a3d1082f71482824e9", artifact = "cdylib", target = "target", optional = true }

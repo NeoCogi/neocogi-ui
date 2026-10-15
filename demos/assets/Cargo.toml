@@ -9,6 +9,8 @@ repository.workspace = true
 
 [features]
 default = []
+# Cargo demo compositions read resources from this checkout, independent of cwd.
+workspace-assets = []
 # Additional themes, photo and mesh are exclusive to the full demo. Only that
 # client needs the optional Skin contract for runtime theme activation.
 full-demo = ["neocogi-ui/skin"]

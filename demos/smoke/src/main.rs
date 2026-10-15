@@ -66,72 +66,11 @@ impl Options {
     }
 }
 
-/// Loads the dependency-ordered dynamic plugin manifest from the assembly.
-#[cfg(not(feature = "monolith"))]
-fn register_plugins(runtime: &neocogi_com::Runtime, directory: &std::path::Path) -> Result<(), Box<dyn Error>> {
-    let manifest = std::fs::read_to_string(directory.join("plugins.txt"))?;
-    for name in manifest.lines() {
-        // The package manifest contains file names only, keeping all loads in the staged directory.
-        let path = std::path::Path::new(name);
-        if path.components().count() != 1 || !matches!(path.components().next(), Some(std::path::Component::Normal(_))) {
-            return Err("plugin manifest entry must be a file name".into());
-        }
-        // SAFETY: The build driver stages these trusted, matching workspace plugin assemblies.
-        let plugin_id = unsafe { runtime.load_plugin_library(directory.join(path)) };
-        let info = runtime.plugin_info(plugin_id)?.ok_or("loaded plugin missing")?;
-        println!("loaded {}", info.qualified_name);
-    }
-    Ok(())
-}
-
-/// Registers implementation descriptors retained by the monolithic executable.
-#[cfg(feature = "monolith")]
-fn register_plugins(runtime: &neocogi_com::Runtime, _directory: &std::path::Path) -> Result<(), Box<dyn Error>> {
-    use neocogi_demo_host::static_plugins::{self, StaticPlugin};
-    let available = [
-        StaticPlugin {
-            package: "neocogi-ui-runtime",
-            description: nc_ui::plugin_descriptor(),
-        },
-        StaticPlugin {
-            package: "neocogi-ui-nodes",
-            description: nc_ui_nodes::plugin_descriptor(),
-        },
-        StaticPlugin {
-            package: "neocogi-render-plugin",
-            description: nc_render::plugin_descriptor(),
-        },
-        StaticPlugin {
-            package: "neocogi-gfx",
-            description: nc_gfx::plugin_descriptor(),
-        },
-        StaticPlugin {
-            package: "neocogi-skin",
-            description: nc_skin::plugin_descriptor(),
-        },
-        #[cfg(feature = "extension")]
-        StaticPlugin {
-            package: "neocogi-example-ui-extension",
-            description: nc_ui_extension::plugin_descriptor(),
-        },
-    ];
-    let selected = static_plugins::select(&available, option_env!("NEOCOGI_ASSEMBLY_PLUGINS"))?;
-    for plugin in selected {
-        // SAFETY: Every generated descriptor and implementation remains linked for process lifetime.
-        unsafe {
-            runtime.register_plugin_descriptor(plugin.description)?;
-        }
-    }
-    Ok(())
-}
-
-/// Loads the staged deployment and either runs interactively or exercises its smoke gate.
+/// Initializes the Cargo composition and runs interactively or exercises its smoke gate.
 fn main() -> Result<(), Box<dyn Error>> {
     let options = Options::read()?;
-    let executable = std::env::current_exe()?;
-    let directory = executable.parent().ok_or("executable has no parent")?;
     let runtime = neocogi_com::Runtime::global();
-    register_plugins(runtime, directory)?;
+    neocogi_demo_host::initialize()?;
     let platform = runtime.acquire_plugin_root::<PlatformAbi>(neocogi_com::guid_from_qualified_name(renderer_plugin_name()))?;
     let assets = neocogi_demo_assets::load_bundle()?;
     let atlas = assets.image()?;
@@ -166,7 +105,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     if let Some(path) = &options.theme {
         // Relative paths belong to the staged package, so startup remains independent of cwd.
-        let path = if path.is_absolute() { path.clone() } else { directory.join(path) };
+        let path = if path.is_absolute() { path.clone() } else { std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(path) };
         let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
         let assets_loader = gfx.asset_loader().map_err(|status| format!("--theme requires a GFX files package: {status}"))?;
         let publisher = gfx.asset_publisher().map_err(|status| format!("--theme requires GFX publication: {status}"))?;

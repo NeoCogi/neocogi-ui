@@ -8,17 +8,18 @@ license.workspace = true
 repository.workspace = true
 
 [features]
+dynamic = ["neocogi-demo-host/dynamic-skin"]
 # Cargo adds feature flags to defaults; alternate backends require --no-default-features.
-default = ["glow"]
+default = ["glow", "dynamic"]
 # Link the full assembly's runtime, UI, renderer, GFX, and Skin implementations.
 monolith = ["neocogi-demo-host/monolith-gfx", "neocogi-demo-host/monolith-skin"]
-glow = ["neocogi-demo-host/glow", "neocogi-render-plugin/glow"]
+glow = ["neocogi-demo-host/glow"]
 # The browser's live style editor needs Skin even though authored themes are precompiled.
 webgl = ["neocogi-demo-host/webgl", "neocogi-demo-host/skin", "embed-assets"]
 # Native deployments read adjacent files unless this feature is explicitly requested.
 embed-assets = ["neocogi-demo-assets/embed-assets"]
-vulkan = ["neocogi-demo-host/vulkan", "neocogi-render-plugin/vulkan"]
-wgpu = ["neocogi-demo-host/wgpu", "neocogi-render-plugin/wgpu"]
+vulkan = ["neocogi-demo-host/vulkan"]
+wgpu = ["neocogi-demo-host/wgpu"]
 
 [dependencies]
 neocogi-ui-samples.workspace = true
@@ -30,11 +31,6 @@ neocogi-demo-assets = { workspace = true, features = ["full-demo"] }
 neocogi-demo-host = { workspace = true, features = ["png-assets"] }
 rs-math3d.workspace = true
 
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-# Dynamic assembly roots add `dynamic-plugin`; monoliths call descriptors directly.
-neocogi-com-runtime.workspace = true
-neocogi-ui-runtime = { path = "../../crates/ui/runtime" }
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "eef495f01bab0c70144820985f838d0ffbe36e93", default-features = false }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen.workspace = true

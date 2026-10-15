@@ -2,6 +2,7 @@
 # Installed executable names are declared explicitly below.
 autobins = false
 name = "neocogi-demo-smoke"
+default-run = "neocogi-demo-smoke"
 version = "0.0.0"
 authors.workspace = true
 edition.workspace = true
@@ -10,15 +11,19 @@ repository.workspace = true
 publish = false
 
 [features]
-default = ["glow"]
+dynamic = ["neocogi-demo-host/dynamic-skin"]
+default = ["glow", "dynamic"]
 # Link the runtime and selected implementation descriptors into one executable.
-monolith = ["neocogi-com/static-runtime"]
-glow = ["neocogi-render-plugin/glow"]
-vulkan = ["neocogi-render-plugin/vulkan"]
-wgpu = ["neocogi-render-plugin/wgpu"]
-extension = ["dep:neocogi-example-ui-extension"]
+monolith = ["neocogi-demo-host/monolith-gfx", "neocogi-demo-host/monolith-skin"]
+glow = ["neocogi-demo-host/glow"]
+vulkan = ["neocogi-demo-host/vulkan"]
+wgpu = ["neocogi-demo-host/wgpu"]
+extension = []
+# Extension implementations follow the same explicit linkage choice as the host.
+dynamic-extension = ["extension", "dynamic", "neocogi-demo-host/dynamic-extension"]
+monolith-extension = ["extension", "monolith", "neocogi-demo-host/monolith-extension"]
 # Standalone development benchmark; no counters or recorder enter the normal demo executable.
-benchmark = ["embed-assets"]
+benchmark = ["embed-assets", "monolith", "dep:neocogi-ui-nodes", "dep:neocogi-gfx"]
 embed-assets = ["neocogi-demo-assets/embed-assets"]
 
 [dependencies]
@@ -33,13 +38,8 @@ neocogi-demo-assets.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Dynamic assembly roots add `dynamic-plugin`; monoliths call descriptors directly.
-neocogi-com-runtime.workspace = true
-neocogi-ui-runtime = { path = "../../crates/ui/runtime" }
-neocogi-ui-nodes.workspace = true
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "eef495f01bab0c70144820985f838d0ffbe36e93", default-features = false }
-neocogi-gfx = { workspace = true, features = ["builder"] }
-neocogi-skin = { workspace = true, features = ["theme-json"] }
-neocogi-example-ui-extension = { path = "../../examples/ui-extension", optional = true }
+neocogi-ui-nodes = { workspace = true, optional = true }
+neocogi-gfx = { workspace = true, features = ["builder"], optional = true }
 
 [[bin]]
 name = "neocogi-com-bench"

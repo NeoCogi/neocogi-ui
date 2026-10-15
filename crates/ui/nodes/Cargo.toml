@@ -9,15 +9,13 @@ description = "Deployable built-in NeoCogi UI node implementations and standard 
 
 [lib]
 # Keep direct Cargo builds and packaged shared libraries under the same short name.
-# cargo-neocogi wraps this implementation rlib in the assembly's deployable
-# cdylib root so the plugin owns one native shared object per deployment.
 name = "nc_ui_nodes"
-crate-type = ["rlib"]
+crate-type = ["rlib", "cdylib"]
 
 [features]
 default = []
 # Only deployable dynamic libraries publish the stable plugin descriptor entrypoint.
-dynamic-plugin = []
+dynamic-plugin = ["dep:com-library"]
 
 [dependencies]
 neocogi-ui-support.workspace = true
@@ -35,3 +33,8 @@ neocogi-ui-support = { workspace = true, features = ["test-support"] }
 neocogi-ui.workspace = true
 neocogi-com = { workspace = true, features = ["static-runtime"] }
 tempfile.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.build-dependencies]
+# Shared-mode facade features may be unified by the host. Every DLL that can
+# import runtime APIs consumes the same Cargo-owned runtime artifact path.
+com-library = { package = "neocogi-com-runtime", git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "9d85aca5180f343d75ed14a3d1082f71482824e9", artifact = "cdylib", target = "target", optional = true }
