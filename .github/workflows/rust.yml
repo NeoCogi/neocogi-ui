@@ -141,11 +141,18 @@ jobs:
         run: xvfb-run -a scripts/test-demo.sh ${{ matrix.backend }}
       - name: Independently built custom widget and container
         run: xvfb-run -a scripts/test-extension.sh ${{ matrix.backend }}
+      - name: Native runtime and provider target profiles
+        if: matrix.backend == 'vulkan'
+        run: python3 scripts/test-native-build.py
+      - name: Complete min-size build and direct executable startup
+        if: matrix.backend == 'vulkan'
+        run: |
+          cargo build -p neocogi-demo-full --no-default-features --features dynamic,vulkan --profile min-size
+          xvfb-run -a env -u LD_LIBRARY_PATH NEOCOGI_DEMO_FRAMES=2 ./target/min-size/neocogi-demo-full
+          cargo test -p neocogi-demo-plugins --profile min-size --features vulkan,skin,extension
       - name: Backend-specific frame/resource checks
         run: xvfb-run -a cargo test -p neocogi-render-plugin --lib --no-default-features --features ${{ matrix.backend }} -- --include-ignored
       - name: Check demo and platform warnings for this backend
-        env:
-          NC_COM_RUNTIME_LINK_DIR: ${{ github.workspace }}/target/debug
         run: cargo clippy -p neocogi-demo-full -p neocogi-demo-basic -p neocogi-render-plugin --all-targets --no-default-features --features dynamic,${{ matrix.backend }} -- -D warnings
 
   # These jobs validate the native loader/package shape without assuming a hosted runner has a GPU desktop.

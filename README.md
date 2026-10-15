@@ -33,18 +33,21 @@ and [executable mapping](docs/guides/EXAMPLES.md) for exact outputs.
 
 ## Run the demos
 
-The checkout pins nightly Cargo for native artifact dependencies. Build and run
-the selected application directly:
+The checkout pins nightly for native artifact/linkage integration and target
+standard-library builds. Build and run the selected application directly:
 
 ```sh
 cargo run -p neocogi-demo-full
 cargo run -p neocogi-demo-full --release --no-default-features --features dynamic,vulkan
+cargo run -p neocogi-demo-full --profile min-size --no-default-features --features dynamic,vulkan
 cargo run -p neocogi-demo-basic --bin neocogi-demo-calculator
 cargo run -p neocogi-demo-smoke -- --smoke
 ```
 
 Cargo builds the shared runtime and selected plugins, provides their exact paths,
-and prepares loader paths for execution. Native defaults are `dynamic,glow`;
+and records Unix loader paths for direct build-tree execution. The complete
+min-size profile includes a size-optimized standard library and immediate abort.
+Native defaults are `dynamic,glow`;
 features are additive, so another renderer or `monolith` requires disabling
 defaults. For a static application with compiled resources:
 
