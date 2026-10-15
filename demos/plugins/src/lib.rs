@@ -1,9 +1,11 @@
 //! Cargo-owned native demo composition. No provider Rust library is linked here.
 //!
 //! Artifact paths refer to this build tree. This is development startup, not an
-//! installation manifest. The single runtime is linked by the adjacent build
-//! script using only Cargo's already-resolved native search directory.
+//! installation manifest. Transitive native link metadata records the one shared
+//! runtime directory; direct execution needs no Cargo loader environment.
 #![deny(missing_docs)]
+
+use neocogi_native_runtime_link as _;
 
 /// Loads trusted Cargo artifacts in their explicit provider order.
 /// The shared runtime validates metadata, dependencies and process ownership.

@@ -1,6 +1,7 @@
 //! Independently compiled DLL proving Cargo compositions share one runtime authority.
 #[path = "../interface.rs"]
 mod interface;
+use neocogi_native_runtime_link as _;
 use interface::{IRegistryProbe, IRegistryProbeAbi};
 use neocogi_com::{ComPtr, NcStatus, Runtime, com_object};
 

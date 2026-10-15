@@ -9,6 +9,22 @@ use neocogi_com::{Runtime, guid_from_qualified_name};
 /// Registration observed/changed inside the DLL must be the host's same process catalog.
 #[test]
 fn cargo_host_and_plugin_share_one_runtime_catalog() {
+    // Cargo adds native dependency directories to its loader environment. The
+    // child must also start directly, before main, without that hidden support.
+    #[cfg(unix)]
+    if std::env::var_os("NEOCOGI_DIRECT_RUNTIME_TEST").is_none() {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "cargo_host_and_plugin_share_one_runtime_catalog", "--nocapture"])
+            .env("NEOCOGI_DIRECT_RUNTIME_TEST", "1")
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("DYLD_LIBRARY_PATH")
+            .env_remove("DYLD_FALLBACK_LIBRARY_PATH")
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "direct host startup/ABI calls failed:\n{}\n{}",
+            String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+        return;
+    }
     neocogi_demo_plugins::register();
     let runtime = Runtime::global();
     let renderer = if cfg!(feature = "vulkan") {

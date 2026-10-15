@@ -6,6 +6,10 @@
 
 #![deny(missing_docs)]
 
+// Native link metadata propagates to this DLL without embedding runtime state.
+#[cfg(all(feature = "dynamic-plugin", not(target_arch = "wasm32")))]
+use neocogi_native_runtime_link as _;
+
 #[cfg(feature = "builder")]
 use neocogi_gfx_impl::AssetLoaderObject;
 use neocogi_gfx_impl::{AssetPublisherObject, GfxCompositorObject, PngDecoderObject};

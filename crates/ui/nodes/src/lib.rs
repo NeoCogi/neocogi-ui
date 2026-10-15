@@ -27,6 +27,10 @@
 )]
 
 // Compile the nodes-owned authoring guide without publishing a second API module.
+// Native link metadata propagates to this DLL without embedding runtime state.
+#[cfg(all(feature = "dynamic-plugin", not(target_arch = "wasm32")))]
+use neocogi_native_runtime_link as _;
+
 #[cfg(doctest)]
 mod guide_doctests {
     #[doc = include_str!("../docs/WIDGETS.md")]

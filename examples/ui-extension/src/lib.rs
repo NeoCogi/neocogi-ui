@@ -3,6 +3,10 @@
 //! The two concrete objects share only lifecycle plumbing. The counter owns its scalar value and
 //! event producer; the inset owns its padding and the host's sole authoritative child editor.
 #![deny(missing_docs)]
+// Native link metadata propagates to this DLL without embedding runtime state.
+#[cfg(all(feature = "dynamic-plugin", not(target_arch = "wasm32")))]
+use neocogi_native_runtime_link as _;
+
 mod settings;
 use neocogi_ui::com::widget::WidgetState;
 use neocogi_ui_core_contracts::*;
