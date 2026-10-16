@@ -23,6 +23,8 @@ jobs:
       - uses: actions/checkout@v6
       - run: cargo test -p cargo-neocogi
       - run: cargo clippy -p cargo-neocogi --all-targets -- -D warnings
+      - name: Cargo debugger source-map metadata
+        run: python3 -m unittest discover -s scripts -p test_lldb_source_map.py
 
   # The UI consumes resolved resources; optional construction features belong to assets.
   ui:
