@@ -3,34 +3,18 @@ use super::recipe_data as data;
 use neocogi_ui::{GfxPluginFactoryAbi, IAssetBundleAbi, NativePath, Size};
 use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcStatus};
 
-/// Resolves an explicit resource policy independently of the process working directory.
-/// Cargo development hosts select checkout paths with `workspace-assets`; other
-/// users retain executable-relative resources. Neither policy searches or falls
-/// back to the other after a missing file.
+/// Resolves resources beside the executable, independently of cwd or build paths.
 pub(super) fn asset_path(relative: &str) -> std::io::Result<std::path::PathBuf> {
-    #[cfg(feature = "workspace-assets")]
-    {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let relative = match relative {
-            "assets/FACEPALM.png" => "demos/full/assets/FACEPALM.png",
-            path => path,
-        };
-        Ok(root.join(relative))
-    }
-    #[cfg(not(feature = "workspace-assets"))]
-    {
-        let executable = std::env::current_exe()?;
-        let directory = executable.parent().ok_or_else(|| std::io::Error::other("executable has no parent"))?;
-        Ok(directory.join(relative))
-    }
+    let executable = std::env::current_exe()?;
+    let directory = executable.parent().ok_or_else(|| std::io::Error::other("executable has no parent"))?;
+    Ok(directory.join(relative))
 }
 
 /// Constructs the default bundle after the host registers its adjacent plugins.
 /// The provider owns every decoder, font rasterizer and packing operation; no UI implementation is linked here.
 pub fn load_bundle() -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
     let directory = asset_path("").map_err(|_| neocogi_com::NC_E_LOAD_FAILED)?;
-    let factory =
-        neocogi_com::Runtime::global().acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+    let factory = neocogi_com::Runtime::global().acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
     let loader = factory.asset_loader()?;
     let builder = loader.create_builder(
         Size {

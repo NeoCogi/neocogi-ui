@@ -35,13 +35,14 @@ class NativeBuildProfiles(unittest.TestCase):
         self.assertEqual(expected["lto"], "fat")
         self.assertEqual(expected["codegen_units"], 1)
         self.assertEqual(expected["strip"], {"resolved": {"Named": "symbols"}})
+        self.assertEqual(expected["trim_paths"], "all")
         artifacts = [u for u in units if u["target"]["name"] in PROVIDERS]
         self.assertEqual({u["target"]["name"] for u in artifacts}, PROVIDERS)
         self.assertEqual(len(artifacts), len(PROVIDERS), "one runtime/provider artifact per target graph")
         for unit in artifacts:
             with self.subTest(provider=unit["target"]["name"]):
                 self.assertEqual(unit["target"]["kind"], ["cdylib"], "implementation rlibs must not enter the host")
-                for key in ("opt_level", "panic", "lto", "codegen_units", "strip"):
+                for key in ("opt_level", "panic", "lto", "codegen_units", "strip", "trim_paths"):
                     self.assertEqual(unit["profile"][key], expected[key], key)
                 self.assertEqual(unit["profile"].get("rustflags", []), expected.get("rustflags", []))
         standard = [u for u in units if u["target"]["name"] == "std"]

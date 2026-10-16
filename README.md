@@ -44,8 +44,8 @@ cargo run -p neocogi-demo-basic --bin neocogi-demo-calculator
 cargo run -p neocogi-demo-smoke -- --smoke
 ```
 
-Cargo builds the shared runtime and selected plugins, provides their exact paths,
-and records Unix loader paths for direct build-tree execution. The complete
+Cargo builds the shared runtime and selected plugins, copies them into `lib/`
+beside the executable, and records relative Unix loader paths. The complete
 min-size profile includes a size-optimized standard library and immediate abort.
 Native defaults are `dynamic,glow`;
 features are additive, so another renderer or `monolith` requires disabling
@@ -55,9 +55,12 @@ defaults. For a static application with compiled resources:
 cargo run -p neocogi-demo-full --no-default-features --features monolith,glow,embed-assets
 ```
 
-Development demos read resources from this checkout or explicitly embed them.
-Cargo artifact paths are build-tree paths; distribution installation remains a
-separate concern. The [native guide](docs/guides/COM_NATIVE.md) explains ownership,
+File-backed resources are copied into adjacent `assets/` and `themes/` directories;
+`embed-assets` compiles them into the executable instead. Copy the executable,
+`lib/` and those resource directories together to relocate the application
+(also the adjacent `nc_com.dll` on Windows). Build paths remain compiler inputs;
+debug unremapping sidecars must stay on the build machine. Distribution
+installation remains separate. The [native guide](docs/guides/COM_NATIVE.md) explains ownership,
 linkage, resources, browser builds and remaining Cargo costs. The optional
 [cargo-neocogi tool](tools/cargo-neocogi/README.md) manages NCIDL module authoring;
 it no longer builds assemblies.

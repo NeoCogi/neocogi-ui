@@ -77,7 +77,8 @@ Generated interface signatures are computed by the IDL library. Rust macro
 expansion does not hash contracts. Both linkage modes perform the same exact
 interface negotiation against one runtime authority.
 
-The demo host explicitly selects source-checkout resources with `workspace-assets`.
+Native file-backed resources are copied beside the executable during compilation.
+Runtime paths use that application directory, independent of the source checkout.
 `embed-assets` instead processes fonts, PNGs and JSON into generated Rust under
 `OUT_DIR`. Dynamic composition currently retains the GFX builder and selected
 Skin JSON support even with embedded resources; the former assembly-specific

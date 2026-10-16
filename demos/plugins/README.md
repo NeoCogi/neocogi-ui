@@ -3,7 +3,8 @@
 This crate declares the native DLL artifacts used by the existing demo host.
 Cargo owns resolution, compilation, caching and exact paths. The shared native
 linkage crate declares the runtime as a normal target artifact and propagates
-native search/rpath metadata; `register()` loads selected artifacts in provider
+relative native loader metadata; compiler-only staging copies DLLs into `lib/`
+beside the executable. `register()` loads those filenames in provider
 order. No build subprocess or assembly planner is
 present. The full ownership contract is in the [native guide](../../docs/guides/COM_NATIVE.md).
 
@@ -26,11 +27,15 @@ The host observes both operations through its own facade, then acquires the
 published descriptor after dropping the probe owner. This catches accidental
 private runtime instances and lost library pinning. It also checks the selected
 renderer identity and repeat registration, making backend switches testable
-without constructing an SDL window. On Unix it re-executes the real test host
-with loader-path environment variables removed before making those ABI calls. The probe uses a fixed test-only C interface;
+without constructing an SDL window. It copies and renames the real test host's
+application directory and re-executes it with Unix loader-path environment
+variables removed before making those ABI calls. The probe uses a fixed test-only C interface;
 IDL-generated closed contracts and generic roots are tested by the compiler suite.
 
-This is development composition. Embedded artifact paths are not an installed
-application manifest. Unix executables record the build-tree runtime directory
-and can start directly without Cargo's loader environment. Relocatable deployment
-and Windows execution still require an explicit DLL/resource layout.
+Absolute Cargo paths are compiler inputs only. Runtime code holds filenames and
+uses the executable's adjacent `lib/`; Windows also gets `nc_com.dll` beside the
+executable for initial imports. `register()` returns executable-location I/O
+errors; mandatory plugin loading retains the runtime's fatal validation policy.
+Staging tracks both input and copied files, so deleting a DLL or switching to a
+cached renderer restores the selected bytes. Unused old files can remain in a
+shared profile; only the compiled selection is registered.

@@ -9,13 +9,14 @@ repository.workspace = true
 
 [features]
 default = []
-# Cargo demo compositions read resources from this checkout, independent of cwd.
-workspace-assets = []
 # Additional themes, photo and mesh are exclusive to the full demo. Only that
 # client needs the optional Skin contract for runtime theme activation.
 full-demo = ["neocogi-ui/skin"]
 # Explicit opt-in for self-contained resources, including browser deployments.
 embed-assets = ["neocogi-gfx-support/compiled-assets", "dep:neocogi-gfx-impl", "dep:neocogi-skin-impl", "dep:neocogi-gfx-contracts", "dep:neocogi-gfx-support"]
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+neocogi-native-layout.workspace = true
 
 [dependencies]
 neocogi-ui.workspace = true

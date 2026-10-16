@@ -482,7 +482,7 @@ pub fn initialize() -> Result<(), HostError> {
 /// Registration order is explicit because Nodes and Skin declare hard provider requirements.
 #[cfg(all(not(target_arch = "wasm32"), feature = "dynamic", not(feature = "monolith")))]
 fn register() -> Result<(), HostError> {
-    neocogi_demo_plugins::register();
+    neocogi_demo_plugins::register()?;
     Ok(())
 }
 

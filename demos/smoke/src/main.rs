@@ -105,7 +105,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     if let Some(path) = &options.theme {
         // Relative paths belong to the staged package, so startup remains independent of cwd.
-        let path = if path.is_absolute() { path.clone() } else { std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(path) };
+        let path = if path.is_absolute() {
+            path.clone()
+        } else {
+            std::env::current_exe()?.parent().ok_or("executable has no parent")?.join(path)
+        };
         let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
         let assets_loader = gfx.asset_loader().map_err(|status| format!("--theme requires a GFX files package: {status}"))?;
         let publisher = gfx.asset_publisher().map_err(|status| format!("--theme requires GFX publication: {status}"))?;

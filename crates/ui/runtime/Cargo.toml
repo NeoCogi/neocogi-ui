@@ -25,7 +25,7 @@ rs-math3d.workspace = true
 
 [dev-dependencies]
 neocogi-ui-document.workspace = true
-neocogi-idl-example-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "576c56186ca80f21c8d34ee104007004d832e057" }
+neocogi-idl-example-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "ed443b6da0b8ac99ab62b10cc768b3960bc26441" }
 neocogi-ui-nodes.workspace = true
 neocogi-ui-nodes-contracts.workspace = true
 neocogi-ui-support = { workspace = true, features = ["test-support"] }

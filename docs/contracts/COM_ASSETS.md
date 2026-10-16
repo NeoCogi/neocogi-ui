@@ -474,11 +474,11 @@ cargo build -p neocogi-demo-full
 cargo build -p neocogi-demo-full --features embed-assets
 ```
 
-Native Cargo compositions explicitly select source-checkout resources through
-`workspace-assets`. GFX owns decoding and resource baking; Skin owns appearance
+Native Cargo compositions copy file-backed resources into executable-relative
+`assets/` and `themes/` directories. GFX owns decoding and resource baking; Skin owns appearance
 and external JSON compilation. Register providers before loading a bundle.
-These development resource paths are independent of the working directory and
-are not an installed package layout.
+Resource paths are independent of the working directory and source checkout.
+Copy those directories with the executable when relocating a file-backed build.
 
 `embed-assets` compiles atlases and themes and embeds the full demo's photo and
 mesh. Dynamic composition keeps its selected GFX/Skin services even in this mode;

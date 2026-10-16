@@ -52,6 +52,14 @@
 //
 //! Demo resources use adjacent native files by default; `embed-assets` explicitly selects compiled resources.
 
+// Only the compiler reads source paths; deployed resource lookup is app-relative.
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "embed-assets")))]
+const _: () = neocogi_native_layout::stage_resources!(
+    "../../assets" => "assets",
+    "../../themes" => "themes",
+    "../full/assets/FACEPALM.png" => "assets/FACEPALM.png",
+);
+
 /// Native loading and host construction share one catalog recipe.
 #[cfg(any(not(feature = "embed-assets"), test))]
 #[cfg_attr(

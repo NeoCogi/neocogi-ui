@@ -10,4 +10,6 @@ if [[ "${NEOCOGI_TEST_BUILD_ONLY:-0}" == 1 ]]; then
 fi
 NEOCOGI_DEMO_FRAMES=3 cargo run -p neocogi-demo-full --no-default-features --features "$features"
 # SDL permits one event pump per process; native fixtures own it in turn.
-cargo test -p neocogi-demo-full --lib --no-default-features --features "$features" -- --include-ignored --test-threads=1
+cargo test -p neocogi-demo-full --lib --no-default-features --features "$features" \
+    --config "target.'cfg(any(unix, windows))'.runner = ['python3', '$PWD/scripts/run-native-test.py']" \
+    -- --include-ignored --test-threads=1

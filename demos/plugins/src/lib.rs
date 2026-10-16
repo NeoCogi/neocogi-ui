@@ -1,31 +1,36 @@
 //! Cargo-owned native demo composition. No provider Rust library is linked here.
 //!
-//! Artifact paths refer to this build tree. This is development startup, not an
-//! installation manifest. Transitive native link metadata records the one shared
-//! runtime directory; direct execution needs no Cargo loader environment.
+//! Cargo paths are consumed only while staging build outputs. Runtime startup
+//! loads selected filenames from the lib directory beside the executable.
 #![deny(missing_docs)]
 
 use neocogi_native_runtime_link as _;
 
 /// Loads trusted Cargo artifacts in their explicit provider order.
 /// The shared runtime validates metadata, dependencies and process ownership.
-pub fn register() {
-    let paths = [
-        env!("CARGO_CDYLIB_FILE_UI_LIBRARY_nc_ui"),
-        env!("CARGO_CDYLIB_FILE_NODES_LIBRARY_nc_ui_nodes"),
-        env!("CARGO_CDYLIB_FILE_RENDER_LIBRARY_nc_render"),
-        env!("CARGO_CDYLIB_FILE_GFX_LIBRARY_nc_gfx"),
+pub fn register() -> std::io::Result<()> {
+    let executable = std::env::current_exe()?;
+    let directory = executable
+        .parent()
+        .ok_or_else(|| std::io::Error::other("executable has no parent"))?
+        .join("lib");
+    let filenames = [
+        neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_UI_LIBRARY_nc_ui"),
+        neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_NODES_LIBRARY_nc_ui_nodes"),
+        neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_RENDER_LIBRARY_nc_render"),
+        neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_GFX_LIBRARY_nc_gfx"),
         #[cfg(feature = "extension")]
-        env!("CARGO_CDYLIB_FILE_EXTENSION_LIBRARY_nc_ui_extension"),
+        neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_EXTENSION_LIBRARY_nc_ui_extension"),
         #[cfg(feature = "skin")]
-        env!("CARGO_CDYLIB_FILE_SKIN_LIBRARY_nc_skin"),
+        neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_SKIN_LIBRARY_nc_skin"),
     ];
     let runtime = neocogi_com::Runtime::global();
-    for path in paths {
-        // SAFETY: these are trusted provider artifacts built from this Cargo graph.
+    for filename in filenames {
+        // SAFETY: the application ships trusted Cargo-built providers in its lib directory.
         // Runtime registration validates descriptors and retains code for process lifetime.
         unsafe {
-            runtime.load_plugin_library(std::path::Path::new(path));
+            runtime.load_plugin_library(directory.join(filename));
         }
     }
+    Ok(())
 }
