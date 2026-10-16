@@ -32,6 +32,14 @@ unsupported interfaces produce `Ok(None)`, while an ABI mismatch or other error
 remains an error. A successful projection is not another owner. Its methods
 return `NC_E_DROPPED` after the message's event owner is destroyed.
 
+An event owner outside an envelope uses the ordinary
+`event.query_weak::<ConcreteEventAbi>()` operation. It returns a weak projection
+or the original COM error, including `NC_E_NOINTERFACE` for an unsupported type.
+There is no free `downcast_event` function between these APIs. The envelope's
+`downcast` keeps the filtering policy, mapping only `NC_E_NOINTERFACE` to `None`;
+the same policy serves widget/service origin selection. Neither operation may
+hide an ABI mismatch by converting all query failures to absence.
+
 ## Value transport and interpretation
 
 The origin is an IDL value, not an untyped payload. Recursive `WeakComBox<T>` fields

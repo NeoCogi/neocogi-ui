@@ -435,11 +435,13 @@ mod tests {
     ) {
         let (events_tx, events) = std::sync::mpsc::channel();
         let queue = neocogi_ui::test_event_queue!(neocogi_ui::TextboxAbi, RecordedEvent, events_tx, |_queue, _origin, event| {
-            if let Some(value) = neocogi_com::events::downcast_event::<neocogi_ui::ITextChangedEventAbi>(event)? {
-                RecordedEvent::Changed(value.text()?.to_string()?, value.cursor()?)
-            } else {
-                let value = event.query_weak::<neocogi_ui::ITextSubmittedEventAbi>()?;
-                RecordedEvent::Submitted(value.text()?.to_string()?)
+            match event.query_weak::<neocogi_ui::ITextChangedEventAbi>() {
+                Ok(value) => RecordedEvent::Changed(value.text()?.to_string()?, value.cursor()?),
+                Err(neocogi_com::NC_E_NOINTERFACE) => {
+                    let value = event.query_weak::<neocogi_ui::ITextSubmittedEventAbi>()?;
+                    RecordedEvent::Submitted(value.text()?.to_string()?)
+                }
+                Err(status) => return Err(status),
             }
         })
         .unwrap();

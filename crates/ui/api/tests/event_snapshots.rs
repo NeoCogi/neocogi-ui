@@ -1,6 +1,6 @@
 //! Concrete COM snapshots are usable independently of widget construction or Rust event enums.
-use neocogi_com::{ComBox, INcStringComPtrExt, NcStatus, NC_E_DROPPED, NC_E_INVALID_ARG};
-use neocogi_com::events::{IEvent, IEventAbi, downcast_event};
+use neocogi_com::{ComBox, INcStringComPtrExt, NcStatus, NC_E_DROPPED, NC_E_INVALID_ARG, NC_E_NOINTERFACE};
+use neocogi_com::events::{IEvent, IEventAbi};
 use neocogi_ui_core_contracts::*;
 use neocogi_ui_nodes_contracts::*;
 use neocogi_ui::events as snapshot;
@@ -11,11 +11,11 @@ fn activation_is_an_exclusive_immutable_snapshot() {
     let mut label = String::from("Save α");
     let event = snapshot::activated(&label).unwrap();
     label.clear();
-    let typed = downcast_event::<IActivatedEventAbi>(&event).unwrap().unwrap();
+    let typed = event.query_weak::<IActivatedEventAbi>().unwrap();
     let text = typed.label().unwrap();
     assert_eq!(text.to_string().unwrap(), "Save α");
     assert!(text.as_com_ref().same_object(typed.label().unwrap().as_com_ref()));
-    assert!(downcast_event::<ITextChangedEventAbi>(&event).unwrap().is_none());
+    assert_eq!(event.query_weak::<ITextChangedEventAbi>().unwrap_err(), NC_E_NOINTERFACE);
     drop(event);
     assert_eq!(typed.label().unwrap_err(), NC_E_DROPPED);
     assert_eq!(text.to_string().unwrap(), "Save α");
@@ -25,15 +25,15 @@ fn activation_is_an_exclusive_immutable_snapshot() {
 #[test]
 fn text_change_and_submission_are_distinct_typed_events() {
     let changed = snapshot::text_changed("éclair", 2).unwrap();
-    let typed = downcast_event::<ITextChangedEventAbi>(&changed).unwrap().unwrap();
+    let typed = changed.query_weak::<ITextChangedEventAbi>().unwrap();
     assert_eq!(typed.text().unwrap().to_string().unwrap(), "éclair");
     assert_eq!(typed.cursor(), Ok(2));
-    assert!(downcast_event::<ITextSubmittedEventAbi>(&changed).unwrap().is_none());
+    assert_eq!(changed.query_weak::<ITextSubmittedEventAbi>().unwrap_err(), NC_E_NOINTERFACE);
     for text in ["line\ntwo", ""] {
         let submitted = snapshot::text_submitted(text).unwrap();
         assert_eq!(
-            downcast_event::<ITextSubmittedEventAbi>(&submitted)
-                .unwrap()
+            submitted
+                .query_weak::<ITextSubmittedEventAbi>()
                 .unwrap()
                 .text()
                 .unwrap()
@@ -41,16 +41,13 @@ fn text_change_and_submission_are_distinct_typed_events() {
                 .unwrap(),
             text
         );
-        assert!(downcast_event::<ITextChangedEventAbi>(&submitted).unwrap().is_none());
+        assert_eq!(submitted.query_weak::<ITextChangedEventAbi>().unwrap_err(), NC_E_NOINTERFACE);
     }
     assert_eq!(snapshot::text_changed("é", 1).unwrap_err(), NC_E_INVALID_ARG);
     assert_eq!(snapshot::text_changed("x", 2).unwrap_err(), NC_E_INVALID_ARG);
     assert_eq!(snapshot::text_changed("", u64::MAX).unwrap_err(), NC_E_INVALID_ARG);
     assert_eq!(
-        downcast_event::<ITextChangedEventAbi>(&snapshot::text_changed("", 0).unwrap())
-            .unwrap()
-            .unwrap()
-            .cursor(),
+        snapshot::text_changed("", 0).unwrap().query_weak::<ITextChangedEventAbi>().unwrap().cursor(),
         Ok(0)
     );
 }
@@ -59,13 +56,13 @@ fn text_change_and_submission_are_distinct_typed_events() {
 #[test]
 fn scalar_events_keep_domain_invariants() {
     let checkbox = snapshot::checkbox_changed(true).unwrap();
-    assert_eq!(downcast_event::<ICheckboxChangedEventAbi>(&checkbox).unwrap().unwrap().checked(), Ok(true));
+    assert_eq!(checkbox.query_weak::<ICheckboxChangedEventAbi>().unwrap().checked(), Ok(true));
     let numeric = snapshot::numeric_changed(0.75).unwrap();
-    assert_eq!(downcast_event::<INumericChangedEventAbi>(&numeric).unwrap().unwrap().value(), Ok(0.75));
+    assert_eq!(numeric.query_weak::<INumericChangedEventAbi>().unwrap().value(), Ok(0.75));
     let scroll = snapshot::scrollbar_changed(42).unwrap();
-    assert_eq!(downcast_event::<IScrollbarChangedEventAbi>(&scroll).unwrap().unwrap().offset(), Ok(42));
+    assert_eq!(scroll.query_weak::<IScrollbarChangedEventAbi>().unwrap().offset(), Ok(42));
     let split = snapshot::split_changed(73).unwrap();
-    assert_eq!(downcast_event::<ISplitChangedEventAbi>(&split).unwrap().unwrap().position(), Ok(73));
+    assert_eq!(split.query_weak::<ISplitChangedEventAbi>().unwrap().position(), Ok(73));
     for value in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
         assert_eq!(snapshot::numeric_changed(value).unwrap_err(), NC_E_INVALID_ARG);
     }
@@ -84,15 +81,15 @@ impl INumericChangedEvent for RejectedNumeric {
     }
 }
 
-/// Unsupported type is None; errors from a supported getter stay explicit.
+/// Missing projections and errors from supported getters retain their exact status.
 #[test]
 fn foreign_event_getter_errors_remain_visible() {
     let event: ComBox<IEventAbi> = RejectedNumeric::into_box(RejectedNumeric).query().unwrap();
     assert_eq!(
-        downcast_event::<INumericChangedEventAbi>(&event).unwrap().unwrap().value(),
+        event.query_weak::<INumericChangedEventAbi>().unwrap().value(),
         Err(NC_E_INVALID_ARG)
     );
-    assert!(downcast_event::<ICheckboxChangedEventAbi>(&event).unwrap().is_none());
+    assert_eq!(event.query_weak::<ICheckboxChangedEventAbi>().unwrap_err(), NC_E_NOINTERFACE);
 }
 
 /// Every lifecycle fact has its own interface and shares the window marker ancestry.
@@ -102,9 +99,9 @@ fn service_events_keep_lifecycle_and_selection_facts() {
     macro_rules! geometry {
         ($construct:ident, $interface:ty) => {{
             let event = snapshot::$construct(rect).unwrap();
-            assert_eq!(downcast_event::<$interface>(&event).unwrap().unwrap().rect(), Ok(rect));
-            assert!(downcast_event::<IWindowEventAbi>(&event).unwrap().is_some());
-            assert!(downcast_event::<IWindowHiddenEventAbi>(&event).unwrap().is_none());
+            assert_eq!(event.query_weak::<$interface>().unwrap().rect(), Ok(rect));
+            event.query_weak::<IWindowEventAbi>().unwrap();
+            assert_eq!(event.query_weak::<IWindowHiddenEventAbi>().unwrap_err(), NC_E_NOINTERFACE);
             assert_eq!(snapshot::$construct(Rect { width: -1, ..rect }).unwrap_err(), NC_E_INVALID_ARG);
             assert_eq!(snapshot::$construct(Rect { height: -1, ..rect }).unwrap_err(), NC_E_INVALID_ARG);
         }};
@@ -116,20 +113,20 @@ fn service_events_keep_lifecycle_and_selection_facts() {
     macro_rules! marker {
         ($construct:ident, $interface:ty) => {{
             let event = snapshot::$construct().unwrap();
-            assert!(downcast_event::<$interface>(&event).unwrap().is_some());
-            assert!(downcast_event::<IWindowEventAbi>(&event).unwrap().is_some());
-            assert!(downcast_event::<IWindowGeometryChangedEventAbi>(&event).unwrap().is_none());
+            event.query_weak::<$interface>().unwrap();
+            event.query_weak::<IWindowEventAbi>().unwrap();
+            assert_eq!(event.query_weak::<IWindowGeometryChangedEventAbi>().unwrap_err(), NC_E_NOINTERFACE);
         }};
     }
     marker!(window_close_requested, IWindowCloseRequestedEventAbi);
     marker!(window_hidden, IWindowHiddenEventAbi);
     marker!(window_destroyed, IWindowDestroyedEventAbi);
     let popup = snapshot::popup_dismissed().unwrap();
-    assert!(downcast_event::<IPopupDismissedEventAbi>(&popup).unwrap().is_some());
-    assert!(downcast_event::<IWindowEventAbi>(&popup).unwrap().is_none());
+    popup.query_weak::<IPopupDismissedEventAbi>().unwrap();
+    assert_eq!(popup.query_weak::<IWindowEventAbi>().unwrap_err(), NC_E_NOINTERFACE);
     for selection in [ChoiceSelection::None, ChoiceSelection::Selected(0), ChoiceSelection::Selected(u64::MAX)] {
         let event = snapshot::choice_changed(selection).unwrap();
-        assert_eq!(downcast_event::<IChoiceChangedEventAbi>(&event).unwrap().unwrap().selection(), Ok(selection));
+        assert_eq!(event.query_weak::<IChoiceChangedEventAbi>().unwrap().selection(), Ok(selection));
     }
 }
 
@@ -140,12 +137,12 @@ fn file_dialog_events_preserve_native_paths_and_cancellation() {
     let path = neocogi_ui::NativePath::new(original);
     let accepted = snapshot::file_accepted(path.as_interface().add_ref()).unwrap();
     drop(path);
-    let typed = downcast_event::<IFileAcceptedEventAbi>(&accepted).unwrap().unwrap();
+    let typed = accepted.query_weak::<IFileAcceptedEventAbi>().unwrap();
     assert_eq!(neocogi_ui::path::decode(typed.path().unwrap().as_com_ref()).unwrap(), original);
-    assert!(downcast_event::<IFileCancelledEventAbi>(&accepted).unwrap().is_none());
+    assert_eq!(accepted.query_weak::<IFileCancelledEventAbi>().unwrap_err(), NC_E_NOINTERFACE);
     let cancelled = snapshot::file_cancelled().unwrap();
-    assert!(downcast_event::<IFileCancelledEventAbi>(&cancelled).unwrap().is_some());
-    assert!(downcast_event::<IFileAcceptedEventAbi>(&cancelled).unwrap().is_none());
+    cancelled.query_weak::<IFileCancelledEventAbi>().unwrap();
+    assert_eq!(cancelled.query_weak::<IFileAcceptedEventAbi>().unwrap_err(), NC_E_NOINTERFACE);
 }
 
 /// The production channel moves the same allocation and restores it on rejection.
@@ -158,7 +155,7 @@ fn common_channel_retains_exclusive_owner_and_returns_it_when_disconnected() {
     let (mut queue, inbox) = channel();
     let event = snapshot::activated("captured").unwrap();
     let allocation = event.as_raw();
-    let projection = downcast_event::<IActivatedEventAbi>(&event).unwrap().unwrap();
+    let projection = event.query_weak::<IActivatedEventAbi>().unwrap();
     queue.post(NcValueRef::new(&origin).unwrap(), event).unwrap();
     drop(source);
     let message = inbox.try_recv().unwrap();

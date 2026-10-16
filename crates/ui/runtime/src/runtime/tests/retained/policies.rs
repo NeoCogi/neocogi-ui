@@ -553,7 +553,11 @@ fn rejected_caption_event_leaves_the_window_visible_and_live() {
     let body = body_owner.handle();
     let (send, _messages) = std::sync::mpsc::channel();
     let queue = neocogi_ui::test_event_queue!(neocogi_ui::IWindowAbi, (), send, |_queue, _origin, event| {
-        if neocogi_com::events::downcast_event::<IWindowCloseRequestedEventAbi>(event)?.is_some() { return Err(neocogi_com::NC_E_INVALID_ARG); }
+        match event.query_weak::<IWindowCloseRequestedEventAbi>() {
+            Ok(_) => return Err(neocogi_com::NC_E_INVALID_ARG),
+            Err(neocogi_com::NC_E_NOINTERFACE) => (),
+            Err(status) => return Err(status),
+        }
     }).unwrap();
     let window = fixture.ui.window_with_queue("failed intent", Rect { x: 30, y: 30, width: 180, height: 120 }, body_owner, Some(queue.as_com_ref())).unwrap();
     fixture.frame(VIEW).unwrap();

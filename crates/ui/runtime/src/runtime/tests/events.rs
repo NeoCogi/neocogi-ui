@@ -166,7 +166,13 @@ fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
         .unwrap();
     let button = button_owner.handle();
 
-    let queue = neocogi_ui::test_event_queue!(neocogi_ui::IWindowAbi, Mutation, events_tx.clone(), |_queue, _origin, event| Mutation::Window(neocogi_com::events::downcast_event::<IWindowDestroyedEventAbi>(event)?.is_some())).unwrap();
+    let queue = neocogi_ui::test_event_queue!(neocogi_ui::IWindowAbi, Mutation, events_tx.clone(), |_queue, _origin, event| {
+        Mutation::Window(match event.query_weak::<IWindowDestroyedEventAbi>() {
+            Ok(_) => true,
+            Err(neocogi_com::NC_E_NOINTERFACE) => false,
+            Err(status) => return Err(status),
+        })
+    }).unwrap();
     let previous = ui.window_with_queue("first", RECT, button_owner, Some(queue.as_com_ref())).unwrap();
     // Move every callback dependency into the persistent model; retain separate
     // assertion capabilities only where the test also needs direct observations.
@@ -433,10 +439,12 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
             "",
             Some(
                 neocogi_ui::test_event_queue!(neocogi_ui::TextboxAbi, String, session_tx.clone(), |_queue, _origin, event| {
-                    if let Some(value) = neocogi_com::events::downcast_event::<ITextChangedEventAbi>(event)? {
-                        format!("changed:{}:{}", value.text()?.to_string()?, value.cursor()?)
-                    } else {
-                        format!("submitted:{}", event.query_weak::<ITextSubmittedEventAbi>()?.text()?.to_string()?)
+                    match event.query_weak::<ITextChangedEventAbi>() {
+                        Ok(value) => format!("changed:{}:{}", value.text()?.to_string()?, value.cursor()?),
+                        Err(neocogi_com::NC_E_NOINTERFACE) => {
+                            format!("submitted:{}", event.query_weak::<ITextSubmittedEventAbi>()?.text()?.to_string()?)
+                        }
+                        Err(status) => return Err(status),
                     }
                 })
                 .unwrap()
@@ -468,10 +476,12 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
             true,
             Some(
                 neocogi_ui::test_event_queue!(neocogi_ui::TextAreaAbi, String, session_tx.clone(), |_queue, _origin, event| {
-                    if let Some(value) = neocogi_com::events::downcast_event::<ITextChangedEventAbi>(event)? {
-                        format!("changed:{}:{}", value.text()?.to_string()?, value.cursor()?)
-                    } else {
-                        format!("submitted:{}", event.query_weak::<ITextSubmittedEventAbi>()?.text()?.to_string()?)
+                    match event.query_weak::<ITextChangedEventAbi>() {
+                        Ok(value) => format!("changed:{}:{}", value.text()?.to_string()?, value.cursor()?),
+                        Err(neocogi_com::NC_E_NOINTERFACE) => {
+                            format!("submitted:{}", event.query_weak::<ITextSubmittedEventAbi>()?.text()?.to_string()?)
+                        }
+                        Err(status) => return Err(status),
                     }
                 })
                 .unwrap()

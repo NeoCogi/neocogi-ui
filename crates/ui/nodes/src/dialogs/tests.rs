@@ -5,11 +5,14 @@ use neocogi_com::events::EventOrigin;
 use neocogi_ui_support::test_support::events::TestApp;
 /// Terminal recorder extracts the native path while it owns the event.
 fn completion(event: &ComBox<neocogi_com::events::IEventAbi>) -> Result<Option<PathBuf>, NcStatus> {
-    if let Some(event) = neocogi_com::events::downcast_event::<IFileAcceptedEventAbi>(event)? {
-        return neocogi_ui::path::decode(event.path()?.as_com_ref()).map(Some);
+    match event.query_weak::<IFileAcceptedEventAbi>() {
+        Ok(event) => neocogi_ui::path::decode(event.path()?.as_com_ref()).map(Some),
+        Err(neocogi_com::NC_E_NOINTERFACE) => {
+            event.query_weak::<IFileCancelledEventAbi>()?;
+            Ok(None)
+        }
+        Err(status) => Err(status),
     }
-    event.query_weak::<IFileCancelledEventAbi>()?;
-    Ok(None)
 }
 
 /// Deterministic drawable keeps the full modal visible while testing its real flex layout.
