@@ -65,6 +65,11 @@ linkage, resources, browser builds and remaining Cargo costs. The optional
 [cargo-neocogi tool](tools/cargo-neocogi/README.md) manages NCIDL module authoring;
 it no longer builds assemblies.
 
+For VS Code, install the recommended CodeLLDB extension and select **Full demo:
+Vulkan (shared, debug)** or **Full demo: Glow (shared, debug)** in Run and Debug.
+The workspace automatically restores local source mappings for copied plugins
+and generated COM code. See [native debugging](docs/guides/COM_NATIVE.md#debugging-in-vs-code).
+
 ## Workspace layout
 
 COM infrastructure lives under `crates/com`: `core` defines the

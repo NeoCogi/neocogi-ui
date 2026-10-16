@@ -1,0 +1,31 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Full demo: Vulkan (shared, debug)",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "build", "-p", "neocogi-demo-full", "--bin", "neocogi-demo-full",
+                    "--no-default-features", "--features", "dynamic,vulkan"
+                ],
+                "filter": { "name": "neocogi-demo-full", "kind": "bin" }
+            },
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Full demo: Glow (shared, debug)",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "build", "-p", "neocogi-demo-full", "--bin", "neocogi-demo-full",
+                    "--no-default-features", "--features", "dynamic,glow"
+                ],
+                "filter": { "name": "neocogi-demo-full", "kind": "bin" }
+            },
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
