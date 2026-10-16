@@ -144,11 +144,14 @@ jobs:
       - name: Native runtime and provider target profiles
         if: matrix.backend == 'vulkan'
         run: python3 scripts/test-native-build.py
-      - name: Complete min-size build and direct executable startup
+      - name: Native staging destination policy
+        if: matrix.backend == 'vulkan'
+        run: cargo test -p neocogi-native-layout
+      - name: Native path privacy, cached renderer switches and relocated startup
         if: matrix.backend == 'vulkan'
         run: |
-          cargo build -p neocogi-demo-full --no-default-features --features dynamic,vulkan --profile min-size
-          xvfb-run -a env -u LD_LIBRARY_PATH NEOCOGI_DEMO_FRAMES=2 ./target/min-size/neocogi-demo-full
+          xvfb-run -a python3 scripts/test-native-layout.py --cache --run
+          xvfb-run -a python3 scripts/test-native-layout.py --profile release --run
           cargo test -p neocogi-demo-plugins --profile min-size --features vulkan,skin,extension
       - name: Backend-specific frame/resource checks
         run: xvfb-run -a cargo test -p neocogi-render-plugin --lib --no-default-features --features ${{ matrix.backend }} -- --include-ignored
@@ -168,7 +171,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew install sdl2
-          echo "RUSTFLAGS=-L native=$(brew --prefix sdl2)/lib" >> "$GITHUB_ENV"
+          echo "RUSTFLAGS=-Zosx-rpath-install-name -L native=$(brew --prefix sdl2)/lib" >> "$GITHUB_ENV"
       - name: Install SDL on Windows
         if: runner.os == 'Windows'
         shell: pwsh
@@ -178,6 +181,8 @@ jobs:
           "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin" >> $env:GITHUB_PATH
       - name: Build Cargo-owned native Glow artifacts
         run: cargo build -p neocogi-demo-full
+      - name: Relocated host and independent plugin share the runtime
+        run: cargo test -p neocogi-demo-plugins --features glow,skin,extension
       - name: Platform-neutral contracts and facade behavior
         run: cargo test -p neocogi-ui-core-contracts -p neocogi-ui --features neocogi-ui/static-runtime
 
