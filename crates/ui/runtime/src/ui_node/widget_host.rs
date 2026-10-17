@@ -10,6 +10,8 @@ use std::{
 /// Phase state contains no tree or application references, so widget retention cannot cycle.
 #[derive(Default)]
 pub(crate) struct HostState {
+    /// Dispatch-owner capability; widget-facing host projections can only post.
+    pub(crate) event_origins: neocogi_ui_support::EventOriginOwner,
     /// Replaceable host service shared by independent COM widgets; no borrow spans a request.
     pub(crate) clipboard: RefCell<Option<ComPtr<neocogi_ui_core_contracts::ITextClipboardAbi>>>,
     /// Topology edits invalidate the runtime's reusable descendant-first widget snapshot.
@@ -47,6 +49,11 @@ pub(crate) struct WidgetHost {
 }
 
 impl IWidgetHost for WidgetHost {
+    /// Reads the active scoped origin without exposing stack control over COM.
+    fn post_event(&self, receiver: neocogi_com::ComRef<'_, neocogi_com::events::IEventReceiverAbi>, event: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
+        if let Err(status) = self.check_mutation() { return Err((status, event)); }
+        self.state.event_origins.post(receiver, event)
+    }
     /// Notification is not a widget mutation and remains legal during recovery/collection.
     fn mark_geometry_changed(&self) -> Result<(), NcStatus> {
         self.check_open()?;

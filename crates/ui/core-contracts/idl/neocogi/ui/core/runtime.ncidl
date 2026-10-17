@@ -63,6 +63,7 @@ interface IWidget {
     /// is a no-op and must not erase an earlier pending geometry change.
     fn clear_flags(&mut self, flags: WidgetOptions) -> Result<()>;
     /// Processes one router-owned snapshot; the text argument is UTF-8 only for Text events.
+    /// Runtime dispatch scopes the current event origin for this synchronous call.
     /// Return CHANGED for every modification to measurement or child placement inputs.
     fn update(&mut self, state: WidgetUpdate, event: WidgetEvent, text: &[u8]) -> Result<GeometryChange>;
 
@@ -89,6 +90,7 @@ interface IWidgetDispatcher {
     /// bounded update budget and reconsiders descendant work. Handler errors propagate
     /// unchanged and leave later messages queued. Topology changes require recollection
     /// even when the handler reports false. Removed receivers are never entered.
+    /// The runtime scopes this composite as origin while its handler posts public events.
     fn dispatch_next(&mut self) -> Result<bool>;
 }
 
@@ -326,6 +328,10 @@ interface UiRuntime: IInputSink + IWindowManager + IMenus + IChoiceMenus {
 #[version(3)]
 /// Runtime identity and mutation authority without a reference back to its tree.
 interface IWidgetHost {
+    /// Posts through the owner's current update/dispatch origin. No scope-control
+    /// capability is exposed to widgets. Absence of an active origin rejects the
+    /// transfer without losing the event; receiver failures preserve it as well.
+    fn post_event(&self, receiver: &IEventReceiver, event: ComBox<IEvent>) -> Result<()>;
     /// Returns the installed clipboard during ordinary mutation, or NotFound for headless hosts.
     fn clipboard(&self) -> Result<ComPtr<ITextClipboard>>;
     /// Retains the current immutable resource revision without owning the runtime tree.

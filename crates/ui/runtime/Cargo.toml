@@ -25,7 +25,7 @@ rs-math3d.workspace = true
 
 [dev-dependencies]
 neocogi-ui-document.workspace = true
-neocogi-idl-example-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "1d1a804c05ecdfabdff8f63751e8a13b3fd22e88" }
+neocogi-idl-example-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "cbf21b79e9c068ff22cbae7f325478486bfdce02" }
 neocogi-ui-nodes.workspace = true
 neocogi-ui-nodes-contracts.workspace = true
 neocogi-ui-support = { workspace = true, features = ["test-support"] }
@@ -41,6 +41,8 @@ trybuild.workspace = true
 
 [features]
 default = []
+# Typed owner driver for native algorithm tests; no scope control is exported over COM.
+test-support = []
 # A final dynamic artifact owns the loader entrypoint; static clients use the descriptor directly.
 dynamic-plugin = ["dep:neocogi-native-runtime-link"]
 

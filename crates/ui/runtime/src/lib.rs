@@ -151,6 +151,8 @@ pub(crate) use rs_math3d::{
 pub(crate) use render::geometry::UNCLIPPED_RECT;
 pub(crate) use ui_node::UiRuntime;
 pub use runtime::{Runtime, create_runtime_from_assets};
+#[cfg(feature = "test-support")]
+pub use runtime::testing;
 
 /// Stateless process entry that creates independent retained UI runtimes.
 #[neocogi_com::com_object(neocogi_ui_core_contracts::UiPluginFactory)]

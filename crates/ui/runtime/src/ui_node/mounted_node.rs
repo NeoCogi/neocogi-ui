@@ -96,7 +96,10 @@ impl ComNode {
     pub(crate) fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Result<Change, NcStatus> {
         let state = super::input_contract::snapshot(ctx, input, self.policy().1);
         let (event, text) = super::input_contract::event(input);
-        let result = self.widget.update(state, event, NcCopyFromBufferOffset::new(0, text));
+        let origin = neocogi_com::events::EventOrigin::Widget(self.widget.downgrade().into_unknown());
+        let result = self.services.state.event_origins.with_origin(origin, || {
+            self.widget.update(state, event, NcCopyFromBufferOffset::new(0, text))
+        })?;
         let change = match result {
             Ok(GeometryChange::Changed) => Change::Changed,
             Ok(GeometryChange::NoChange) => Change::NoChange,

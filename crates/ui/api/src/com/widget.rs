@@ -1,7 +1,7 @@
 //! Shared state for concrete Rust widget implementations.
 //!
 //! This helper lives inside a widget's COM allocation. Its Rust layout never
-//! crosses an interface boundary and it owns no children, runtime, or app sink.
+//! crosses an interface boundary. It owns no children, runtime tree, or application model.
 
 use super::{GeometryChange, IWidgetHostAbi, UI_E_OWNER, WidgetOptions};
 use neocogi_com::{ComPtr, ComRef, NcStatus};
@@ -24,6 +24,8 @@ enum Attachment {
 pub struct WidgetState {
     /// Runtime authority shared across widgets without an ownership cycle.
     host: ComPtr<IWidgetHostAbi>,
+    /// Constructor-selected posting capability; no self-reference or origin authority.
+    receiver: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
     /// Authoritative requested flags; effective behavior-derived flags are never stored here.
     requested_flags: WidgetOptions,
     /// Geometry changes retained until the runtime collects them before layout.
@@ -37,9 +39,29 @@ impl WidgetState {
     pub fn new(host: ComPtr<IWidgetHostAbi>, options: WidgetOptions) -> Self {
         Self {
             host,
+            receiver: None,
             requested_flags: options,
             dirty: false,
             attachment: Attachment::Unmounted,
+        }
+    }
+
+    /// Selects event delivery while the ordinary Rust value is being constructed.
+    /// Consuming self avoids a receiver-installation operation on a published widget.
+    pub fn with_events(mut self, receiver: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>) -> Self {
+        self.receiver = receiver;
+        self
+    }
+
+    /// Whether this widget should allocate a snapshot for an observed transition.
+    pub fn is_observed(&self) -> bool { self.receiver.is_some() }
+
+    /// Posts a captured fact using the dispatch owner's active source identity.
+    /// Committed widget state is not rolled back when delivery is rejected.
+    pub fn post(&self, event: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), NcStatus> {
+        match &self.receiver {
+            Some(receiver) => self.host.post_event(receiver.as_com_ref(), event).map_err(|(status, _event)| status),
+            None => Ok(()),
         }
     }
 

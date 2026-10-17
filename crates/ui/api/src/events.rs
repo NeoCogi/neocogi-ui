@@ -14,6 +14,8 @@ pub mod testing;
 
 mod dispatcher;
 pub use dispatcher::{ApplyOutcome, Dispatcher, MessageProcessor};
+mod origin;
+pub use origin::EventOriginOwner;
 
 /// COM event interfaces, owned messages and common channel construction.
 pub use neocogi_com::events::{EventBinding, EventMessage, EventOrigin, IEvent, IEventAbi, IEventReceiver, IEventReceiverAbi, channel};

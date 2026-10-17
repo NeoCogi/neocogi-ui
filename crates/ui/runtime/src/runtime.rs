@@ -27,6 +27,15 @@ pub fn create_runtime_from_assets(
     source: ComRef<'_, IAssetBundleAbi>,
     gfx: ComRef<'_, neocogi_gfx_contracts::GfxPluginFactoryAbi>,
 ) -> Result<ComPtr<UiRuntimeAbi>, NcStatus> {
+    let runtime = create_runtime_value(source, gfx)?;
+    Ok(Runtime::from_value(runtime).query().expect("runtime interface"))
+}
+
+/// Prepares the actual runtime value before publishing any COM projection.
+fn create_runtime_value(
+    source: ComRef<'_, IAssetBundleAbi>,
+    gfx: ComRef<'_, neocogi_gfx_contracts::GfxPluginFactoryAbi>,
+) -> Result<Runtime, NcStatus> {
     // Reject invalid UI metadata before asking GFX to allocate any mutable frame state.
     let assets = crate::assets::ImportedAssets::read(source, None)?;
     // GFX imports the same immutable source during construction. Do not reinstall it into
@@ -36,7 +45,7 @@ pub fn create_runtime_from_assets(
     let runtime = Runtime {
         storage: create_storage(assets, compositor),
     };
-    Ok(Runtime::from_value(runtime).query().expect("runtime interface"))
+    Ok(runtime)
 }
 
 /// Moves the runtime's private compositor into shared UI storage without exposing its capability.
@@ -531,7 +540,8 @@ impl Runtime {
             for mut widget in widgets.iter() {
                 // Selection checks the actual receiver's liveness. Every error
                 // from its behavior propagates, including errors from dependencies.
-                let handled = widget.dispatch_next()?;
+                let origin = neocogi_com::events::EventOrigin::Widget(widget.clone().into_unknown());
+                let handled = self.storage.factory.state.event_origins.with_origin(origin, || widget.dispatch_next())??;
                 self.storage.open()?;
                 if self.storage.context()?.window_manager.take_dispatch_order_changed() {
                     self.storage.factory.state.dispatch_order_changed.set(true);
@@ -608,3 +618,31 @@ impl RuntimeStorage {
 
 #[cfg(test)]
 mod tests;
+
+/// Native owner support for algorithm tests that deliberately bypass retained traversal.
+/// This feature is never enabled by a production widget or exposed over COM.
+#[cfg(any(test, feature = "test-support"))]
+pub mod testing {
+    use super::*;
+
+    /// Runtime-side authority retained only by a direct algorithm test dispatcher.
+    pub struct OriginDriver {
+        /// Same host state used by the real COM posting method, with no duplicate stack.
+        state: Rc<HostState>,
+    }
+    impl OriginDriver {
+        /// Enters the synchronous owner boundary omitted by a direct algorithm call.
+        pub fn with_origin<R>(&self, origin: neocogi_com::events::EventOrigin, call: impl FnOnce() -> R) -> Result<R, NcStatus> {
+            self.state.event_origins.with_origin(origin, call)
+        }
+    }
+    /// Creates the production runtime and its native test dispatcher authority together.
+    pub fn create_runtime(
+        source: ComRef<'_, IAssetBundleAbi>,
+        gfx: ComRef<'_, neocogi_gfx_contracts::GfxPluginFactoryAbi>,
+    ) -> Result<(ComPtr<UiRuntimeAbi>, OriginDriver), NcStatus> {
+        let runtime = create_runtime_value(source, gfx)?;
+        let driver = OriginDriver { state: runtime.storage.factory.state.clone() };
+        Ok((Runtime::from_value(runtime).query()?, driver))
+    }
+}

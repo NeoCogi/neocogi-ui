@@ -65,3 +65,6 @@ pub use theme::{
 pub(crate) use rs_math3d::{Color4b, Dimensioni, Recti, Vec2f, Vec2i, Vec4f};
 pub(crate) use rs_math3d::{color4b, Dimension};
 pub(crate) use std::{cmp::max, rc::Rc};
+
+/// Dispatch-owner origin scopes; widget posting handles expose no scope mutation.
+pub use neocogi_ui::events::EventOriginOwner;

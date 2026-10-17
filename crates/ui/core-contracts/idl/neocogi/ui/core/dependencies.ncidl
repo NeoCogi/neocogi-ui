@@ -1,4 +1,5 @@
 use neocogi.com.events::EventBinding;
+use neocogi.com.events::{IEvent, IEventReceiver};
 extern neocogi.renderer;
 extern neocogi.platform;
 extern neocogi.gfx;

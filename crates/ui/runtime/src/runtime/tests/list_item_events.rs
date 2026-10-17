@@ -35,25 +35,30 @@ fn activations() -> [WidgetEvent; 3] {
 }
 
 /// Calls the generated widget ABI; eventless input represents an eligible pointer click.
-fn activate(widget: &mut WeakComBox<IWidgetAbi>, input: WidgetEvent) -> Result<GeometryChange, NcStatus> {
-    widget.update(state(matches!(input, WidgetEvent::None)), input, NcCopyFromBufferOffset::new(0, b""))
+fn activate(driver: &crate::runtime::testing::OriginDriver, widget: &mut WeakComBox<IWidgetAbi>, input: WidgetEvent) -> Result<GeometryChange, NcStatus> {
+    let origin = neocogi_com::events::EventOrigin::Widget(widget.clone().into_unknown());
+    driver.with_origin(origin, || widget.update(state(matches!(input, WidgetEvent::None)), input, NcCopyFromBufferOffset::new(0, b"")))?
+
 }
 
 /// Absent receivers avoid all capture work, including the old intermediate label copy.
 #[test]
 fn unobserved_list_item_activations_allocate_nothing() {
-    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let source = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
+    let gfx = neocogi_ui_support::test_support::gfx_factory();
+    let (runtime, driver) = crate::runtime::testing::create_runtime(source.as_com_ref(), gfx.as_com_ref()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
     for label in ["", "a", "Unicode row: αβγ 🦀"] {
         let item = ui.widgets().list_item_unobserved(label).unwrap();
         let mut widget = item.as_interface().query_weak::<IWidgetAbi>().unwrap();
         // Resource import and each activation path are warmed outside observation.
         for input in activations() {
-            activate(&mut widget, input).unwrap();
+            activate(&driver, &mut widget, input).unwrap();
         }
         let measurement = crate::test_support::AllocationMeasurement::begin();
         for _ in 0..100 {
             for input in activations() {
-                activate(&mut widget, input).unwrap();
+                activate(&driver, &mut widget, input).unwrap();
             }
         }
         let count = measurement.finish();
@@ -65,7 +70,10 @@ fn unobserved_list_item_activations_allocate_nothing() {
 /// Direct capture preserves FIFO facts and weak source identity after edits and destruction.
 #[test]
 fn observed_list_item_captures_each_label_without_retaining_its_source() {
-    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let source = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
+    let gfx = neocogi_ui_support::test_support::gfx_factory();
+    let (runtime, driver) = crate::runtime::testing::create_runtime(source.as_com_ref(), gfx.as_com_ref()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
     let (queue, messages) = neocogi_com::events::channel();
     let item = ui.widgets().list_item_with_queue("initial", Some(queue.as_com_ref())).unwrap();
     let mut row = item.handle();
@@ -75,7 +83,7 @@ fn observed_list_item_captures_each_label_without_retaining_its_source() {
     for (input, label) in activations().into_iter().zip(labels) {
         row.set_text(label).unwrap();
         assert!(messages.try_recv().is_err(), "programmatic text replacement stays silent");
-        activate(&mut widget, input).unwrap();
+        activate(&driver, &mut widget, input).unwrap();
         // Leave the event owned by the test, without interpreting it in the receiver.
         let message = messages.try_recv().unwrap();
         let origin = message.origin.widget::<ListItemAbi>().unwrap().unwrap();
@@ -101,14 +109,17 @@ fn observed_list_item_captures_each_label_without_retaining_its_source() {
 /// Delivery rejection reports closure while preserving the row's authoritative state.
 #[test]
 fn disconnected_list_item_receiver_does_not_change_the_label() {
-    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let source = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
+    let gfx = neocogi_ui_support::test_support::gfx_factory();
+    let (runtime, driver) = crate::runtime::testing::create_runtime(source.as_com_ref(), gfx.as_com_ref()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
     let (queue, messages) = neocogi_com::events::channel();
     let item = ui.widgets().list_item_with_queue("retained", Some(queue.as_com_ref())).unwrap();
     let row = item.handle();
     let mut widget = row.as_interface().query::<IWidgetAbi>().unwrap();
     drop(messages);
     for input in activations() {
-        assert_eq!(activate(&mut widget, input), Err(neocogi_com::NC_E_CLOSED));
+        assert_eq!(activate(&driver, &mut widget, input), Err(neocogi_com::NC_E_CLOSED));
         assert_eq!(row.text().unwrap(), "retained");
         assert!(row.as_interface().is_alive());
     }
