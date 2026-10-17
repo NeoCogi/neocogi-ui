@@ -128,8 +128,9 @@ not remove their own owner while executing. Neither is a
 foreign downcast API. Composites can initialize their private controls without a
 second owner or a `RefCell` around every widget.
 
-A borrowed widget origin can call `ComRef::downgrade_box()` to capture a weak
-identity for a queued event. `WeakComBox::is_alive()` is only an observation;
+Capture a queued event origin with `ComBox::downgrade()` or project an existing
+`WeakComBox` with `query()`. A generic `ComRef` does not establish exclusive
+ownership or its lifetime layout and cannot create an exclusive weak identity. `WeakComBox::is_alive()` is only an observation;
 every subsequent method still checks admission, because another thread may
 remove the owner between the check and the call.
 
