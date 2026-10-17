@@ -6,7 +6,9 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Core typed COM contracts shared by NeoCogi UI hosts and components"
-links = "nc_contract_neocogi_ui_core"
+# Cargo owner for IDL module `neocogi.ui.core`: UTF-8 bytes encoded as hex.
+# Demangle by decoding hex pairs after `nc_contract_`; this is not a library name.
+links = "nc_contract_6e656f636f67692e75692e636f7265"
 
 [package.metadata.neocogi-contract]
 module = "neocogi.ui.core"

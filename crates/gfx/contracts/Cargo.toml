@@ -6,7 +6,9 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Pixel decoding and portable resource-baking ABI contracts for NeoCogi"
-links = "nc_contract_neocogi_gfx"
+# Cargo owner for IDL module `neocogi.gfx`: UTF-8 bytes encoded as hex.
+# Demangle by decoding hex pairs after `nc_contract_`; this is not a library name.
+links = "nc_contract_6e656f636f67692e676678"
 
 [package.metadata.neocogi-contract]
 module = "neocogi.gfx"
