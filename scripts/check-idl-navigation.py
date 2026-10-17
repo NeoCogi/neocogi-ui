@@ -103,7 +103,8 @@ def check(server, directory, repository):
                            tuple(entry["generated"]["end"][key] for key in ("line", "column"))]
                 assert matches, (symbol, position)
                 origin = matches[-1]["original"]
-                authored = generated.parent / mapping["source_root"] / origin["path"]
+                assert mapping["schema"] == 2, mapping["schema"]
+                authored = generated.parent / mapping["sources"][origin["source"]]["location"]
                 assert authored.is_file(), authored
                 print(json.dumps({"symbol": symbol, "rust": str(generated), "position": position,
                                   "idl": str(authored.resolve()), "origin": origin["range"]}), flush=True)
