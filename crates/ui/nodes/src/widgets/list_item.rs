@@ -89,8 +89,6 @@ pub struct ListItem {
     /// Base widget options.
     /// Mutable label displayed for the item.
     label: String,
-    /// Single event slot; receives its destination during construction and is released when the widget is destroyed.
-    events: crate::widget_object::WidgetEvents,
 }
 
 impl ListItem {
@@ -101,7 +99,6 @@ impl ListItem {
             icon: parameters.icon,
             font: parameters.font,
             label: parameters.label,
-            events: Default::default(),
         }
     }
 
@@ -172,10 +169,10 @@ impl Widget for ListItem {
         if ctx.action(input, self.keyboard_behavior()) != Some(KeyboardAction::Activate) {
             return crate::Change::NoChange;
         }
-        if self.events.is_bound() {
+        if self.runtime.state.is_observed() {
             // The constructor captures the label before posting. Borrow it directly
             // so observed rows make one copy and unobserved rows do no snapshot work.
-            ctx.posted(neocogi_ui_core_contracts::events::activated(&self.label).and_then(|event| self.events.post(event)));
+            ctx.posted(neocogi_ui_core_contracts::events::activated(&self.label).and_then(|event| self.runtime.state.post(event)));
         }
 
         // Submitting preserves the label and icon used by intrinsic measurement.
@@ -295,11 +292,8 @@ impl ListItem {
     ) -> Result<neocogi_com::ComBox<ListItemAbi>, NcStatus> {
         let mut value = Self::build(host, label, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
-        Self::into_box_cyclic::<ListItemAbi>(move |origin| {
-            value.events = crate::widget_object::WidgetEvents::with_queue(queue, origin);
-            value
-        })?
-        .query().map_err(|(status, _unpublished)| status)
+        value.runtime.state = value.runtime.state.with_events(queue);
+        Self::into_box(value).query().map_err(|(status, _unpublished)| status)
     }
 
     /// Builds one list item with either directly imported or runtime-shared resources.

@@ -139,8 +139,6 @@ pub struct Slider {
     high: Real,
     /// Inline numeric editing state.
     edit: NumberEditState,
-    /// Single lifetime event slot; the constructor fixes the parent receiver before publishing the widget.
-    events: crate::widget_object::WidgetEvents,
 }
 
 impl Slider {
@@ -156,7 +154,6 @@ impl Slider {
             low: parameters.low,
             high: parameters.high,
             edit: NumberEditState::default(),
-            events: Default::default(),
         }
     }
 
@@ -259,8 +256,8 @@ impl Slider {
         // text may commit on blur with no routed event; its changed candidate reaches this path.
         value = clamp_slider_value(snap_slider_value(value, self.low, self.step), self.low, self.high);
         self.value = value;
-        if last != value && self.events.is_bound() {
-            ctx.posted(neocogi_ui_nodes_contracts::events::numeric_changed(value).and_then(|event| self.events.post(event)));
+        if last != value && self.runtime.state.is_observed() {
+            ctx.posted(neocogi_ui_nodes_contracts::events::numeric_changed(value).and_then(|event| self.runtime.state.post(event)));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(self.value != last)
@@ -675,20 +672,18 @@ mod tests {
                 event.query_weak::<neocogi_ui::INumericChangedEventAbi>()?.value()?
             })?;
             Ok(slider.map(|mut value| {
-                Slider::into_local_box_cyclic::<neocogi_ui_nodes_contracts::SliderAbi>(move |origin| {
-                    value.events = crate::widget_object::WidgetEvents::with_queue(Some(receiver), origin);
-                    value
-                })
-                .unwrap()
+                value.runtime.state = value.runtime.state.with_events(Some(receiver));
+                Slider::into_local_box(value)
             }))
         });
-        let mut slider = slider.try_borrow_mut().unwrap();
-        run_slider_once(&mut slider, rect(0, 0, 100, 20), Vec::new(), true, false, false, Some(vec2(0, 1)));
+        slider.dispatch(|mut slider| {
+            run_slider_once(&mut slider, rect(0, 0, 100, 20), Vec::new(), true, false, false, Some(vec2(0, 1)));
 
-        assert_real_close(slider.value(), 1.4);
-        let mut values = Vec::new();
-        assert!(dispatcher(&mut values));
-        assert_eq!(values, [1.4]);
+            assert_real_close(slider.value(), 1.4);
+            let mut values = Vec::new();
+            assert!(dispatcher(&mut values));
+            assert_eq!(values, [1.4]);
+        });
     }
 
     #[test]
@@ -838,22 +833,23 @@ mod tests {
             })?;
             Ok(number.map(|value| value.into_observed(receiver)))
         });
-        let mut number = number.try_borrow_mut().unwrap();
-        let mut values = Vec::new();
-        number.set_value(4.0);
-        assert!(!dispatcher(&mut values));
+        number.dispatch(|mut number| {
+            let mut values = Vec::new();
+            number.set_value(4.0);
+            assert!(!dispatcher(&mut values));
 
-        run_number_once(
-            &mut number,
-            vec![UiInputEvent::MouseDrag {
-                pos: vec2(10, 10),
-                delta: vec2(3, 0),
-                buttons: MouseButton::LEFT,
-            }],
-        );
-        assert_eq!(number.value(), 10.0);
-        assert!(dispatcher(&mut values));
-        assert_eq!(values, [10.0]);
+            run_number_once(
+                &mut number,
+                vec![UiInputEvent::MouseDrag {
+                    pos: vec2(10, 10),
+                    delta: vec2(3, 0),
+                    buttons: MouseButton::LEFT,
+                }],
+            );
+            assert_eq!(number.value(), 10.0);
+            assert!(dispatcher(&mut values));
+            assert_eq!(values, [10.0]);
+        });
     }
 
     /// Verifies wide drag arithmetic preserves representable cancellation in both directions.
@@ -922,17 +918,15 @@ mod tests {
                 event.query_weak::<neocogi_ui::INumericChangedEventAbi>()?.value()?
             })?;
             Ok(slider.map(|mut value| {
-                Slider::into_local_box_cyclic::<neocogi_ui_nodes_contracts::SliderAbi>(move |origin| {
-                    value.events = crate::widget_object::WidgetEvents::with_queue(Some(receiver), origin);
-                    value
-                })
-                .unwrap()
+                value.runtime.state = value.runtime.state.with_events(Some(receiver));
+                Slider::into_local_box(value)
             }))
         });
-        let mut slider = slider.try_borrow_mut().unwrap();
-        slider.set_value(4.0);
-        assert_eq!(slider.value(), 4.0);
-        assert!(!dispatcher(&mut Vec::new()));
+        slider.dispatch(|slider| {
+            slider.set_value(4.0);
+            assert_eq!(slider.value(), 4.0);
+            assert!(!dispatcher(&mut Vec::new()));
+        });
     }
 
     /// Eventless blur commits are user edits and share the step policy of pointer/key/wheel input.
@@ -946,48 +940,46 @@ mod tests {
                 event.query_weak::<neocogi_ui::INumericChangedEventAbi>()?.value()?
             })?;
             Ok(slider.map(|mut value| {
-                Slider::into_local_box_cyclic::<neocogi_ui_nodes_contracts::SliderAbi>(move |origin| {
-                    value.events = crate::widget_object::WidgetEvents::with_queue(Some(receiver), origin);
-                    value
-                })
-                .unwrap()
+                value.runtime.state = value.runtime.state.with_events(Some(receiver));
+                Slider::into_local_box(value)
             }))
         });
-        let mut slider = slider.try_borrow_mut().unwrap();
-        slider.edit.editing = true;
-        // Enter through the editing contract instead of reaching into the private numeric buffer.
-        run_slider_once(
-            &mut slider,
-            rect(0, 0, 100, 20),
-            vec![UiInputEvent::Text { text: "4.4".to_owned() }],
-            true,
-            true,
-            false,
-            None,
-        );
-        let atlas = make_test_atlas();
-        let style = test_skin(&atlas);
-        let bounds = rect(0, 0, 100, 20);
-        let mut ctx = WidgetUpdateCtx::new_with_interaction(
-            bounds,
-            bounds,
-            &style,
-            &atlas,
-            true,
-            false,
-            false,
-            false,
-            false,
-            MouseButton::NONE,
-            Modifiers::NONE,
-        );
-        assert_eq!(slider.update(&mut ctx, None), crate::Change::Changed);
-        assert_eq!(slider.value(), 4.0);
-        let mut values = Vec::new();
-        assert!(dispatcher(&mut values));
-        assert_eq!(values, [4.0]);
-        assert_eq!(slider.update(&mut ctx, None), crate::Change::NoChange);
-        assert!(!dispatcher(&mut values));
+        slider.dispatch(|mut slider| {
+            slider.edit.editing = true;
+            // Enter through the editing contract instead of reaching into the private numeric buffer.
+            run_slider_once(
+                &mut slider,
+                rect(0, 0, 100, 20),
+                vec![UiInputEvent::Text { text: "4.4".to_owned() }],
+                true,
+                true,
+                false,
+                None,
+            );
+            let atlas = make_test_atlas();
+            let style = test_skin(&atlas);
+            let bounds = rect(0, 0, 100, 20);
+            let mut ctx = WidgetUpdateCtx::new_with_interaction(
+                bounds,
+                bounds,
+                &style,
+                &atlas,
+                true,
+                false,
+                false,
+                false,
+                false,
+                MouseButton::NONE,
+                Modifiers::NONE,
+            );
+            assert_eq!(slider.update(&mut ctx, None), crate::Change::Changed);
+            assert_eq!(slider.value(), 4.0);
+            let mut values = Vec::new();
+            assert!(dispatcher(&mut values));
+            assert_eq!(values, [4.0]);
+            assert_eq!(slider.update(&mut ctx, None), crate::Change::NoChange);
+            assert!(!dispatcher(&mut values));
+        });
     }
 
     /// Verifies both numeric setters retain their last finite value when given invalid input.
@@ -1058,11 +1050,8 @@ impl Slider {
     ) -> Result<neocogi_com::ComBox<SliderAbi>, NcStatus> {
         let mut value = Self::build(host, options, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
-        Self::into_box_cyclic::<SliderAbi>(move |origin| {
-            value.events = crate::widget_object::WidgetEvents::with_queue(queue, origin);
-            value
-        })?
-        .query().map_err(|(status, _unpublished)| status)
+        value.runtime.state = value.runtime.state.with_events(queue);
+        Self::into_box(value).query().map_err(|(status, _unpublished)| status)
     }
 
     /// Builds one slider with either directly imported or runtime-shared resources.

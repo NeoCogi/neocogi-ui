@@ -1352,6 +1352,7 @@ fn builtin_scoped_paint_preserves_alignment_with_inline_semantic_state() {
 
 mod component_events;
 mod event_queues;
+mod event_origins;
 mod events;
 mod document_events;
 mod list_item_events;

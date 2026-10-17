@@ -27,8 +27,8 @@ neocogi-ui-nodes-contracts.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
 
 [dev-dependencies]
-# Tests construct the real core runtime through its public entrypoint, never private storage.
-neocogi-ui-runtime.workspace = true
+# Direct algorithm tests use the real host and its native scoped-dispatch driver.
+neocogi-ui-runtime = { workspace = true, features = ["test-support"] }
 neocogi-ui-support = { workspace = true, features = ["test-support"] }
 neocogi-ui.workspace = true
 neocogi-com = { workspace = true, features = ["static-runtime"] }

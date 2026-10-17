@@ -187,8 +187,8 @@ fn combo_choice_menu_uses_shared_submenu_navigation() {
 }
 
 #[neocogi_com::com_object(interfaces(neocogi_com::events::IEventReceiver))]
-/// Hostile queue removes the emitting header during synchronous menu forwarding.
-/// Application queues normally only enqueue; this probes the destructor boundary.
+/// Deliberately reentrant queue attempts removal during composite output.
+/// Application queues normally only enqueue; the active widget gate must reject this.
 struct RemoveComboDuringPost {
     /// Weak parent access cannot preserve the emitted control after clear.
     root: neocogi_ui::LinearWidget,
@@ -196,7 +196,7 @@ struct RemoveComboDuringPost {
     calls: Rc<Cell<u32>>,
 }
 impl neocogi_com::events::IEventReceiver for RemoveComboDuringPost {
-    /// Removal must not require a recursive call into the active menu state.
+    /// A receiver cannot destroy the composite whose dispatch call is active.
     fn post(&mut self, _: neocogi_com::NcValueRef<'_, neocogi_com::events::EventOrigin>, event_owner: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
         let result = (|| -> Result<(), NcStatus> {
         event_owner.query_weak::<neocogi_ui::IChoiceChangedEventAbi>()?;
@@ -208,10 +208,10 @@ impl neocogi_com::events::IEventReceiver for RemoveComboDuringPost {
     }
 }
 
-/// Popup coordination cannot own a dead header's menu/queue or require Drop to
-/// reenter the menu while its submission call is still on the stack.
+/// Composite forwarding runs under its own gate; removal retries after return
+/// and releases both the menu and application queue without a second notification.
 #[test]
-fn combo_removal_during_forwarding_releases_menu_queue_without_close_callback() {
+fn combo_forwarding_rejects_active_removal_then_releases_menu_and_queue() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let root_owner = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let mut root = root_owner.handle();
@@ -227,13 +227,15 @@ fn combo_removal_during_forwarding_releases_menu_queue_without_close_callback() 
     for key in [KeyCode::Tab, KeyCode::Enter, KeyCode::ArrowDown, KeyCode::Enter] {
         press(&ui, key);
     }
-    ui.update(SIZE).unwrap();
+    assert_eq!(ui.update(SIZE), Err(UI_E_BUSY));
     assert_eq!(calls.get(), 1);
+    assert_eq!(combo.selection(), Ok(ChoiceSelection::Selected(1)));
+    root.clear().unwrap();
     assert_eq!(combo.selection(), Err(neocogi_com::NC_E_DROPPED));
     assert!(weak_queue.upgrade().unwrap().is_none(), "the popup coordinator must not retain the dead header's destination");
     assert_eq!(root.children().unwrap().child_count(), Ok(0));
     let (renderer, _) = renderer();
-    ui.render(SIZE, renderer.as_com_ref()).unwrap();
     ui.update(SIZE).unwrap();
+    ui.render(SIZE, renderer.as_com_ref()).unwrap();
     assert_eq!(calls.get(), 1);
 }

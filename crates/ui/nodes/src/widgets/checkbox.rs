@@ -82,8 +82,6 @@ pub struct Checkbox {
     /// Base widget options.
     /// Current checked value.
     checked: bool,
-    /// Single lifetime event slot; the constructor fixes the parent receiver before publishing the widget.
-    events: crate::widget_object::WidgetEvents,
 }
 
 impl Checkbox {
@@ -94,7 +92,6 @@ impl Checkbox {
             label: parameters.label,
             font: parameters.font,
             checked: parameters.checked,
-            events: Default::default(),
         }
     }
 
@@ -153,8 +150,8 @@ impl Widget for Checkbox {
         // Windows-style checkboxes toggle with Space; Enter remains available to a default button.
         self.checked = !self.checked;
         let checked = self.checked;
-        if self.events.is_bound() {
-            ctx.posted(neocogi_ui_nodes_contracts::events::checkbox_changed(checked).and_then(|event| self.events.post(event)));
+        if self.runtime.state.is_observed() {
+            ctx.posted(neocogi_ui_nodes_contracts::events::checkbox_changed(checked).and_then(|event| self.runtime.state.post(event)));
         }
 
         // The check mark changes paint only; both states reserve the same icon space.
@@ -228,11 +225,8 @@ impl Checkbox {
     ) -> Result<neocogi_com::ComBox<CheckboxAbi>, NcStatus> {
         let mut value = Self::build(host, checked, label, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
-        Self::into_box_cyclic::<CheckboxAbi>(move |origin| {
-            value.events = crate::widget_object::WidgetEvents::with_queue(queue, origin);
-            value
-        })?
-        .query().map_err(|(status, _unpublished)| status)
+        value.runtime.state = value.runtime.state.with_events(queue);
+        Self::into_box(value).query().map_err(|(status, _unpublished)| status)
     }
 
     /// Builds one checkbox with either directly imported or runtime-shared resources.

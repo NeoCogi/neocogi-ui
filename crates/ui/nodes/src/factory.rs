@@ -264,11 +264,8 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
         events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
     ) -> Result<neocogi_com::ComBox<ComboAbi>, NcStatus> {
         self.services.host.check_mutation()?;
-        let forwarder = events
-            .to_owned()?
-            .into_queue()
-            .map(|queue| crate::widgets::ComboEventForwarder::into_local(crate::widgets::ComboEventForwarder { queue, origin: None }));
-        let receiver = forwarder.as_ref().map(|forwarder| forwarder.query::<neocogi_com::events::IEventReceiverAbi>()).transpose()?;
+        let queue = events.to_owned()?.into_queue();
+        let (inbox, receiver) = crate::widget_object::CompositeEvents::new(queue.is_some());
         let binding = neocogi_com::events::EventBinding::from_queue(receiver.as_ref().map(ComPtr::as_com_ref))?;
         let menu = self
             .services
@@ -279,7 +276,8 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
             self.services.resources.clone(),
             menu,
             crate::widgets::DEFAULT_COMBO_PLACEHOLDER.to_owned(),
-            forwarder,
+            inbox,
+            queue,
         )
     }
 }

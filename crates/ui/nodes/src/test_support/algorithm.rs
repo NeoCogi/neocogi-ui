@@ -16,6 +16,8 @@ pub(crate) struct Algorithm<W> {
     value: W,
     /// Dropped after the value so its host remains valid through semantic teardown.
     _owner: ComPtr<UiRuntimeAbi>,
+    /// Test dispatcher owns scope authority; the concrete widget receives only its host.
+    driver: nc_ui::testing::OriginDriver,
 }
 impl<W> Algorithm<W> {
     /// Transfers the concrete value into its real COM allocation while preserving
@@ -24,14 +26,25 @@ impl<W> Algorithm<W> {
         Algorithm {
             value: wrap(self.value),
             _owner: self._owner,
+            driver: self.driver,
         }
+    }
+    /// Runs a direct call under the identity selected by this test's owning dispatcher.
+    pub(crate) fn with_origin<R>(&mut self, origin: neocogi_com::events::EventOrigin, call: impl FnOnce(&mut W) -> R) -> R {
+        self.driver.with_origin(origin, || call(&mut self.value)).unwrap()
     }
     /// Supplies the actual host and resource imports to the normal concrete constructor.
     pub(crate) fn new(options: WidgetOption, construct: impl FnOnce(WidgetRuntime) -> W) -> Self {
-        let owner = super::create_runtime(super::test_atlas());
+        let source = super::assets::export_bundle(&crate::SkinBundle::from_atlas(super::test_atlas())).unwrap();
+        let gfx = neocogi_ui_support::test_support::gfx_factory();
+        let (owner, driver) = nc_ui::testing::create_runtime(source.as_com_ref(), gfx.as_com_ref()).unwrap();
         let host = owner.construction_host().unwrap().host().unwrap();
         let runtime = WidgetRuntime::new(host, options).unwrap();
-        Self { value: construct(runtime), _owner: owner }
+        Self {
+            value: construct(runtime),
+            _owner: owner,
+            driver,
+        }
     }
 }
 impl<W> Deref for Algorithm<W> {
@@ -46,5 +59,20 @@ impl<W> DerefMut for Algorithm<W> {
     /// Grants ordinary exclusive mutation without introducing cells or weak widget proxies.
     fn deref_mut(&mut self) -> &mut W {
         &mut self.value
+    }
+}
+
+impl<W: neocogi_com::ComObject> Algorithm<neocogi_com::LocalBox<W>> {
+    /// Borrows the actual concrete object inside a synchronous owner-selected source scope.
+    pub(crate) fn dispatch<R>(&mut self, call: impl FnOnce(&mut W) -> R) -> R {
+        let origin = self
+            .value
+            .query::<neocogi_ui_core_contracts::IWidgetAbi>()
+            .unwrap()
+            .into_unknown()
+            .into_thread_local();
+        self.with_origin(neocogi_com::events::EventOrigin::Widget(origin), |value| {
+            call(&mut value.try_borrow_mut().unwrap())
+        })
     }
 }

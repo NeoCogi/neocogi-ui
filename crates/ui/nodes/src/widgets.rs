@@ -65,7 +65,6 @@ mod button;
 mod checkbox;
 mod color_swatch;
 mod combo;
-pub(crate) use combo::ComboEventForwarder;
 pub(crate) use combo::DEFAULT_COMBO_PLACEHOLDER;
 pub(crate) mod control;
 mod list_box;

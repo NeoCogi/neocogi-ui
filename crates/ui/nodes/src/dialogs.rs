@@ -9,7 +9,6 @@ use std::{
     rc::Rc,
 };
 use crate::boundary::text;
-use crate::widget_object::WidgetEvents;
 use neocogi_ui::OwnedWidget;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
@@ -17,8 +16,9 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 struct Request {
     /// Active versus idle request state; COM ownership alone controls destruction.
     phase: RequestPhase,
-    /// Installed concrete completion receiver; consumers own their committed outcomes.
-    completed: WidgetEvents,
+    /// Explicit cancel/close can complete outside runtime dispatch. This one producer
+    /// therefore retains a weak completion identity; it grants no origin-stack control.
+    completed: Option<(ComPtr<neocogi_com::events::IEventReceiverAbi>, neocogi_com::events::EventOrigin)>,
 }
 
 /// Mutually exclusive picker-request lifecycle; no two booleans can disagree.
@@ -51,7 +51,9 @@ impl Request {
         match self.phase {
             RequestPhase::Active => {
                 self.phase = RequestPhase::Idle;
-                if self.completed.is_bound() { self.completed.post(snapshot()?)?; }
+                if let Some((queue, origin)) = &mut self.completed {
+                    queue.post(neocogi_com::NcValueRef::new(origin)?, snapshot()?).map_err(|(status, _event)| status)?;
+                }
             }
             RequestPhase::Idle => {}
         }
@@ -408,7 +410,9 @@ impl FileDialog {
             buttons,
         };
         let dialog = Self::into_local_box_cyclic::<IFileDialogAbi>(move |origin| {
-            model.request.completed = WidgetEvents::with_queue(queue, origin);
+            // Completion is also callable outside the scheduled widget phases.
+            // A weak identity preserves those immediate facts without retaining this dialog.
+            model.request.completed = queue.map(|queue| (queue, neocogi_com::events::EventOrigin::Widget(origin.into_unknown())));
             Self { shell, model, messages: events }
         })?;
         let windows = services.windows.clone();

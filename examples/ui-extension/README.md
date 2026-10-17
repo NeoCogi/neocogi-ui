@@ -39,7 +39,9 @@ External controls share the built-in ownership and routing rules.
 
 The [implementation](src/lib.rs) uses `WidgetState` for common options, mount-once
 attachment and sticky invalidation. The counter stores its value
-once and owns an optional common receiver plus cached weak origin initialized before publication.
+once. `WidgetState` retains its optional receiver and posts through the existing
+host; the owning runtime supplies the origin during update/dispatch. No cached
+weak self-reference or cyclic construction is needed, including across DLLs.
 `#[events(IActivatedEvent, ICounterChangedEvent)]` advertises the captured facts.
 The counter captures each fact as an immutable `ComBox<IEvent>`, exposing the
 common `IActivatedEvent` or custom `ICounterChangedEvent` interface. Both move

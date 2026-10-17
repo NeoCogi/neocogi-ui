@@ -77,8 +77,6 @@ pub struct ListBox {
     fit_width: bool,
     /// Initialization-only font.
     font: FontRef,
-    /// Single event slot; receives its destination during construction and is released when the widget is destroyed.
-    events: crate::widget_object::WidgetEvents,
 }
 
 impl ListBox {
@@ -90,7 +88,6 @@ impl ListBox {
             image: parameters.image,
             fit_width: false,
             font: parameters.font,
-            events: Default::default(),
         }
     }
 
@@ -134,8 +131,8 @@ impl Widget for ListBox {
             return crate::Change::NoChange;
         }
         // Pointer and keyboard activation publish the same application-facing submission.
-        if self.events.is_bound() {
-            ctx.posted(neocogi_ui_core_contracts::events::activated(self.com_label()).and_then(|event| self.events.post(event)));
+        if self.runtime.state.is_observed() {
+            ctx.posted(neocogi_ui_core_contracts::events::activated(self.com_label()).and_then(|event| self.runtime.state.post(event)));
         }
 
         // The submitted event does not change this header's intrinsic inputs.
@@ -220,11 +217,8 @@ impl ListBox {
     ) -> Result<neocogi_com::ComBox<ListBoxAbi>, NcStatus> {
         let mut value = Self::build(host, label, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
-        Self::into_box_cyclic::<ListBoxAbi>(move |origin| {
-            value.events = crate::widget_object::WidgetEvents::with_queue(queue, origin);
-            value
-        })?
-        .query().map_err(|(status, _unpublished)| status)
+        value.runtime.state = value.runtime.state.with_events(queue);
+        Self::into_box(value).query().map_err(|(status, _unpublished)| status)
     }
 
     /// Builds one list box with either directly imported or runtime-shared resources.

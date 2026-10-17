@@ -74,14 +74,16 @@ impl Default for ComboParameters {
 #[neocogi_com::com_object(neocogi_ui_nodes_contracts::Combo, ownership = exclusive)]
 /// Concrete retained combo and dynamically constructible COM object.
 pub struct Combo {
-    /// Non-semantic COM lifecycle and host-backed phase resources.
-    runtime: crate::widget_object::WidgetRuntime,
     /// Core-owned hierarchy, popup lifecycle, committed selection, and user event source.
     menu: ComPtr<IChoiceMenuAbi>,
     /// Header-only fallback displayed when the generalized choice menu has no selection.
     placeholder: String,
     /// Initialization-only font.
     font: FontRef,
+    /// Private menu facts, promoted only during this composite's dispatch scope.
+    events: crate::widget_object::CompositeEvents,
+    /// Drops after private children/inboxes so their receivers are released first.
+    runtime: crate::widget_object::WidgetRuntime,
 }
 
 impl Combo {
@@ -91,12 +93,14 @@ impl Combo {
         parameters: ComboParameters,
         menu: ComPtr<IChoiceMenuAbi>,
         placeholder: String,
+        events: crate::widget_object::CompositeEvents,
     ) -> Self {
         Self {
             runtime,
             menu,
             placeholder,
             font: parameters.font,
+            events,
         }
     }
 
@@ -256,28 +260,14 @@ impl Combo {
         resources: crate::widget_object::SharedAssets,
         menu: ComPtr<IChoiceMenuAbi>,
         placeholder: String,
-        forwarder: Option<neocogi_com::LocalCom<ComboEventForwarder>>,
+        events: crate::widget_object::CompositeEvents,
+        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<neocogi_com::ComBox<ComboAbi>, NcStatus> {
-        let value = Self::build(host, &resources, menu, placeholder)?;
-        Self::into_box_cyclic::<ComboAbi>(move |origin| {
-            if let Some(forwarder) = forwarder {
-                forwarder.try_borrow_mut().expect("unpublished event forwarder is idle").origin = Some(origin);
-            }
-            value
-        })?
-        .query().map_err(|(status, _unpublished)| status)
-    }
-
-    /// Builds one header with runtime-shared resources and no semantic-state mirror.
-    fn build(
-        host: ComPtr<IWidgetHostAbi>,
-        resources: &crate::widget_object::SharedAssets,
-        menu: ComPtr<IChoiceMenuAbi>,
-        placeholder: String,
-    ) -> Result<Self, NcStatus> {
         let parameters = crate::ComboParameters::new();
-        let runtime = crate::widget_object::WidgetRuntime::for_resources(host, parameters.opt, Some(resources))?;
-        Ok(Self::from_runtime(runtime, parameters, menu, placeholder))
+        let mut runtime = crate::widget_object::WidgetRuntime::for_resources(host, parameters.opt, Some(&resources))?;
+        runtime.state = runtime.state.with_events(queue);
+        Self::into_box(Self::from_runtime(runtime, parameters, menu, placeholder, events))
+            .query().map_err(|(status, _unpublished)| status)
     }
 }
 
@@ -360,30 +350,10 @@ impl neocogi_ui_nodes_contracts::Combo for Combo {
     }
 }
 
-/// Private composition bridge: the core menu emits its own origin, while the
-/// application observes the public Combo. No event payload is copied here.
-#[neocogi_com::com_object(interfaces(neocogi_com::events::IEventReceiver))]
-pub(crate) struct ComboEventForwarder {
-    /// Final application queue, fixed before the private menu is created.
-    pub(crate) queue: ComPtr<neocogi_com::events::IEventReceiverAbi>,
-    /// Filled exactly once by the enclosing Combo constructor, before publication.
-    /// No public method can replace this origin or its queue.
-    pub(crate) origin: Option<neocogi_com::WeakComBox<ComboAbi>>,
-}
-impl neocogi_com::events::IEventReceiver for ComboEventForwarder {
-    /// Forwards the sole snapshot owner with the public identity, without entering
-    /// either object's widget state or performing application behavior.
-    fn post(
-        &mut self,
-        _origin: neocogi_com::NcValueRef<'_, neocogi_com::events::EventOrigin>,
-        event: neocogi_com::ComBox<neocogi_com::events::IEventAbi>,
-    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
-        let Some(origin) = &self.origin else { return Err((neocogi_com::NC_E_BUSY, event)) };
-        let origin = neocogi_com::events::EventOrigin::Widget(origin.clone().into_unknown());
-        let origin = match neocogi_com::NcValueRef::new(&origin) {
-            Ok(origin) => origin,
-            Err(status) => return Err((status, event)),
-        };
-        self.queue.post(origin, event)
+/// Menu input is private; applications observe the public combo identity.
+impl neocogi_ui_core_contracts::IWidgetDispatcher for Combo {
+    /// Relays one immutable menu snapshot without copying its payload.
+    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
+        self.events.dispatch_next(&self.runtime.state)
     }
 }

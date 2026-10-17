@@ -142,6 +142,21 @@ handlers. Reloadable documents can use `document_receiver(generation, sender)` a
 attempt and widget before the handler queries an event. Optional generated `Form`
 fields simplify widget lookup. No generated event dispatch code is required.
 
+## Origin ownership
+
+The runtime scopes the current widget for each update and private dispatch call.
+A widget posts through its existing host and constructor-selected receiver; it
+holds no origin-stack controller or ordinary weak self-reference. Each message
+captures its weak origin at post time. Nested scopes restore their caller, and
+all independently loaded providers use the same owning host over COM.
+
+TextArea and Combo own private editor/menu inboxes. Their scheduled dispatch
+forwards the captured event under the public composite identity, replacing
+self-origin binding and Combo's separate forwarding COM object. Explicit
+FileDialog cancellation/closure and shared service calls can emit outside these
+scopes, so they retain weak completion/service identities. The
+[origin contract](../contracts/WIDGET_EVENT_ORIGINS.md) explains these boundaries.
+
 ## Behavior inside a composite
 
 A passive button or layout container needs no private dispatcher. A component

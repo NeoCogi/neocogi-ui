@@ -103,8 +103,6 @@ pub struct Number {
     value: Real,
     /// Text editing state for shift-click numeric entry.
     edit: NumberEditState,
-    /// Single lifetime event slot; the constructor fixes the parent receiver before publishing the widget.
-    events: crate::widget_object::WidgetEvents,
 }
 
 impl Number {
@@ -118,7 +116,6 @@ impl Number {
             font: parameters.font,
             value: parameters.value,
             edit: NumberEditState::default(),
-            events: Default::default(),
         }
     }
 
@@ -142,14 +139,11 @@ impl Number {
         self.edit.editing
     }
 
-    /// Test construction consumes the bare algorithm before fixing its real weak origin.
+    /// Test construction binds delivery before allocating the ordinary exclusive object.
     #[cfg(test)]
     pub(crate) fn into_observed(mut self, queue: ComPtr<neocogi_com::events::IEventReceiverAbi>) -> neocogi_com::LocalBox<Self> {
-        Self::into_local_box_cyclic::<NumberAbi>(move |origin| {
-            self.events = crate::widget_object::WidgetEvents::with_queue(Some(queue), origin);
-            self
-        })
-        .unwrap()
+        self.runtime.state = self.runtime.state.with_events(Some(queue));
+        Self::into_local_box(self)
     }
 
     /// Measures the formatted number label.
@@ -182,8 +176,8 @@ impl Number {
             let drag_delta = f64::from(delta.x) * f64::from(self.step);
             self.value = add_number_delta(self.value, drag_delta);
         }
-        if self.value != last && self.events.is_bound() {
-            ctx.posted(neocogi_ui_nodes_contracts::events::numeric_changed(self.value).and_then(|event| self.events.post(event)));
+        if self.value != last && self.runtime.state.is_observed() {
+            ctx.posted(neocogi_ui_nodes_contracts::events::numeric_changed(self.value).and_then(|event| self.runtime.state.post(event)));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(self.value != last)
@@ -295,11 +289,8 @@ impl Number {
     ) -> Result<neocogi_com::ComBox<NumberAbi>, NcStatus> {
         let mut value = Self::build(host, options, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
-        Self::into_box_cyclic::<NumberAbi>(move |origin| {
-            value.events = crate::widget_object::WidgetEvents::with_queue(queue, origin);
-            value
-        })?
-        .query().map_err(|(status, _unpublished)| status)
+        value.runtime.state = value.runtime.state.with_events(queue);
+        Self::into_box(value).query().map_err(|(status, _unpublished)| status)
     }
 
     /// Builds one number editor with either directly imported or runtime-shared resources.

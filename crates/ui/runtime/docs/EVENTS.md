@@ -79,12 +79,22 @@ widget-specific receiver implementation. A custom receiver may add an applicatio
 envelope, but keeps the exclusive COM event until handling.
 
 ```text
-widget commits state and captures immutable event
-  → transfers ComBox<IEvent> and weak origin through IEventReceiver
+runtime scopes current widget for update/private dispatch
+  → widget commits state and captures immutable event
+  → WidgetState posts through its existing IWidgetHost
+  → host captures current weak origin and transfers ComBox<IEvent> through IEventReceiver
   → receiver moves EventMessage into its inbox
   → runtime reaches a safe dispatch boundary
   → processor queries event interfaces and handles the message
 ```
+
+The widget-facing host exposes posting only; it cannot push/pop the origin
+stack. Ordinary controls need no cached weak self or cyclic construction.
+TextArea and Combo own private inboxes and republish their captured facts during
+composite dispatch, under their public identities. Shared services and immediate
+FileDialog cancel/close completion retain explicit weak identities because those
+calls also run outside widget processing. See the
+[origin contract](../../../../docs/contracts/WIDGET_EVENT_ORIGINS.md).
 
 Posting runs during the producer's call. Keep channel senders and immutable policy
 in the receiver; defer command selection and widget calls to the handler. Neither

@@ -3,7 +3,9 @@
 Every observed producer retains one `IEventReceiver` selected before publication.
 All producers use that same receiver interface. Each post transfers an immutable
 `ComBox<IEvent>` and captures a weak source identity. The complete wire and
-ownership contract is [COM event objects](COM_EVENT_INTERFACES.md).
+ownership contract is [COM event objects](COM_EVENT_INTERFACES.md). Ordinary UI
+widgets use [owner-scoped origins](WIDGET_EVENT_ORIGINS.md): their existing host
+supplies the current weak source, without a stored self-reference.
 
 ## Construction
 

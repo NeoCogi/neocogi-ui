@@ -119,8 +119,6 @@ fn partition(settings: SplitOptions, rect: Recti) -> Partition {
 #[neocogi_com::com_object(neocogi_ui_nodes_contracts::SplitView, ownership = exclusive)]
 /// Concrete container owns pane sizing and its divider; no sibling handles share mutable state.
 pub struct SplitView {
-    /// Standard lifetime, resource access, options, and sticky geometry invalidation.
-    runtime: WidgetRuntime,
     /// Exclusive topology authority; callers receive only its read-only view.
     editor: neocogi_com::ComBox<IChildrenEditorAbi>,
     /// Committed child count, updated only after successful topology edits.
@@ -133,8 +131,8 @@ pub struct SplitView {
     drag: Drag,
     /// Last routed local pointer position distinguishes the handle from inert pane backgrounds.
     pointer: Option<Vec2i>,
-    /// Optional typed destination for user-originated position changes.
-    events: crate::widget_object::WidgetEvents,
+    /// Drops after private children/inboxes so their receivers are released first.
+    runtime: WidgetRuntime,
 }
 
 impl SplitView {
@@ -156,13 +154,9 @@ impl SplitView {
             partition: Partition::default(),
             drag: Drag::Idle,
             pointer: None,
-            events: Default::default(),
         };
-        Self::into_box_cyclic::<SplitViewAbi>(move |origin| {
-            value.events = crate::widget_object::WidgetEvents::with_queue(queue, origin);
-            value
-        })?
-        .query().map_err(|(status, _unpublished)| status)
+        value.runtime.state = value.runtime.state.with_events(queue);
+        Self::into_box(value).query().map_err(|(status, _unpublished)| status)
     }
 
     /// Retires geometry and gesture state after a committed topology or policy edit.
@@ -182,8 +176,8 @@ impl SplitView {
             return Change::NoChange;
         }
         self.settings.position = position;
-        if self.events.is_bound() {
-            ctx.posted(neocogi_ui_nodes_contracts::events::split_changed(position).and_then(|event| self.events.post(event)));
+        if self.runtime.state.is_observed() {
+            ctx.posted(neocogi_ui_nodes_contracts::events::split_changed(position).and_then(|event| self.runtime.state.post(event)));
         }
         Change::Changed
     }

@@ -12,7 +12,7 @@ use neocogi_ui::com::widget::WidgetState;
 use neocogi_ui_core_contracts::*;
 use neocogi_demo_contracts::*;
 use neocogi_ui::Painter;
-use neocogi_com::{ComBox, WeakComBox, ComPtr, ComRef, NcCopyFromBufferOffset, NcOutputWriter, NcStatus, NC_E_INVALID_ARG, com_object};
+use neocogi_com::{ComBox, ComPtr, ComRef, NcCopyFromBufferOffset, NcOutputWriter, NcStatus, NC_E_INVALID_ARG, com_object};
 use neocogi_ui_design::DesignWidgetManifest;
 use neocogi_ui_document_contracts::IDesignWidgetCatalog;
 
@@ -109,20 +109,19 @@ struct CounterObject {
     count: u32,
     /// Accepted provider-owned constructor policy, shared with the design editor.
     settings: settings::Settings,
-    /// Sole destination for the complete enum-valued event stream.
-    event: Option<(ComPtr<neocogi_com::events::IEventReceiverAbi>, WeakComBox<CounterAbi>)>,
 }
 impl CounterObject {
     /// Validates runtime authority and publishes one fully initialized counter identity.
     fn create(host: ComRef<'_, IWidgetHostAbi>, queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>, settings: settings::Settings,
     ) -> Result<ComBox<CounterAbi>, NcStatus> {
         host.check_mutation()?;
-        Self::into_box_cyclic::<CounterAbi>(move |origin| Self {
-            common: Common::new(host, WidgetOptions::FRAME),
+        let mut common = Common::new(host, WidgetOptions::FRAME);
+        common.state = common.state.with_events(queue);
+        Self::into_box(Self {
+            common,
             count: settings.initial(),
             settings,
-            event: queue.map(|queue| (queue, origin)),
-        })?
+        })
         .query().map_err(|(status, _unpublished)| status)
     }
 
@@ -132,9 +131,9 @@ impl CounterObject {
             self.count = self.settings.next(self.count);
             // A rejected foreign post cannot erase this already committed change.
             self.common.state.record_change(GeometryChange::Changed);
-            if self.event.is_some() {
-                self.post(neocogi_ui_core_contracts::events::activated(&self.count.to_string())?)?;
-                self.post(neocogi_demo_contracts::events::counter_changed(self.count)?)?;
+            if self.common.state.is_observed() {
+                self.common.state.post(neocogi_ui_core_contracts::events::activated(&self.count.to_string())?)?;
+                self.common.state.post(neocogi_demo_contracts::events::counter_changed(self.count)?)?;
             }
             Ok(GeometryChange::Changed)
         } else {
@@ -144,17 +143,6 @@ impl CounterObject {
     /// Standard body text requires no knowledge of native fonts, atlas packing or GPU types.
     fn paint_content(&self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
         painter.text(state.rect, &self.count.to_string())
-    }
-    /// Enqueues a typed snapshot while lending its live origin. Destruction drops
-    /// the receiver automatically; there is no separate port-close state.
-    fn post(&mut self, event: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), NcStatus> {
-        match &mut self.event {
-            None => Ok(()),
-            Some((queue, origin)) => {
-                use neocogi_com::events::EventOrigin;
-                let origin = EventOrigin::Widget(origin.clone().into_unknown());
-                queue.post(neocogi_com::NcValueRef::new(&origin)?, event).map_err(|(status, _event)| status)
-            }}
     }
 }
 // Focus=1, Tab=2, Enter=4 and Space=8 are the canonical WidgetProperties keyboard bits.

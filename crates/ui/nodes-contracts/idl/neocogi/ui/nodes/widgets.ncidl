@@ -246,7 +246,7 @@ bitenum FillStates: u8 {
 #[version(5)]
 /// Constructible fixed scrolling editor whose interface forwards to one actual internal editor.
 #[events(ITextChangedEvent, ITextSubmittedEvent)]
-interface TextArea: IWidget + IContainerLayout + IScrolling {
+interface TextArea: IWidget + IContainerLayout + IScrolling + IWidgetDispatcher {
     /// Returns an independently owned immutable UTF-8 snapshot from the actual editor.
     fn text(&self) -> Result<ComPtr<INcString>>;
     /// Replaces normalized text on the actual editor and schedules caret reveal.
@@ -269,7 +269,7 @@ interface TextArea: IWidget + IContainerLayout + IScrolling {
 #[version(4)]
 /// Runtime-owned combo box whose header, item model, popup, and interaction state form one control.
 #[events(IChoiceChangedEvent)]
-interface Combo: IWidget + ILeafLayout {
+interface Combo: IWidget + ILeafLayout + IWidgetDispatcher {
     /// Returns the committed stable leaf identity, preserving `None` independently of every ID.
     fn selection(&self) -> Result<ChoiceSelection>;
     /// Returns the exact rendered header text: the selected label or the configured placeholder.

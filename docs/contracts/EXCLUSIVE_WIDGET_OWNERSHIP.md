@@ -128,11 +128,13 @@ not remove their own owner while executing. Neither is a
 foreign downcast API. Composites can initialize their private controls without a
 second owner or a `RefCell` around every widget.
 
-Capture a queued event origin with `ComBox::downgrade()` or project an existing
+Dispatch owners capture a queued event origin with `ComBox::downgrade()` or project an existing
 `WeakComBox` with `query()`. A generic `ComRef` does not establish exclusive
 ownership or its lifetime layout and cannot create an exclusive weak identity. `WeakComBox::is_alive()` is only an observation;
 every subsequent method still checks admission, because another thread may
-remove the owner between the check and the call.
+remove the owner between the check and the call. Ordinary widgets use their
+existing host for [owner-scoped posting](WIDGET_EVENT_ORIGINS.md), without storing
+a weak self-reference or controlling the origin stack.
 
 ## Removing the generic close operation
 

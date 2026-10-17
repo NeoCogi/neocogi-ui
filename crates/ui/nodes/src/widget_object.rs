@@ -516,28 +516,30 @@ pub(crate) trait ImageState {
     fn set_image(&mut self, image: Option<neocogi_ui::Image>, fit_width: bool) -> bool;
 }
 
-/// Private construction-selected delivery for an exclusively owned UI control.
-/// The widget's fields own this storage; destruction releases the destination.
-/// No attach method, close state, or second consumer exists here.
-pub(crate) struct WidgetEvents {
-    /// The sole destination and cached weak source identity.
-    receiver: Option<(neocogi_com::ComPtr<neocogi_com::events::IEventReceiverAbi>, neocogi_com::events::EventOrigin)>,
+/// Sole private inbox owned by a composite which republishes child facts as its own.
+/// Children receive only the sending COM capability; neither it nor the upstream
+/// widget host exposes scope control. Runtime dispatch selects the composite origin.
+pub(crate) struct CompositeEvents {
+    /// Absent observation needs neither an extra receiver nor a private channel.
+    messages: Option<std::sync::mpsc::Receiver<neocogi_com::events::EventMessage>>,
 }
-impl Default for WidgetEvents {
-    fn default() -> Self { Self { receiver: None } }
-}
-impl WidgetEvents {
-    /// Selects the receiver before publication; replacement is unsupported.
-    pub(crate) fn with_queue<C: neocogi_com::ComInterface>(queue: Option<neocogi_com::ComPtr<neocogi_com::events::IEventReceiverAbi>>, origin: neocogi_com::WeakComBox<C, C::Threading>) -> Self {
-        Self { receiver: queue.map(|queue| (queue, neocogi_com::events::EventOrigin::Widget(origin.into_unknown().into_thread_local()))) }
+impl CompositeEvents {
+    /// Prepares a private channel only when the public composite is observed.
+    pub(crate) fn new(observed: bool) -> (Self, Option<neocogi_com::ComPtr<neocogi_com::events::IEventReceiverAbi>>) {
+        let (queue, messages) = if observed {
+            let (queue, messages) = neocogi_com::events::channel();
+            (Some(queue), Some(messages))
+        } else { (None, None) };
+        (Self { messages }, queue)
     }
-    /// Allows unobserved controls to avoid allocating an event snapshot.
-    pub(crate) fn is_bound(&self) -> bool { self.receiver.is_some() }
-    /// Transfers the sole event owner; committed widget state survives receiver rejection.
-    pub(crate) fn post(&mut self, event: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), neocogi_com::NcStatus> {
-        match &mut self.receiver {
-            None => Ok(()),
-            Some((queue, origin)) => queue.post(neocogi_com::NcValueRef::new(origin)?, event).map_err(|(status, _event)| status),
-        }
+
+    /// Transfers at most one captured snapshot under the composite's owner scope.
+    /// The queue is private to this composition; public lifetime belongs to its owner.
+    /// Rejected delivery leaves the semantic transition committed, as direct posts do.
+    pub(crate) fn dispatch_next(&mut self, state: &neocogi_ui::com::widget::WidgetState) -> Result<bool, neocogi_com::NcStatus> {
+        state.writable()?;
+        let Some(message) = self.messages.as_ref().and_then(|messages| messages.try_recv().ok()) else { return Ok(false) };
+        state.post(message.event)?;
+        Ok(true)
     }
 }

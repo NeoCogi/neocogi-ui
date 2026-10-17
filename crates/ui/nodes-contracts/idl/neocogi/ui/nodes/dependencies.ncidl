@@ -7,7 +7,7 @@ extern neocogi.gfx;
 use neocogi.ui.core::{
     IActivatedEvent, ITextChangedEvent, ITextSubmittedEvent, IChoiceChangedEvent, ChoiceMenuEntry, ChoiceSelection, IChildren,
     IConstructionHost, IContainerLayout, IFileDialogs, ILeafLayout, IScrolling,
-    ITextContent, IWidget, IWidgetHost, IWindow, ScrollInfo,
+    ITextContent, IWidget, IWidgetDispatcher, IWidgetHost, IWindow, ScrollInfo,
     TextWrapping, UiRuntime,
 };
 use neocogi.renderer::{ITexture, Rect, Size};

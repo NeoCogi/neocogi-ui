@@ -40,6 +40,12 @@ There is no free `downcast_event` function between these APIs. The envelope's
 the same policy serves widget/service origin selection. Neither operation may
 hide an ABI mismatch by converting all query failures to absence.
 
+UI widgets ordinarily call `IWidgetHost::post_event(receiver, event)`. The owning
+runtime supplies the current origin before entering this generic receiver
+protocol. Widgets cannot push/pop that stack. Shared services and explicit
+FileDialog completion remain explicit-origin producers outside widget dispatch.
+See [owner-scoped widget origins](WIDGET_EVENT_ORIGINS.md).
+
 ## Value transport and interpretation
 
 The origin is an IDL value, not an untyped payload. Recursive `WeakComBox<T>` fields

@@ -112,8 +112,6 @@ pub struct Button {
     /// Base widget options.
     /// Initialization-only fill behavior.
     fill: WidgetFillOption,
-    /// Single event slot; receives its destination during construction and is released when the widget is destroyed.
-    events: crate::widget_object::WidgetEvents,
 }
 
 impl Button {
@@ -124,7 +122,6 @@ impl Button {
             content: parameters.content,
             font: parameters.font,
             fill: parameters.fill,
-            events: Default::default(),
         }
     }
 
@@ -216,8 +213,8 @@ impl Widget for Button {
             return crate::Change::NoChange;
         }
         // Pointer click, Enter, and Space converge on the button's single typed submission port.
-        if self.events.is_bound() {
-            ctx.posted(neocogi_ui_core_contracts::events::activated(self.com_label()).and_then(|event| self.events.post(event)));
+        if self.runtime.state.is_observed() {
+            ctx.posted(neocogi_ui_core_contracts::events::activated(self.com_label()).and_then(|event| self.runtime.state.post(event)));
         }
 
         // Submitting leaves the label and preferred dimensions unchanged.
@@ -334,11 +331,8 @@ impl Button {
         // must not repeat this policy; explicit overrides use IWidget setters.
         let mut value = Self::build(host, label, WidgetOptions::FRAME, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
-        Self::into_box_cyclic::<ButtonAbi>(move |origin| {
-            value.events = crate::widget_object::WidgetEvents::with_queue(queue, origin);
-            value
-        })?
-        .query().map_err(|(status, _unpublished)| status)
+        value.runtime.state = value.runtime.state.with_events(queue);
+        Self::into_box(value).query().map_err(|(status, _unpublished)| status)
     }
 
     /// Builds one button with either directly imported or runtime-shared resources.

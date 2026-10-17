@@ -105,8 +105,6 @@ pub struct Textbox {
     editing: super::editing::Editing,
     /// Initialization-only font.
     font: FontRef,
-    /// Single event slot; receives its destination during construction and is released when the widget is destroyed.
-    events: crate::widget_object::WidgetEvents,
 }
 
 impl Textbox {
@@ -121,7 +119,6 @@ impl Textbox {
             cursor,
             editing: super::editing::Editing::default(),
             font: parameters.font,
-            events: Default::default(),
         }
     }
 
@@ -190,12 +187,12 @@ impl Textbox {
     fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
         let outcome = textbox_update(ctx, input, &mut self.buf, &mut self.cursor, &mut self.editing, font, self.runtime.state.host());
-        if self.events.is_bound() {
+        if self.runtime.state.is_observed() {
             if outcome.changed {
-                ctx.posted(neocogi_ui_core_contracts::events::text_changed(&self.buf, self.cursor as u64).and_then(|event| self.events.post(event)));
+                ctx.posted(neocogi_ui_core_contracts::events::text_changed(&self.buf, self.cursor as u64).and_then(|event| self.runtime.state.post(event)));
             }
             if outcome.submitted {
-                ctx.posted(neocogi_ui_core_contracts::events::text_submitted(&self.buf).and_then(|event| self.events.post(event)));
+                ctx.posted(neocogi_ui_core_contracts::events::text_submitted(&self.buf).and_then(|event| self.runtime.state.post(event)));
             }
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
@@ -446,11 +443,8 @@ mod tests {
         })
         .unwrap();
         let textbox = textbox.map(|mut value| {
-            Textbox::into_local_box_cyclic::<TextboxAbi>(move |origin| {
-                value.events = crate::widget_object::WidgetEvents::with_queue(Some(queue), origin);
-                value
-            })
-            .unwrap()
+            value.runtime.state = value.runtime.state.with_events(Some(queue));
+            Textbox::into_local_box(value)
         });
         (textbox, move |values: &mut Vec<RecordedEvent>| {
             let before = values.len();
@@ -547,45 +541,47 @@ mod tests {
     fn text_events_preserve_complete_snapshots_and_consumer_fifo() {
         let textbox = crate::test_support::algorithm::Algorithm::<Textbox>::from(TextboxParameters::new(""));
         let (mut textbox, mut dispatcher) = text_dispatcher(textbox);
-        let mut textbox = textbox.try_borrow_mut().unwrap();
+        textbox.dispatch(|mut textbox| {
 
-        update_textbox(
-            &mut textbox,
-            true,
-            vec![
-                UiInputEvent::Text { text: "ab".into() },
-                UiInputEvent::Text { text: "cd".into() },
-                UiInputEvent::Key {
-                    event: KeyEvent::pressed(Key::Enter, Modifiers::NONE),
-                },
-            ],
-        );
-        update_textbox(&mut textbox, true, vec![UiInputEvent::Text { text: "e".into() }]);
+            update_textbox(
+                &mut textbox,
+                true,
+                vec![
+                    UiInputEvent::Text { text: "ab".into() },
+                    UiInputEvent::Text { text: "cd".into() },
+                    UiInputEvent::Key {
+                        event: KeyEvent::pressed(Key::Enter, Modifiers::NONE),
+                    },
+                ],
+            );
+            update_textbox(&mut textbox, true, vec![UiInputEvent::Text { text: "e".into() }]);
 
-        assert_eq!(textbox.text(), "abcde");
-        let mut events = Vec::new();
-        assert!(dispatcher(&mut events));
-        assert_eq!(
-            events,
-            [
-                RecordedEvent::Changed("ab".to_owned(), 2),
-                RecordedEvent::Changed("abcd".to_owned(), 4),
-                RecordedEvent::Submitted("abcd".to_owned()),
-                RecordedEvent::Changed("abcde".to_owned(), 5),
-            ]
-        );
+            assert_eq!(textbox.text(), "abcde");
+            let mut events = Vec::new();
+            assert!(dispatcher(&mut events));
+            assert_eq!(
+                events,
+                [
+                    RecordedEvent::Changed("ab".to_owned(), 2),
+                    RecordedEvent::Changed("abcd".to_owned(), 4),
+                    RecordedEvent::Submitted("abcd".to_owned()),
+                    RecordedEvent::Changed("abcde".to_owned(), 5),
+                ]
+            );
+        });
     }
 
     #[test]
     fn programmatic_text_and_cursor_setters_are_silent() {
         let textbox = crate::test_support::algorithm::Algorithm::<Textbox>::from(TextboxParameters::new("initial"));
         let (mut textbox, mut dispatcher) = text_dispatcher(textbox);
-        let mut textbox = textbox.try_borrow_mut().unwrap();
-        textbox.set_text("replacement");
-        textbox.set_cursor(3);
-        textbox.move_cursor_to_end();
-        textbox.clear();
-        assert!(!dispatcher(&mut Vec::new()));
+        textbox.dispatch(|textbox| {
+            textbox.set_text("replacement");
+            textbox.set_cursor(3);
+            textbox.move_cursor_to_end();
+            textbox.clear();
+            assert!(!dispatcher(&mut Vec::new()));
+        });
     }
 
     /// Verifies the public Home and End keys select the two single-line cursor boundaries.
@@ -648,11 +644,8 @@ impl Textbox {
     ) -> Result<neocogi_com::ComBox<TextboxAbi>, NcStatus> {
         let mut value = Self::build(host, text, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
-        Self::into_box_cyclic::<TextboxAbi>(move |origin| {
-            value.events = crate::widget_object::WidgetEvents::with_queue(queue, origin);
-            value
-        })?
-        .query().map_err(|(status, _unpublished)| status)
+        value.runtime.state = value.runtime.state.with_events(queue);
+        Self::into_box(value).query().map_err(|(status, _unpublished)| status)
     }
 
     /// Builds one textbox with either directly imported or runtime-shared resources.

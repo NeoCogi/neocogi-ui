@@ -267,9 +267,6 @@ pub struct Scrollbar {
     axis: ScrollbarAxis,
     /// One authoritative range/offset allocation, also shared by composed scroll layout when present.
     pub(crate) axis_state: std::rc::Rc<ScrollAxisState>,
-    /// Caller-authored options; dynamic range policy is resolved from the same shared state.
-    /// Typed source for user-originated movement; programmatic requests remain silent.
-    events: crate::widget_object::WidgetEvents,
 }
 
 /// Coherent copied values shared by a real scrollbar and its co-packaged scroll layout.
@@ -343,7 +340,6 @@ impl Scrollbar {
             runtime,
             axis: parameters.axis,
             axis_state,
-            events: Default::default(),
         }
     }
 }
@@ -426,10 +422,10 @@ impl Widget for Scrollbar {
             }
             _ => {}
         }
-        if self.offset() != previous && self.events.is_bound() {
+        if self.offset() != previous && self.runtime.state.is_observed() {
             // Publish only user-originated movement. Programmatic setters intentionally remain
             // silent so owners can synchronize range and offset without recursive notifications.
-            ctx.posted(neocogi_ui_nodes_contracts::events::scrollbar_changed(self.offset()).and_then(|event| self.events.post(event)));
+            ctx.posted(neocogi_ui_nodes_contracts::events::scrollbar_changed(self.offset()).and_then(|event| self.runtime.state.post(event)));
         }
 
         // A containing ScrollArea reads this offset when placing its content.
@@ -567,11 +563,8 @@ impl Scrollbar {
     ) -> Result<neocogi_com::ComBox<ScrollbarAbi>, NcStatus> {
         let mut value = Self::build(host, range, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.
-        Self::into_box_cyclic::<ScrollbarAbi>(move |origin| {
-            value.events = crate::widget_object::WidgetEvents::with_queue(queue, origin);
-            value
-        })?
-        .query().map_err(|(status, _unpublished)| status)
+        value.runtime.state = value.runtime.state.with_events(queue);
+        Self::into_box(value).query().map_err(|(status, _unpublished)| status)
     }
 
     /// Builds one scrollbar with either directly imported or runtime-shared resources.
