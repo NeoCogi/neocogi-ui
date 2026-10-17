@@ -92,6 +92,10 @@ jobs:
         run: cargo test -p neocogi-com -p neocogi-com-runtime --lib --release -- --test-threads=1
       - name: IDL value lowering, malformed input and generated compile cases
         run: cargo test -p neocogi-idl
+      - name: Install the SDK compiler floor for actual archive tests
+        run: rustup toolchain install 1.85.0 --profile minimal
+      - name: Extract SDK archives, run their unit tests and execute generated COM
+        run: bash crates/com/scripts/test-packages.sh
       - name: Driver rejects missing tests, artifacts and stale success evidence
         run: python3 -m unittest discover -s crates/com/scripts -p test_compatibility.py
       - name: Relocated monolith without native NeoCogi libraries
