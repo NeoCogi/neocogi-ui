@@ -127,16 +127,20 @@ impl ChoiceMenuState {
         queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<ComPtr<IChoiceMenuStateAbi>, NcStatus> {
         validate_menu(&menu_text, &entries, selection)?;
-        Self::from_value_cyclic::<IChoiceMenuAbi>(move |origin| Self {
+        let local = Self::into_local(Self {
             menu_text,
             entries,
             selection,
             revision: 0,
             popup_anchor: Rect::default(),
             popup: ChoicePopupLifecycle::Closed,
-            changed_event: neocogi_com::events::EventPort::with_queue(queue, origin),
-        })?
-        .query()
+            changed_event: neocogi_com::events::EventPort::new(),
+        });
+        // No caller can submit a choice until this factory returns. Connect its
+        // weak public identity through checked local access before that boundary.
+        let origin = local.query::<IChoiceMenuAbi>()?.downgrade()?;
+        local.try_borrow_mut()?.changed_event = neocogi_com::events::EventPort::with_queue(queue, origin);
+        local.query()
     }
 
     /// Advances the semantic revision after one observable model change.

@@ -392,7 +392,7 @@ impl FileDialog {
             phase: RequestPhase::Idle,
             completed: Default::default(),
         };
-        let mut model = Model {
+        let model = Model {
             nodes,
             window: None,
             request,
@@ -409,12 +409,13 @@ impl FileDialog {
             rows: Vec::new(),
             buttons,
         };
-        let dialog = Self::into_local_box_cyclic::<IFileDialogAbi>(move |origin| {
-            // Completion is also callable outside the scheduled widget phases.
-            // A weak identity preserves those immediate facts without retaining this dialog.
-            model.request.completed = queue.map(|queue| (queue, neocogi_com::events::EventOrigin::Widget(origin.into_unknown())));
-            Self { shell, model, messages: events }
-        })?;
+        let mut dialog = Self::into_local_box(Self { shell, model, messages: events });
+        // Completion is also callable outside scheduled widget phases. Connect
+        // the fully initialized dialog before its root reaches the runtime;
+        // the weak identity never retains the dialog or needs an absent value.
+        let origin = dialog.query::<IFileDialogAbi>()?;
+        dialog.try_borrow_mut()?.model.request.completed =
+            queue.map(|queue| (queue, neocogi_com::events::EventOrigin::Widget(origin.into_unknown())));
         let windows = services.windows.clone();
         let window_sink = dialog.try_borrow()?.model.nodes.queue.clone();
         let window_binding = neocogi_com::events::EventBinding::from_queue(Some(window_sink.as_com_ref()))?;

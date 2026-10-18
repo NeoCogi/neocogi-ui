@@ -2,6 +2,26 @@
 use super::*;
 
 impl WindowManager {
+    /// Completes a fresh window's constructor-selected delivery before its
+    /// creating transaction returns. Registration invokes no producer code;
+    /// the caller holds exclusive manager access and has not exposed the handle.
+    /// This is private factory wiring, not a runtime receiver replacement API.
+    pub(crate) fn connect_window_events(&mut self, window: &WindowHandle, events: neocogi_com::events::EventPort) {
+        self.surfaces.root_node_mut(window.id()).expect("new window remains registered")
+            .root_mut().expect("window has root policy").events = events;
+    }
+
+    /// Completes an application popup's delivery in its creating transaction,
+    /// after ordinary COM allocation supplies its weak identity. No popup input
+    /// or application call can occur before the factory exposes its capability.
+    pub(crate) fn connect_popup_events(&mut self, popup: &PopupHandle, events: neocogi_com::events::EventPort) {
+        let node = self.surfaces.popup_node_mut(popup.id()).expect("new popup remains registered");
+        match &mut node.kind {
+            SurfaceKind::Popup(PopupState::Application { events: destination, .. }) => *destination = events,
+            _ => unreachable!("public popup creation selects application popup policy"),
+        }
+    }
+
     /// Validates complete runtime shutdown before changing any lifetime state.
     pub(crate) fn ensure_widgets_idle(&self) -> Result<(), neocogi_com::NcStatus> {
         for surface in &self.surfaces.nodes {

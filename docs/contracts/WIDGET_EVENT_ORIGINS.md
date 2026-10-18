@@ -96,14 +96,20 @@ A composite's inbox grants no control of its upstream origin stack.
 Shared windows, popups, menu items and choice-menu services can publish from
 manager operations or explicit application calls. Their existing `EventPort`
 therefore continues carrying a weak service identity to the generic COM receiver.
+Their factories allocate fully initialized objects normally, obtain their weak
+interface identities, and connect the ports before exposing the capabilities.
+Window/popup factories hold exclusive manager access across registration and
+connection; registration itself emits no events. Menu items enter the declaration
+only after their port and retained public capability have been connected.
 
 FileDialog also supports immediate completion from explicit `cancel()` and
 `close()` calls outside widget processing. Its request retains a weak dialog
 completion identity for that reason. Replacing it with ambient widget context
-would reject valid calls or defer/drop committed results during removal. It
-retains cyclic initialization for this narrow purpose; it cannot push or pop the
-runtime's origin stack. The remaining `#[com_object]` construction choices are a
-separate architectural discussion.
+would reject valid calls or defer/drop committed results during removal. Its
+factory obtains that identity after ordinary allocation, connects completion
+through checked local access, then registers the dialog's root with the runtime.
+It cannot push or pop the runtime's origin stack. A weak completion identity
+requires neither cyclic construction nor access to an uninitialized Rust value.
 
 ## Forms and stale facts
 

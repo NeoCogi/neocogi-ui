@@ -14,6 +14,7 @@ mod input_boundaries;
 mod shutdown;
 mod documentation;
 mod resource_refresh;
+mod ordinary_construction;
 
 /// Positive drawable size shared by the deterministic headless fixtures.
 const SIZE: Size = Size { width: 640, height: 400 };

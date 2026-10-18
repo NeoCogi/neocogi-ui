@@ -137,11 +137,11 @@ impl RuntimeStorage {
             Placement::Window(placement, queue) => {
                 LogicalWindow::create(Rc::downgrade(self), manager, placement, Window::new(title, local_rect(rect), node), queue)
             }
-            Placement::Popup(parent, queue) => LogicalPopup::create(Rc::downgrade(self), queue, |events| {
-                manager
-                    .create_popup(&parent, &title, node, events)
-                    .expect("authenticated popup owner cannot disappear during an exclusive transaction")
-            }),
+            Placement::Popup(parent, queue) => {
+                let popup = manager.create_popup(&parent, &title, node, None)
+                    .expect("authenticated popup owner cannot disappear during an exclusive transaction");
+                LogicalPopup::create(Rc::downgrade(self), manager, popup, queue)
+            }
         };
         self.mounts.borrow_mut().push(SurfaceMount { surface, identity: identity.clone() });
         self.pending.set(true);
@@ -273,28 +273,22 @@ impl LogicalWindow {
         window: Window,
         queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
     ) -> (ComPtr<IUnknown>, NativeSurface) {
-        // A single cyclic initializer keeps weak setup, allocation and publication
-        // common. Supplying a different FnOnce per placement had duplicated this
-        // machinery in the min-size binary despite an identical ownership contract.
-        let local = Self::into_local_cyclic::<IWindowAbi>(|origin| {
-            let events = Some(neocogi_com::events::EventPort::with_queue(queue, origin));
-            let window = match placement {
-                WindowPlacement::Root => manager.create_window(window, events),
-                WindowPlacement::Child(parent) => manager
-                    .create_child_window(&parent, window, events)
-                    .expect("authenticated ordinary parent cannot change during an exclusive transaction"),
-                WindowPlacement::Dialog(parent) => manager
-                    .create_dialog(&parent, window, events)
-                    .expect("authenticated ordinary owner cannot change during an exclusive transaction"),
-            };
-            Self {
-                runtime,
-                window,
-                closed: Cell::new(false),
-            }
-        }).expect("LogicalWindow declares IWindow");
-        let surface = NativeSurface::Window(local.try_borrow().expect("new local window is idle").window.clone());
-        (local.query().expect("every generated object declares IUnknown"), surface)
+        let window = match placement {
+            WindowPlacement::Root => manager.create_window(window, None),
+            WindowPlacement::Child(parent) => manager
+                .create_child_window(&parent, window, None)
+                .expect("authenticated ordinary parent cannot change during an exclusive transaction"),
+            WindowPlacement::Dialog(parent) => manager
+                .create_dialog(&parent, window, None)
+                .expect("authenticated ordinary owner cannot change during an exclusive transaction"),
+        };
+        let local = Self::into_local(Self { runtime, window: window.clone(), closed: Cell::new(false) });
+        let origin = local.query::<IWindowAbi>().expect("LogicalWindow declares IWindow")
+            .downgrade().expect("LogicalWindow has shared ownership");
+        // Registration emits no events. The exclusive manager transaction keeps
+        // this record private until its initialized COM identity is connected.
+        manager.connect_window_events(&window, neocogi_com::events::EventPort::with_queue(queue, origin));
+        (local.query().expect("every generated object declares IUnknown"), NativeSurface::Window(window))
     }
 
     /// Secures a live owner while allowing observational reads in layout and paint.
@@ -438,20 +432,20 @@ enum PopupEdit {
 }
 
 impl LogicalPopup {
-    /// Fixes the queue's public origin while constructing the authoritative
-    /// popup record; no receiver installation API escapes to applications.
+    /// Completes a freshly registered popup's COM identity and delivery while
+    /// its creating transaction still owns the manager. The caller must not
+    /// expose the native handle or invoke popup operations before this returns.
     pub(super) fn create(
         runtime: Weak<RuntimeStorage>,
+        manager: &mut WindowManager,
+        popup: PopupHandle,
         queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
-        register: impl FnOnce(Option<neocogi_com::events::EventPort>) -> PopupHandle,
     ) -> (ComPtr<IUnknown>, NativeSurface) {
-        let local = Self::into_local_cyclic::<IPopupAbi>(|origin| Self {
-            runtime,
-            popup: register(Some(neocogi_com::events::EventPort::with_queue(queue, origin))),
-            closed: false,
-        }).expect("LogicalPopup declares IPopup");
-        let surface = NativeSurface::Popup(local.try_borrow().expect("new local popup is idle").popup.clone());
-        (local.query().expect("every generated object declares IUnknown"), surface)
+        let local = Self::into_local(Self { runtime, popup: popup.clone(), closed: false });
+        let origin = local.query::<IPopupAbi>().expect("LogicalPopup declares IPopup")
+            .downgrade().expect("LogicalPopup has shared ownership");
+        manager.connect_popup_events(&popup, neocogi_com::events::EventPort::with_queue(queue, origin));
+        (local.query().expect("every generated object declares IUnknown"), NativeSurface::Popup(popup))
     }
 
     /// Retains the live owner for one synchronous checked call.

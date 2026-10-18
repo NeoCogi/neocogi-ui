@@ -58,22 +58,20 @@ impl IMenuBuilder for Builder {
         // Complete all fallible declaration checks before publishing the COM
         // item and forest record with the same fixed weak origin.
         let slot = menu.entries.len();
-        let object = Item::from_value_cyclic::<IMenuItemAbi>(|origin| {
-            let (handle, item) = crate::MenuItem::create(MenuItemParameters::new(label), Some(neocogi_com::events::EventPort::with_queue(queue, origin)));
-            menu.entries.push(MenuEntry::Item(item));
-            Item {
-                runtime: Rc::downgrade(&runtime),
-                declaration: Rc::downgrade(&self.declaration),
-                path: self.path.clone(),
-                slot,
-                handle,
-            }
-        })?;
+        let (handle, mut item) = crate::MenuItem::create(MenuItemParameters::new(label), None);
+        let object = Item::from_value(Item {
+            runtime: Rc::downgrade(&runtime),
+            declaration: Rc::downgrade(&self.declaration),
+            path: self.path.clone(),
+            slot,
+            handle,
+        });
         let interface = object.query::<IMenuItemAbi>()?;
-        match &mut menu.entries[slot] {
-            MenuEntry::Item(item) => item.record.origin = Some(interface.clone()),
-            _ => unreachable!("constructor inserted an item at this slot"),
-        }
+        item.record.submitted_event = neocogi_com::events::EventPort::with_queue(queue, interface.downgrade()?);
+        item.record.origin = Some(interface.clone());
+        // Only the complete record enters the declaration. No native input or
+        // application capability can observe an item with an unconnected port.
+        menu.entries.push(MenuEntry::Item(item));
         Ok(interface)
     }
     /// Preserves separators as direct compact rows with no event source or widget allocation.
@@ -329,12 +327,9 @@ impl IMenus for Runtime {
         let mut context = self.storage.context()?;
         context.window_manager.window_visible(&parent).map_err(windows::status)?;
         let menu = declaration.menu.try_borrow_mut().map_err(|_| UI_E_BUSY)?.take().ok_or(UI_E_CLOSED)?;
-        let (identity, surface) = windows::LogicalPopup::create(Rc::downgrade(&self.storage), queue, |events| {
-            context
-                .window_manager
-                .create_menu_popup(&parent, menu, events)
-                .unwrap_or_else(|_| unreachable!("authenticated parent cannot disappear before registration"))
-        });
+        let popup = context.window_manager.create_menu_popup(&parent, menu, None)
+            .unwrap_or_else(|_| unreachable!("authenticated parent cannot disappear before registration"));
+        let (identity, surface) = windows::LogicalPopup::create(Rc::downgrade(&self.storage), &mut context.window_manager, popup, queue);
         self.storage.mounts.borrow_mut().push(SurfaceMount { surface, identity: identity.clone() });
         self.storage.pending.set(true);
         identity.query()
