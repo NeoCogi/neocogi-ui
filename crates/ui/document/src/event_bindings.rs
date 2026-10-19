@@ -132,7 +132,7 @@ impl neocogi_com::events::IEventReceiver for DocumentReceiver {
 
 /// Creates the common receiver for a reload attempt, without generating Rust code.
 /// Use EventBindings::all or insert_queue to select observed widgets before loading.
-/// Drain the inbox after traversal and use DocumentEvent::event_for before downcast.
+/// Drain the inbox after traversal and use DocumentEvent::event_for before querying the event.
 pub fn document_receiver(generation: crate::Generation, sender: std::sync::mpsc::Sender<DocumentEvent>) -> Result<ComPtr<IEventReceiverAbi>, NcStatus> {
     DocumentReceiver::from_value(DocumentReceiver { generation, sender }).query::<IEventReceiverAbi>()
 }
