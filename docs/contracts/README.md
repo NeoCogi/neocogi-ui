@@ -51,6 +51,5 @@ application channels and whole-module IDL identity are deliberate policies.
 Provider sticky geometry and conservative host notification work together.
 Explicit Reset/Open intent may require preview replacement even when recipes are
 equal. Weak-local ownership is implemented; it does not imply a runtime-storage
-refactor. Outstanding changes belong in [issues](../issues/README.md) or
-[optimization opportunities](../optimizations/README.md), not in these contracts
-as if already implemented.
+contracts describe accepted behavior and must not present proposed changes as
+already implemented.

@@ -2,6 +2,8 @@
 
 ## 0.0.0 (unreleased)
 
+  removing the redundant issues folder and linking directly to the current backlog.
+
 - Consolidate current adversarial findings, decisions, investigations and
   Archive superseded reports and make issue/optimization pages navigation only;
   retain native probes and independent rerun evidence.
@@ -29,7 +31,6 @@
 - Organize repository documentation by purpose: issues, optimization opportunities,
   contracts, experiments, measurements, architecture, guides, validation, reviews
   and project information. Update cross-links and executable documentation paths.
-- Reconcile unresolved review findings in [issues](../issues/OPEN_ISSUES.md) and
   [optimization opportunities](../optimizations/OPPORTUNITIES.md), retire completed
   reviews and superseded plans, and update ownership, event and IDL guidance.
 

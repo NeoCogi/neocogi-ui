@@ -8,7 +8,6 @@ IDL, plugins, retained UI, rendering and authoring tools. Start with the
 
 | Folder | Contents |
 | --- | --- |
-| [Issues](issues/README.md) | Navigation to findings and investigations in the open review backlog |
 | [Optimization opportunities](optimizations/README.md) | Navigation to performance and simplification work in the open review backlog |
 | [Contracts](contracts/README.md) | Current API, ABI, ownership, event, document and resource rules |
 | [Experiments](experiments/README.md) | Prototype reports, hypotheses, outcomes and implementation status |
@@ -41,10 +40,10 @@ purpose; this directory contains only the main index.
 ## Keeping the categories current
 
 One open review backlog owns remaining findings, investigations, decisions and
-optimization opportunities. Issue and optimization pages link into it. Fixes
+optimization opportunities. The optimization index links into it. Fixes
 record verification, update owning contracts/tests and remove completed entries.
 Experiment reports record the revision actually tested and distinguish prototypes
 from applied changes; measurements retain workloads, artifacts and limits.
 
-validation records and dated evidence. Retain useful evidence under `external run artifacts`;
-do not maintain competing current ledgers.
+validation and dated results under `external run artifacts`. Do not maintain competing
+current ledgers.

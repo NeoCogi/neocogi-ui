@@ -309,7 +309,7 @@ impl PaintService {
         // that allocation alive. Its generated interface header therefore carries the matching
         // Recorder storage pointer. `borrow_abi_mut` applies the same exclusive call gate used by
         // normal mutable COM dispatch and keeps it held for the complete closure invocation.
-        let mut recorder = unsafe { <Recorder as neocogi_com::ComAbiObject>::borrow_abi_mut(object) }?;
+        let mut recorder = unsafe { <Recorder as neocogi_com::ComObject>::borrow_abi_mut(object) }?;
         Ok(call(&mut recorder))
     }
 
