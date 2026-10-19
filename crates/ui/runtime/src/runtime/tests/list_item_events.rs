@@ -67,9 +67,9 @@ fn unobserved_list_item_activations_allocate_nothing() {
     }
 }
 
-/// Direct capture preserves FIFO facts and weak source identity after edits and destruction.
+/// Marker events retain exact weak identity independently of display edits and source destruction.
 #[test]
-fn observed_list_item_captures_each_label_without_retaining_its_source() {
+fn observed_list_item_keeps_activation_identity_after_label_edits_and_source_drop() {
     let source = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
     let gfx = neocogi_ui_support::test_support::gfx_factory();
     let (runtime, driver) = crate::runtime::testing::create_runtime(source.as_com_ref(), gfx.as_com_ref()).unwrap();
@@ -89,20 +89,14 @@ fn observed_list_item_captures_each_label_without_retaining_its_source() {
         let origin = message.origin.widget::<ListItemAbi>().unwrap().unwrap();
         assert!(origin.same_object(row.as_interface()));
         row.set_text("later live label").unwrap();
-        assert_eq!(
-            message.query::<IActivatedEventAbi>().unwrap().unwrap().label().unwrap().to_string().unwrap(),
-            label
-        );
+        assert!(message.query::<IActivatedEventAbi>().unwrap().is_some());
         assert!(messages.try_recv().is_err(), "exactly one fact per activation");
         captured.push(message);
     }
     drop(item);
-    for (message, label) in captured.iter().zip(labels) {
+    for message in &captured {
         assert!(!message.origin.widget::<ListItemAbi>().unwrap().unwrap().is_alive());
-        assert_eq!(
-            message.query::<IActivatedEventAbi>().unwrap().unwrap().label().unwrap().to_string().unwrap(),
-            label
-        );
+        assert!(message.query::<IActivatedEventAbi>().unwrap().is_some());
     }
 }
 

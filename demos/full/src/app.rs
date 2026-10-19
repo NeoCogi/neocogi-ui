@@ -332,9 +332,9 @@ pub(super) enum Action {
 }
 impl State {
     /// Runs after the UI releases its context, permitting ordinary concrete edits and menu coordination.
-    fn activate(&mut self, action: Action, label: &str) -> Result<(), NcStatus> {
+    fn activate(&mut self, action: Action) -> Result<(), NcStatus> {
         match action {
-            Action::Log => self.write_log(&format!("Pressed {label}")),
+            Action::Log => self.write_log("Activated sample command"),
             Action::Submit => self.submit(),
             // The popup capability resolves the pointer captured by the triggering input boundary,
             // so moving the Demo Window does not require application-authored coordinate offsets.
@@ -812,7 +812,7 @@ impl State {
         match &message.origin {
             EventOrigin::Widget(origin) if origin.is_alive() => {
                 if let Some(action) = self.inputs.buttons.iter().find(|(control, _)| control.same_object(origin)).map(|(_, action)| *action) {
-                    if let Some(event) = message.query::<IActivatedEventAbi>()? { self.activate(action, &event.label()?.to_string()?)?; }
+                    if message.query::<IActivatedEventAbi>()?.is_some() { self.activate(action)?; }
                 } else if let Some(target) = self.inputs.sliders.iter().find(|(control, _)| control.same_object(origin)).map(|(_, target)| *target) {
                     if let Some(event) = message.query::<INumericChangedEventAbi>()? {
                         let value = event.value()?;
@@ -831,7 +831,7 @@ impl State {
             }
             EventOrigin::Service(origin) if origin.upgrade()?.is_some() => {
                 if let Some(action) = self.inputs.menus.iter().find(|(control, _)| control.same_object(origin)).map(|(_, action)| *action) {
-                    if let Some(event) = message.query::<IActivatedEventAbi>()? { self.activate(action, &event.label()?.to_string()?)?; }
+                    if message.query::<IActivatedEventAbi>()?.is_some() { self.activate(action)?; }
                 } else if origin.same_object(&self.demo.downgrade()?) { self.window_changed(message)?; }
             }
             _ => {}

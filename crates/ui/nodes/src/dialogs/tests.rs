@@ -549,7 +549,7 @@ fn shared_child_queue_discards_events_from_replaced_directory_rows() {
         (queue, old)
     }).unwrap();
     // Post through the real generated ABI before replacing the row's membership.
-    let event = neocogi_ui::events::activated("old.txt").unwrap();
+    let event = neocogi_ui::events::activated().unwrap();
     queue.post(NcValueRef::new(&EventOrigin::Widget(old.clone().into_unknown())).unwrap(), event).unwrap();
     fixture.widget.with_mut(|dialog| {
         let listing = dialog.model.candidate(replacement.path()).unwrap();

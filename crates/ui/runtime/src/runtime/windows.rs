@@ -555,7 +555,7 @@ mod tests {
             .item_with_queue(
                 "Run at pointer",
                 Some(
-                    neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, events_tx.clone(), |_queue, _origin, event| event.query_weak::<neocogi_ui::IActivatedEventAbi>()?.label()?.to_string()?)
+                    neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, events_tx.clone(), |_queue, _origin, event| { event.query_ref::<neocogi_ui::IActivatedEventAbi>()?; "Run at pointer".to_owned() })
                         .unwrap()
                         .as_com_ref(),
                 ),

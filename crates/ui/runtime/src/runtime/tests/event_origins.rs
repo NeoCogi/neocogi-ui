@@ -5,7 +5,7 @@ use neocogi_com::events::{channel, EventMessage, IEventReceiverAbi};
 
 /// Checks idle authority over the real COM host and preserves the rejected allocation.
 fn assert_idle(host: ComRef<'_, IWidgetHostAbi>, queue: ComRef<'_, IEventReceiverAbi>) {
-    let event = neocogi_ui::events::activated("outside dispatch").unwrap();
+    let event = neocogi_ui::events::activated().unwrap();
     let raw = event.as_raw();
     let (status, returned) = host.post_event(queue, event).unwrap_err();
     assert_eq!(status, NC_E_INVALID_ARG);
@@ -37,7 +37,7 @@ impl DispatchingLeafContent for Producer {
             return Ok(false);
         }
         self.host
-            .post_event(self.queue.as_com_ref(), neocogi_ui::events::activated("dispatch")?)
+            .post_event(self.queue.as_com_ref(), neocogi_ui::events::activated()?)
             .map_err(|(status, _event)| status)?;
         if self.fail { Err(NC_E_INVALID_ARG) } else { Ok(true) }
     }
@@ -76,10 +76,7 @@ fn dispatch_scopes_are_per_runtime_and_restore_after_success_and_failure() {
         assert!(inbox.try_recv().is_err());
         window.close().unwrap();
         assert!(!message.origin.widget::<IWidgetAbi>().unwrap().unwrap().is_alive());
-        assert_eq!(
-            message.query::<IActivatedEventAbi>().unwrap().unwrap().label().unwrap().to_string().unwrap(),
-            "dispatch"
-        );
+        assert!(message.query::<IActivatedEventAbi>().unwrap().is_some());
     }
 }
 

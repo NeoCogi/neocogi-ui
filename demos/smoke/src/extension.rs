@@ -1,12 +1,11 @@
 //! Native acceptance uses the same extension protocol in dynamic assemblies and static monoliths.
 use super::*;
-use neocogi_com::INcStringComPtrExt;
 use neocogi_demo_contracts::*;
 use neocogi_ui::events;
 
 /// Host-local controller owns its labels and the extension's editing projection.
 struct Model {
-    /// Captured values prove emission order independently of later producer edits.
+    /// Activation markers and captured counter values establish deferred delivery order.
     labels: Vec<String>,
     /// Typed extension interface acquired once during construction.
     counter: neocogi_com::WeakComBox<CounterAbi>,
@@ -22,8 +21,8 @@ impl events::MessageProcessor for Model {
         if !origin.same_object(&self.counter) {
             return Ok(());
         }
-        if let Some(event) = message.query::<IActivatedEventAbi>()? {
-            self.labels.push(event.label()?.to_string()?);
+        if message.query::<IActivatedEventAbi>()?.is_some() {
+            self.labels.push("activated".to_owned());
             self.counter.set_count(100)?;
         } else if let Some(event) = message.query::<ICounterChangedEventAbi>()? {
             self.labels.push(format!("count={}", event.value()?));
@@ -103,7 +102,7 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     key(ui, KeyCode::Tab)?;
     key(ui, KeyCode::Space)?;
     ui.update_with_events(size, owner.as_com_ref())?;
-    assert_eq!(&app.try_borrow()?.processor.labels, &["1".to_owned(), "count=1".to_owned()]);
+    assert_eq!(&app.try_borrow()?.processor.labels, &["activated".to_owned(), "count=1".to_owned()]);
     assert_eq!(counter.count()?, 100);
     ui.render(size, renderer)?;
     let activated = probe.calls()?;

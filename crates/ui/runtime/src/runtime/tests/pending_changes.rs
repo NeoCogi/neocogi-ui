@@ -14,12 +14,16 @@ fn key(ui: &neocogi_ui::Ui, key: KeyCode) {
 struct RenameButton {
     /// Weak editing handle; the composite shell owns the button allocation.
     button: ButtonWidget,
+    /// Shared fixture trace proves ordering at commit/post boundaries, not final state alone.
+    trace: std::rc::Rc<std::cell::RefCell<Vec<&'static str>>>,
 }
 impl MessageProcessor for RenameButton {
     type Message = ();
     /// Committing the new label publishes ordinary geometry notifications.
     fn handle(&mut self, (): ()) -> Result<(), NcStatus> {
-        self.button.set_label("applied")
+        self.button.set_label("applied")?;
+        self.trace.borrow_mut().push("renamed");
+        Ok(())
     }
 }
 
@@ -28,11 +32,16 @@ impl MessageProcessor for RenameButton {
 fn applied_pending_changes_dispatch_children_before_the_first_queued_input() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let (send, messages) = mpsc::channel();
-    let queue = neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, String, send,
-        |_queue, _origin, event| event.query_weak::<neocogi_ui::IActivatedEventAbi>()?.label()?.to_string()?).unwrap();
+    let trace = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let queue = neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, (), send,
+        |queue, _origin, event| {
+            event.query_ref::<neocogi_ui::IActivatedEventAbi>()?;
+            queue.trace.borrow_mut().push("activated");
+        }, { trace: std::rc::Rc<std::cell::RefCell<Vec<&'static str>>> = trace.clone() }).unwrap();
     let button = ui.widgets().button_with_queue("before", Some(queue.as_com_ref())).unwrap();
+    let observed = button.handle();
     let (child_send, child_messages) = mpsc::channel();
-    let (child, mut shell) = Composite::build(&ui, RenameButton { button: button.handle() }, child_messages);
+    let (child, mut shell) = Composite::build(&ui, RenameButton { button: button.handle(), trace: trace.clone() }, child_messages);
     shell.insert(0, button, LinearEdge::new(LayoutTrack::Content)).unwrap();
     let window = ui.window("pending child work", RECT, child.into_interface::<IWidgetAbi>().unwrap()).unwrap();
     // Establish focus and drain all construction notifications before scheduling pending work.
@@ -46,7 +55,9 @@ fn applied_pending_changes_dispatch_children_before_the_first_queued_input() {
         });
     key(&ui, KeyCode::Space);
     app.update(&ui, SIZE).unwrap();
-    assert_eq!(app.state().1, ["applied"]);
+    assert_eq!(app.state().1, [()]);
+    assert_eq!(observed.label().unwrap(), "applied");
+    assert_eq!(&*trace.borrow(), &["renamed", "activated"]);
     assert_eq!(app.as_interface().dispatch_next(), Ok(ApplicationDispatch::Idle));
     window.close().unwrap();
 }

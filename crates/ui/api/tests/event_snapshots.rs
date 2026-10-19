@@ -5,19 +5,32 @@ use neocogi_ui_core_contracts::*;
 use neocogi_ui_nodes_contracts::*;
 use neocogi_ui::events as snapshot;
 
-/// Text storage is copied once and its shared getter result outlives the event.
+/// Activation carries occurrence and ancestry only; no copied display text exists.
 #[test]
-fn activation_is_an_exclusive_immutable_snapshot() {
-    let mut label = String::from("Save α");
-    let event = snapshot::activated(&label).unwrap();
-    label.clear();
-    let typed = event.query_weak::<IActivatedEventAbi>().unwrap();
-    let text = typed.label().unwrap();
-    assert_eq!(text.to_string().unwrap(), "Save α");
-    assert!(text.as_com_ref().same_object(typed.label().unwrap().as_com_ref()));
+fn activation_is_an_exclusive_marker() {
+    let event = snapshot::activated().unwrap();
+    let view = event.query_ref::<IActivatedEventAbi>().unwrap();
+    assert_eq!(view.as_raw().object, event.as_raw().object);
+    assert_eq!(IActivatedEventAbi::INTERFACE_DESCRIPTOR.method_count, 0);
+    let observer = event.query_weak::<IActivatedEventAbi>().unwrap();
     assert_eq!(event.query_weak::<ITextChangedEventAbi>().unwrap_err(), NC_E_NOINTERFACE);
+    assert!(observer.is_alive());
     drop(event);
-    assert_eq!(typed.label().unwrap_err(), NC_E_DROPPED);
+    assert!(!observer.is_alive());
+}
+
+/// Immutable text getters share one captured string and can outlive the event.
+#[test]
+fn text_submission_retains_its_snapshot_independently_of_the_producer() {
+    let mut input = String::from("Save α");
+    let event = snapshot::text_submitted(&input).unwrap();
+    input.clear();
+    let typed = event.query_weak::<ITextSubmittedEventAbi>().unwrap();
+    let text = typed.text().unwrap();
+    assert_eq!(text.to_string().unwrap(), "Save α");
+    assert!(text.as_com_ref().same_object(typed.text().unwrap().as_com_ref()));
+    drop(event);
+    assert_eq!(typed.text().unwrap_err(), NC_E_DROPPED);
     assert_eq!(text.to_string().unwrap(), "Save α");
 }
 
@@ -153,20 +166,20 @@ fn common_channel_retains_exclusive_owner_and_returns_it_when_disconnected() {
     let (source, _source_inbox) = channel();
     let origin = EventOrigin::Service(source.downgrade().unwrap().into_unknown());
     let (mut queue, inbox) = channel();
-    let event = snapshot::activated("captured").unwrap();
+    let event = snapshot::text_submitted("captured").unwrap();
     let allocation = event.as_raw();
-    let projection = event.query_weak::<IActivatedEventAbi>().unwrap();
+    let projection = event.query_weak::<ITextSubmittedEventAbi>().unwrap();
     queue.post(NcValueRef::new(&origin).unwrap(), event).unwrap();
     drop(source);
     let message = inbox.try_recv().unwrap();
     assert_eq!(message.event.as_raw(), allocation);
     assert!(message.origin.service::<IEventReceiverAbi>().unwrap().unwrap().upgrade().unwrap().is_none());
-    assert_eq!(projection.label().unwrap().to_string().unwrap(), "captured");
+    assert_eq!(projection.text().unwrap().to_string().unwrap(), "captured");
     drop(inbox);
     let (status, returned) = queue.post(NcValueRef::new(&origin).unwrap(), message.event).unwrap_err();
     assert_eq!(status, NC_E_CLOSED);
     assert_eq!(returned.as_raw(), allocation);
-    assert_eq!(projection.label().unwrap().to_string().unwrap(), "captured");
+    assert_eq!(projection.text().unwrap().to_string().unwrap(), "captured");
     drop(returned);
-    assert_eq!(projection.label().unwrap_err(), NC_E_DROPPED);
+    assert_eq!(projection.text().unwrap_err(), NC_E_DROPPED);
 }

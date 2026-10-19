@@ -32,7 +32,7 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
         .item_with_queue(
             "Disabled",
             Some(
-                neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, session_tx.clone(), |_queue, _origin, event| event.query_weak::<neocogi_ui::IActivatedEventAbi>()?.label()?.to_string()?)
+                neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, session_tx.clone(), |_queue, _origin, event| { event.query_ref::<neocogi_ui::IActivatedEventAbi>()?; "disabled-command".to_owned() })
                     .unwrap()
                     .as_com_ref(),
             ),
@@ -45,7 +45,7 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
         .item_with_queue(
             "old",
             Some(
-                neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, session_tx.clone(), |_queue, _origin, event| event.query_weak::<neocogi_ui::IActivatedEventAbi>()?.label()?.to_string()?)
+                neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, session_tx.clone(), |_queue, _origin, event| { event.query_ref::<neocogi_ui::IActivatedEventAbi>()?; "menu-command".to_owned() })
                     .unwrap()
                     .as_com_ref(),
             ),
@@ -75,7 +75,7 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
     // Moving the menu into the runtime preserves the original consumer slot.
     // Neither a queued snapshot nor the mapping for future activations is replaced.
     labels.extend(session.try_iter());
-    assert_eq!(&labels, &["Captured"]);
+    assert_eq!(&labels, &["menu-command"]);
     assert_eq!(editor.text().unwrap(), "focus restored");
     for code in [KeyCode::Function, KeyCode::ArrowDown, KeyCode::ArrowRight, KeyCode::Enter] {
         key(&ui, code, if code == KeyCode::Function { 10 } else { 0 });
@@ -85,7 +85,7 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
         Ok(())
     });
     ui.update_with_events(SIZE, app.as_interface()).unwrap();
-    assert_eq!(&*app.state(), &["Captured", "Later"]);
+    assert_eq!(&*app.state(), &["menu-command", "menu-command"]);
     let (renderer, _) = renderer();
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
     item.set_shortcut_hint("A longer accelerator").unwrap();
@@ -146,7 +146,7 @@ fn standalone_menu_popup_submits_then_hides_without_destroying_its_live_rows() {
         .item_with_queue(
             "Run",
             Some(
-                neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, session_tx.clone(), |_queue, _origin, event| event.query_weak::<neocogi_ui::IActivatedEventAbi>()?.label()?.to_string()?)
+                neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, session_tx.clone(), |_queue, _origin, event| { event.query_ref::<neocogi_ui::IActivatedEventAbi>()?; "Run".to_owned() })
                     .unwrap()
                     .as_com_ref(),
             ),

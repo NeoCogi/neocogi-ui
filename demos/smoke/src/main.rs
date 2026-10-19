@@ -16,7 +16,7 @@ struct ClickModel {
 }
 impl events::MessageProcessor for ClickModel {
     type Message = neocogi_com::events::EventMessage;
-    /// Uses the captured label and commits the next presentation before later input.
+    /// Uses exact source identity and commits presentation before later input.
     fn handle(&mut self, message: Self::Message) -> Result<(), NcStatus> {
         let Some(origin) = message.origin.widget::<ButtonAbi>()? else { return Ok(()); };
         if !origin.is_alive() {
@@ -25,10 +25,9 @@ impl events::MessageProcessor for ClickModel {
         if !origin.same_object(self.button.as_interface()) {
             return Ok(());
         }
-        let Some(event) = message.query::<IActivatedEventAbi>()? else { return Ok(()); };
-        let label = event.label()?.to_string()?;
+        let Some(_event) = message.query::<IActivatedEventAbi>()? else { return Ok(()); };
         self.count += 1;
-        println!("button submitted: {label}");
+        println!("button activated: {}", self.count);
         self.button.set_label(&format!("Clicked {} times", self.count))
     }
 }
@@ -308,8 +307,7 @@ impl events::MessageProcessor for ComponentModel {
     fn handle(&mut self, event: Self::Message) -> Result<(), NcStatus> {
         if let Some(origin) = event.origin.service::<IMenuItemAbi>()? {
             if origin.upgrade()?.is_none() { return Ok(()); }
-            let Some(event) = event.query::<IActivatedEventAbi>()? else { return Ok(()); };
-            assert_eq!(event.label()?.to_string()?, "Menu command");
+            let Some(_activation) = event.query::<IActivatedEventAbi>()? else { return Ok(()); };
         } else if let Some(origin) = event.origin.widget::<IFileDialogAbi>()? {
             if !origin.is_alive() { return Ok(()); }
             let Some(event) = event.query::<IFileAcceptedEventAbi>()? else { return Ok(()); };

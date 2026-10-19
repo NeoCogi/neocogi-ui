@@ -113,8 +113,7 @@ can also use `component.widget::<ButtonAbi>("save")` directly without generating
 
 For reloadable documents, share a `Sender<DocumentEvent>` across attempts. Import
 `document_receiver`, `EventBindings` and `DocumentEvent` from `neocogi_ui_document`,
-`IActivatedEventAbi` from `neocogi_ui`, and `INcStringComPtrExt` from `neocogi_com`
-for the string getter below. This example uses the `title` and `save` nodes created
+`IActivatedEventAbi` from `neocogi_ui`. This example uses the `title` and `save` nodes created
 by `Document::new`, their exported fields, and an already mounted `ReloadSlot`.
 Construct a library receiver carrying each attempt's generation and bind all
 emitting widgets:
@@ -139,8 +138,8 @@ identity before querying the concrete event:
 ```rust,ignore
 for envelope in receiver.try_iter() {
     if let Some(message) = envelope.event_for(&slot, "save")? {
-        if let Some(event) = message.query::<IActivatedEventAbi>()? {
-            form.widget_title_1.set_text(&event.label()?.to_string()?)?;
+        if message.query::<IActivatedEventAbi>()?.is_some() {
+            form.widget_title_1.set_text("Saved")?;
         }
     }
 }

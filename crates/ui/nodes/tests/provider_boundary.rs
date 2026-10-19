@@ -61,7 +61,7 @@ fn independently_activated_nodes_bind_only_to_their_core_host_and_deliver_events
                     neocogi_ui::ButtonAbi,
                     String,
                     events_tx.clone(),
-                    |_queue, _origin, event| event.query_weak::<neocogi_ui::IActivatedEventAbi>()?.label()?.to_string()?
+                    |_queue, _origin, event| { event.query_ref::<neocogi_ui::IActivatedEventAbi>()?; "nodes-owned activation".to_owned() }
                 )
                 .unwrap()
                 .as_com_ref(),

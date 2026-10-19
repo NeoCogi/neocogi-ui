@@ -76,7 +76,7 @@ contracts define event meaning independently of the producer's concrete class:
 
 | Interface | Immutable information |
 | --- | --- |
-| `IActivatedEvent` | Captured label; shared by buttons, rows and menu commands |
+| `IActivatedEvent` | Activation occurrence; buttons, rows and menu commands are identified by the envelope's weak origin. No display label is captured. |
 | `ITextChangedEvent` | Complete text and its UTF-8 byte cursor |
 | `ITextSubmittedEvent` | Submitted text |
 | `ICheckboxChangedEvent` | Checked state |

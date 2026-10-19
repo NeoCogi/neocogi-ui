@@ -132,7 +132,7 @@ impl CounterObject {
             // A rejected foreign post cannot erase this already committed change.
             self.common.state.record_change(GeometryChange::Changed);
             if self.common.state.is_observed() {
-                self.common.state.post(neocogi_ui_core_contracts::events::activated(&self.count.to_string())?)?;
+                self.common.state.post(neocogi_ui_core_contracts::events::activated()?)?;
                 self.common.state.post(neocogi_demo_contracts::events::counter_changed(self.count)?)?;
             }
             Ok(GeometryChange::Changed)

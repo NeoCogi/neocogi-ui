@@ -1,11 +1,9 @@
 use neocogi.com.events::IEvent;
 
-#[version(1)]
-/// Immutable activation snapshot shared by buttons, list items and menu commands.
-interface IActivatedEvent: IEvent {
-    /// Label captured at activation, independently of subsequent producer edits.
-    fn label(&self) -> Result<ComPtr<INcString>>;
-}
+#[version(2)]
+/// Activation occurrence shared by buttons, list items and menu commands.
+/// The envelope supplies exact source identity; display labels are not event data.
+interface IActivatedEvent: IEvent {}
 
 #[version(1)]
 /// Immutable committed edit, independent of the editor's current text and cursor.

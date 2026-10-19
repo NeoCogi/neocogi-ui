@@ -75,7 +75,7 @@ fn shared_document_receiver_rejects_foreign_and_replaced_forms_before_dispatch()
         generation: first,
         message: EventMessage {
             origin: EventOrigin::Widget(foreign_form.widget_first_1.as_interface().clone().into_unknown()),
-            event: neocogi_ui::events::activated("foreign form").unwrap(),
+            event: neocogi_ui::events::activated().unwrap(),
         },
     };
     assert!(foreign_event.event_for(&slot, "first").unwrap().is_none());
@@ -92,13 +92,13 @@ fn shared_document_receiver_rejects_foreign_and_replaced_forms_before_dispatch()
         if let Some(event) = message.event_for(&slot, "first").unwrap() {
             observed.push((
                 1,
-                event.query::<IActivatedEventAbi>().unwrap().unwrap().label().unwrap().to_string().unwrap(),
+                { assert!(event.query::<IActivatedEventAbi>().unwrap().is_some()); "first".to_owned() },
             ));
             form.widget_first_1.set_label("handled first").unwrap();
         } else if let Some(event) = message.event_for(&slot, "second").unwrap() {
             observed.push((
                 2,
-                event.query::<IActivatedEventAbi>().unwrap().unwrap().label().unwrap().to_string().unwrap(),
+                { assert!(event.query::<IActivatedEventAbi>().unwrap().is_some()); "second".to_owned() },
             ));
         } else if let Some(event) = message.event_for(&slot, "text").unwrap() {
             observed.push((
@@ -133,7 +133,7 @@ fn shared_document_receiver_rejects_foreign_and_replaced_forms_before_dispatch()
         generation: next,
         message: EventMessage {
             origin: EventOrigin::Widget(outsider.as_interface().downgrade().into_unknown()),
-            event: neocogi_ui::events::activated("outside").unwrap(),
+            event: neocogi_ui::events::activated().unwrap(),
         },
     };
     assert!(outside.event_for(&slot, "first").unwrap().is_none());
@@ -144,12 +144,12 @@ fn shared_document_receiver_rejects_foreign_and_replaced_forms_before_dispatch()
         generation: next,
         message: EventMessage {
             origin: EventOrigin::Service(receiver.downgrade().unwrap().into_unknown()),
-            event: neocogi_ui::events::activated("service").unwrap(),
+            event: neocogi_ui::events::activated().unwrap(),
         },
     };
     assert!(service.event_for(&slot, "first").unwrap().is_none());
     drop(messages);
-    let event = neocogi_ui::events::activated("rejected").unwrap();
+    let event = neocogi_ui::events::activated().unwrap();
     let allocation = event.as_raw();
     let (status, returned) = receiver
         .post(neocogi_com::NcValueRef::new(&outside.message.origin).unwrap(), event)

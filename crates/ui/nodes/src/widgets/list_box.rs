@@ -132,7 +132,7 @@ impl Widget for ListBox {
         }
         // Pointer and keyboard activation publish the same application-facing submission.
         if self.runtime.state.is_observed() {
-            ctx.posted(neocogi_ui_core_contracts::events::activated(self.com_label()).and_then(|event| self.runtime.state.post(event)));
+            ctx.posted(neocogi_ui_core_contracts::events::activated().and_then(|event| self.runtime.state.post(event)));
         }
 
         // The submitted event does not change this header's intrinsic inputs.

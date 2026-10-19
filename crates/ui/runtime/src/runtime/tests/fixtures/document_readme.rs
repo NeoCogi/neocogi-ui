@@ -22,7 +22,7 @@ mod tests {
         )
     }
 
-    /// Exercises deferred behavior, captured labels and replacement admission with
+    /// Exercises deferred behavior, source commands and replacement admission with
     /// the production runtime, loader and nodes behind their generated COM contracts.
     #[test]
     fn documented_reload() -> Result<(), Box<dyn std::error::Error>> {
@@ -57,7 +57,7 @@ mod tests {
 
         /* checked-example: document-dispatch */
 
-        assert_eq!(form.widget_title_1.text()?, "Save", "dispatch reads the captured label");
+        assert_eq!(form.widget_title_1.text()?, "Saved", "dispatch applies the source command independently of display edits");
         form.widget_save_2.set_label("stale")?;
         press(&ui, KeyCode::Space)?;
         ui.update(size)?;
@@ -78,7 +78,7 @@ mod tests {
 
         /* checked-example: document-dispatch */
 
-        assert_eq!(form.widget_title_1.text()?, "Save", "the replacement handles its own facts");
+        assert_eq!(form.widget_title_1.text()?, "Saved", "the replacement handles its own facts");
         window.close()?;
         Ok(())
     }

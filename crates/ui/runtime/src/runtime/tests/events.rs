@@ -60,7 +60,7 @@ fn key(ui: &neocogi_ui::Ui, key: KeyCode) {
 }
 /// Emission order governs the consumer FIFO even when ports were registered in the opposite order.
 #[test]
-fn consumer_preserves_emission_order_snapshot_values_and_bounded_progress() {
+fn consumer_preserves_source_commands_and_bounded_progress_after_label_edits() {
     let runtime = runtime();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let (session_tx, session) = std::sync::mpsc::channel();
@@ -73,7 +73,7 @@ fn consumer_preserves_emission_order_snapshot_values_and_bounded_progress() {
                     neocogi_ui::ButtonAbi,
                     String,
                     session_tx.clone(),
-                    |_queue, _origin, event| event.query_weak::<neocogi_ui::IActivatedEventAbi>()?.label()?.to_string()?
+                    |_queue, _origin, event| { event.query_ref::<neocogi_ui::IActivatedEventAbi>()?; "a".to_owned() }
                 )
                 .unwrap()
                 .as_com_ref(),
@@ -90,7 +90,7 @@ fn consumer_preserves_emission_order_snapshot_values_and_bounded_progress() {
                     neocogi_ui::ButtonAbi,
                     String,
                     session_tx.clone(),
-                    |_queue, _origin, event| event.query_weak::<neocogi_ui::IActivatedEventAbi>()?.label()?.to_string()?
+                    |_queue, _origin, event| { event.query_ref::<neocogi_ui::IActivatedEventAbi>()?; "b".to_owned() }
                 )
                 .unwrap()
                 .as_com_ref(),
@@ -116,9 +116,9 @@ fn consumer_preserves_emission_order_snapshot_values_and_bounded_progress() {
     a.set_label("later a").unwrap();
     b.set_label("later b").unwrap();
     labels.extend(session.try_iter().take(2));
-    assert_eq!(&labels, &["a", "a2"]);
+    assert_eq!(&labels, &["a", "a"]);
     labels.push(session.try_recv().unwrap());
-    assert_eq!(&labels, &["a", "a2", "b"]);
+    assert_eq!(&labels, &["a", "a", "b"]);
     assert!(session.try_recv().is_err());
     // Silent setters create no semantic event and do not make the next sweep deliver anything.
     a.set_label("silent").unwrap();
@@ -224,7 +224,7 @@ fn dropping_inbox_and_application_releases_runtime_without_a_source_sink_cycle()
                     neocogi_ui::ButtonAbi,
                     String,
                     events_tx.clone(),
-                    |_queue, _origin, event| { event.query_weak::<IActivatedEventAbi>()?.label()?.to_string()? }
+                    |_queue, _origin, event| { { event.query_ref::<neocogi_ui::IActivatedEventAbi>()?; "owned runtime".to_owned() } }
                 )
                 .unwrap()
                 .as_com_ref(),
@@ -349,7 +349,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
                     neocogi_ui::ListItemAbi,
                     String,
                     session_tx.clone(),
-                    |_queue, _origin, event| event.query_weak::<IActivatedEventAbi>()?.label()?.to_string()?
+                    |_queue, _origin, event| { event.query_ref::<neocogi_ui::IActivatedEventAbi>()?; "item".to_owned() }
                 )
                 .unwrap()
                 .as_com_ref(),
@@ -366,7 +366,7 @@ fn scalar_and_list_event_capabilities_publish_real_user_changes_and_keep_setters
                     neocogi_ui::ListBoxAbi,
                     String,
                     session_tx.clone(),
-                    |_queue, _origin, event| event.query_weak::<IActivatedEventAbi>()?.label()?.to_string()?
+                    |_queue, _origin, event| { event.query_ref::<neocogi_ui::IActivatedEventAbi>()?; "box".to_owned() }
                 )
                 .unwrap()
                 .as_com_ref(),

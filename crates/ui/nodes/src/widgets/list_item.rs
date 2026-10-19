@@ -172,7 +172,7 @@ impl Widget for ListItem {
         if self.runtime.state.is_observed() {
             // The constructor captures the label before posting. Borrow it directly
             // so observed rows make one copy and unobserved rows do no snapshot work.
-            ctx.posted(neocogi_ui_core_contracts::events::activated(&self.label).and_then(|event| self.runtime.state.post(event)));
+            ctx.posted(neocogi_ui_core_contracts::events::activated().and_then(|event| self.runtime.state.post(event)));
         }
 
         // Submitting preserves the label and icon used by intrinsic measurement.

@@ -15,7 +15,7 @@ A Rust provider configures its existing state before publishing the widget:
 let state = WidgetState::new(host, options).with_events(queue);
 // Inside update or private dispatch, after committing semantic state:
 if state.is_observed() {
-    state.post(events::activated(label)?)?;
+    state.post(events::activated()?)?;
 }
 // The containing widget is allocated with into_box(value), without cyclic setup.
 ```

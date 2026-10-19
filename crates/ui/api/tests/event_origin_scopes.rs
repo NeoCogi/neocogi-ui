@@ -1,17 +1,17 @@
 //! Owner scopes capture facts now and restore callers on every synchronous exit.
 use neocogi_com::{ComBox, ComPtr, INcStringComPtrExt, IUnknown, NcStatus, NC_E_CLOSED, NC_E_INVALID_ARG};
-use neocogi_ui::events::{channel, activated, EventOrigin, EventOriginOwner, IEventAbi, IEventReceiverAbi};
+use neocogi_ui::events::{channel, activated, text_submitted, EventOrigin, EventOriginOwner, IEventAbi, IEventReceiverAbi};
 
 /// Uses real exclusive event objects as sender identities without retaining their values.
 fn sender() -> (ComBox<IEventAbi>, EventOrigin) {
-    let owner = activated("source").unwrap();
+    let owner = activated().unwrap();
     let origin = EventOrigin::Widget(owner.downgrade().into_unknown());
     (owner, origin)
 }
 
 /// Confirms both stack restoration and the source captured through the production channel ABI.
 fn post(owner: &EventOriginOwner, queue: &ComPtr<IEventReceiverAbi>, label: &str) {
-    owner.post(queue.as_com_ref(), activated(label).unwrap()).unwrap();
+    owner.post(queue.as_com_ref(), text_submitted(label).unwrap()).unwrap();
 }
 
 #[test]
@@ -41,10 +41,10 @@ fn nested_scopes_capture_in_post_order_and_restore_after_errors() {
         assert!(message.origin.widget::<IUnknown>().unwrap().unwrap().same_object(&expected.downgrade()));
         assert_eq!(
             message
-                .query::<neocogi_ui::IActivatedEventAbi>()
+                .query::<neocogi_ui::ITextSubmittedEventAbi>()
                 .unwrap()
                 .unwrap()
-                .label()
+                .text()
                 .unwrap()
                 .to_string()
                 .unwrap(),
@@ -60,7 +60,7 @@ fn nested_scopes_capture_in_post_order_and_restore_after_errors() {
 fn idle_and_rejected_posts_return_the_same_event_owner() {
     let scope = EventOriginOwner::new();
     let (queue, inbox) = channel();
-    let event = activated("retry").unwrap();
+    let event = activated().unwrap();
     let allocation = event.as_raw();
     let (status, event) = scope.post(queue.as_com_ref(), event).unwrap_err();
     assert_eq!(status, NC_E_INVALID_ARG);

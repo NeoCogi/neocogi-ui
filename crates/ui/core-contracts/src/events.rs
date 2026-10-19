@@ -4,21 +4,13 @@ use neocogi_com::{ComBox, ComPtr, NcStatus, NcString, INcStringAbi, NC_E_INVALID
 use neocogi_com::events::{IEvent, IEventAbi};
 
 #[neocogi_com::com_object(interfaces(crate::IActivatedEvent), ownership = exclusive)]
-/// Immutable captured fact; this allocation retains no source widget or service.
-struct Activated {
-    /// Captured label, independent of subsequent producer edits.
-    label: ComPtr<INcStringAbi>,
-}
+/// Activation occurrence; the envelope independently retains weak source identity.
+struct Activated;
 impl IEvent for Activated {}
-impl IActivatedEvent for Activated {
-    /// Reads the immutable label snapshot through the public event ABI.
-    fn label(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
-        Ok(self.label.clone())
-    }
-}
-/// Copies the activation label into an exclusive snapshot with no source ownership.
-pub fn activated(label: &str) -> Result<ComBox<IEventAbi>, NcStatus> {
-    Activated::into_box(Activated { label: NcString::from_utf8_str(label) })
+impl IActivatedEvent for Activated {}
+/// Captures activation without copying presentation text or owning its source.
+pub fn activated() -> Result<ComBox<IEventAbi>, NcStatus> {
+    Activated::into_box(Activated)
         .query()
         .map_err(|(status, _unpublished)| status)
 }
