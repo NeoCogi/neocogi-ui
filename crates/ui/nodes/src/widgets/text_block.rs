@@ -348,8 +348,7 @@ fn com_object_control_is_independent_of_interface_count() {
     println!(
         "TextBlock: state={}, allocation={}",
         core::mem::size_of::<TextBlock>(),
-        core::mem::size_of::<TextBlockComObject>()
+        core::mem::size_of::<neocogi_com::__ComBoxStorage<TextBlock>>()
     );
-    assert_eq!(core::mem::offset_of!(TextBlockComObject, value), 24);
-    assert_eq!(core::mem::size_of::<TextBlockComObject>(), core::mem::size_of::<TextBlock>() + 24);
+    assert_eq!(core::mem::size_of::<neocogi_com::__ComBoxStorage<TextBlock>>(), core::mem::size_of::<TextBlock>() + 24);
 }

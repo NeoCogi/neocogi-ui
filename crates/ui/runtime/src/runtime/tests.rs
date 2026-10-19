@@ -15,6 +15,7 @@ mod shutdown;
 mod documentation;
 mod resource_refresh;
 mod ordinary_construction;
+mod retention;
 
 /// Positive drawable size shared by the deterministic headless fixtures.
 const SIZE: Size = Size { width: 640, height: 400 };
@@ -300,7 +301,7 @@ impl IRenderer for Renderer {
         assert!(vertices.iter().all(|v| v.x.is_finite() && v.y.is_finite()));
         *self.probe.vertices.borrow_mut() = vertices.into_vec();
         self.probe.calls.set(self.probe.calls.get() + 1);
-        self.probe.streams.borrow_mut().push((stream.add_ref(), info.invocation));
+        self.probe.streams.borrow_mut().push((stream.try_add_ref()?, info.invocation));
         if self.probe.fail.get() { Err(UI_E_RENDER) } else { Ok(()) }
     }
 }
@@ -576,7 +577,7 @@ impl IWidget for RetainingWidget {
         let malformed = [RenderVertex { x: f32::NAN, ..RenderVertex::default() }; 3];
         assert_eq!(painter.triangles(scope, NcCopyFromBufferOffset::new(0, &malformed)), Err(NC_E_INVALID_ARG));
         painter.fill(scope, state.rect, 0xff00ff00)?;
-        self.probe.painters.borrow_mut().push((painter.add_ref(), scope));
+        self.probe.painters.borrow_mut().push((painter.try_add_ref()?, scope));
         if self.probe.fail_paint.get() { Err(NC_E_INVALID_ARG) } else { Ok(()) }
     }
 }
@@ -1656,7 +1657,7 @@ struct ReviewStickyWidget {
 }
 impl IWidget for ReviewStickyWidget {
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
-        Ok(self.state.host().add_ref())
+        self.state.host().try_add_ref()
     }
     fn mount(&mut self) -> Result<(), NcStatus> { self.state.mount() }
     fn properties(&self) -> Result<WidgetProperties, NcStatus> {

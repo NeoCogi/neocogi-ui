@@ -179,7 +179,7 @@ impl Button {
                 if let (Some(image), Some(visual)) = (image.as_ref(), placement.visual) {
                     // External image pixels carry their own color; the adjacent label alone uses
                     // the stateful Button content color selected by the active theme.
-                    ctx.draw_texture(visual, crate::color(255, 255, 255, 255), image.as_interface().add_ref());
+                    ctx.draw_texture(visual, crate::color(255, 255, 255, 255), image.clone().into_interface());
                 }
             }
             ButtonContent::ScaledImage { label, image } => {
@@ -195,7 +195,7 @@ impl Button {
                 if let (Some(image), Some(visual)) = (image.as_ref(), placement.visual) {
                     // Scaling changes only destination geometry; it must not introduce a theme
                     // content-color tint that destroys the source image's RGB channels.
-                    ctx.draw_texture(visual, crate::color(255, 255, 255, 255), image.as_interface().add_ref());
+                    ctx.draw_texture(visual, crate::color(255, 255, 255, 255), image.clone().into_interface());
                 }
             }
         }
@@ -408,7 +408,7 @@ impl neocogi_ui_nodes_contracts::Button for Button {
     /// Validates and retains the renderer-owned image before changing semantic content.
     fn set_image(&mut self, image: ComRef<'_, ITextureAbi>, fit_width: bool) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
-        let image = neocogi_ui::Image::from_interface(image.add_ref())?;
+        let image = neocogi_ui::Image::from_interface(image.try_add_ref()?)?;
         // A hostile dimension provider may reenter through another interface while this mutable
         // call is active; revalidate host authority before committing the prepared image.
         self.runtime().state.writable()?;
@@ -440,8 +440,7 @@ fn com_object_control_is_independent_of_interface_count() {
     println!(
         "Button: state={}, allocation={}",
         core::mem::size_of::<Button>(),
-        core::mem::size_of::<ButtonComObject>()
+        core::mem::size_of::<neocogi_com::__ComBoxStorage<Button>>()
     );
-    assert_eq!(core::mem::offset_of!(ButtonComObject, value), 24);
-    assert_eq!(core::mem::size_of::<ButtonComObject>(), core::mem::size_of::<Button>() + 24);
+    assert_eq!(core::mem::size_of::<neocogi_com::__ComBoxStorage<Button>>(), core::mem::size_of::<Button>() + 24);
 }

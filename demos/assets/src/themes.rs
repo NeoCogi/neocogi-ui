@@ -48,7 +48,7 @@ impl Theme {
     /// releasing that service, while returning the exact original COM status to the caller.
     pub fn load(self, base: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         if self == Self::Default {
-            return Ok(base.add_ref());
+            return base.try_add_ref();
         }
         #[cfg(feature = "embed-assets")]
         {

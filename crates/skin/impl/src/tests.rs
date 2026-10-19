@@ -67,7 +67,7 @@ fn bundled_themes_cross_only_typed_gfx_capabilities() {
     let imported = ImportedAssets::read(base.as_com_ref(), None).unwrap();
     let assets: ComPtr<AssetLoaderAbi> = AssetLoaderObject::from_value(AssetLoaderObject::default()).query().unwrap();
     let publisher: ComPtr<AssetPublisherAbi> = AssetPublisherObject::from_value(AssetPublisherObject::default()).query().unwrap();
-    let loader: ComPtr<ThemeLoaderAbi> = ThemeLoaderObject::from_value(ThemeLoaderObject::new(assets.as_com_ref(), publisher.as_com_ref()))
+    let loader: ComPtr<ThemeLoaderAbi> = ThemeLoaderObject::from_value(ThemeLoaderObject::new(assets.as_com_ref(), publisher.as_com_ref()).unwrap())
         .query()
         .unwrap();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
@@ -115,7 +115,7 @@ fn original_application_artwork_names_survive_first_and_repeated_theme_loads() {
     let base = original.clone().into_bundle().unwrap();
     let assets: ComPtr<AssetLoaderAbi> = AssetLoaderObject::from_value(AssetLoaderObject::default()).query().unwrap();
     let publisher: ComPtr<AssetPublisherAbi> = AssetPublisherObject::from_value(AssetPublisherObject::default()).query().unwrap();
-    let loader: ComPtr<ThemeLoaderAbi> = ThemeLoaderObject::from_value(ThemeLoaderObject::new(assets.as_com_ref(), publisher.as_com_ref()))
+    let loader: ComPtr<ThemeLoaderAbi> = ThemeLoaderObject::from_value(ThemeLoaderObject::new(assets.as_com_ref(), publisher.as_com_ref()).unwrap())
         .query()
         .unwrap();
     let temporary = tempfile::tempdir().unwrap();

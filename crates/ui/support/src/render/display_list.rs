@@ -402,7 +402,7 @@ mod tests {
             Recti::new(10, 11, 12, 13),
             neocogi_ui_core_contracts::TextureRegion { u0: 0., v0: 0., u1: 1., v1: 1. },
             color(13, 14, 15, 16),
-            crate::test_support::test_image(12, 13).as_interface().add_ref(),
+            crate::test_support::test_image(12, 13).into_interface(),
         ).unwrap();
 
         assert_eq!(list.ops.len(), clips.len());

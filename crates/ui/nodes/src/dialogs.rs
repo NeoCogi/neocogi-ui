@@ -150,7 +150,7 @@ impl Model {
         };
         // Capture the exact native identity once at commit, not through a lossy
         // display label or a dispatcher-time reconstruction of this model.
-        self.finish(|| neocogi_ui_core_contracts::events::file_accepted(neocogi_ui::NativePath::new(&path).as_interface().add_ref()))
+        self.finish(|| neocogi_ui_core_contracts::events::file_accepted(neocogi_ui::NativePath::new(&path).into_interface()))
     }
 }
 

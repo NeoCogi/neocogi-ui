@@ -28,8 +28,8 @@ impl NodeServices {
         Ok(Rc::new(Self {
             host,
             resources,
-            choices: runtime.add_ref().query()?,
-            windows: runtime.add_ref().query()?,
+            choices: runtime.try_add_ref()?.query()?,
+            windows: runtime.try_add_ref()?.query()?,
         }))
     }
 }

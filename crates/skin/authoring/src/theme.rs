@@ -346,7 +346,7 @@ impl CompiledTheme {
     /// Transfers complete appearance records to GFX for validation and immutable publication.
     fn publish(self, publisher: ComRef<'_, AssetPublisherAbi>, base: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IAssetBundleAbi>, ThemeLoadError> {
         let Self { metrics, chrome, appearance } = self;
-        let diagnostics = publisher.add_ref().query::<IGfxDiagnosticsAbi>().ok();
+        let diagnostics = publisher.try_add_ref().and_then(|owner| owner.query::<IGfxDiagnosticsAbi>()).ok();
         publisher
             .revise_appearance(
                 base,
@@ -857,7 +857,7 @@ impl ResourceRecipe {
     ) -> Result<BuiltResources, ThemeLoadError> {
         match self {
             Self::ReuseBase => Ok(BuiltResources {
-                bundle: base.add_ref(),
+                bundle: base.try_add_ref().map_err(|status| gfx_failure("base bundle retention", None, status, None))?,
                 images: BTreeMap::new(),
             }),
             Self::Derive(recipe) => recipe.execute(base, loader, source),
@@ -873,7 +873,7 @@ impl DerivedResourceRecipe {
         loader: ComRef<'_, AssetLoaderAbi>,
         source: &mut impl AssetSource,
     ) -> Result<BuiltResources, ThemeLoadError> {
-        let loader_diagnostics = loader.add_ref().query::<IGfxDiagnosticsAbi>().ok();
+        let loader_diagnostics = loader.try_add_ref().and_then(|owner| owner.query::<IGfxDiagnosticsAbi>()).ok();
         let builder = loader
             .derive_builder(self.size, base, self.options)
             .map_err(|status| gfx_failure("derived-atlas creation", None, status, loader_diagnostics.as_ref()))?;

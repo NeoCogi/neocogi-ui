@@ -60,7 +60,7 @@ impl IRenderer for Recorder {
         capture.calls += 1;
         capture.vertices = vertices.into_vec();
         capture.batches = batches;
-        capture.stream = Some((stream.add_ref(), info.invocation));
+        capture.stream = Some((stream.try_add_ref()?, info.invocation));
         if capture.fail { Err(NC_E_INVALID_ARG) } else { Ok(()) }
     }
 }

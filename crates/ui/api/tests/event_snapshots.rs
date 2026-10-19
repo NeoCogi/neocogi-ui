@@ -135,7 +135,7 @@ fn service_events_keep_lifecycle_and_selection_facts() {
 fn file_dialog_events_preserve_native_paths_and_cancellation() {
     let original = std::path::Path::new("directory/example file.txt");
     let path = neocogi_ui::NativePath::new(original);
-    let accepted = snapshot::file_accepted(path.as_interface().add_ref()).unwrap();
+    let accepted = snapshot::file_accepted(path.clone().into_interface()).unwrap();
     drop(path);
     let typed = accepted.query_weak::<IFileAcceptedEventAbi>().unwrap();
     assert_eq!(neocogi_ui::path::decode(typed.path().unwrap().as_com_ref()).unwrap(), original);

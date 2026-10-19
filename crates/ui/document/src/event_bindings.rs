@@ -27,7 +27,8 @@ impl EventBindings {
         if key.is_empty() || self.receivers.contains_key(&key) {
             return Err(NC_E_INVALID_ARG);
         }
-        self.receivers.insert(key, queue.add_ref());
+        let queue = queue.try_add_ref()?;
+        self.receivers.insert(key, queue);
         Ok(())
     }
 
@@ -134,4 +135,83 @@ impl neocogi_com::events::IEventReceiver for DocumentReceiver {
 /// Drain the inbox after traversal and use DocumentEvent::event_for before downcast.
 pub fn document_receiver(generation: crate::Generation, sender: std::sync::mpsc::Sender<DocumentEvent>) -> Result<ComPtr<IEventReceiverAbi>, NcStatus> {
     DocumentReceiver::from_value(DocumentReceiver { generation, sender }).query::<IEventReceiverAbi>()
+}
+
+#[cfg(test)]
+mod tests {
+    //! Receiver capture executes through the real document consumer and generated ABI.
+    use super::*;
+    use neocogi_com::{com_interface, com_object, ComBox, ComRef, NcValueRef};
+    use neocogi_com::events::{EventOrigin, IEventAbi, IEventReceiver};
+
+    #[com_object(::neocogi_com::events::IEventReceiver, ownership = exclusive)]
+    /// A valid borrow cannot grant another shared owner of this receiver.
+    struct ExclusiveReceiver;
+    impl IEventReceiver for ExclusiveReceiver {
+        fn post(&mut self, _: NcValueRef<'_, EventOrigin>, event: ComBox<IEventAbi>) -> Result<(), (NcStatus, ComBox<IEventAbi>)> {
+            Err((neocogi_com::NC_E_CLOSED, event))
+        }
+    }
+
+    #[com_interface(auto_guid = "nc.tests.document.ReceiverCapture:v1", assigned_signature = b"00000000000000000000000000000642")]
+    /// Tests the caller's status across an extern-C boundary, not only a Rust method.
+    trait IRetainer {
+        /// Adds a concrete document binding while propagating retention rejection.
+        fn install(&mut self, queue: ComRef<'_, IEventReceiverAbi>) -> Result<(), NcStatus>;
+    }
+    #[com_object(IRetainer)]
+    /// The adapter owns the actual public document bindings implementation.
+    struct Retainer {
+        /// Existing entries must survive a rejected insertion.
+        bindings: EventBindings,
+    }
+    impl IRetainer for Retainer {
+        fn install(&mut self, queue: ComRef<'_, IEventReceiverAbi>) -> Result<(), NcStatus> {
+            self.bindings.insert_queue("candidate", queue)
+        }
+    }
+
+    /// Rejection preserves keys and sole-owner liveness; shared capture succeeds afterward.
+    #[test]
+    fn actual_document_binding_rejects_exclusive_receiver_through_com() {
+        let exclusive = ExclusiveReceiver::into_box(ExclusiveReceiver).query::<IEventReceiverAbi>().unwrap();
+        let observed = exclusive.downgrade();
+        let (original, _inbox) = neocogi_com::events::channel();
+        let mut bindings = EventBindings::new();
+        bindings.insert_queue("original", original.as_com_ref()).unwrap();
+        assert_eq!(bindings.insert_queue("direct", exclusive.as_com_ref()), Err(NC_E_INVALID_ARG));
+        assert_eq!(bindings.receivers.len(), 1);
+        let local = Retainer::into_local(Retainer { bindings });
+        let mut abi = local.query::<IRetainerAbi>().unwrap();
+        assert_eq!(abi.install(exclusive.as_com_ref()), Err(NC_E_INVALID_ARG));
+        assert!(observed.is_alive());
+        {
+            let state = local.try_borrow().unwrap();
+            assert_eq!(state.bindings.receivers.len(), 1);
+            assert!(state.bindings.receivers["original"].as_com_ref().same_object(original.as_com_ref()));
+        }
+        abi.install(original.as_com_ref()).unwrap();
+        assert_eq!(local.try_borrow().unwrap().bindings.receivers.len(), 2);
+        drop(exclusive);
+        assert!(!observed.is_alive());
+    }
+
+    /// Whole-document convenience obeys the same generic-borrow capture contract.
+    #[test]
+    fn all_bindings_reject_exclusive_and_retain_shared_receivers() {
+        let document = Document::from_json(include_bytes!("../tests/fixtures/shared.ui.json")).unwrap();
+        let custom = CustomWidgetRegistry::new();
+        custom.validate_document(&document).unwrap();
+        let exclusive = ExclusiveReceiver::into_box(ExclusiveReceiver).query::<IEventReceiverAbi>().unwrap();
+        assert!(matches!(EventBindings::all(&document, &custom, exclusive.as_com_ref()), Err(NC_E_INVALID_ARG)));
+        assert!(exclusive.downgrade().is_alive());
+        let (shared, _inbox) = neocogi_com::events::channel();
+        let weak = shared.downgrade().unwrap();
+        let bindings = EventBindings::all(&document, &custom, shared.as_com_ref()).unwrap();
+        assert!(bindings.receivers.contains_key("first"));
+        drop(shared);
+        assert!(weak.upgrade().unwrap().is_some());
+        drop(bindings);
+        assert!(weak.upgrade().unwrap().is_none());
+    }
 }

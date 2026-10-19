@@ -27,4 +27,8 @@ impl Image {
     pub fn as_interface(&self) -> ComRef<'_, ITextureAbi> {
         self.interface.as_com_ref()
     }
+    /// Transfers this wrapper's proven shared owner without another acquisition.
+    pub fn into_interface(self) -> ComPtr<ITextureAbi> {
+        self.interface
+    }
 }

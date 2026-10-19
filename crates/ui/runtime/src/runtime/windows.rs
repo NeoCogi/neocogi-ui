@@ -81,7 +81,7 @@ enum Placement {
 impl RuntimeStorage {
     /// Resolves an actual manager-owned COM identity without trusting caller-provided numeric IDs.
     pub(super) fn parent(&self, parent: ComRef<'_, IWindowAbi>) -> Result<WindowHandle, NcStatus> {
-        let identity: ComPtr<IUnknown> = parent.add_ref().query()?;
+        let identity: ComPtr<IUnknown> = parent.try_add_ref()?.query()?;
         self.mounts
             .borrow()
             .iter()

@@ -291,8 +291,7 @@ fn com_object_control_is_independent_of_interface_count() {
     println!(
         "Checkbox: state={}, allocation={}",
         core::mem::size_of::<Checkbox>(),
-        core::mem::size_of::<CheckboxComObject>()
+        core::mem::size_of::<neocogi_com::__ComBoxStorage<Checkbox>>()
     );
-    assert_eq!(core::mem::offset_of!(CheckboxComObject, value), 24);
-    assert_eq!(core::mem::size_of::<CheckboxComObject>(), core::mem::size_of::<Checkbox>() + 24);
+    assert_eq!(core::mem::size_of::<neocogi_com::__ComBoxStorage<Checkbox>>(), core::mem::size_of::<Checkbox>() + 24);
 }

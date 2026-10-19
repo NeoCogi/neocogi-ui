@@ -38,7 +38,7 @@ struct LeafObject<Content: LeafContent> {
 impl<Content: LeafContent> IWidget for LeafObject<Content> {
     /// Supplies the same runtime authority used by built-in COM objects.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
-        Ok(self.state.host().add_ref())
+        self.state.host().try_add_ref()
     }
     /// Mount-once semantics come from the single common state, not the content behavior.
     fn mount(&mut self) -> Result<(), NcStatus> {

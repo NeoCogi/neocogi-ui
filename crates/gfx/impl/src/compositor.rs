@@ -695,12 +695,13 @@ impl GfxCompositor for GfxCompositorObject {
         let Some(vertices) = clipped_quad(destination, source.u0, source.v0, source.u1, source.v1, rgba, clip) else {
             return Ok(());
         };
-        let mut output = self.storage.vertices.borrow_mut();
-        let first = u32::try_from(output.len()).map_err(|_| NC_E_OUT_OF_RANGE)?;
+        let first = u32::try_from(self.storage.vertices.borrow().len()).map_err(|_| NC_E_OUT_OF_RANGE)?;
         if first.checked_add(4).filter(|end| *end <= MAX_RENDER_VERTICES).is_none() || self.storage.batches.borrow().len() >= MAX_RENDER_BATCHES as usize {
             return Err(NC_E_OUT_OF_RANGE);
         }
-        let retained = Rc::new(texture.add_ref());
+        // Foreign retention executes before borrowing the recording buffers.
+        let retained = Rc::new(texture.try_add_ref()?);
+        let mut output = self.storage.vertices.borrow_mut();
         output.try_reserve(4).map_err(|_| NC_E_OUT_OF_MEMORY)?;
         let mut batches = self.storage.batches.borrow_mut();
         batches.try_reserve(1).map_err(|_| NC_E_OUT_OF_MEMORY)?;
@@ -727,7 +728,7 @@ impl GfxCompositor for GfxCompositorObject {
         if self.storage.batches.borrow().len() >= MAX_RENDER_BATCHES as usize {
             return Err(NC_E_OUT_OF_RANGE);
         }
-        let retained = Rc::new(item.add_ref());
+        let retained = Rc::new(item.try_add_ref()?);
         let mut batches = self.storage.batches.borrow_mut();
         batches.try_reserve(1).map_err(|_| NC_E_OUT_OF_MEMORY)?;
         batches.push(Batch::Item { rect: content, clip, item: retained });

@@ -18,13 +18,13 @@ pub struct ThemeLoaderObject {
 }
 
 impl ThemeLoaderObject {
-    /// Retains a typed GFX loader supplied by the Skin plugin factory caller.
-    pub fn new(assets: ComRef<'_, AssetLoaderAbi>, publisher: ComRef<'_, AssetPublisherAbi>) -> Self {
-        Self {
-            assets: assets.add_ref(),
-            publisher: publisher.add_ref(),
+    /// Retains supplied GFX capabilities, rejecting non-shareable borrows before publication.
+    pub fn new(assets: ComRef<'_, AssetLoaderAbi>, publisher: ComRef<'_, AssetPublisherAbi>) -> Result<Self, NcStatus> {
+        Ok(Self {
+            assets: assets.try_add_ref()?,
+            publisher: publisher.try_add_ref()?,
             diagnostic: Diagnostic::default(),
-        }
+        })
     }
 }
 

@@ -710,8 +710,7 @@ fn com_object_control_is_independent_of_interface_count() {
     println!(
         "Textbox: state={}, allocation={}",
         core::mem::size_of::<Textbox>(),
-        core::mem::size_of::<TextboxComObject>()
+        core::mem::size_of::<neocogi_com::__ComBoxStorage<Textbox>>()
     );
-    assert_eq!(core::mem::offset_of!(TextboxComObject, value), 24);
-    assert_eq!(core::mem::size_of::<TextboxComObject>(), core::mem::size_of::<Textbox>() + 24);
+    assert_eq!(core::mem::size_of::<neocogi_com::__ComBoxStorage<Textbox>>(), core::mem::size_of::<Textbox>() + 24);
 }

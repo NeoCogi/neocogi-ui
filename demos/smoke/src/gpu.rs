@@ -20,7 +20,7 @@ impl IWidget for SceneView {
 
     /// Authorizes this independent class to join the selected UI's tree.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
-        Ok(self.state.host().add_ref())
+        self.state.host().try_add_ref()
     }
     /// The single common state rejects duplicate tree attachment.
     fn mount(&mut self) -> Result<(), NcStatus> {
@@ -93,7 +93,7 @@ impl ILeafLayout for SceneView {
 
 /// Exercises actual separately loaded texture/scene creation and ordered native GPU execution.
 pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
-    let factory: ComPtr<ITextureFactoryAbi> = renderer.add_ref().query()?;
+    let factory: ComPtr<ITextureFactoryAbi> = renderer.try_add_ref()?.query()?;
     let pixels = [255u8, 32, 16, 255, 16, 255, 32, 255, 32, 16, 255, 255, 255, 255, 255, 255];
     let image_size = Size { width: 2, height: 2 };
     assert_eq!(
@@ -102,7 +102,7 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     );
     let texture = factory.create_texture(image_size, NcCopyFromBufferOffset::new(0, &pixels))?;
     assert_eq!(texture.size()?, image_size);
-    let scenes: ComPtr<IMeshScenesAbi> = renderer.add_ref().query()?;
+    let scenes: ComPtr<IMeshScenesAbi> = renderer.try_add_ref()?.query()?;
     let scene = scenes.create_scene()?;
     let vertices = [
         MeshVertex {

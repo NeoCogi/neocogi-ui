@@ -25,11 +25,11 @@ struct Common {
 }
 impl Common {
     /// Retains exactly the explicit owner capability supplied by the caller.
-    fn new(host: ComRef<'_, IWidgetHostAbi>, options: WidgetOptions) -> Self {
-        Self {
-            state: WidgetState::new(host.add_ref(), options),
+    fn new(host: ComRef<'_, IWidgetHostAbi>, options: WidgetOptions) -> Result<Self, NcStatus> {
+        Ok(Self {
+            state: WidgetState::new(host.try_add_ref()?, options),
             calls: WidgetCalls::default(),
-        }
+        })
     }
 }
 
@@ -39,7 +39,7 @@ macro_rules! widget {
         impl IWidget for $name {
             /// Borrowing the host is explicit; returning it owns one ordinary COM reference.
             fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
-                Ok(self.common.state.host().add_ref())
+                self.common.state.host().try_add_ref()
             }
             /// The shared state accepts exactly one attachment over the object's lifetime.
             fn mount(&mut self) -> Result<(), NcStatus> {
@@ -115,7 +115,7 @@ impl CounterObject {
     fn create(host: ComRef<'_, IWidgetHostAbi>, queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>, settings: settings::Settings,
     ) -> Result<ComBox<CounterAbi>, NcStatus> {
         host.check_mutation()?;
-        let mut common = Common::new(host, WidgetOptions::FRAME);
+        let mut common = Common::new(host, WidgetOptions::FRAME)?;
         common.state = common.state.with_events(queue);
         Self::into_box(Self {
             common,
@@ -382,7 +382,7 @@ impl ExtensionProvider for ExtensionProviderObject {
         host.check_mutation()?;
         let editor = host.create_children()?;
         Inset::into_box(Inset {
-            common: Common::new(host, WidgetOptions::NONE),
+            common: Common::new(host, WidgetOptions::NONE)?,
             padding: 4,
             editor,
         })

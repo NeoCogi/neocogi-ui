@@ -41,7 +41,7 @@ impl AssetLoader for AssetLoaderObject {
         let excluded_icons = if options.replace_semantic_icons { semantic_icons.as_slice() } else { &[] };
         let builder = Builder::from_data(&data, size.width as usize, size.height as usize, excluded_fonts, excluded_icons)
             .map_err(|error| self.diagnostic.failure(error))?;
-        Ok(BuildSession::create(Draft { builder, base: Some(base.add_ref()) }))
+        Ok(BuildSession::create(Draft { builder, base: Some(base.try_add_ref()?) }))
     }
 }
 impl IGfxDiagnostics for AssetLoaderObject {

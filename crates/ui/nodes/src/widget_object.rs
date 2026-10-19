@@ -193,7 +193,7 @@ macro_rules! direct_widget_phase_impl {
             /// Returns the runtime authority without retaining a tree or parent.
             fn host(&self) -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::IWidgetHostAbi>, neocogi_com::NcStatus> {
                 let runtime = <$name as crate::widget_object::HostedWidget>::runtime(self);
-                Ok(runtime.state.host().add_ref())
+                runtime.state.host().try_add_ref()
             }
 
             /// Claims this concrete allocation's only attachment after host validation.

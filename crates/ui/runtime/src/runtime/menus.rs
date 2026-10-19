@@ -253,7 +253,7 @@ impl IFontStyle for Item {
 impl RuntimeStorage {
     /// Authenticates a root builder by canonical COM identity and live weak registration before taking native data.
     fn menu_declaration(&self, menu: ComRef<'_, IMenuBuilderAbi>) -> Result<Rc<Declaration>, NcStatus> {
-        let identity: ComPtr<IUnknown> = menu.add_ref().query()?;
+        let identity: ComPtr<IUnknown> = menu.try_add_ref()?.query()?;
         let key = identity.as_raw().object as usize;
         self.menus
             .borrow()

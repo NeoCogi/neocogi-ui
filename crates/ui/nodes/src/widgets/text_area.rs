@@ -898,7 +898,7 @@ mod tests {
         })
         .unwrap();
         let text_area = text_area.map(|mut value| {
-            let host = value.runtime.state.host().add_ref();
+            let host = value.runtime.state.host().try_add_ref().unwrap();
             let parts = crate::ScrollParts::prepare(host.clone(), false, None).unwrap();
             value.scroll_area = Some(parts.model.clone());
             let (inbox, receiver) = crate::widget_object::CompositeEvents::new(true);

@@ -140,7 +140,7 @@ fn text(widgets: &WidgetFactory, root: &mut OwnedWidget<LinearAbi>, label: &str,
 /// native controls own editing state and settings() reads them after input dispatch returns.
 pub(super) fn create(widgets: ComRef<'_, UiFactoryAbi>, bytes: &[u8]) -> Result<ComBox<IDesignSettingsEditorAbi>, NcStatus> {
     let settings = Settings::decode(bytes)?;
-    let widgets = WidgetFactory::from_interface(widgets.add_ref());
+    let widgets = WidgetFactory::from_interface(widgets.try_add_ref()?);
     let mut root = widgets.linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     let step = text(&widgets, &mut root, "Increment", settings.step)?;
     let (bounded, minimum, maximum) = match settings.mode {

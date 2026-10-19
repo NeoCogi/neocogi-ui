@@ -46,7 +46,7 @@ impl IRenderer for CaptureRenderer {
         assert_eq!(stream.batches(info.invocation, batches.output(0, info.batch_count as usize))?, info.batch_count);
         *self.capture.vertices.borrow_mut() = vertices.into_vec();
         *self.capture.batches.borrow_mut() = batches.into_vec();
-        *self.capture.retained.borrow_mut() = Some((info.invocation, stream.add_ref()));
+        *self.capture.retained.borrow_mut() = Some((info.invocation, stream.try_add_ref()?));
         self.capture.calls.set(self.capture.calls.get() + 1);
         Ok(())
     }

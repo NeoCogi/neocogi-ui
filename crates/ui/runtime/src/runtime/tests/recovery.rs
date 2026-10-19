@@ -28,7 +28,7 @@ struct Provider {
 impl IWidget for Provider {
     /// Returns standard owner authentication.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
-        Ok(self.state.host().add_ref())
+        self.state.host().try_add_ref()
     }
     /// Uses standard mount-once admission.
     fn mount(&mut self) -> Result<(), NcStatus> {

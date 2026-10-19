@@ -270,7 +270,7 @@ impl IRenderer for UploadRenderer {
         if self.0.fail.get() {
             return Err(UI_E_RENDER);
         }
-        let source = source.add_ref();
+        let source = source.try_add_ref()?;
         let old = self.0.current.replace(source);
         drop(old);
         Ok(())
@@ -459,7 +459,7 @@ fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision
         .query()
         .unwrap();
     let compiler: ComPtr<StyleCompilerAbi> =
-        neocogi_skin_impl::StyleCompilerObject::from_value(neocogi_skin_impl::StyleCompilerObject::new(publisher.as_com_ref()))
+        neocogi_skin_impl::StyleCompilerObject::from_value(neocogi_skin_impl::StyleCompilerObject::new(publisher.as_com_ref()).unwrap())
             .query()
             .unwrap();
     let ui = nc_ui_nodes::bind_builtin_nodes(crate::test_support::runtime_from_assets(source.as_com_ref()).unwrap()).unwrap();

@@ -54,12 +54,12 @@ pub struct StyleCompilerObject {
 }
 
 impl StyleCompilerObject {
-    /// Retains the explicit GFX revision capability supplied by the Skin plugin caller.
-    pub fn new(publisher: ComRef<'_, AssetPublisherAbi>) -> Self {
-        Self {
-            publisher: publisher.add_ref(),
+    /// Retains the explicit GFX revision capability, rejecting a non-shareable borrow.
+    pub fn new(publisher: ComRef<'_, AssetPublisherAbi>) -> Result<Self, NcStatus> {
+        Ok(Self {
+            publisher: publisher.try_add_ref()?,
             diagnostic: Diagnostic::default(),
-        }
+        })
     }
 }
 

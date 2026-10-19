@@ -26,6 +26,11 @@ impl NativePath {
     pub fn as_interface(&self) -> ComRef<'_, INativePathAbi> {
         self.interface.as_com_ref()
     }
+    /// Transfers this wrapper's proven shared owner without another acquisition.
+    pub fn into_interface(self) -> ComPtr<INativePathAbi> {
+        self.interface
+    }
+
     /// Copies display-only text; it is unsuitable as a lookup key or reconstructed path.
     pub fn display(&self) -> Result<String, NcStatus> {
         self.interface.display()?.to_string()
@@ -102,8 +107,6 @@ fn copy_range<T: neocogi_com::ComInlineValue>(source: &[T], mut output: NcOutput
     Ok(())
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -136,7 +139,10 @@ mod tests {
             assert!(units.is_empty());
         }
         // Oversized capacity is rejected by the shared output preflight before dispatch.
-        assert_eq!(neocogi_com::NcOutputBuffer::<u16>::new().output(0, usize::MAX).prepare().err(), Some(neocogi_com::NC_E_OUT_OF_RANGE));
+        assert_eq!(
+            neocogi_com::NcOutputBuffer::<u16>::new().output(0, usize::MAX).prepare().err(),
+            Some(neocogi_com::NC_E_OUT_OF_RANGE)
+        );
     }
 
     /// Different non-Unicode paths may share display text but must round-trip to distinct filesystem identities.

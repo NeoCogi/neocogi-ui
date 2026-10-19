@@ -120,7 +120,7 @@ impl ListBox {
         if let (Some(image), Some(visual)) = (self.image.as_ref(), placement.visual) {
             // List-box labels remain theme-colored while external image content preserves the
             // exact source RGBA values supplied to the renderer.
-            ctx.draw_texture(visual, crate::color(255, 255, 255, 255), image.as_interface().add_ref());
+            ctx.draw_texture(visual, crate::color(255, 255, 255, 255), image.clone().into_interface());
         }
     }
 }
@@ -260,7 +260,7 @@ impl neocogi_ui_nodes_contracts::ListBox for ListBox {
     /// Validates and installs one immutable renderer-owned image before committing the edit.
     fn set_image(&mut self, image: ComRef<'_, ITextureAbi>, fit_width: bool) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;
-        let image = neocogi_ui::Image::from_interface(image.add_ref())?;
+        let image = neocogi_ui::Image::from_interface(image.try_add_ref()?)?;
         // Revalidate lifetime authority after the foreign size query before committing the
         // prepared image; the generated object gate rejects recursive mutable entry.
         self.runtime().state.writable()?;

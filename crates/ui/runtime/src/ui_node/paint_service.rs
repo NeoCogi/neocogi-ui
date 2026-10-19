@@ -182,7 +182,7 @@ impl IPainter for Recorder {
         source.validate()?;
         self.check(scope)?;
         // AddRef can execute foreign code, so retain the texture before taking the paint context.
-        let texture = texture.add_ref();
+        let texture = texture.try_add_ref()?;
         self.with_painter(scope, |painter| {
             painter.com_texture_region(local_rect(rect), source, crate::render::contract_color(rgba), texture)
         })
@@ -195,7 +195,7 @@ impl IPainter for Recorder {
         }
         self.check(scope)?;
         // AddRef can execute foreign code, so retain the item before taking the paint context.
-        let item = item.add_ref();
+        let item = item.try_add_ref()?;
         self.with_painter(scope, |painter| painter.com_item(local_rect(rect), item))
     }
     /// Validates the whole batch before publishing any geometry to this scope.

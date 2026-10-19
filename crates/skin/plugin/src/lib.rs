@@ -26,14 +26,14 @@ struct SkinPluginFactoryObject;
 impl SkinPluginFactory for SkinPluginFactoryObject {
     /// Creates a compiler that delegates generic revision publication to the supplied GFX root.
     fn style_compiler(&self, publisher: ComRef<'_, AssetPublisherAbi>) -> Result<ComPtr<StyleCompilerAbi>, NcStatus> {
-        StyleCompilerObject::from_value(StyleCompilerObject::new(publisher)).query()
+        StyleCompilerObject::from_value(StyleCompilerObject::new(publisher)?).query()
     }
 
     /// Creates the optional external JSON compiler selected by the deployment.
     fn theme_loader(&self, assets: ComRef<'_, AssetLoaderAbi>, publisher: ComRef<'_, AssetPublisherAbi>) -> Result<ComPtr<ThemeLoaderAbi>, NcStatus> {
         #[cfg(feature = "theme-json")]
         {
-            ThemeLoaderObject::from_value(ThemeLoaderObject::new(assets, publisher)).query()
+            ThemeLoaderObject::from_value(ThemeLoaderObject::new(assets, publisher)?).query()
         }
         #[cfg(not(feature = "theme-json"))]
         {

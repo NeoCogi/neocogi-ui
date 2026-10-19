@@ -50,10 +50,10 @@ impl TestContainer {
         for (service, old) in old_scopes {
             assert_eq!(service.child_count(old), Err(UI_E_EXPIRED_SCOPE));
         }
-        self.probe.scopes.borrow_mut().push((layout.add_ref(), scope));
+        self.probe.scopes.borrow_mut().push((layout.try_add_ref().unwrap(), scope));
         let leaf = self.probe.leaf_probe.borrow().clone();
         if let Some(leaf) = leaf {
-            *leaf.parent_layout.borrow_mut() = Some((layout.add_ref(), scope));
+            *leaf.parent_layout.borrow_mut() = Some((layout.try_add_ref().unwrap(), scope));
         }
     }
 }
@@ -63,7 +63,7 @@ impl IWidget for TestContainer {
 
     /// Common authority carries no runtime tree pointer.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
-        Ok(self.state.host().add_ref())
+        self.state.host().try_add_ref()
     }
     /// Attachment must reject nested edge edits before committing the mount-once claim.
     fn mount(&mut self) -> Result<(), NcStatus> {

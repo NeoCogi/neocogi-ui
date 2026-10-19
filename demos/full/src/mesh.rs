@@ -83,7 +83,7 @@ impl Suzanne {
             Dimensioni::new(1, 1),
             bounds,
         );
-        let scenes = renderer.add_ref().query::<IMeshScenesAbi>()?;
+        let scenes = renderer.try_add_ref()?.query::<IMeshScenesAbi>()?;
         let scene = scenes.create_scene()?;
         let (vertices, indices) = mesh_buffers(&mesh);
         scene.set_mesh(NcCopyFromBufferOffset::new(0, &vertices), NcCopyFromBufferOffset::new(0, &indices))?;

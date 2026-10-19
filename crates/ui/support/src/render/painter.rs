@@ -457,7 +457,7 @@ mod tests {
             painter.com_texture(
                 Recti::new(100, 100, 10, 10),
                 color(255, 255, 255, 255),
-                crate::test_support::test_image(10, 10).as_interface().add_ref(),
+                crate::test_support::test_image(10, 10).into_interface(),
             ).unwrap();
         }
 

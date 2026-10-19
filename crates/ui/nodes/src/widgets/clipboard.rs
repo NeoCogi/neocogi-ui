@@ -166,14 +166,14 @@ mod tests {
         /// Queues a read without fabricating a synchronous result.
         fn read(&self, completion: ComRef<'_, IClipboardCompletionAbi>) -> Result<(), NcStatus> {
             self.requests
-                .send(Request::Read(completion.add_ref()))
+                .send(Request::Read(completion.try_add_ref()?))
                 .map_err(|_| neocogi_ui_core_contracts::UI_E_CLOSED)
         }
         /// Captures text before returning and deliberately delays its acknowledgement.
         fn write(&self, text: NcCopyFromBufferOffset<'_, u8>, completion: ComRef<'_, IClipboardCompletionAbi>) -> Result<(), NcStatus> {
             let text = crate::boundary::text(text)?.to_owned();
             self.requests
-                .send(Request::Write(text, completion.add_ref()))
+                .send(Request::Write(text, completion.try_add_ref()?))
                 .map_err(|_| neocogi_ui_core_contracts::UI_E_CLOSED)
         }
     }

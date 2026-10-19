@@ -241,8 +241,9 @@ impl UiRuntime for Runtime {
     /// Publishes a platform service only through the runtime's exclusive mutation boundary.
     fn set_clipboard(&mut self, clipboard: ComRef<'_, neocogi_ui_core_contracts::ITextClipboardAbi>) -> Result<(), NcStatus> {
         self.storage.factory.host.check_mutation()?;
+        let clipboard = clipboard.try_add_ref()?;
         let _context = self.storage.context()?;
-        let previous = self.storage.factory.state.clipboard.replace(Some(clipboard.add_ref()));
+        let previous = self.storage.factory.state.clipboard.replace(Some(clipboard));
         // Foreign destruction cannot run while a shared service slot is borrowed.
         drop(previous);
         Ok(())
