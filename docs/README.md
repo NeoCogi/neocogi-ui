@@ -8,8 +8,8 @@ IDL, plugins, retained UI, rendering and authoring tools. Start with the
 
 | Folder | Contents |
 | --- | --- |
-| [Issues](issues/README.md) | Navigation to findings and investigations in the consolidated review |
-| [Optimization opportunities](optimizations/README.md) | Navigation to performance and simplification work in the consolidated review |
+| [Issues](issues/README.md) | Navigation to findings and investigations in the open review backlog |
+| [Optimization opportunities](optimizations/README.md) | Navigation to performance and simplification work in the open review backlog |
 | [Contracts](contracts/README.md) | Current API, ABI, ownership, event, document and resource rules |
 | [Experiments](experiments/README.md) | Prototype reports, hypotheses, outcomes and implementation status |
 | Measurements | Historical performance/size results, raw data, fixtures and reproduction commands |
@@ -40,12 +40,11 @@ purpose; this directory contains only the main index.
 
 ## Keeping the categories current
 
-One consolidated review owns current findings, investigations, decisions and
+One open review backlog owns remaining findings, investigations, decisions and
 optimization opportunities. Issue and optimization pages link into it. Fixes
-update its disposition and the owning contracts/tests. Experiment reports record
-the revision actually tested and distinguish prototypes from applied changes;
-measurements retain workloads, artifacts and limits.
+record verification, update owning contracts/tests and remove completed entries.
+Experiment reports record the revision actually tested and distinguish prototypes
+from applied changes; measurements retain workloads, artifacts and limits.
 
-Reconcile future reviews into one current report under `reviews/` and archive
-superseded snapshots. Retain useful evidence under `external run artifacts`; do not maintain
-competing current ledgers.
+validation records and dated evidence. Retain useful evidence under `external run artifacts`;
+do not maintain competing current ledgers.

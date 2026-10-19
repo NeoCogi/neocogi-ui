@@ -104,10 +104,12 @@ checks still use the platform-specific scripts described in `BACKENDS.md`.
 
 The editor's native acceptance tests use the same host, state, UI routers,
 compiler, renderer surfaces, history, and file operations as the application.
-The staged runner builds an assembly, relocates it with its required runtime,
-plugins and resources, launches the packaged application for three frames, then
-runs the tests from `/tmp`. `NEOCOGI_TEST_ASSET_ROOT` forbids source-tree fixture
-fallback. Shared and monolithic modes are exercised separately on each backend:
+The script builds and launches the production application for three frames with
+ordinary Cargo. Its test runner copies the compiled test, runtime, plugins and
+resources into a temporary executable-relative layout, then runs that test without
+Unix loader overrides. `NEOCOGI_TEST_ASSET_ROOT` selects test fixture inputs;
+production resources remain adjacent to the executable. Shared and monolithic
+modes are separate selections on each backend:
 
 ```sh
 SDL_VIDEODRIVER=offscreen ./scripts/test-theme-editor.sh glow shared

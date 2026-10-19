@@ -144,7 +144,7 @@ on October 4 with `--features monolith`, recorded 2 setup allocations and 10,323
 allocations for 10,000 scalar events including channel storage. The unobserved
 path performed 10,000 updates with zero allocations. These are
 allocation counts, not an elapsed-time benchmark. See the
-[migration validation](../validation/COM_EVENTS_ONLY_2026-10-04.md).
+[migration record in Git history](../validation/README.md#historical-records).
 
 [Built-in list-item regressions](../../crates/ui/runtime/src/runtime/tests/list_item_events.rs)
 also measure empty, nonempty and Unicode labels through real COM updates for
