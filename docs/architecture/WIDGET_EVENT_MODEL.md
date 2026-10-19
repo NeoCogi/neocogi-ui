@@ -5,6 +5,16 @@ message processing**. Widgets own control state, the UI runtime owns routing and
 layout, and the application owns its behavior and inbox. A composite widget can
 also own behavior and a private inbox.
 
+Producers commit semantic state, construct a concrete COM event and move it into
+mutable `post(event)`. An absent destination discards that owner immediately;
+queues retain unhandled facts until consumption. Activation is an empty marker,
+with source identity supplied by the host's stack. Native widget updates return
+errors directly, preserving any already committed geometry before fallible work.
+Recoverable operation failures can use the ordinary `IErrorEvent` status/message
+snapshot through the same destination and origin. Delivery failures remain
+statuses; the system does not recursively enqueue diagnostics. See the
+[event contract](../contracts/COM_EVENT_INTERFACES.md).
+
 The behavioral part resembles an actor's mailbox: one owner receives a message
 and changes its state through exclusive mutable access. Delivery runs
 synchronously on the UI thread under the runtime's scheduler. There is no task or

@@ -48,6 +48,14 @@ ready paste followed by Enter captures changed then submitted on success;
 rejection of changed stops before constructing submitted. Failure does not
 replay that edit or its event on the next eventless update.
 
+Recoverable failures may use `state.post(events::error(status, message)?)?` in
+the same scope. The host attaches the offending widget exactly as for any other
+fact; no widget label, extra source argument or alternate error channel is
+needed. The queued `IErrorEvent` remains readable after that source expires.
+Infrastructure failures still propagate a status, including failure to deliver
+the report itself; there is no recursive report attempt. See
+[reported failures](COM_EVENT_INTERFACES.md#reported-failures).
+
 Directly calling an observed widget's update outside an owning dispatch scope
 cannot manufacture an origin. Applications deliver input through `Ui::update`
 or `update_with_events`. Native algorithm tests use the feature-gated runtime

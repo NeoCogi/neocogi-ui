@@ -51,6 +51,39 @@ protocol. Widgets cannot push/pop that stack. Shared services and explicit
 FileDialog completion remain explicit-origin producers outside widget dispatch.
 See [owner-scoped widget origins](WIDGET_EVENT_ORIGINS.md).
 
+## Reported failures
+
+The common `IErrorEvent : IEvent` exposes `status() -> i32` and
+`message() -> ComPtr<INcString>`. `events::error(status, message)` captures an
+exclusive immutable report. It rejects nonnegative success codes before
+allocation, preserves unknown negative domain codes, and copies UTF-8 once.
+Repeated getters share the same immutable string. The report has no source
+field: the ordinary envelope attaches the current weak widget or service origin.
+
+A provider may handle a recoverable operation failure by posting this report:
+
+```rust,ignore
+// Inside the owning widget's update or private dispatch scope:
+if let Err(status) = self.try_load_selection() {
+    self.state.post(events::error(status, "Unable to load selection")?)?;
+}
+```
+
+The same application `MessageProcessor::handle` can query `IErrorEventAbi` and
+present or record it. It need not call the source; reports remain readable after
+source destruction. Liveness and document-generation filtering are application
+policy. In particular, `DocumentEvent::event_for` deliberately filters stale
+command targets; diagnostic consumers that need removed-source reports inspect
+the captured envelope/report before applying that command-routing helper.
+
+Reporting is explicit. Infrastructure failures, including inability to enter an
+origin scope, create a snapshot or deliver to a selected queue, still return
+`NcStatus`. There is no guaranteed diagnostic when no functioning destination
+exists, and rejection never recursively generates another error event. The
+receiver returns the original failed report owner; `WidgetState::post` drops it
+and returns the transport status, preserving already committed producer state.
+Unobserved reports follow the ordinary immediate-drop rule.
+
 ## Value transport and interpretation
 
 The origin is an IDL value, not an untyped payload. Recursive `WeakComBox<T>` fields
@@ -135,6 +168,13 @@ inbox is gone. Producer convenience APIs discard that rejected snapshot and retu
 the status without rolling back committed widget changes.
 
 ## Validation
+
+[Common error regressions](../../crates/com/api/src/events/error.rs) call actual
+generated getters, preserve unknown negative codes and immutable string identity,
+reject success codes and verify independent event/string lifetimes.
+[Native update and error-origin regressions](../../crates/ui/runtime/src/runtime/tests/direct_posting.rs)
+exercise rejection, first-failure stopping, sticky committed geometry, nested host
+scope restoration, missing-scope owner return and reports after source destruction.
 
 [Generated ABI regressions](../../crates/com/idl/tests/event_interfaces.rs) exercise
 both origin kinds, live/expired weak fields, missing event interfaces, ABI revision

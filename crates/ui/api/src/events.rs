@@ -18,7 +18,9 @@ mod origin;
 pub use origin::EventOriginOwner;
 
 /// COM event interfaces, owned messages and common channel construction.
-pub use neocogi_com::events::{EventBinding, EventMessage, EventOrigin, IEvent, IEventAbi, IEventReceiver, IEventReceiverAbi, channel};
+pub use neocogi_com::events::{
+    EventBinding, EventMessage, EventOrigin, IErrorEvent, IErrorEventAbi, IEvent, IEventAbi, IEventReceiver, IEventReceiverAbi, channel, error,
+};
 /// Built-in immutable snapshot constructors return the sole COM event owner.
 pub use neocogi_ui_core_contracts::events::*;
 /// Concrete control snapshot constructors use the same IEvent root.

@@ -2,6 +2,16 @@
 
 ## 0.0.0 (unreleased)
 
+- Simplify event production to mutable `post(event)` with direct native update
+  errors. Remove observation guards and the update context's saved error bridge;
+  unobserved events are constructed and immediately discarded. Preserve committed
+  geometry before fallible event work and stop further emissions on failure.
+- Make `IActivatedEvent` version 2 an empty occurrence marker; the host's weak
+  source envelope identifies commands without copying display labels. Add common
+  immutable `IErrorEvent` status/message reports through that same queue and
+  origin stack. Reporting is explicit and delivery failures still return statuses.
+  The single shared COM runtime continues to own the global plugin registry.
+
   removing the redundant issues folder and linking directly to the current backlog.
 
 - Consolidate current adversarial findings, decisions, investigations and
