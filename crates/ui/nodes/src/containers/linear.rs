@@ -668,12 +668,12 @@ impl ContainerWidget for Linear {
 }
 
 impl Widget for Linear {
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) -> crate::Change {
+    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) -> Result<crate::Change, neocogi_com::NcStatus> {
         // Linear owns no event-driven semantic state, so runtime update traversal only visits its
         // descendants after this intentionally empty surface callback.
 
         // Child updates report their own changes independently of this static surface.
-        crate::Change::NoChange
+        Ok(crate::Change::NoChange)
     }
 
     fn paint(&self, _ctx: &mut WidgetPaintCtx<'_>) {

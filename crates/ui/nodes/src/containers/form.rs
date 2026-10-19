@@ -126,8 +126,8 @@ impl ContainerWidget for Form {
 }
 impl Widget for Form {
     /// Interaction belongs to descendants; visual authoring is a tool concern.
-    fn update(&mut self, _: &mut WidgetUpdateCtx<'_>, _: Option<&UiInputEvent>) -> Change {
-        Change::NoChange
+    fn update(&mut self, _: &mut WidgetUpdateCtx<'_>, _: Option<&UiInputEvent>) -> Result<Change, neocogi_com::NcStatus> {
+        Ok(Change::NoChange)
     }
     /// The normal optional frame and descendants are painted by the existing runtime.
     fn paint(&self, _: &mut WidgetPaintCtx<'_>) {}

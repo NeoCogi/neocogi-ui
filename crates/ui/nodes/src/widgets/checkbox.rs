@@ -142,18 +142,19 @@ impl Checkbox {
 }
 
 impl Widget for Checkbox {
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Result<crate::Change, neocogi_com::NcStatus> {
         if ctx.action(input, self.keyboard_behavior()) != Some(KeyboardAction::Activate) {
-            return crate::Change::NoChange;
+            return Ok(crate::Change::NoChange);
         }
 
         // Windows-style checkboxes toggle with Space; Enter remains available to a default button.
         self.checked = !self.checked;
         let checked = self.checked;
-        ctx.posted(neocogi_ui_nodes_contracts::events::checkbox_changed(checked).and_then(|event| self.runtime.state.post(event)));
+        let event = neocogi_ui_nodes_contracts::events::checkbox_changed(checked)?;
+        self.runtime.state.post(event)?;
 
         // The check mark changes paint only; both states reserve the same icon space.
-        crate::Change::NoChange
+        Ok(crate::Change::NoChange)
     }
 
     fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {

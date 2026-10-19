@@ -38,6 +38,16 @@ status and drops a rejected snapshot; committed widget state remains committed.
 Posting consumes an already constructed event. An absent destination drops it
 immediately; there is no lazy constructor or producer observation check.
 
+Native `Widget::update` returns `Result<Change, NcStatus>` and uses `?` directly.
+`WidgetUpdateCtx` contains interaction/resource observations, with no `posted`
+error accumulator or update `finish`. A widget records committed geometry in
+its `WidgetState` before constructing or delivering a snapshot. On failure,
+`IWidget::take_change` still reports that geometry, semantic edits remain
+committed, and no later event in the same update is attempted. For example, a
+ready paste followed by Enter captures changed then submitted on success;
+rejection of changed stops before constructing submitted. Failure does not
+replay that edit or its event on the next eventless update.
+
 Directly calling an observed widget's update outside an owning dispatch scope
 cannot manufacture an origin. Applications deliver input through `Ui::update`
 or `update_with_events`. Native algorithm tests use the feature-gated runtime

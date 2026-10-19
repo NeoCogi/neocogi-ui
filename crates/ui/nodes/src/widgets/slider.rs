@@ -185,7 +185,7 @@ impl Slider {
     }
 
     /// Updates slider value from shift-click text entry, scroll, or pointer drag.
-    fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
+    fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Result<crate::Change, neocogi_com::NcStatus> {
         let base = ctx.local_rect();
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
         let last = self.value;
@@ -210,7 +210,7 @@ impl Slider {
             };
         }
         if number_textbox_update(ctx, input, &mut self.edit, self.precision, font, &mut value, self.runtime.state.host()) {
-            return crate::Change::NoChange;
+            return Ok(crate::Change::NoChange);
         }
         if let Some(UiInputEvent::Scroll { delta, .. }) = input {
             let range = self.high - self.low;
@@ -250,17 +250,20 @@ impl Slider {
         if !adjusted && value == last {
             // No user adjustment or committed text change occurred. In particular, an eventless
             // visit must not normalize an off-step value installed by construction or a setter.
-            return crate::Change::NoChange;
+            return Ok(crate::Change::NoChange);
         }
         // Keyboard, wheel, pointer, and committed text share one snap-and-clamp policy. Numeric
         // text may commit on blur with no routed event; its changed candidate reaches this path.
         value = clamp_slider_value(snap_slider_value(value, self.low, self.step), self.low, self.high);
         self.value = value;
         if last != value {
-            ctx.posted(neocogi_ui_nodes_contracts::events::numeric_changed(value).and_then(|event| self.runtime.state.post(event)));
+            // Preserve committed measurement/placement changes even if posting fails.
+            self.runtime.state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
+            let event = neocogi_ui_nodes_contracts::events::numeric_changed(value)?;
+            self.runtime.state.post(event)?;
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
-        crate::Change::from(self.value != last)
+        Ok(crate::Change::from(self.value != last))
     }
 
     /// Paints either the inline numeric editor or the slider track/thumb/value label.
@@ -357,7 +360,7 @@ impl Widget for Slider {
         FrameRole::Control(ControlRole::SliderTrack)
     }
 
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Result<crate::Change, neocogi_com::NcStatus> {
         self.update_widget(ctx, input)
     }
 
@@ -434,7 +437,7 @@ mod tests {
         }
         for event in &events {
             let mut ctx = WidgetUpdateCtx::new_with_interaction(rect, rect, &style, &atlas, true, hovered, focused, false, active, held, Modifiers::NONE);
-            slider.update(&mut ctx, Some(event));
+            slider.update(&mut ctx, Some(event)).unwrap();
         }
     }
 
@@ -456,7 +459,7 @@ mod tests {
                 MouseButton::LEFT,
                 Modifiers::NONE,
             );
-            number.update(&mut ctx, Some(event));
+            number.update(&mut ctx, Some(event)).unwrap();
         }
     }
 
@@ -655,7 +658,7 @@ mod tests {
         let mut ctx = WidgetUpdateCtx::new_with_interaction(rect, rect, &style, &atlas, true, true, true, false, true, MouseButton::LEFT, Modifiers::NONE);
 
         let event = localize_event(Vec2i::new(rect.x, rect.y), input.into_iter().next().unwrap());
-        slider.update(&mut ctx, Some(&event));
+        slider.update(&mut ctx, Some(&event)).unwrap();
 
         assert!(slider.value().is_finite());
         assert_eq!(slider.value(), 5.0);
@@ -719,7 +722,7 @@ mod tests {
         let mut ctx = WidgetUpdateCtx::new_with_interaction(rect, rect, &style, &atlas, true, true, true, false, true, MouseButton::LEFT, Modifiers::NONE);
 
         let event = localize_event(Vec2i::new(rect.x, rect.y), input.into_iter().next().unwrap());
-        slider.update(&mut ctx, Some(&event));
+        slider.update(&mut ctx, Some(&event)).unwrap();
 
         assert_eq!(slider.value(), 50.0);
     }
@@ -972,12 +975,12 @@ mod tests {
                 MouseButton::NONE,
                 Modifiers::NONE,
             );
-            assert_eq!(slider.update(&mut ctx, None), crate::Change::Changed);
+            assert_eq!(slider.update(&mut ctx, None), Ok(crate::Change::Changed));
             assert_eq!(slider.value(), 4.0);
             let mut values = Vec::new();
             assert!(dispatcher(&mut values));
             assert_eq!(values, [4.0]);
-            assert_eq!(slider.update(&mut ctx, None), crate::Change::NoChange);
+            assert_eq!(slider.update(&mut ctx, None), Ok(crate::Change::NoChange));
             assert!(!dispatcher(&mut values));
         });
     }

@@ -190,7 +190,7 @@ impl DisclosureHeader {
 }
 
 impl Widget for DisclosureHeader {
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Result<crate::Change, neocogi_com::NcStatus> {
         // Pointer/Enter/Space toggle while directional keys expose the conventional tree behavior.
         match ctx.action(input, self.keyboard_behavior()) {
             Some(crate::KeyboardAction::Activate) => {
@@ -209,7 +209,7 @@ impl Widget for DisclosureHeader {
         if self.model.dirty.get() {
             self.runtime.state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
         }
-        crate::Change::NoChange
+        Ok(crate::Change::NoChange)
     }
 
     fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {

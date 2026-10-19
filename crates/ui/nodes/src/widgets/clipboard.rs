@@ -350,8 +350,7 @@ mod tests {
             let input = key.map(|key| crate::UiInputEvent::Key {
                 event: KeyEvent::pressed(Key::Character(key), Modifiers::CTRL),
             });
-            crate::Widget::update(textbox, &mut context, input.as_ref());
-            context.finish().unwrap();
+            crate::Widget::update(textbox, &mut context, input.as_ref()).unwrap();
         };
         update(&mut textbox, Some('a'));
         update(&mut textbox, Some('x'));

@@ -107,10 +107,15 @@ pub trait Widget {
     /// typed handle or a widget update that reports `Changed`. Out-of-band interior mutation is
     /// not observable by the runtime. Hidden/clipped widgets are not guaranteed an update, so
     /// shared geometry state should be synchronized through handles before it must affect layout.
+    /// Return errors directly with `?`, including snapshot construction and delivery failures.
+    /// Already committed semantic edits are not rolled back. Before fallible work, record any
+    /// committed geometry change in the widget's `WidgetState` so `IWidget::take_change` can
+    /// recover it even when this call returns an error. Stop emitting after the first failure;
+    /// the context has no separate error accumulator or completion operation.
     /// The default is suitable for widgets with no update behavior.
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) -> Change {
+    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, _input: Option<&UiInputEvent>) -> Result<Change, neocogi_com::NcStatus> {
         // Static widgets retain valid measurement until an independently tracked input changes.
-        Change::NoChange
+        Ok(Change::NoChange)
     }
     /// Records paint commands through paint-only capabilities.
     ///

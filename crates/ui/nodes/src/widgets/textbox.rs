@@ -184,17 +184,21 @@ impl Textbox {
     }
 
     /// Applies input and cursor movement for this textbox.
-    fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
+    fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Result<crate::Change, neocogi_com::NcStatus> {
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
         let outcome = textbox_update(ctx, input, &mut self.buf, &mut self.cursor, &mut self.editing, font, self.runtime.state.host());
         if outcome.changed {
-            ctx.posted(neocogi_ui_core_contracts::events::text_changed(&self.buf, self.cursor as u64).and_then(|event| self.runtime.state.post(event)));
+            // Preserve committed measurement/placement changes even if posting fails.
+            self.runtime.state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
+            let event = neocogi_ui_core_contracts::events::text_changed(&self.buf, self.cursor as u64)?;
+            self.runtime.state.post(event)?;
         }
         if outcome.submitted {
-            ctx.posted(neocogi_ui_core_contracts::events::text_submitted(&self.buf).and_then(|event| self.runtime.state.post(event)));
+            let event = neocogi_ui_core_contracts::events::text_submitted(&self.buf)?;
+            self.runtime.state.post(event)?;
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
-        crate::Change::from(outcome.changed)
+        Ok(crate::Change::from(outcome.changed))
     }
 
     /// Paints the textbox frame, text, and caret.
@@ -361,7 +365,7 @@ impl Widget for Textbox {
         FrameRole::Control(ControlRole::TextInput)
     }
 
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Result<crate::Change, neocogi_com::NcStatus> {
         self.update_widget(ctx, input)
     }
 
@@ -462,7 +466,7 @@ mod tests {
             }
             let mut ctx =
                 WidgetUpdateCtx::new_with_interaction(bounds, bounds, &style, &atlas, true, false, focused, false, false, MouseButton::NONE, modifiers);
-            textbox.update(&mut ctx, Some(event));
+            textbox.update(&mut ctx, Some(event)).unwrap();
         }
     }
 

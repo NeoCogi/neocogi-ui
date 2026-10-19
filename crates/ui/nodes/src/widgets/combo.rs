@@ -158,22 +158,23 @@ impl Combo {
     }
 
     /// Converts header activation into one private popup-state-machine transition.
-    fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) {
+    fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Result<(), neocogi_com::NcStatus> {
         if let Some(action) = ctx.action(input, self.keyboard_behavior()) {
             let anchor = self.popup_anchor(ctx);
             match action {
                 KeyboardAction::Activate => {
-                    let _ = self.menu.toggle_at(anchor);
+                    self.menu.toggle_at(anchor)?;
                 }
                 KeyboardAction::Expand => {
-                    let _ = self.menu.show_at(anchor);
+                    self.menu.show_at(anchor)?;
                 }
                 KeyboardAction::Collapse => {
-                    let _ = self.menu.hide();
+                    self.menu.hide()?;
                 }
                 KeyboardAction::Decrease | KeyboardAction::Increase => {}
             }
         }
+        Ok(())
     }
 
     /// Paints the combo header from already-committed retained state.
@@ -206,11 +207,11 @@ impl Widget for Combo {
         FrameRole::Control(ControlRole::Combo)
     }
 
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
-        self.update_widget(ctx, input);
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Result<crate::Change, neocogi_com::NcStatus> {
+        self.update_widget(ctx, input)?;
 
         // Popup coordination is deferred; the header retains the same geometry.
-        crate::Change::NoChange
+        Ok(crate::Change::NoChange)
     }
 
     fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {

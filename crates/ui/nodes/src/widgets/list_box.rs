@@ -126,15 +126,16 @@ impl ListBox {
 }
 
 impl Widget for ListBox {
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Result<crate::Change, neocogi_com::NcStatus> {
         if ctx.action(input, self.keyboard_behavior()) != Some(KeyboardAction::Activate) {
-            return crate::Change::NoChange;
+            return Ok(crate::Change::NoChange);
         }
         // Pointer and keyboard activation publish the same application-facing submission.
-        ctx.posted(neocogi_ui_core_contracts::events::activated().and_then(|event| self.runtime.state.post(event)));
+        let event = neocogi_ui_core_contracts::events::activated()?;
+        self.runtime.state.post(event)?;
 
         // The submitted event does not change this header's intrinsic inputs.
-        crate::Change::NoChange
+        Ok(crate::Change::NoChange)
     }
 
     fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {

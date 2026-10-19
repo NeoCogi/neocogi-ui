@@ -167,17 +167,19 @@ impl SplitView {
     }
 
     /// Commits a user request against the latest bounds, notifying only on an actual change.
-    fn move_divider(&mut self, requested: i32, ctx: &mut WidgetUpdateCtx<'_>) -> Change {
+    fn move_divider(&mut self, requested: i32) -> Result<Change, neocogi_com::NcStatus> {
         let position = requested.clamp(self.partition.low, self.partition.high);
         let current = extent(self.settings.axis, Dimensioni::new(self.partition.first.width, self.partition.first.height));
         if position == current {
             // An immobile handle in a narrow allocation must not overwrite the
             // user's wider preferred position merely because it was dragged.
-            return Change::NoChange;
+            return Ok(Change::NoChange);
         }
         self.settings.position = position;
-        ctx.posted(neocogi_ui_nodes_contracts::events::split_changed(position).and_then(|event| self.runtime.state.post(event)));
-        Change::Changed
+        self.runtime.state.record_change(GeometryChange::Changed);
+        let event = neocogi_ui_nodes_contracts::events::split_changed(position)?;
+        self.runtime.state.post(event)?;
+        Ok(Change::Changed)
     }
 }
 
@@ -352,7 +354,7 @@ impl ContainerWidget for SplitView {
 
 impl Widget for SplitView {
     /// Reconciles capture first; only a press in the committed handle starts a gesture.
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Change {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Result<Change, neocogi_com::NcStatus> {
         if !ctx.active() {
             self.drag = Drag::Idle;
         }
@@ -368,25 +370,25 @@ impl Widget for SplitView {
                 self.drag = Drag::Active {
                     offset: coordinate(self.settings.axis, *pos) - coordinate(self.settings.axis, Vec2i::new(self.partition.handle.x, self.partition.handle.y)),
                 };
-                Change::NoChange
+                Ok(Change::NoChange)
             }
             (Drag::Active { offset }, Some(UiInputEvent::MouseDrag { pos, .. })) => {
-                self.move_divider(coordinate(self.settings.axis, *pos).saturating_sub(offset), ctx)
+                self.move_divider(coordinate(self.settings.axis, *pos).saturating_sub(offset))
             }
             (_, Some(UiInputEvent::MouseUp { .. } | UiInputEvent::Cancel)) => {
                 self.drag = Drag::Idle;
-                Change::NoChange
+                Ok(Change::NoChange)
             }
             (_, Some(UiInputEvent::Key { .. })) => {
                 let delta = match (self.settings.axis, ctx.action(input, self.keyboard_behavior())) {
                     (SplitAxis::Horizontal, Some(KeyboardAction::Decrease)) | (SplitAxis::Vertical, Some(KeyboardAction::Increase)) => -8,
                     (SplitAxis::Horizontal, Some(KeyboardAction::Increase)) | (SplitAxis::Vertical, Some(KeyboardAction::Decrease)) => 8,
-                    _ => return Change::NoChange,
+                    _ => return Ok(Change::NoChange),
                 };
                 let current = extent(self.settings.axis, Dimensioni::new(self.partition.first.width, self.partition.first.height));
-                self.move_divider(current.saturating_add(delta), ctx)
+                self.move_divider(current.saturating_add(delta))
             }
-            _ => Change::NoChange,
+            _ => Ok(Change::NoChange),
         }
     }
     /// Uses normal button appearance for the handle and a small centered grip for discoverability.

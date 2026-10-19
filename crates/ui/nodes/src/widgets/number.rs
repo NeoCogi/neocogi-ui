@@ -152,7 +152,7 @@ impl Number {
     }
 
     /// Updates number value from shift-click text entry or horizontal drag.
-    fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
+    fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Result<crate::Change, neocogi_com::NcStatus> {
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
         let last = self.value;
         if !self.edit.editing {
@@ -177,10 +177,13 @@ impl Number {
             self.value = add_number_delta(self.value, drag_delta);
         }
         if self.value != last {
-            ctx.posted(neocogi_ui_nodes_contracts::events::numeric_changed(self.value).and_then(|event| self.runtime.state.post(event)));
+            // Preserve committed measurement/placement changes even if posting fails.
+            self.runtime.state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
+            let event = neocogi_ui_nodes_contracts::events::numeric_changed(self.value)?;
+            self.runtime.state.post(event)?;
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
-        crate::Change::from(self.value != last)
+        Ok(crate::Change::from(self.value != last))
     }
 
     /// Paints either the inline numeric editor or the formatted value.
@@ -216,7 +219,7 @@ impl Widget for Number {
         FrameRole::Control(ControlRole::TextInput)
     }
 
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Result<crate::Change, neocogi_com::NcStatus> {
         self.update_widget(ctx, input)
     }
 

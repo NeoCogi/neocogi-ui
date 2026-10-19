@@ -264,19 +264,13 @@ macro_rules! direct_widget_phase_impl {
                     crate::MouseButton::from_bits(u32::from(state.mouse_buttons)).ok_or(neocogi_com::NC_E_INVALID_ARG)?,
                     crate::Modifiers::from_bits(state.modifiers).ok_or(neocogi_com::NC_E_INVALID_ARG)?,
                 );
-                let change = match crate::Widget::update(self, &mut ctx, input.as_ref()) {
+                // Providers record committed geometry before fallible event work.
+                // Errors propagate directly; the update context owns no shadow status.
+                let change = crate::Widget::update(self, &mut ctx, input.as_ref())?;
+                Ok(match change {
                     crate::Change::Changed => neocogi_ui_core_contracts::GeometryChange::Changed,
                     crate::Change::NoChange => neocogi_ui_core_contracts::GeometryChange::NoChange,
-                };
-                if let Err(error) = ctx.finish() {
-                    // State was committed before posting. Preserve its geometry change
-                    // for a later successful update even when the receiver rejects it.
-                    <$name as crate::widget_object::HostedWidget>::runtime_mut(self)
-                        .state
-                        .record_change(change);
-                    return Err(error);
-                }
-                Ok(change)
+                })
             }
 
             /// Drains sticky common and explicitly shared semantic geometry changes together.

@@ -304,8 +304,8 @@ impl Widget for ScrollArea {
     }
 
     /// Reports scrolling because child placement reads the scrollbar-owned offsets.
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
-        self.update_scroll(input)
+    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Result<crate::Change, neocogi_com::NcStatus> {
+        Ok(self.update_scroll(input))
     }
 
     fn paint(&self, ctx: &mut WidgetPaintCtx<'_>) {

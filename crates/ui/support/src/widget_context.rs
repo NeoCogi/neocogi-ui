@@ -181,6 +181,7 @@ impl<'a> WidgetContextData<'a> {
 ///
 /// These private algorithm services mirror the external IWidget phase separation: update receives
 /// copied input, while paint alone receives a scoped recorder.
+/// Update algorithms return errors directly; this context stores no delivery status.
 pub struct WidgetUpdateCtx<'a> {
     /// Common read-only data, intentionally separated from phase capabilities.
     common: WidgetContextData<'a>,
@@ -190,8 +191,6 @@ pub struct WidgetUpdateCtx<'a> {
     mouse_buttons: MouseButton,
     /// Modifier state committed by the latest logical keyboard transition.
     modifiers: Modifiers,
-    /// First synchronous receiver failure, returned by the enclosing COM update.
-    event_error: Option<NcStatus>,
 }
 
 impl<'a> WidgetUpdateCtx<'a> {
@@ -246,19 +245,7 @@ impl<'a> WidgetUpdateCtx<'a> {
             in_hover_root,
             mouse_buttons,
             modifiers,
-            event_error: None,
         }
-    }
-
-    /// Records a port-posting failure while the native algorithm completes its state transition.
-    pub fn posted(&mut self, result: Result<(), NcStatus>) {
-        if self.event_error.is_none() {
-            self.event_error = result.err();
-        }
-    }
-    /// Ends the copied input transaction and reports its first receiver failure.
-    pub fn finish(self) -> Result<(), NcStatus> {
-        self.event_error.map_or(Ok(()), Err)
     }
 
     /// Returns the derived content rectangle in widget-local coordinates.

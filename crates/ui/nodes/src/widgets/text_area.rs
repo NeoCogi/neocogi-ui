@@ -168,8 +168,8 @@ impl Widget for TextArea {
     }
 
     /// Applies wheel input to the scroll model shared with the actual editor and bars.
-    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
-        crate::ScrollComposition::update_scroll(self, input)
+    fn update(&mut self, _ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Result<crate::Change, neocogi_com::NcStatus> {
+        Ok(crate::ScrollComposition::update_scroll(self, input))
     }
 
     /// Paints only the outer panel and scrollbar corner; the editor child paints text and caret.
@@ -286,7 +286,7 @@ impl TextEditor {
     }
 
     /// Applies one routed editing event and publishes resulting semantic events.
-    fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
+    fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Result<crate::Change, neocogi_com::NcStatus> {
         // Runtime-only navigation preference is reset lazily so typed cursor setters need no phase
         // context and remain safe between retained updates.
         if self.reset_preferred_x {
@@ -298,13 +298,17 @@ impl TextEditor {
 
         // Capture committed facts directly; absent destinations discard their owners.
         if outcome.changed {
-            ctx.posted(neocogi_ui_core_contracts::events::text_changed(&self.buf, self.cursor as u64).and_then(|event| self.runtime.state.post(event)));
+            // Preserve committed measurement/placement changes even if posting fails.
+            self.runtime.state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
+            let event = neocogi_ui_core_contracts::events::text_changed(&self.buf, self.cursor as u64)?;
+            self.runtime.state.post(event)?;
         }
         if outcome.submitted {
-            ctx.posted(neocogi_ui_core_contracts::events::text_submitted(&self.buf).and_then(|event| self.runtime.state.post(event)));
+            let event = neocogi_ui_core_contracts::events::text_submitted(&self.buf)?;
+            self.runtime.state.post(event)?;
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
-        crate::Change::from(outcome.changed)
+        Ok(crate::Change::from(outcome.changed))
     }
 
     /// Paints editable content and its caret in stable content-local coordinates.
@@ -610,7 +614,7 @@ fn textarea_paint(ctx: &mut WidgetPaintCtx<'_>, state: &TextEditor, font: FontId
 
 impl Widget for TextEditor {
     /// Applies one routed event to retained text and cursor state.
-    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
+    fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Result<crate::Change, neocogi_com::NcStatus> {
         // Keep the trait boundary thin so unit tests and retained traversal share one implementation.
         self.update_widget(ctx, input)
     }
@@ -933,7 +937,7 @@ mod tests {
                 modifiers = event.modifiers;
             }
             let mut ctx = WidgetUpdateCtx::new_with_interaction(bounds, bounds, &style, &atlas, true, true, true, false, false, MouseButton::NONE, modifiers);
-            text_area.update(&mut ctx, Some(event));
+            text_area.update(&mut ctx, Some(event)).unwrap();
         }
     }
 
@@ -1055,7 +1059,7 @@ mod tests {
             MouseButton::NONE,
             Modifiers::NONE,
         );
-        text_area.update(&mut ctx, Some(&down));
+        text_area.update(&mut ctx, Some(&down)).unwrap();
 
         let font = style.resolve_font(&atlas, &text_area.font);
         let layout = textarea_layout(bounds, &atlas, &text_area, font);
@@ -1084,7 +1088,7 @@ mod tests {
             MouseButton::NONE,
             Modifiers::NONE,
         );
-        text_area.update(&mut ctx, Some(&delete));
+        text_area.update(&mut ctx, Some(&delete)).unwrap();
         assert_eq!(text_area.text(), "_ _");
         assert_eq!(text_area.cursor(), 2);
         assert_eq!(text_area.interaction.caret_affinity, CaretAffinity::Downstream);
@@ -1106,7 +1110,7 @@ mod tests {
             MouseButton::NONE,
             Modifiers::NONE,
         );
-        text_area.update(&mut ctx, Some(&end));
+        text_area.update(&mut ctx, Some(&end)).unwrap();
         assert_eq!(text_area.cursor(), 3);
     }
 
