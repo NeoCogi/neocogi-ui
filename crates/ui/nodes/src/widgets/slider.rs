@@ -256,7 +256,7 @@ impl Slider {
         // text may commit on blur with no routed event; its changed candidate reaches this path.
         value = clamp_slider_value(snap_slider_value(value, self.low, self.step), self.low, self.high);
         self.value = value;
-        if last != value && self.runtime.state.is_observed() {
+        if last != value {
             ctx.posted(neocogi_ui_nodes_contracts::events::numeric_changed(value).and_then(|event| self.runtime.state.post(event)));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.

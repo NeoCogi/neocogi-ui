@@ -187,13 +187,11 @@ impl Textbox {
     fn update_widget(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> crate::Change {
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
         let outcome = textbox_update(ctx, input, &mut self.buf, &mut self.cursor, &mut self.editing, font, self.runtime.state.host());
-        if self.runtime.state.is_observed() {
-            if outcome.changed {
-                ctx.posted(neocogi_ui_core_contracts::events::text_changed(&self.buf, self.cursor as u64).and_then(|event| self.runtime.state.post(event)));
-            }
-            if outcome.submitted {
-                ctx.posted(neocogi_ui_core_contracts::events::text_submitted(&self.buf).and_then(|event| self.runtime.state.post(event)));
-            }
+        if outcome.changed {
+            ctx.posted(neocogi_ui_core_contracts::events::text_changed(&self.buf, self.cursor as u64).and_then(|event| self.runtime.state.post(event)));
+        }
+        if outcome.submitted {
+            ctx.posted(neocogi_ui_core_contracts::events::text_submitted(&self.buf).and_then(|event| self.runtime.state.post(event)));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(outcome.changed)

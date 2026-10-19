@@ -125,16 +125,14 @@ impl CounterObject {
         .query().map_err(|(status, _unpublished)| status)
     }
 
-    /// User activation commits before emission, capturing the matching label for deferred delivery.
+    /// User activation commits before posting its marker and captured counter value.
     fn update_content(&mut self, state: WidgetUpdate) -> Result<GeometryChange, NcStatus> {
         if state.clicked || state.action == WidgetAction::Activate {
             self.count = self.settings.next(self.count);
             // A rejected foreign post cannot erase this already committed change.
             self.common.state.record_change(GeometryChange::Changed);
-            if self.common.state.is_observed() {
-                self.common.state.post(neocogi_ui_core_contracts::events::activated()?)?;
-                self.common.state.post(neocogi_demo_contracts::events::counter_changed(self.count)?)?;
-            }
+            self.common.state.post(neocogi_ui_core_contracts::events::activated()?)?;
+            self.common.state.post(neocogi_demo_contracts::events::counter_changed(self.count)?)?;
             Ok(GeometryChange::Changed)
         } else {
             Ok(GeometryChange::NoChange)

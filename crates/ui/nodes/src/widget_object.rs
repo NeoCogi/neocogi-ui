@@ -536,7 +536,7 @@ impl CompositeEvents {
     /// Transfers at most one captured snapshot under the composite's owner scope.
     /// The queue is private to this composition; public lifetime belongs to its owner.
     /// Rejected delivery leaves the semantic transition committed, as direct posts do.
-    pub(crate) fn dispatch_next(&mut self, state: &neocogi_ui::com::widget::WidgetState) -> Result<bool, neocogi_com::NcStatus> {
+    pub(crate) fn dispatch_next(&mut self, state: &mut neocogi_ui::com::widget::WidgetState) -> Result<bool, neocogi_com::NcStatus> {
         state.writable()?;
         let Some(message) = self.messages.as_ref().and_then(|messages| messages.try_recv().ok()) else { return Ok(false) };
         state.post(message.event)?;

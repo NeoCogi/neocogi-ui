@@ -51,8 +51,8 @@ fn show(ui: &Ui, owner: ComRef<'_, IWindowAbi>, anchor: Rect) -> Result<(), NcSt
 ```
 
 Use `set_label`, `set_enabled`, `set_mark`, `set_shortcut_hint`, and the font-style
-capability to edit a row. Setters are silent. Activation captures its label before
-callback delivery, and the manager closes the selected popup path before the
+capability to edit a row. Setters are silent. Activation posts a marker with the
+row's weak identity, and the manager closes the selected popup path before the
 application handler runs. Check/radio-group transitions belong to application
 handlers; a shortcut hint does not register an accelerator.
 

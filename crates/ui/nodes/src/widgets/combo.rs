@@ -354,6 +354,6 @@ impl neocogi_ui_nodes_contracts::Combo for Combo {
 impl neocogi_ui_core_contracts::IWidgetDispatcher for Combo {
     /// Relays one immutable menu snapshot without copying its payload.
     fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
-        self.events.dispatch_next(&self.runtime.state)
+        self.events.dispatch_next(&mut self.runtime.state)
     }
 }

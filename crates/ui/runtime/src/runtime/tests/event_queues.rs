@@ -27,6 +27,50 @@ impl neocogi_com::events::IEventReceiver for ExclusiveReceiver {
     }
 }
 
+#[com_object(interfaces(neocogi_com::events::IEvent), ownership = exclusive)]
+/// Sole-owner instrumentation for direct posting through the real host and receiver.
+struct DirectFact {
+    /// Counts value destruction independently of retained weak allocation storage.
+    drops: Rc<Cell<u32>>,
+}
+impl neocogi_com::events::IEvent for DirectFact {}
+impl Drop for DirectFact {
+    /// Rejected, unhandled and unrouted owners all destroy the fact exactly once.
+    fn drop(&mut self) { self.drops.set(self.drops.get() + 1); }
+}
+
+/// No receiver drops immediately; a queue retains until consumption; rejection drops once.
+#[test]
+fn direct_post_owns_cleanup_for_absence_unhandled_delivery_and_rejection() {
+    let source = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
+    let gfx = neocogi_ui_support::test_support::gfx_factory();
+    let (runtime, driver) = crate::runtime::testing::create_runtime(source.as_com_ref(), gfx.as_com_ref()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
+    let sender = ui.widgets().button_unobserved("source").unwrap();
+    let origin = neocogi_com::events::EventOrigin::Widget(sender.as_interface().downgrade().into_unknown());
+    let drops = Rc::new(Cell::new(0));
+    let fact = || DirectFact::into_box(DirectFact { drops: drops.clone() })
+        .query::<neocogi_com::events::IEventAbi>().unwrap();
+    let mut state = neocogi_ui::com::widget::WidgetState::new(ui.widgets().host().unwrap(), WidgetOptions::NONE);
+    let discarded = fact();
+    let observer = discarded.downgrade();
+    state.post(discarded).unwrap();
+    assert_eq!(drops.get(), 1);
+    assert!(!observer.is_alive());
+
+    let (queue, inbox) = neocogi_com::events::channel();
+    let mut state = state.with_events(Some(queue));
+    driver.with_origin(origin.clone(), || state.post(fact())).unwrap().unwrap();
+    assert_eq!(drops.get(), 1, "queued owner remains live");
+    let unhandled = inbox.try_recv().unwrap();
+    assert!(unhandled.origin.widget::<ButtonAbi>().unwrap().unwrap().same_object(&sender.as_interface().downgrade()));
+    drop(unhandled);
+    assert_eq!(drops.get(), 2);
+    drop(inbox);
+    assert_eq!(driver.with_origin(origin, || state.post(fact())).unwrap(), Err(neocogi_com::NC_E_CLOSED));
+    assert_eq!(drops.get(), 3);
+}
+
 /// Widget/menu capture is fallible, and all mounting facades return the same root for retry.
 #[test]
 fn exclusive_receiver_rejection_preserves_unmounted_roots() {

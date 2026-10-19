@@ -176,9 +176,7 @@ impl SplitView {
             return Change::NoChange;
         }
         self.settings.position = position;
-        if self.runtime.state.is_observed() {
-            ctx.posted(neocogi_ui_nodes_contracts::events::split_changed(position).and_then(|event| self.runtime.state.post(event)));
-        }
+        ctx.posted(neocogi_ui_nodes_contracts::events::split_changed(position).and_then(|event| self.runtime.state.post(event)));
         Change::Changed
     }
 }

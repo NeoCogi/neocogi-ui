@@ -691,7 +691,7 @@ impl SurfaceNode {
         }
         // Commit visibility before even the mapper can observe the captured transition.
         match hidden {
-            true => self.emit_window_event(neocogi_ui_core_contracts::events::window_hidden),
+            true => self.emit_window_event(neocogi_ui_core_contracts::events::window_hidden()?),
             false => Ok(()),
         }
     }
@@ -775,10 +775,10 @@ impl SurfaceNode {
     }
 
     /// Emits one concrete window event at the next safe application dispatch boundary.
-    fn emit_window_event(&mut self, snapshot: impl FnOnce() -> Result<neocogi_com::ComBox<neocogi_com::events::IEventAbi>, neocogi_com::NcStatus>) -> Result<(), neocogi_com::NcStatus> {
+    fn emit_window_event(&mut self, event: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), neocogi_com::NcStatus> {
         // The record owns its receiver; posting owns no queue and invokes no app behavior.
         let events = &mut self.root_mut().expect("window events are emitted only by roots").events;
-        if events.is_bound() { events.post(snapshot()?) } else { Ok(()) }
+        events.post(event)
     }
 
     /// Dismisses an active popup and emits exactly one policy event.
@@ -787,7 +787,7 @@ impl SurfaceNode {
         self.surface.body.clear_transient_targets();
         if let Some(PopupState::Application { events, .. }) = self.popup_mut() {
             // Menu popups have no unobservable lifecycle port; their visibility is wholly internal.
-            if events.is_bound() { events.post(neocogi_ui_core_contracts::events::popup_dismissed()?)?; }
+            events.post(neocogi_ui_core_contracts::events::popup_dismissed()?)?;
         }
         Ok(())
     }

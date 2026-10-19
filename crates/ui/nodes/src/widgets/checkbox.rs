@@ -150,9 +150,7 @@ impl Widget for Checkbox {
         // Windows-style checkboxes toggle with Space; Enter remains available to a default button.
         self.checked = !self.checked;
         let checked = self.checked;
-        if self.runtime.state.is_observed() {
-            ctx.posted(neocogi_ui_nodes_contracts::events::checkbox_changed(checked).and_then(|event| self.runtime.state.post(event)));
-        }
+        ctx.posted(neocogi_ui_nodes_contracts::events::checkbox_changed(checked).and_then(|event| self.runtime.state.post(event)));
 
         // The check mark changes paint only; both states reserve the same icon space.
         crate::Change::NoChange

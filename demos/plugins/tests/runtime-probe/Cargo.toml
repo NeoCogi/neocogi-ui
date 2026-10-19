@@ -9,5 +9,5 @@ crate-type = ["cdylib"]
 [features]
 dynamic-plugin = []
 [dependencies]
-neocogi-com = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "82286448baf3274d5c1053e2ece6bb1bec885975", features = ["runtime"] }
-neocogi-native-runtime-link = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "82286448baf3274d5c1053e2ece6bb1bec885975" }
+neocogi-com = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "67c9f946be3ec95baa647589e6ba0b359b7d6322", features = ["runtime"] }
+neocogi-native-runtime-link = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "67c9f946be3ec95baa647589e6ba0b359b7d6322" }

@@ -95,9 +95,10 @@ string or path capability.
 Rust constructors such as `events::text_changed(text, cursor)` and
 `events::numeric_changed(value)` return `Result<ComBox<IEventAbi>, NcStatus>`
 directly. They validate finite numeric values, nonnegative geometry and UTF-8
-cursor boundaries. Unobserved producers skip construction before copying labels
-or other snapshot data. Observed controls pass borrowed text directly to the
-snapshot constructor, which captures it before delivery. String snapshots store
+cursor boundaries. Producers construct snapshots directly and move them to mutable `post(event)`.
+An absent destination drops the event immediately; a selected receiver moves it
+to its inbox. Controls pass borrowed text to the snapshot constructor, which
+captures it before delivery. Activation markers contain no strings. String snapshots store
 one immutable string capability; repeated getters add references without copying
 its contents. Foreign getter results remain subject to the consumer's domain checks.
 There are no native widget output enums or conversion traits.
@@ -146,15 +147,16 @@ readable after source destruction, and restores the same owner on disconnection.
 Each observed scalar event now requires an exclusive allocation. The existing
 [allocation probe](../../examples/com-plugin/examples/event_allocations.rs), run
 on October 4 with `--features monolith`, recorded 2 setup allocations and 10,323
-allocations for 10,000 scalar events including channel storage. The unobserved
-path performed 10,000 updates with zero allocations. These are
+allocations for 10,000 scalar events including channel storage. That historical
+unobserved path skipped construction and performed 10,000 updates with zero
+allocations; the direct-post contract now constructs and discards those snapshots. These are
 allocation counts, not an elapsed-time benchmark. See the
 [migration record in Git history](../validation/README.md#historical-records).
 
 [Built-in list-item regressions](../../crates/ui/runtime/src/runtime/tests/list_item_events.rs)
 also measure empty, nonempty and Unicode labels through real COM updates for
-pointer, Enter and Space activation. They verify no silent capture allocations,
-immutable labels after edits/destruction and state preservation on rejected delivery.
+pointer, Enter and Space activation. They verify one marker allocation per activation independently of label size,
+exact weak source identity after edits/destruction and state preservation on rejected delivery.
 
 The [October 4 benchmark](../experiments/COM_EVENT_DOWNCAST_2026-10-04.md) measured
 shared `ComPtr` queries. Its exact timings do not measure this exclusive event

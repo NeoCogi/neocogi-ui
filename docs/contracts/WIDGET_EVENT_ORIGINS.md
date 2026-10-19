@@ -12,11 +12,9 @@ ABI v1, core ABI 17 or domain descriptor ABI 10.
 A Rust provider configures its existing state before publishing the widget:
 
 ```rust,ignore
-let state = WidgetState::new(host, options).with_events(queue);
+let mut state = WidgetState::new(host, options).with_events(queue);
 // Inside update or private dispatch, after committing semantic state:
-if state.is_observed() {
-    state.post(events::activated()?)?;
-}
+state.post(events::activated()?)?;
 // The containing widget is allocated with into_box(value), without cyclic setup.
 ```
 
@@ -37,7 +35,8 @@ later when consuming the queue. No active origin returns `NC_E_INVALID_ARG` and
 the original event owner. Layout/paint and closed-runtime checks still apply;
 receiver rejection also returns the same owner. `WidgetState::post` reports the
 status and drops a rejected snapshot; committed widget state remains committed.
-An unobserved state allocates no snapshot when its caller checks `is_observed`.
+Posting consumes an already constructed event. An absent destination drops it
+immediately; there is no lazy constructor or producer observation check.
 
 Directly calling an observed widget's update outside an owning dispatch scope
 cannot manufacture an origin. Applications deliver input through `Ui::update`

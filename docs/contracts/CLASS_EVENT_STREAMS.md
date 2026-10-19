@@ -84,7 +84,7 @@ stateDiagram-v2
     Closed --> Closed: close
 ```
 
-Unobserved producers skip snapshot allocation. Observed shared ports reject an
+Unobserved producers construct and discard snapshots directly. Observed shared ports reject an
 expired source with `NC_E_DROPPED`. Closed ports retain no queue or origin and
 reject posts with `NC_E_CLOSED`. No attachment, replacement or reopening operation
 exists. Posting through a shared port temporarily pins the source; the queued

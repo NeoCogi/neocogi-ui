@@ -307,7 +307,7 @@ impl IChoiceMenuState for ChoiceMenuState {
             ChoicePopupLifecycle::Detached => ChoicePopupLifecycle::Detached,
         };
         // Commit the complete popup transition before entering even a pure mapper.
-        if changed && self.changed_event.is_bound() {
+        if changed {
             self.changed_event.post(neocogi_ui_core_contracts::events::choice_changed(ChoiceSelection::Selected(id))?)?;
         }
         Ok(self.revision)

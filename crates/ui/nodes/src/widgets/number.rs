@@ -176,7 +176,7 @@ impl Number {
             let drag_delta = f64::from(delta.x) * f64::from(self.step);
             self.value = add_number_delta(self.value, drag_delta);
         }
-        if self.value != last && self.runtime.state.is_observed() {
+        if self.value != last {
             ctx.posted(neocogi_ui_nodes_contracts::events::numeric_changed(self.value).and_then(|event| self.runtime.state.post(event)));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.

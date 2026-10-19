@@ -808,9 +808,9 @@ impl WindowManager {
         for &id in &removed {
             // Commit the final fact before removing the record. Consumer queues own it
             // independently, so components can settle requests after native teardown.
-            let result = self
-                .root_node_mut(id)?
-                .emit_window_event(neocogi_ui_core_contracts::events::window_destroyed);
+            let node = self.root_node_mut(id)?;
+            let result = neocogi_ui_core_contracts::events::window_destroyed()
+                .and_then(|event| node.emit_window_event(event));
             self.posted(result);
         }
         self.surfaces.remove_roots(&removed);

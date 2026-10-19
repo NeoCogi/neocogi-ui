@@ -53,12 +53,11 @@ impl WidgetState {
         self
     }
 
-    /// Whether this widget should allocate a snapshot for an observed transition.
-    pub fn is_observed(&self) -> bool { self.receiver.is_some() }
-
     /// Posts a captured fact using the dispatch owner's active source identity.
-    /// Committed widget state is not rolled back when delivery is rejected.
-    pub fn post(&self, event: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), NcStatus> {
+    /// An absent destination drops the supplied event immediately. A present
+    /// destination receives the same sole owner; rejection drops that owner and
+    /// returns its status. Committed producer state is never rolled back.
+    pub fn post(&mut self, event: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), NcStatus> {
         match &self.receiver {
             Some(receiver) => self.host.post_event(receiver.as_com_ref(), event).map_err(|(status, _event)| status),
             None => Ok(()),

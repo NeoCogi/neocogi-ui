@@ -213,9 +213,7 @@ impl Widget for Button {
             return crate::Change::NoChange;
         }
         // Pointer click, Enter, and Space converge on the button's single typed submission port.
-        if self.runtime.state.is_observed() {
-            ctx.posted(neocogi_ui_core_contracts::events::activated().and_then(|event| self.runtime.state.post(event)));
-        }
+        ctx.posted(neocogi_ui_core_contracts::events::activated().and_then(|event| self.runtime.state.post(event)));
 
         // Submitting leaves the label and preferred dimensions unchanged.
         crate::Change::NoChange

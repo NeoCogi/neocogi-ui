@@ -422,7 +422,7 @@ impl Widget for Scrollbar {
             }
             _ => {}
         }
-        if self.offset() != previous && self.runtime.state.is_observed() {
+        if self.offset() != previous {
             // Publish only user-originated movement. Programmatic setters intentionally remain
             // silent so owners can synchronize range and offset without recursive notifications.
             ctx.posted(neocogi_ui_nodes_contracts::events::scrollbar_changed(self.offset()).and_then(|event| self.runtime.state.post(event)));

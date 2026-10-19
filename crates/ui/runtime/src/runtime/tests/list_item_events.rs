@@ -41,9 +41,9 @@ fn activate(driver: &crate::runtime::testing::OriginDriver, widget: &mut WeakCom
 
 }
 
-/// Absent receivers avoid all capture work, including the old intermediate label copy.
+/// Direct unobserved posting allocates one marker per occurrence, independent of label size.
 #[test]
-fn unobserved_list_item_activations_allocate_nothing() {
+fn unobserved_list_item_activations_allocate_only_their_marker() {
     let source = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
     let gfx = neocogi_ui_support::test_support::gfx_factory();
     let (runtime, driver) = crate::runtime::testing::create_runtime(source.as_com_ref(), gfx.as_com_ref()).unwrap();
@@ -62,8 +62,7 @@ fn unobserved_list_item_activations_allocate_nothing() {
             }
         }
         let count = measurement.finish();
-        assert_eq!(count.events, 0, "unobserved label {label:?}: {count:?}");
-        assert_eq!(count.bytes, 0);
+        assert_eq!(count.events, 300, "one marker per activation, label {label:?}: {count:?}");
     }
 }
 

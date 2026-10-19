@@ -155,7 +155,7 @@ Use `EventBindings::insert_queue` to observe selected keys. Non-reloading consum
 can supply `events::channel()` directly. No generated Rust is required for either path.
 The [walkthrough regression](../runtime/src/runtime/tests/documentation.rs)
 compiles these exact blocks with fresh generated fields and executes activation,
-captured-label reads, replacement and stale-event rejection. Run it with
+source-based commands, replacement and stale-event rejection. Run it with
 `cargo test --offline -p neocogi-ui-runtime --lib documented_form_reload`.
 
 ## Reload, ownership, and authored state

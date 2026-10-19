@@ -296,14 +296,12 @@ impl TextEditor {
         let font = ctx.skin().resolve_font(ctx.atlas(), &self.font);
         let outcome = textarea_update(ctx, input, self, font);
 
-        // Capture committed text/cursor once, only when a receiver exists.
-        if self.runtime.state.is_observed() {
-            if outcome.changed {
-                ctx.posted(neocogi_ui_core_contracts::events::text_changed(&self.buf, self.cursor as u64).and_then(|event| self.runtime.state.post(event)));
-            }
-            if outcome.submitted {
-                ctx.posted(neocogi_ui_core_contracts::events::text_submitted(&self.buf).and_then(|event| self.runtime.state.post(event)));
-            }
+        // Capture committed facts directly; absent destinations discard their owners.
+        if outcome.changed {
+            ctx.posted(neocogi_ui_core_contracts::events::text_changed(&self.buf, self.cursor as u64).and_then(|event| self.runtime.state.post(event)));
+        }
+        if outcome.submitted {
+            ctx.posted(neocogi_ui_core_contracts::events::text_submitted(&self.buf).and_then(|event| self.runtime.state.post(event)));
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
         crate::Change::from(outcome.changed)
@@ -1194,6 +1192,6 @@ mod tests {
 impl neocogi_ui_core_contracts::IWidgetDispatcher for TextArea {
     /// Promotes one already captured editor snapshot under the text-area origin.
     fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
-        self.events.dispatch_next(&self.runtime.state)
+        self.events.dispatch_next(&mut self.runtime.state)
     }
 }

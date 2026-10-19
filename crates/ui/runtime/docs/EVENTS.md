@@ -73,7 +73,8 @@ fn example(ui: &Ui, queue: ComRef<'_, IEventReceiverAbi>) -> Result<(), NcStatus
 }
 ```
 
-`textbox_unobserved(text)` permanently disables delivery and skips event allocation.
+`textbox_unobserved(text)` permanently disables delivery. User edits still construct
+their snapshots; mutable posting drops those owners immediately.
 The standard `events::channel()` helper receives `EventMessage` directly, with no
 widget-specific receiver implementation. A custom receiver may add an application
 envelope, but keeps the exclusive COM event until handling.
