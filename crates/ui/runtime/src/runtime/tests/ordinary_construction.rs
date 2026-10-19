@@ -29,7 +29,7 @@ fn fresh_window_capabilities_deliver_direct_closure_with_their_own_identity() {
         let message = messages.try_recv().expect("close delivers synchronously");
         let source = message.origin.service::<IWindowAbi>().unwrap().unwrap();
         assert!(source.same_object(&expected));
-        assert!(message.downcast::<IWindowDestroyedEventAbi>().unwrap().is_some());
+        assert!(message.query::<IWindowDestroyedEventAbi>().unwrap().is_some());
         drop(window);
         assert!(source.upgrade().unwrap().is_none(), "queued facts must not retain their source");
     }
@@ -56,7 +56,7 @@ fn fresh_popup_connects_dismissal_before_the_first_application_call() {
     let message = messages.try_recv().expect("hide delivers synchronously");
     let source = message.origin.service::<IPopupAbi>().unwrap().unwrap();
     assert!(source.same_object(&popup.downgrade().unwrap()));
-    assert!(message.downcast::<IPopupDismissedEventAbi>().unwrap().is_some());
+    assert!(message.query::<IPopupDismissedEventAbi>().unwrap().is_some());
     popup.close().unwrap();
     drop(popup);
     assert!(source.upgrade().unwrap().is_none());

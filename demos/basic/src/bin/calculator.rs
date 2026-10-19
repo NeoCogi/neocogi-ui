@@ -344,7 +344,7 @@ impl AppState for State {
     /// Consumes one command using exclusive access to the ordinary arithmetic model.
     fn update(&mut self, message: Self::Message) -> Result<(), NcStatus> {
         let Some(origin) = message.origin.widget::<ButtonAbi>()? else { return Ok(()); };
-        if !origin.is_alive() || message.downcast::<IActivatedEventAbi>()?.is_none() {
+        if !origin.is_alive() || message.query::<IActivatedEventAbi>()?.is_none() {
             return Ok(());
         }
         let Some((_, action)) = self.keys.iter().find(|(key, _)| key.same_object(&origin)) else {

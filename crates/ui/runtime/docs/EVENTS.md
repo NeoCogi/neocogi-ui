@@ -281,7 +281,7 @@ intent-posting API or a method on the widget itself. `IWidget` has no close meth
 
 ```rust,ignore
 if let Some(origin) = message.origin.service::<IWindowAbi>()? {
-    if message.downcast::<IWindowCloseRequestedEventAbi>()?.is_some() && may_discard_changes() {
+    if message.query::<IWindowCloseRequestedEventAbi>()?.is_some() && may_discard_changes() {
         if let Some(window) = origin.upgrade()? {
             window.close()?; // Parent approves; Drop completes here.
         }

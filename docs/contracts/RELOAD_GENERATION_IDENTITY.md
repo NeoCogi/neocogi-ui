@@ -106,7 +106,7 @@ before any lookup/query, then origin liveness and current component membership:
 
 ```rust,ignore
 if let Some(message) = message.event_for(&slot, "save")? {
-    if message.downcast::<IActivatedEventAbi>()?.is_some() {
+    if message.query::<IActivatedEventAbi>()?.is_some() {
         app.save()?;
     }
 }

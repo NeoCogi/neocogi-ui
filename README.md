@@ -202,7 +202,7 @@ impl MessageProcessor for Counter {
     /// This application ignores queued work from a removed button.
     fn handle(&mut self, message: EventMessage) -> Result<(), NcStatus> {
         let Some(origin) = message.origin.widget::<ButtonAbi>()? else { return Ok(()); };
-        if origin.is_alive() && message.downcast::<IActivatedEventAbi>()?.is_some() {
+        if origin.is_alive() && message.query::<IActivatedEventAbi>()?.is_some() {
             self.count += 1;
         }
         Ok(())

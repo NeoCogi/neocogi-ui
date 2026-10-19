@@ -90,7 +90,7 @@ fn observed_list_item_captures_each_label_without_retaining_its_source() {
         assert!(origin.same_object(row.as_interface()));
         row.set_text("later live label").unwrap();
         assert_eq!(
-            message.downcast::<IActivatedEventAbi>().unwrap().unwrap().label().unwrap().to_string().unwrap(),
+            message.query::<IActivatedEventAbi>().unwrap().unwrap().label().unwrap().to_string().unwrap(),
             label
         );
         assert!(messages.try_recv().is_err(), "exactly one fact per activation");
@@ -100,7 +100,7 @@ fn observed_list_item_captures_each_label_without_retaining_its_source() {
     for (message, label) in captured.iter().zip(labels) {
         assert!(!message.origin.widget::<ListItemAbi>().unwrap().unwrap().is_alive());
         assert_eq!(
-            message.downcast::<IActivatedEventAbi>().unwrap().unwrap().label().unwrap().to_string().unwrap(),
+            message.query::<IActivatedEventAbi>().unwrap().unwrap().label().unwrap().to_string().unwrap(),
             label
         );
     }

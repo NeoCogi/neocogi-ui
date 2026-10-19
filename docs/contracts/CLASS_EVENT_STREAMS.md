@@ -41,7 +41,7 @@ let textbox = ui.widgets().textbox_with_queue("", Some(queue.as_com_ref()))?;
 let app = Dispatcher::into_local(Dispatcher::new(processor, messages));
 ```
 
-A handler can query `message.downcast::<ITextChangedEventAbi>()?` and call the
+A handler can query `message.query::<ITextChangedEventAbi>()?` and call the
 returned projection's `text()` and `cursor()` methods. Unsupported interfaces
 return `None`; revision mismatches and provider failures remain errors. Rust
 handlers use `message.origin.widget::<TextboxAbi>()?` to query the weak origin
@@ -71,8 +71,8 @@ the handler after traversal returns. A failed post does not roll back committed
 widget edits. Producer convenience methods drop a rejected snapshot after
 reporting its status; a caller using the raw receiver API can retain or retry it.
 
-An exclusive widget caches a `WeakComBox` origin and releases its destination
-when its sole owner is destroyed. Weak projections cannot acquire ownership.
+An ordinary exclusive widget uses the runtime's owner-scoped origin and releases
+its destination when its sole owner is destroyed. Weak projections cannot acquire ownership.
 A shared-service `EventPort` additionally has a terminal close state:
 
 ```mermaid

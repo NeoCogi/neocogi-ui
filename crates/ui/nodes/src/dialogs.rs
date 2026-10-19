@@ -528,27 +528,27 @@ impl Model {
         // newer visible request.
         if let Some(origin) = event.origin.service::<IWindowAbi>()? {
             if origin.same_object(&self.window()?.downgrade()?) && self.request.active() {
-                let close = event.downcast::<IWindowCloseRequestedEventAbi>()?.is_some();
-                let hidden = event.downcast::<IWindowHiddenEventAbi>()?.is_some()
+                let close = event.query::<IWindowCloseRequestedEventAbi>()?.is_some();
+                let hidden = event.query::<IWindowHiddenEventAbi>()?.is_some()
                     && self.window()?.snapshot().is_ok_and(|s| s.visibility == Visibility::Hidden);
                 if close || hidden { self.finish(neocogi_ui_core_contracts::events::file_cancelled)?; }
             }
             return Ok(());
         }
         let command = if let Some(origin) = event.origin.widget::<neocogi_ui::ButtonAbi>()? {
-            if !origin.is_alive() || event.downcast::<IActivatedEventAbi>()?.is_none() { return Ok(()); }
+            if !origin.is_alive() || event.query::<IActivatedEventAbi>()?.is_none() { return Ok(()); }
             self.buttons.iter().find(|(control, _)| control.same_object(&origin)).map(|(_, action)| action.clone())
         } else if let Some(origin) = event.origin.widget::<neocogi_ui::ListItemAbi>()? {
-            if !origin.is_alive() || event.downcast::<IActivatedEventAbi>()?.is_none() { return Ok(()); }
+            if !origin.is_alive() || event.query::<IActivatedEventAbi>()?.is_none() { return Ok(()); }
             self.rows.iter().find(|(control, _)| control.same_object(&origin)).map(|(_, action)| action.clone())
         } else if let Some(origin) = event.origin.widget::<neocogi_ui::TextboxAbi>()? {
             if !origin.is_alive() { return Ok(()); }
             let is_path = origin.same_object(self.path.as_interface());
             let is_filename = origin.same_object(self.filename.as_interface());
             if !is_path && !is_filename { return Ok(()); }
-            if event.downcast::<ITextChangedEventAbi>()?.is_some() {
+            if event.query::<ITextChangedEventAbi>()?.is_some() {
                 Some(if is_path { Command::PathEdited } else { Command::FilenameEdited })
-            } else if let Some(submitted) = event.downcast::<ITextSubmittedEventAbi>()? {
+            } else if let Some(submitted) = event.query::<ITextSubmittedEventAbi>()? {
                 Some(if is_path { Command::Navigate(submitted.text()?.to_string()?) } else { Command::Accept })
             } else { None }
         } else { None };

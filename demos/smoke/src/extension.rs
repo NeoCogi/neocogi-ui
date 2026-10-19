@@ -22,10 +22,10 @@ impl events::MessageProcessor for Model {
         if !origin.same_object(&self.counter) {
             return Ok(());
         }
-        if let Some(event) = message.downcast::<IActivatedEventAbi>()? {
+        if let Some(event) = message.query::<IActivatedEventAbi>()? {
             self.labels.push(event.label()?.to_string()?);
             self.counter.set_count(100)?;
-        } else if let Some(event) = message.downcast::<ICounterChangedEventAbi>()? {
+        } else if let Some(event) = message.query::<ICounterChangedEventAbi>()? {
             self.labels.push(format!("count={}", event.value()?));
         }
         Ok(())

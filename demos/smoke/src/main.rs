@@ -25,7 +25,7 @@ impl events::MessageProcessor for ClickModel {
         if !origin.same_object(self.button.as_interface()) {
             return Ok(());
         }
-        let Some(event) = message.downcast::<IActivatedEventAbi>()? else { return Ok(()); };
+        let Some(event) = message.query::<IActivatedEventAbi>()? else { return Ok(()); };
         let label = event.label()?.to_string()?;
         self.count += 1;
         println!("button submitted: {label}");
@@ -308,11 +308,11 @@ impl events::MessageProcessor for ComponentModel {
     fn handle(&mut self, event: Self::Message) -> Result<(), NcStatus> {
         if let Some(origin) = event.origin.service::<IMenuItemAbi>()? {
             if origin.upgrade()?.is_none() { return Ok(()); }
-            let Some(event) = event.downcast::<IActivatedEventAbi>()? else { return Ok(()); };
+            let Some(event) = event.query::<IActivatedEventAbi>()? else { return Ok(()); };
             assert_eq!(event.label()?.to_string()?, "Menu command");
         } else if let Some(origin) = event.origin.widget::<IFileDialogAbi>()? {
             if !origin.is_alive() { return Ok(()); }
-            let Some(event) = event.downcast::<IFileAcceptedEventAbi>()? else { return Ok(()); };
+            let Some(event) = event.query::<IFileAcceptedEventAbi>()? else { return Ok(()); };
             assert_eq!(neocogi_ui::path::decode(event.path()?.as_com_ref())?, self.expected_path);
         } else { return Ok(()); }
         self.count += 1;

@@ -27,18 +27,23 @@ must enqueue during the producer call and defer application behavior until that
 call returns. Visual ancestry does not determine event routing.
 
 The Rust `EventMessage` holds this origin and the sole event owner. Its
-`downcast::<ConcreteEventAbi>()` queries a typed **weak projection** of the event:
-unsupported interfaces produce `Ok(None)`, while an ABI mismatch or other error
-remains an error. A successful projection is not another owner. Its methods
-return `NC_E_DROPPED` after the message's event owner is destroyed.
+`query::<ConcreteEventAbi>()` lends a typed **borrowed projection** tied to the
+message's owner. Unsupported interfaces produce `Ok(None)`; a revision mismatch
+remains an error. Getter failures propagate through ordinary COM calls. Querying
+adds no strong or weak reference and does not acquire an implementation borrow.
+Actual getter/mutable calls still use the provider's normal admission gate.
 
-An event owner outside an envelope uses the ordinary
-`event.query_weak::<ConcreteEventAbi>()` operation. It returns a weak projection
-or the original COM error, including `NC_E_NOINTERFACE` for an unsupported type.
-There is no free `downcast_event` function between these APIs. The envelope's
-`downcast` keeps the filtering policy, mapping only `NC_E_NOINTERFACE` to `None`;
-the same policy serves widget/service origin selection. Neither operation may
-hide an ABI mismatch by converting all query failures to absence.
+An event owner outside an envelope uses `event.query_ref::<ConcreteEventAbi>()`.
+It returns a borrowed view or the original COM error, including `NC_E_NOINTERFACE`
+for an unsupported type. The envelope alone maps that missing-interface status
+to `None`, preserving the same optional filtering policy used for weak origins.
+
+A caller intentionally retaining observation after the envelope disappears uses
+`event.query_weak::<ConcreteEventAbi>()`. That explicit operation retains weak
+storage; calls return `NC_E_DROPPED` after the sole event owner is destroyed.
+Borrowed views cannot escape their owner. Queued origins remain independently
+retained weak identities because they must survive producer removal. No free
+`downcast_event` adapter or compatibility alias exists.
 
 UI widgets ordinarily call `IWidgetHost::post_event(receiver, event)`. The owning
 runtime supplies the current origin before entering this generic receiver

@@ -17,7 +17,7 @@ impl MessageProcessor for Counter {
     /// may require a different policy: expiration does not erase captured facts.
     fn handle(&mut self, message: EventMessage) -> Result<(), NcStatus> {
         let Some(origin) = message.origin.widget::<ButtonAbi>()? else { return Ok(()); };
-        let Some(_activation) = message.downcast::<IActivatedEventAbi>()? else { return Ok(()); };
+        let Some(_activation) = message.query::<IActivatedEventAbi>()? else { return Ok(()); };
         if !origin.is_alive() {
             self.ignored += 1;
             return Ok(());

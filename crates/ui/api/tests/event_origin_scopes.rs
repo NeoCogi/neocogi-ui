@@ -41,7 +41,7 @@ fn nested_scopes_capture_in_post_order_and_restore_after_errors() {
         assert!(message.origin.widget::<IUnknown>().unwrap().unwrap().same_object(&expected.downgrade()));
         assert_eq!(
             message
-                .downcast::<neocogi_ui::IActivatedEventAbi>()
+                .query::<neocogi_ui::IActivatedEventAbi>()
                 .unwrap()
                 .unwrap()
                 .label()

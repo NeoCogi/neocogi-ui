@@ -155,8 +155,8 @@ fn constructor_queues_reject_invalid_payloads_before_recording() {
     for value in [snapshot::text_changed("é", 2).unwrap(), snapshot::text_submitted("é").unwrap()] {
         sink.post(neocogi_com::NcValueRef::new(&origin).unwrap(), value).unwrap();
     }
-    assert_eq!(receiver.try_recv().unwrap().downcast::<neocogi_ui::ITextChangedEventAbi>().unwrap().unwrap().cursor(), Ok(2));
-    assert_eq!(receiver.try_recv().unwrap().downcast::<neocogi_ui::ITextSubmittedEventAbi>().unwrap().unwrap().text().unwrap().to_string().unwrap(), "é");
+    assert_eq!(receiver.try_recv().unwrap().query::<neocogi_ui::ITextChangedEventAbi>().unwrap().unwrap().cursor(), Ok(2));
+    assert_eq!(receiver.try_recv().unwrap().query::<neocogi_ui::ITextSubmittedEventAbi>().unwrap().unwrap().text().unwrap().to_string().unwrap(), "é");
     assert_eq!(snapshot::numeric_changed(f32::INFINITY).unwrap_err(), NC_E_INVALID_ARG);
 
 }
@@ -219,14 +219,14 @@ fn one_application_queue_handles_two_widget_types_without_retaining_origins() {
     assert!(!text_origin.is_alive());
     let button_message = messages.try_recv().unwrap();
     let origin = button_message.origin.widget::<ButtonAbi>().unwrap().unwrap();
-    let event = button_message.downcast::<neocogi_ui::IActivatedEventAbi>().unwrap().unwrap();
+    let event = button_message.query::<neocogi_ui::IActivatedEventAbi>().unwrap().unwrap();
     assert!(origin.same_object(&button_origin));
     assert!(!origin.is_alive());
     assert_eq!(event.label().unwrap().to_string().unwrap(), "captured");
-    assert!(button_message.downcast::<neocogi_ui::ITextChangedEventAbi>().unwrap().is_none());
+    assert!(button_message.query::<neocogi_ui::ITextChangedEventAbi>().unwrap().is_none());
     let text_message = messages.try_recv().unwrap();
     let origin = text_message.origin.widget::<TextboxAbi>().unwrap().unwrap();
-    let event = text_message.downcast::<neocogi_ui::ITextChangedEventAbi>().unwrap().unwrap();
+    let event = text_message.query::<neocogi_ui::ITextChangedEventAbi>().unwrap().unwrap();
     assert!(origin.same_object(&text_origin));
     assert!(!origin.is_alive());
     assert_eq!(event.text().unwrap().to_string().unwrap(), "owned snapshot");
@@ -254,7 +254,7 @@ fn composite_queues_report_outer_origins_without_retaining_their_children() {
     let captured = message.origin.widget::<TextAreaAbi>().unwrap().unwrap();
     assert!(captured.same_object(&origin));
     assert!(!captured.is_alive());
-    assert_eq!(message.downcast::<neocogi_ui::ITextChangedEventAbi>().unwrap().unwrap().text().unwrap().to_string().unwrap(), "outer text");
+    assert_eq!(message.query::<neocogi_ui::ITextChangedEventAbi>().unwrap().unwrap().text().unwrap().to_string().unwrap(), "outer text");
 
     let root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let root_owner = root;
@@ -281,7 +281,7 @@ fn composite_queues_report_outer_origins_without_retaining_their_children() {
     let captured = message.origin.widget::<ComboAbi>().unwrap().unwrap();
     assert!(captured.same_object(&origin));
     assert!(!captured.is_alive());
-    let selection = message.downcast::<neocogi_ui::IChoiceChangedEventAbi>().unwrap().unwrap().selection().unwrap();
+    let selection = message.query::<neocogi_ui::IChoiceChangedEventAbi>().unwrap().unwrap().selection().unwrap();
     assert_eq!(selection, ChoiceSelection::Selected(1));
 }
 

@@ -54,19 +54,19 @@ impl AppState for State {
     /// Runtime calls application handlers only at its normal safe mutation boundary.
     fn update(&mut self, event: Self::Message) -> Result<(), NcStatus> {
         if let Some(origin) = event.origin.service::<IWindowAbi>()? {
-            if event.downcast::<IWindowCloseRequestedEventAbi>()?.is_some() {
+            if event.query::<IWindowCloseRequestedEventAbi>()?.is_some() {
                 if let Some(window) = origin.upgrade()? { window.set_visibility(Visibility::Hidden)?; }
             }
         } else if let Some(origin) = event.origin.service::<IMenuItemAbi>()? {
             if let Some(origin) = origin.upgrade()? {
-                if origin.as_com_ref().same_object(self.reload_item.as_interface()) && event.downcast::<IActivatedEventAbi>()?.is_some() {
+                if origin.as_com_ref().same_object(self.reload_item.as_interface()) && event.query::<IActivatedEventAbi>()?.is_some() {
                     if let Err(error) = self.reload() { eprintln!("Reload: {error}"); }
                 }
             }
         } else if let Some(origin) = event.origin.widget::<ButtonAbi>()? {
             if origin.is_alive() {
                 if let Some(component) = self.slot.component() {
-                    if origin.same_object(component.widget::<ButtonAbi>("save")?.as_interface()) && event.downcast::<IActivatedEventAbi>()?.is_some() {
+                    if origin.same_object(component.widget::<ButtonAbi>("save")?.as_interface()) && event.query::<IActivatedEventAbi>()?.is_some() {
                         self.saves += 1;
                         component.widget::<TextBlockAbi>("title")?.set_text(&format!("Save requested {} times", self.saves))?;
                     }

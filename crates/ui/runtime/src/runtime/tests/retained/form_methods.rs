@@ -128,7 +128,7 @@ fn generated_event_handler_uses_widget_methods_after_receiving_the_user_event() 
     let message = events.try_recv().unwrap();
     assert!(slot.accepts(message.generation));
     let event = message.event_for(&slot, "root").unwrap().unwrap();
-    assert!(event.downcast::<IActivatedEventAbi>().unwrap().is_some());
+    assert!(event.query::<IActivatedEventAbi>().unwrap().is_some());
     form.widget_root_0.set_label("Handled by application").unwrap();
     assert_eq!(form.widget_root_0.label().unwrap(), "Handled by application");
     assert!(matches!(events.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));

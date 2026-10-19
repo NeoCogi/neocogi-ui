@@ -579,7 +579,7 @@ fn real_lifecycle_cascade_is_deferred_until_each_consumer_returns() {
     let window = ui.window_with_queue("cascade", RECT, button, Some(queue.as_com_ref())).unwrap();
     window.set_visibility(Visibility::Hidden).unwrap();
     let app = TestApp::new((0, window.clone()), events, |(observed, window), event| {
-        if event.downcast::<IWindowHiddenEventAbi>()?.is_some() {
+        if event.query::<IWindowHiddenEventAbi>()?.is_some() {
             *observed += 1;
             if *observed < 3 {
                 window.set_visibility(Visibility::Visible)?;

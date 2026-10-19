@@ -62,7 +62,7 @@ impl AppState for State {
     /// Approves this demo's close request after the caption handler has returned.
     fn update(&mut self, message: Self::Message) -> Result<(), neocogi_com::NcStatus> {
         let Some(origin) = message.origin.service::<IWindowAbi>()? else { return Ok(()); };
-        if message.downcast::<IWindowCloseRequestedEventAbi>()?.is_some() {
+        if message.query::<IWindowCloseRequestedEventAbi>()?.is_some() {
             if let Some(window) = origin.upgrade()? { window.close()?; }
         }
         Ok(())

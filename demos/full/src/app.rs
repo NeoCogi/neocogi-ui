@@ -410,18 +410,18 @@ impl State {
 
     /// Preserves manager-owned minimize/maximize/restore rectangles and clamps only ordinary geometry.
     fn window_changed(&mut self, message: &neocogi_com::events::EventMessage) -> Result<(), NcStatus> {
-        let (mut area, clamp) = if let Some(event) = message.downcast::<IWindowGeometryChangedEventAbi>()? {
+        let (mut area, clamp) = if let Some(event) = message.query::<IWindowGeometryChangedEventAbi>()? {
             (event.rect()?, !self.minimized)
-        } else if message.downcast::<IWindowMinimizedEventAbi>()?.is_some() {
+        } else if message.query::<IWindowMinimizedEventAbi>()?.is_some() {
             self.minimized = true;
             return self.write_log("Minimized Demo Window");
-        } else if let Some(event) = message.downcast::<IWindowMaximizedEventAbi>()? {
+        } else if let Some(event) = message.query::<IWindowMaximizedEventAbi>()? {
             self.minimized = false;
             (event.rect()?, false)
-        } else if let Some(event) = message.downcast::<IWindowRestoredEventAbi>()? {
+        } else if let Some(event) = message.query::<IWindowRestoredEventAbi>()? {
             self.minimized = false;
             (event.rect()?, false)
-        } else if message.downcast::<IWindowCloseRequestedEventAbi>()?.is_some() {
+        } else if message.query::<IWindowCloseRequestedEventAbi>()?.is_some() {
             self.demo.set_visibility(Visibility::Hidden)?;
             return self.write_log("Closed Demo Window; use Grid > Show Demo Window to restore it");
         } else { return Ok(()); };
@@ -812,26 +812,26 @@ impl State {
         match &message.origin {
             EventOrigin::Widget(origin) if origin.is_alive() => {
                 if let Some(action) = self.inputs.buttons.iter().find(|(control, _)| control.same_object(origin)).map(|(_, action)| *action) {
-                    if let Some(event) = message.downcast::<IActivatedEventAbi>()? { self.activate(action, &event.label()?.to_string()?)?; }
+                    if let Some(event) = message.query::<IActivatedEventAbi>()? { self.activate(action, &event.label()?.to_string()?)?; }
                 } else if let Some(target) = self.inputs.sliders.iter().find(|(control, _)| control.same_object(origin)).map(|(_, target)| *target) {
-                    if let Some(event) = message.downcast::<INumericChangedEventAbi>()? {
+                    if let Some(event) = message.query::<INumericChangedEventAbi>()? {
                         let value = event.value()?;
                         if !value.is_finite() { return Err(NC_E_INVALID_ARG); }
                         self.command(target.message(value))?;
                     }
                 } else if origin.same_object(self.entry.as_interface()) {
-                    if let Some(event) = message.downcast::<ITextSubmittedEventAbi>()? { self.text_submitted(&event.text()?.to_string()?)?; }
+                    if let Some(event) = message.query::<ITextSubmittedEventAbi>()? { self.text_submitted(&event.text()?.to_string()?)?; }
                 } else if origin.same_object(self.combo.as_interface()) {
-                    if let Some(event) = message.downcast::<IChoiceChangedEventAbi>()? { self.choice_changed(&event.selection()?)?; }
+                    if let Some(event) = message.query::<IChoiceChangedEventAbi>()? { self.choice_changed(&event.selection()?)?; }
                 } else if self.file_dialog.as_ref().is_some_and(|dialog| origin.same_object(dialog.as_interface())) {
-                    if let Some(event) = message.downcast::<IFileAcceptedEventAbi>()? {
+                    if let Some(event) = message.query::<IFileAcceptedEventAbi>()? {
                         self.file_selected(Some(neocogi_ui::path::decode(event.path()?.as_com_ref())?))?;
-                    } else if message.downcast::<IFileCancelledEventAbi>()?.is_some() { self.file_selected(None)?; }
+                    } else if message.query::<IFileCancelledEventAbi>()?.is_some() { self.file_selected(None)?; }
                 }
             }
             EventOrigin::Service(origin) if origin.upgrade()?.is_some() => {
                 if let Some(action) = self.inputs.menus.iter().find(|(control, _)| control.same_object(origin)).map(|(_, action)| *action) {
-                    if let Some(event) = message.downcast::<IActivatedEventAbi>()? { self.activate(action, &event.label()?.to_string()?)?; }
+                    if let Some(event) = message.query::<IActivatedEventAbi>()? { self.activate(action, &event.label()?.to_string()?)?; }
                 } else if origin.same_object(&self.demo.downgrade()?) { self.window_changed(message)?; }
             }
             _ => {}

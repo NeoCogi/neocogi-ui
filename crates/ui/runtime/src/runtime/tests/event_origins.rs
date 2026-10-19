@@ -77,7 +77,7 @@ fn dispatch_scopes_are_per_runtime_and_restore_after_success_and_failure() {
         window.close().unwrap();
         assert!(!message.origin.widget::<IWidgetAbi>().unwrap().unwrap().is_alive());
         assert_eq!(
-            message.downcast::<IActivatedEventAbi>().unwrap().unwrap().label().unwrap().to_string().unwrap(),
+            message.query::<IActivatedEventAbi>().unwrap().unwrap().label().unwrap().to_string().unwrap(),
             "dispatch"
         );
     }
@@ -114,7 +114,7 @@ fn text_area_captures_public_identity_and_order_from_its_private_editor() {
         assert!(message.origin.widget::<TextAreaAbi>().unwrap().unwrap().same_object(observer.as_interface()));
         assert_eq!(
             message
-                .downcast::<ITextChangedEventAbi>()
+                .query::<ITextChangedEventAbi>()
                 .unwrap()
                 .unwrap()
                 .text()
@@ -128,7 +128,7 @@ fn text_area_captures_public_identity_and_order_from_its_private_editor() {
     assert!(!messages[0].origin.widget::<TextAreaAbi>().unwrap().unwrap().is_alive());
     assert_eq!(
         messages[0]
-            .downcast::<ITextChangedEventAbi>()
+            .query::<ITextChangedEventAbi>()
             .unwrap()
             .unwrap()
             .text()

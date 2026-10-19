@@ -139,7 +139,7 @@ identity before querying the concrete event:
 ```rust,ignore
 for envelope in receiver.try_iter() {
     if let Some(message) = envelope.event_for(&slot, "save")? {
-        if let Some(event) = message.downcast::<IActivatedEventAbi>()? {
+        if let Some(event) = message.query::<IActivatedEventAbi>()? {
             form.widget_title_1.set_text(&event.label()?.to_string()?)?;
         }
     }

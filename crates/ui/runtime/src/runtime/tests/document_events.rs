@@ -92,18 +92,18 @@ fn shared_document_receiver_rejects_foreign_and_replaced_forms_before_dispatch()
         if let Some(event) = message.event_for(&slot, "first").unwrap() {
             observed.push((
                 1,
-                event.downcast::<IActivatedEventAbi>().unwrap().unwrap().label().unwrap().to_string().unwrap(),
+                event.query::<IActivatedEventAbi>().unwrap().unwrap().label().unwrap().to_string().unwrap(),
             ));
             form.widget_first_1.set_label("handled first").unwrap();
         } else if let Some(event) = message.event_for(&slot, "second").unwrap() {
             observed.push((
                 2,
-                event.downcast::<IActivatedEventAbi>().unwrap().unwrap().label().unwrap().to_string().unwrap(),
+                event.query::<IActivatedEventAbi>().unwrap().unwrap().label().unwrap().to_string().unwrap(),
             ));
         } else if let Some(event) = message.event_for(&slot, "text").unwrap() {
             observed.push((
                 3,
-                event.downcast::<ITextChangedEventAbi>().unwrap().unwrap().text().unwrap().to_string().unwrap(),
+                event.query::<ITextChangedEventAbi>().unwrap().unwrap().text().unwrap().to_string().unwrap(),
             ));
         }
     }

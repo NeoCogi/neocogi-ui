@@ -640,14 +640,14 @@ mod placement_tests {
             window.set_visibility(Visibility::Hidden).unwrap();
             let found = events
                 .try_iter()
-                .any(|message| message.origin.service::<IWindowAbi>().unwrap().unwrap().same_object(&origins[index]) && message.downcast::<IWindowHiddenEventAbi>().unwrap().is_some());
+                .any(|message| message.origin.service::<IWindowAbi>().unwrap().unwrap().same_object(&origins[index]) && message.query::<IWindowHiddenEventAbi>().unwrap().is_some());
             assert!(found, "placement {index} must identify its own visibility event");
             window.set_visibility(Visibility::Visible).unwrap();
         }
         root.close().unwrap();
         let closed: Vec<_> = events
             .try_iter()
-            .filter_map(|message| message.downcast::<IWindowDestroyedEventAbi>().unwrap().map(|_| message.origin.service::<IWindowAbi>().unwrap().unwrap()))
+            .filter_map(|message| message.query::<IWindowDestroyedEventAbi>().unwrap().map(|_| message.origin.service::<IWindowAbi>().unwrap().unwrap()))
             .collect();
         assert_eq!(closed.len(), 3);
         assert!(closed.iter().any(|origin| origin.same_object(&origins[0])));

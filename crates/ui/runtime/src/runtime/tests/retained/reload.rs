@@ -766,13 +766,13 @@ fn textbox_enum_stream_drives_form_action_and_public_sink() {
     fixture.frame(VIEW).unwrap();
     assert_eq!(preview.text().unwrap(), "");
     let message = events.try_recv().unwrap();
-    let value = message.downcast::<ITextChangedEventAbi>().unwrap().expect("edit arrives before submit");
+    let value = message.query::<ITextChangedEventAbi>().unwrap().expect("edit arrives before submit");
     assert_eq!(value.cursor(), Ok(3));
     preview.set_text(&value.text().unwrap().to_string().unwrap()).unwrap();
     assert_eq!(preview.text().unwrap(), "Ada");
     key(&fixture.ui, KeyCode::Enter, 0, 0);
     fixture.frame(VIEW).unwrap();
-    assert_eq!(events.try_recv().unwrap().downcast::<ITextSubmittedEventAbi>().unwrap().unwrap().text().unwrap().to_string().unwrap(), "Ada");
+    assert_eq!(events.try_recv().unwrap().query::<ITextSubmittedEventAbi>().unwrap().unwrap().text().unwrap().to_string().unwrap(), "Ada");
 }
 
 /// Constructor tables reject ambiguous ownership and nonobservable keys before publication.

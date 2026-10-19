@@ -318,7 +318,7 @@ fn title_drag_and_close_deliver_window_events_through_the_production_session() {
     let moved = owner.snapshot().unwrap().rect;
     assert_eq!((moved.x, moved.y, moved.width, moved.height), (40, 38, 180, 120));
     assert_eq!(app.state().len(), 1);
-    assert_eq!(app.state()[0].downcast::<IWindowGeometryChangedEventAbi>().unwrap().unwrap().rect(), Ok(moved));
+    assert_eq!(app.state()[0].query::<IWindowGeometryChangedEventAbi>().unwrap().unwrap().rect(), Ok(moved));
     // The default recipe puts its sole caption control at the trailing edge of the title.
     pointer(
         &fixture.ui,
@@ -341,8 +341,8 @@ fn title_drag_and_close_deliver_window_events_through_the_production_session() {
     // mutation is manufactured by the caption control itself.
     assert_eq!(owner.snapshot().unwrap().visibility, Visibility::Visible);
     assert_eq!(app.state().len(), 2);
-    assert!(app.state()[0].downcast::<IWindowGeometryChangedEventAbi>().unwrap().is_some());
-    assert!(app.state()[1].downcast::<IWindowCloseRequestedEventAbi>().unwrap().is_some());
+    assert!(app.state()[0].query::<IWindowGeometryChangedEventAbi>().unwrap().is_some());
+    assert!(app.state()[1].query::<IWindowCloseRequestedEventAbi>().unwrap().is_some());
     assert!(body.label().is_ok());
 }
 
@@ -514,7 +514,7 @@ fn caption_close_obeys_the_parents_explicit_decision() {
         let window = fixture.ui.window_with_queue("close policy", Rect { x: 30, y: 30, width: 180, height: 120 }, body_owner, Some(queue.as_com_ref())).unwrap();
         fixture.frame(VIEW).unwrap();
         let app = TestApp::new((window.clone(), decision), messages, |(window, decision), event| {
-            if event.downcast::<IWindowCloseRequestedEventAbi>()?.is_none() { return Ok(()); }
+            if event.query::<IWindowCloseRequestedEventAbi>()?.is_none() { return Ok(()); }
             match *decision {
                 CaptionDecision::Keep => Ok(()),
                 CaptionDecision::Fail => Err(neocogi_com::NC_E_INVALID_ARG),
