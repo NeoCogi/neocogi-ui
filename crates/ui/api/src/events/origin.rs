@@ -61,6 +61,12 @@ struct OriginScope<'a>(&'a EventOriginOwner);
 impl Drop for OriginScope<'_> {
     /// Removes exactly this frame during normal return and Rust unwinding.
     fn drop(&mut self) {
-        self.0.origins.borrow_mut().pop();
+        // Removing a final weak origin can call its provider's deallocator.
+        // End the stack mutation borrow before that foreign cleanup can reenter.
+        let removed = self.0.origins.borrow_mut().pop();
+        drop(removed);
     }
 }
+
+#[cfg(test)]
+mod tests;

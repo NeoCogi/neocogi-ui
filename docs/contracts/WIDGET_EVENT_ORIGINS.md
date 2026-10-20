@@ -78,6 +78,9 @@ escaping guards are deliberately absent.
 
 A short `RefCell` borrow is required because posting and synchronous nested
 owner calls share the authority. No stack borrow spans receiver or widget code.
+Scope cleanup first removes its origin and ends that borrow, then releases the
+removed weak token. Final weak release may invoke a provider deallocator that
+reenters this owner; it observes the enclosing sender or the ordinary idle error.
 The vector retains capacity after a call; allocation failure when entering a new
 frame returns `NC_E_OUT_OF_MEMORY` before entering the widget.
 
