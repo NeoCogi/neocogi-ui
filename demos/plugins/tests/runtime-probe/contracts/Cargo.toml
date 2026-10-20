@@ -1,0 +1,17 @@
+[package]
+name = "neocogi-runtime-probe-contracts"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+links = "nc_contract_6e632e74657374732e72656769737472795f70726f6265"
+
+[package.metadata.neocogi-contract]
+module = "nc.tests.registry_probe"
+source = "idl/nc/tests/registry_probe"
+
+[dependencies]
+neocogi-com = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "a973547f0c7e986e15a2fdb1da0c0cc6fd74aa5d", default-features = false }
+
+[build-dependencies]
+neocogi-idl = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "a973547f0c7e986e15a2fdb1da0c0cc6fd74aa5d" }

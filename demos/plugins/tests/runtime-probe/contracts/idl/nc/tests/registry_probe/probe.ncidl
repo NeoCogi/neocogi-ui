@@ -1,0 +1,8 @@
+#[version(1)]
+/// Observes and changes runtime registration from inside a separately loaded DLL.
+interface IRegistryProbe {
+    /// Reads the one process catalog through the DLL's facade.
+    fn catalog_len(&self) -> Result<u32>;
+    /// Registers process-lived metadata inside the same runtime as the host.
+    fn publish_marker(&self) -> Result<()>;
+}
