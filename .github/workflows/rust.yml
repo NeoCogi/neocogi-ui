@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: cargo test -p neocogi-ui-runtime -p neocogi-ui-nodes -p neocogi-ui-support
-      - run: cargo test -p neocogi-ui -p neocogi-ui-core-contracts -p neocogi-ui-nodes-contracts -p neocogi-ui-document --features neocogi-ui/static-runtime
+      - run: cargo test -p neocogi-ui -p neocogi-ui-core-contracts -p neocogi-ui-nodes-contracts -p neocogi-ui-document --features neocogi-com/runtime
 
   assets:
     runs-on: ubuntu-latest
@@ -85,7 +85,7 @@ jobs:
       - uses: actions/checkout@v6
       - run: rustup toolchain install nightly --profile minimal
       - name: Local ABI, compile cases, inspector and static runtime selection
-        run: cargo test -p neocogi-com-core -p neocogi-com-macros -p neocogi-com-runtime -p neocogi-inspect -p neocogi-com --features neocogi-com/static-runtime
+        run: cargo test -p neocogi-com-core -p neocogi-com-macros -p neocogi-com-runtime -p neocogi-inspect -p neocogi-com --features neocogi-com/runtime
       # A debug-only overflow assertion previously let optimized retain return
       # uncounted owners. Exercise the boundary and real C entrypoints in release too.
       - name: Strong-only ownership limits with debug assertions disabled
@@ -190,7 +190,7 @@ jobs:
       - name: Relocated host and independent plugin share the runtime
         run: cargo test -p neocogi-demo-plugins -p neocogi-ui-support --test shared_runtime --features neocogi-demo-plugins/glow,neocogi-demo-plugins/skin,neocogi-demo-plugins/extension
       - name: Platform-neutral contracts and facade behavior
-        run: cargo test -p neocogi-ui-core-contracts -p neocogi-ui --features neocogi-ui/static-runtime
+        run: cargo test -p neocogi-ui-core-contracts -p neocogi-ui --features neocogi-com/runtime
 
   browser:
     runs-on: ubuntu-latest

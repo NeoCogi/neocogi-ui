@@ -45,7 +45,7 @@ the IID, signature, and getter fields across COM. Catalog admission checks ident
 duplicates, field types, finite graphs and size limits. Event signatures negotiate
 against actual event objects at query time; the constructor receiver remains common.
 
-Event references contribute to canonical module signatures (encoding v11). They
+Event references contribute to canonical module signatures (encoding v12). They
 are semantic dependencies, not widget vtable inheritance. A bare template event
 parameter uses its binder position; a qualified free reference uses its declaration
 identity. Both cases carry explicit tags, and parameter renames preserve signatures. Changing event declarations
