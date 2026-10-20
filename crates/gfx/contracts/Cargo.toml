@@ -15,7 +15,7 @@ module = "neocogi.gfx"
 source = "idl/neocogi/gfx"
 
 [dependencies]
-neocogi-com = { workspace = true, features = ["macros"] }
+neocogi-com = { workspace = true }
 neocogi-renderer-contracts.workspace = true
 neocogi-platform-contracts.workspace = true
 

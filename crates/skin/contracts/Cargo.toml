@@ -15,7 +15,7 @@ module = "neocogi.skin"
 source = "idl/neocogi/skin"
 
 [dependencies]
-neocogi-com = { workspace = true, features = ["macros"] }
+neocogi-com = { workspace = true }
 neocogi-gfx-contracts.workspace = true
 neocogi-platform-contracts.workspace = true
 
