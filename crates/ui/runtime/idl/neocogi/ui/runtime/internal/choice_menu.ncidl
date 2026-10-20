@@ -60,4 +60,3 @@ interface IChoiceMenuState {
     /// Ends event delivery and requests permanent private-popup removal.
     fn retire(&mut self) -> Result<()>;
 }
-

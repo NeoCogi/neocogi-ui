@@ -10,5 +10,5 @@ crate-type = ["cdylib"]
 dynamic-plugin = []
 [dependencies]
 neocogi-runtime-probe-contracts = { path = "contracts" }
-neocogi-com = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "a973547f0c7e986e15a2fdb1da0c0cc6fd74aa5d", features = ["runtime"] }
-neocogi-native-runtime-link = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "a973547f0c7e986e15a2fdb1da0c0cc6fd74aa5d" }
+neocogi-com = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "ce3f66fab6082bbb3d539ef29ce16ee7472378bd", features = ["runtime"] }
+neocogi-native-runtime-link = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "ce3f66fab6082bbb3d539ef29ce16ee7472378bd" }
