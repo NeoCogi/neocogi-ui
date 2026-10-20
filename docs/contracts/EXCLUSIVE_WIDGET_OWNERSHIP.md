@@ -59,8 +59,8 @@ Use `#[com_object(Button, ownership = exclusive)]` (or the same option on
 `com_object`) for widgets and other unique owners. Shared services use the default
 `ownership = shared`. These are separate concrete implementation policies;
 an interface does not determine ownership. A class cannot expose both constructor
-families. `com_object` rejects exclusive ownership because factory handles are
-shared services.
+families. Typed plugin root acquisition returns a shared `ComPtr`; that bootstrap
+requirement does not restrict ordinary widgets or other exclusive classes.
 
 Shared classes use their existing strong count and borrow gate. Exclusive classes
 use one atomic header word for owner presence and reader/writer access, followed

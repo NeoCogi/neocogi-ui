@@ -2,6 +2,11 @@
 
 ## 0.0.0 (unreleased)
 
+- Reconcile open work through the direct-event implementation and consolidate
+  the COM/event adversarial assessments. Remove resolved COM9 and documentation
+  cleanup O1/O4 from the active backlog; retain original reviews in Git and keep
+  unrelated runtime/compiler findings and validation limits explicit.
+
 - Simplify event production to mutable `post(event)` with direct native update
   errors. Remove observation guards and the update context's saved error bridge;
   unobserved events are constructed and immediately discarded. Preserve committed
