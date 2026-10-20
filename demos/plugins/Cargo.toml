@@ -21,7 +21,7 @@ neocogi-native-layout.workspace = true
 neocogi-com = { workspace = true, features = ["runtime"] }
 ui-library = { package = "neocogi-ui-runtime", path = "../../crates/ui/runtime", artifact = "cdylib", features = ["dynamic-plugin"] }
 nodes-library = { package = "neocogi-ui-nodes", path = "../../crates/ui/nodes", artifact = "cdylib", features = ["dynamic-plugin"] }
-render-library = { package = "neocogi-render-plugin", git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "4446b232f8d0073def3e27679e1f7dd79cd97745", artifact = "cdylib", default-features = false, features = ["dynamic-plugin"] }
+render-library = { package = "neocogi-render-plugin", git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "f6812ee0afc51c306a0ea4d2914da17d90e72ca3", artifact = "cdylib", default-features = false, features = ["dynamic-plugin"] }
 gfx-library = { package = "neocogi-gfx", path = "../../crates/gfx/plugin", artifact = "cdylib", default-features = false, features = ["dynamic-plugin", "builder"] }
 skin-library = { package = "neocogi-skin", path = "../../crates/skin/plugin", artifact = "cdylib", default-features = false, features = ["dynamic-plugin", "theme-json"], optional = true }
 extension-library = { package = "neocogi-example-ui-extension", path = "../../examples/ui-extension", artifact = "cdylib", features = ["dynamic-plugin"], optional = true }

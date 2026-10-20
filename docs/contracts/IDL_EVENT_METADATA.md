@@ -16,7 +16,7 @@ use neocogi.com.events::{IEvent, EventBinding};
 }
 ```
 
-The attribute accepts one nonempty list on an interface, class or factory.
+The attribute accepts one nonempty list on an interface.
 Each entry resolves to an interface derived from the canonical
 `neocogi.com.events.IEvent`. Imported and closed generic interfaces are supported.
 Duplicate identities are rejected. Every getter, including inherited getters,

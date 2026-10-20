@@ -28,12 +28,11 @@ fn acquire() -> Result<ComPtr<IRegistryProbeAbi>, NcStatus> {
 
 /// Process-lived marker metadata using the probe's exact acquisition contract.
 mod marker {
-    use super::*;
     /// Static descriptor is pinned together with this DLL's root registration.
     static DESCRIPTOR: neocogi_com::NcPluginDescriptor = neocogi_com::NcPluginDescriptor {
         plugin_id: neocogi_com::guid_from_qualified_name("nc.tests.cargo.marker"),
         qualified_name: neocogi_com::NcStaticUtf8::from_static("nc.tests.cargo.marker"),
-        ..NC_COM_PLUGIN_DESCRIPTOR
+        ..*super::plugin_descriptor()
     };
     /// Lends marker metadata without acquiring an object.
     pub(super) fn plugin_descriptor() -> &'static neocogi_com::NcPluginDescriptor {
