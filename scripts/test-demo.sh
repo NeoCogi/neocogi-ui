@@ -13,3 +13,6 @@ NEOCOGI_DEMO_FRAMES=3 cargo run -p neocogi-demo-full --no-default-features --fea
 cargo test -p neocogi-demo-full --lib --no-default-features --features "$features" \
     --config "target.'cfg(any(unix, windows))'.runner = ['python3', '$PWD/scripts/run-native-test.py']" \
     -- --include-ignored --test-threads=1
+# Exercise shader inputs and actual pixels as well as the application's COM/UI integration.
+cargo test -p neocogi-render-mesh --lib --no-default-features --features "$backend" \
+    -- --include-ignored --test-threads=1
