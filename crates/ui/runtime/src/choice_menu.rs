@@ -3,45 +3,13 @@
 //! The root forest stores only generic menu surfaces and popup ownership. This module connects
 //! one public header, one authoritative typed state, and one private choice-popup definition.
 
-
 use crate::menu::{Menu, MenuEntry};
 use crate::window_manager::{PopupHandle, SurfaceMutationError, WindowManager};
-use neocogi_com::{
-    ComPtr, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcOutputWriter, NcStatus, NcString, NC_E_INVALID_ARG, com_int_enum, com_interface,
-    com_object,
-};
-use neocogi_ui_core_contracts::{
-    ChoiceMenuEntry, ChoiceSelection, IChoiceMenu, IChoiceMenuAbi, IChoiceMenuVtblFor, MenuTextRange, Rect,
-};
+use neocogi_com::{ComPtr, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcOutputWriter, NcStatus, NcString, NC_E_INVALID_ARG, com_object};
+use neocogi_ui_core_contracts::{ChoiceMenuEntry, ChoiceSelection, IChoiceMenu, IChoiceMenuAbi, IChoiceMenuVtblFor, MenuTextRange, Rect};
 
 /// Maximum accepted branch nesting, keeping foreign preorder input bounded on the native stack.
 const MAX_CHOICE_MENU_DEPTH: usize = 32;
-
-com_int_enum! {
-    /// Header intent understood only by the private choice menu state machine.
-    pub(crate) enum ChoicePopupIntent: u8 {
-        /// Toggle the current popup intent after ordinary pointer, Enter, or Space activation.
-        Toggle = 0,
-        /// Request opening without closing an already-open popup.
-        Open = 1,
-        /// Request closure without opening a currently closed popup.
-        Close = 2,
-    }
-}
-
-com_int_enum! {
-    /// Concrete operation returned to the runtime-level choice menu coordinator.
-    pub(crate) enum ChoicePopupAction: u8 {
-        /// Popup visibility already agrees with semantic intent.
-        None = 0,
-        /// Prepare and show the ordinary widget popup at the retained anchor.
-        Open = 1,
-        /// Hide the ordinary widget popup without changing selection.
-        Close = 2,
-        /// Permanently remove the private popup because its header retired.
-        Remove = 3,
-    }
-}
 
 /// Complete private popup lifecycle; every transition is centralized in [`ChoiceMenuState`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -60,44 +28,12 @@ enum ChoicePopupLifecycle {
     Detached,
 }
 
-#[com_interface(
-    auto_guid = "neocogi.ui.runtime.internal.ChoiceMenuState:v1",
-    assigned_signature = b"00000000000000000000000000000051"
-)]
-/// Runtime-private typed access to one authoritative choice menu model.
-pub(crate) trait IChoiceMenuState {
-    /// Returns a revision changed by hierarchy labels or committed selection.
-    fn revision(&self) -> Result<u64, NcStatus>;
-    /// Returns the explicit optional committed leaf identity.
-    fn selection(&self) -> Result<ChoiceSelection, NcStatus>;
-    /// Copies the hierarchy's shared UTF-8 storage for rebuilding its menu projection.
-    fn menu_text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus>;
-    /// Copies a requested preorder entry range and returns the complete entry count.
-    fn menu_entries(&self, output: NcOutputWriter<'_, ChoiceMenuEntry>) -> Result<u32, NcStatus>;
-    /// Returns the number of retained display labels.
-    fn choice_count(&self) -> Result<u64, NcStatus>;
-    /// Copies one exact display label after strict range validation.
-    fn choice_label(&self, ordinal: u64) -> Result<ComPtr<INcStringAbi>, NcStatus>;
-    /// Atomically replaces every label and the explicit optional selection.
-    fn replace_menu(
-        &mut self,
-        menu_text: NcCopyFromBufferOffset<'_, u8>,
-        entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntry>,
-        selection: ChoiceSelection,
-    ) -> Result<bool, NcStatus>;
-    /// Silently replaces the optional committed selection without clamping.
-    fn set_selection(&mut self, selection: ChoiceSelection) -> Result<bool, NcStatus>;
-    /// Applies one typed header intent and captures a valid screen-space anchor when opening.
-    fn request_popup(&mut self, intent: ChoicePopupIntent, anchor: Rect) -> Result<(), NcStatus>;
-    /// Reconciles semantic lifecycle with actual generic-popup visibility.
-    fn reconcile_popup(&mut self, visible: bool) -> Result<ChoicePopupAction, NcStatus>;
-    /// Returns the most recently captured header-bottom anchor.
-    fn popup_anchor(&self) -> Result<Rect, NcStatus>;
-    /// Commits one user choice, publishes a changed snapshot, and requests popup closure.
-    fn submit(&mut self, id: u64) -> Result<u64, NcStatus>;
-    /// Ends event delivery and requests permanent private-popup removal.
-    fn retire(&mut self) -> Result<(), NcStatus>;
+/// Complete runtime-private bindings compiled from the local IDL contract.
+#[allow(dead_code, unused_imports)]
+mod bindings {
+    include!(concat!(env!("OUT_DIR"), "/neocogi_ui_runtime_internal.rs"));
 }
+pub(crate) use bindings::{ChoicePopupAction, ChoicePopupIntent, IChoiceMenuState, IChoiceMenuStateAbi, IChoiceMenuStateVtblFor};
 
 #[com_object(interfaces(IChoiceMenuState, IChoiceMenu))]
 /// Plain authoritative choice menu state mutated exclusively through `IChoiceMenuState`'s mutable receiver.
@@ -308,7 +244,8 @@ impl IChoiceMenuState for ChoiceMenuState {
         };
         // Commit the complete popup transition before entering even a pure mapper.
         if changed {
-            self.changed_event.post(neocogi_ui_core_contracts::events::choice_changed(ChoiceSelection::Selected(id))?)?;
+            self.changed_event
+                .post(neocogi_ui_core_contracts::events::choice_changed(ChoiceSelection::Selected(id))?)?;
         }
         Ok(self.revision)
     }
@@ -575,10 +512,7 @@ fn ranged_text(text: &str, range: MenuTextRange) -> Option<&str> {
 
 /// Counts selectable leaves without creating a parallel flattened collection.
 fn choice_count(entries: &[ChoiceMenuEntry]) -> usize {
-    entries
-        .iter()
-        .filter(|entry| matches!(entry, ChoiceMenuEntry::Choice { .. }))
-        .count()
+    entries.iter().filter(|entry| matches!(entry, ChoiceMenuEntry::Choice { .. })).count()
 }
 
 /// Resolves one preorder leaf ordinal directly from the authoritative serialized entries.

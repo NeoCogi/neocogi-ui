@@ -141,7 +141,7 @@ pub fn document_receiver(generation: crate::Generation, sender: std::sync::mpsc:
 mod tests {
     //! Receiver capture executes through the real document consumer and generated ABI.
     use super::*;
-    use neocogi_com::{com_interface, com_object, ComBox, ComRef, NcValueRef};
+    use neocogi_com::{com_object, ComBox, ComRef, NcValueRef};
     use neocogi_com::events::{EventOrigin, IEventAbi, IEventReceiver};
 
     #[com_object(::neocogi_com::events::IEventReceiver, ownership = exclusive)]
@@ -153,12 +153,7 @@ mod tests {
         }
     }
 
-    #[com_interface(auto_guid = "nc.tests.document.ReceiverCapture:v1", assigned_signature = b"00000000000000000000000000000642")]
-    /// Tests the caller's status across an extern-C boundary, not only a Rust method.
-    trait IRetainer {
-        /// Adds a concrete document binding while propagating retention rejection.
-        fn install(&mut self, queue: ComRef<'_, IEventReceiverAbi>) -> Result<(), NcStatus>;
-    }
+    neocogi_com_test_contracts::document_receiver!();
     #[com_object(IRetainer)]
     /// The adapter owns the actual public document bindings implementation.
     struct Retainer {

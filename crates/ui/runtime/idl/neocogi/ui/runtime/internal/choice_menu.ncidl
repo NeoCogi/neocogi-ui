@@ -1,0 +1,63 @@
+extern neocogi.ui.core;
+extern neocogi.renderer;
+
+#[version(1)]
+/// Header intent understood only by the private choice menu state machine.
+enum ChoicePopupIntent: u8 {
+    /// Toggle the current popup intent after ordinary pointer, Enter, or Space activation.
+    Toggle = 0,
+    /// Request opening without closing an already-open popup.
+    Open = 1,
+    /// Request closure without opening a currently closed popup.
+    Close = 2,
+}
+
+#[version(1)]
+/// Concrete operation returned to the runtime-level choice menu coordinator.
+enum ChoicePopupAction: u8 {
+    /// Popup visibility already agrees with semantic intent.
+    None = 0,
+    /// Prepare and show the ordinary widget popup at the retained anchor.
+    Open = 1,
+    /// Hide the ordinary widget popup without changing selection.
+    Close = 2,
+    /// Permanently remove the private popup because its header retired.
+    Remove = 3,
+}
+
+#[version(1)]
+/// Runtime-private typed access to one authoritative choice menu model.
+interface IChoiceMenuState {
+    /// Returns a revision changed by hierarchy labels or committed selection.
+    fn revision(&self) -> Result<u64>;
+    /// Returns the explicit optional committed leaf identity.
+    fn selection(&self) -> Result<neocogi::ui::core::ChoiceSelection>;
+    /// Copies the hierarchy's shared UTF-8 storage for rebuilding its menu projection.
+    fn menu_text(&self) -> Result<ComPtr<INcString>>;
+    /// Copies a requested preorder entry range and returns the complete entry count.
+    fn menu_entries(&self, output: &mut [neocogi::ui::core::ChoiceMenuEntry]) -> Result<u32>;
+    /// Returns the number of retained display labels.
+    fn choice_count(&self) -> Result<u64>;
+    /// Copies one exact display label after strict range validation.
+    fn choice_label(&self, ordinal: u64) -> Result<ComPtr<INcString>>;
+    /// Atomically replaces every label and the explicit optional selection.
+    fn replace_menu(
+    &mut self,
+    menu_text: &[u8],
+    entries: &[neocogi::ui::core::ChoiceMenuEntry],
+    selection: neocogi::ui::core::ChoiceSelection,
+    ) -> Result<bool>;
+    /// Silently replaces the optional committed selection without clamping.
+    fn set_selection(&mut self, selection: neocogi::ui::core::ChoiceSelection) -> Result<bool>;
+    /// Applies one typed header intent and captures a valid screen-space anchor when opening.
+    fn request_popup(&mut self, intent: ChoicePopupIntent, anchor: neocogi::renderer::Rect) -> Result<()>;
+    /// Reconciles semantic lifecycle with actual generic-popup visibility.
+    fn reconcile_popup(&mut self, visible: bool) -> Result<ChoicePopupAction>;
+    /// Returns the most recently captured header-bottom anchor.
+    fn popup_anchor(&self) -> Result<neocogi::renderer::Rect>;
+    /// Commits one user choice, publishes a changed snapshot, and requests popup closure.
+    fn submit(&mut self, id: u64) -> Result<u64>;
+    /// Ends event delivery and requests permanent private-popup removal.
+    fn retire(&mut self) -> Result<()>;
+}
+
