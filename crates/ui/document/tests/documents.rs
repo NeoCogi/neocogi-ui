@@ -184,3 +184,6 @@ fn json_byte_limit_counts_escaped_text_and_aggregate_overhead() {
     excessive.push(b' ');
     assert!(Document::from_json(&excessive).is_err());
 }
+
+// This final integration-test executable owns one embedded runtime.
+extern crate nc_com as _;

@@ -321,3 +321,6 @@ fn texture_reservation_errors_allow_failed_submit_and_next_frame() {
         assert_new_frame(&mut failed);
     }
 }
+
+// This final integration-test executable owns one embedded runtime.
+extern crate nc_com as _;

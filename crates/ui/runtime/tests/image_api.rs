@@ -46,3 +46,6 @@ fn image_errors_are_matchable_through_the_public_root_api() {
         }
     ));
 }
+
+// This final integration-test executable owns one embedded runtime.
+extern crate nc_com as _;

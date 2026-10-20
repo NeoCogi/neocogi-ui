@@ -21,3 +21,7 @@ mod runtime;
 pub use runtime::{Component, DOCUMENT_TYPE, Loader, Resources};
 mod reload;
 pub use reload::{Generation, ReloadIds, ReloadSlot, Reloaded};
+
+// This unit-test executable owns one runtime; normal library builds never embed it.
+#[cfg(test)]
+extern crate nc_com as _;

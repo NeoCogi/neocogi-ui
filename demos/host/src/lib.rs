@@ -559,3 +559,7 @@ pub fn monotonic_seconds() -> f64 {
     static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
     START.get_or_init(std::time::Instant::now).elapsed().as_secs_f64()
 }
+
+// This application assembly owns the sole implementation in embedded deployments.
+#[cfg(any(target_arch = "wasm32", feature = "monolith"))]
+extern crate nc_com as _;

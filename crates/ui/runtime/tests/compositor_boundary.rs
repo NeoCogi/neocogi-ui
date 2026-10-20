@@ -222,3 +222,6 @@ fn production_runtime_uses_the_gfx_compositor() {
     assert!(observation.vertices.get() > 0);
     assert!(observation.batches.get() > 0);
 }
+
+// This final integration-test executable owns one embedded runtime.
+extern crate nc_com as _;

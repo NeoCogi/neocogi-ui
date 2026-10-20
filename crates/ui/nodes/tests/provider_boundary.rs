@@ -79,3 +79,6 @@ fn independently_activated_nodes_bind_only_to_their_core_host_and_deliver_events
     app.update(&ui, Size { width: 640, height: 400 }).unwrap();
     assert_eq!(&*app.state(), &["nodes-owned activation"]);
 }
+
+// This final integration-test executable owns one embedded runtime.
+extern crate nc_com as _;

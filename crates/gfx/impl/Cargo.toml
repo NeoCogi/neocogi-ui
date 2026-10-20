@@ -33,7 +33,8 @@ neocogi-com = { workspace = true, default-features = false, features = ["macros"
 
 [dev-dependencies]
 # Every isolated test executable owns its process runtime, independently of workspace unification.
-neocogi-com = { workspace = true, features = ["static-runtime"] }
+neocogi-com = { workspace = true, features = ["runtime"] }
+neocogi-com-runtime.workspace = true
 neocogi-ui.workspace = true
 neocogi-ui-support.workspace = true
 # Allocation-failure regressions submit through the production CPU frame importer.

@@ -25,4 +25,3 @@ test-support = []
 skin = ["dep:neocogi-skin-contracts"]
 # Deployment policy belongs to the final application, not implementation plugins.
 runtime = ["neocogi-com/runtime"]
-static-runtime = ["neocogi-com/static-runtime"]

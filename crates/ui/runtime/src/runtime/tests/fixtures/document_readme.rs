@@ -83,3 +83,6 @@ mod tests {
         Ok(())
     }
 }
+
+// The fixture final executable explicitly owns its process runtime.
+extern crate nc_com as _;

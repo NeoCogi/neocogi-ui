@@ -60,7 +60,7 @@ jobs:
           SDL_VIDEODRIVER: offscreen
         run: cargo run -p neocogi-demo-smoke --no-default-features --features monolith-extension,glow,embed-assets -- --smoke
       - name: Shared runtime identity through a Cargo-built probe DLL
-        run: cargo test -p neocogi-demo-plugins --features glow,skin,extension
+        run: cargo test -p neocogi-demo-plugins -p neocogi-ui-support --test shared_runtime --features neocogi-demo-plugins/glow,neocogi-demo-plugins/skin,neocogi-demo-plugins/extension
       - name: Compile the real COM performance harness
         run: cargo check -p neocogi-demo-smoke --no-default-features --features benchmark,glow --bin neocogi-com-bench
       - name: Build the independent provider before designer discovery
@@ -188,7 +188,7 @@ jobs:
       - name: Build Cargo-owned native Glow artifacts
         run: cargo build -p neocogi-demo-full
       - name: Relocated host and independent plugin share the runtime
-        run: cargo test -p neocogi-demo-plugins --features glow,skin,extension
+        run: cargo test -p neocogi-demo-plugins -p neocogi-ui-support --test shared_runtime --features neocogi-demo-plugins/glow,neocogi-demo-plugins/skin,neocogi-demo-plugins/extension
       - name: Platform-neutral contracts and facade behavior
         run: cargo test -p neocogi-ui-core-contracts -p neocogi-ui --features neocogi-ui/static-runtime
 

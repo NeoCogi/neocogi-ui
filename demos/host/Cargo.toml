@@ -24,7 +24,7 @@ png-assets = []
 # Link/register live appearance compilation without the native JSON theme loader.
 skin = ["dep:neocogi-skin"]
 # Native monoliths retain only the implementations selected by their assembly.
-monolith = ["neocogi-com/static-runtime", "dep:neocogi-ui-runtime", "dep:neocogi-ui-nodes", "dep:neocogi-render-plugin"]
+monolith = ["dep:neocogi-com-runtime", "neocogi-com/runtime", "dep:neocogi-ui-runtime", "dep:neocogi-ui-nodes", "dep:neocogi-render-plugin"]
 monolith-gfx = ["monolith", "dep:neocogi-gfx", "neocogi-gfx/builder"]
 monolith-skin = ["monolith", "skin", "neocogi-skin/theme-json"]
 
@@ -32,9 +32,10 @@ monolith-skin = ["monolith", "skin", "neocogi-skin/theme-json"]
 neocogi-demo-assets.workspace = true
 neocogi-ui.workspace = true
 neocogi-com = { workspace = true, features = ["std", "macros"] }
+neocogi-com-runtime = { workspace = true, optional = true }
 neocogi-ui-runtime = { path = "../../crates/ui/runtime", optional = true }
 neocogi-ui-nodes = { workspace = true, optional = true }
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "c0390645467dcf60639619927d5781d8ce4e599f", optional = true, default-features = false }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "1c6449c17a4acb31daedbd6666c864f8363aba2e", optional = true, default-features = false }
 neocogi-gfx = { workspace = true, optional = true, default-features = false }
 neocogi-skin = { workspace = true, optional = true, default-features = false }
 neocogi-example-ui-extension = { path = "../../examples/ui-extension", optional = true }
@@ -44,6 +45,7 @@ neocogi-demo-plugins = { path = "../plugins", optional = true }
 neocogi-com = { workspace = true, features = ["runtime"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-neocogi-com = { workspace = true, features = ["static-runtime"] }
+neocogi-com = { workspace = true, features = ["runtime"] }
+neocogi-com-runtime.workspace = true
 wasm-bindgen.workspace = true
 web-sys = { workspace = true, features = ["Window", "Performance", "Location", "UrlSearchParams", "console"] }

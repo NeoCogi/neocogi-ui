@@ -232,3 +232,6 @@ fn form_fields_allow_rust_aliases_and_independent_event_revisions() {
     let mut alternate = CustomWidgetRegistry::new();
     alternate.register(Rc::new(Catalog(metadata))).unwrap();
 }
+
+// This final integration-test executable owns one embedded runtime.
+extern crate nc_com as _;

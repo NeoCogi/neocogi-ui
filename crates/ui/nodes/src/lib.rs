@@ -109,3 +109,7 @@ fn acquire_root() -> Result<neocogi_com::ComPtr<neocogi_ui_nodes_contracts::Node
 // Static consumers call `plugin_descriptor` directly. Only a final dynamic artifact
 // exposes the loader entrypoint, avoiding duplicate exports in monolithic applications.
 pub(crate) use widget::{Widget, LeafWidget, WidgetFillOption};
+
+// This unit-test executable owns one runtime; normal library builds never embed it.
+#[cfg(test)]
+extern crate nc_com as _;

@@ -35,13 +35,15 @@ fn documented_onboarding_reload_and_event_dispatch_execute() {
         project.path().join("Cargo.toml"),
         format!(
             "[package]\nname='documented-form-events'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\n\
-         neocogi-com={{path={:?},features=['static-runtime']}}\n\
+         neocogi-com={{path={:?},features=['runtime']}}\n\
+         neocogi-com-runtime={{path={:?}}}\n\
          neocogi-ui={{path={:?}}}\n\
          neocogi-ui-document={{path={:?}}}\n\
          neocogi-ui-runtime={{path={:?}}}\n\
          neocogi-ui-nodes={{path={:?}}}\n\
          neocogi-ui-support={{path={:?},features=['test-support']}}\n",
             root.join("crates/com/api"),
+            root.join("crates/com/runtime"),
             root.join("crates/ui/api"),
             root.join("crates/ui/document"),
             root.join("crates/ui/runtime"),
@@ -76,7 +78,7 @@ fn documented_onboarding_reload_and_event_dispatch_execute() {
     let output = Command::new("cargo")
         .args(["test", "--offline", "--manifest-path"])
         .arg(project.path().join("Cargo.toml"))
-        .env("CARGO_TARGET_DIR", root.join("target/documentation-proof"))
+        .env("CARGO_TARGET_DIR", std::env::var_os("CARGO_TARGET_DIR").unwrap_or_else(|| root.join("target").into_os_string()))
         .output()
         .unwrap();
     assert!(

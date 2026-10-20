@@ -13,10 +13,8 @@ retained UI imports resources and submits composed frames. Applications opt into
 | `neocogi-com` | defaults: `std`, `macros` | Local object/data helpers and event contracts/adapters without linking a runtime. |
 | `neocogi-com` | `macros` | Procedural macros and built-in event contracts, usable without `std` or allocation; IDL is a build dependency. |
 | `neocogi-com` | `std` with `macros` | Add standard-channel mappings and scoped/component dispatch adapters. |
-| `neocogi-com` | `runtime` | Link shared `nc_com` runtime services, including caller-scoped persistence; implies `std`. |
-| `neocogi-com` | `static-runtime` | Implies `runtime`; link its implementation inside one executable or browser module. |
-| `neocogi-ui` | `runtime` | Link the shared neocogi-com runtime used by native hosts. |
-| `neocogi-ui` | `static-runtime` | Link one ordinary runtime implementation, including browser deployments. |
+| `neocogi-com` | `runtime` | Stateless runtime/persistence clients; implies `std`. Final assembly supplies linkage. |
+| `neocogi-ui` | `runtime` | Expose stateless COM runtime clients; final assembly owns linkage. |
 | `neocogi-gfx-support` | `compiled-assets` | Expand bounded zlib pixels from generated asset tables. |
 | `neocogi-ui` | `skin` | Re-export the optional Skin plugin's typed authoring contracts. |
 | `neocogi-ui-support` | none | Non-plugin resource and presentation helpers; owns no runtime or concrete nodes. |
@@ -41,11 +39,11 @@ authored themes into embedded tables does not replace the live appearance compil
 style editor. The browser links/registers that provider without its filesystem-based JSON loader;
 the simple demo does not need it.
 
-Shared native builds intentionally allow Cargo to unify the dynamic `runtime`
-feature. The facade contains no registry state: every dependent calls the same
-loaded `libnc_com`. In contrast, `static-runtime` must not be
-enabled independently in plugin DSOs because each image would then contain a
-separate registry implementation.
+Cargo may freely unify the stateless `runtime` capability. Native final owners
+import one shared `nc_com` through the native bridge; final monolith/browser/test
+owners directly retain one implementation. Neither COM nor UI facade has a
+feature that selects an implementation image. Test-helper selection therefore
+cannot silently change a plugin from shared imports to a private catalog.
 
 The UI implementation has no optional asset features. Applications, plugins and
 native event tests install concrete receivers directly and use the same

@@ -68,3 +68,7 @@ pub(crate) use std::{cmp::max, rc::Rc};
 
 /// Dispatch-owner origin scopes; widget posting handles expose no scope mutation.
 pub use neocogi_ui::events::EventOriginOwner;
+
+// This unit-test executable owns one runtime; normal library builds never embed it.
+#[cfg(test)]
+extern crate nc_com as _;

@@ -31,7 +31,8 @@ neocogi-com = { workspace = true, default-features = false, features = ["macros"
 neocogi-ui-runtime = { workspace = true, features = ["test-support"] }
 neocogi-ui-support = { workspace = true, features = ["test-support"] }
 neocogi-ui.workspace = true
-neocogi-com = { workspace = true, features = ["static-runtime"] }
+neocogi-com = { workspace = true, features = ["runtime"] }
+neocogi-com-runtime.workspace = true
 tempfile.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

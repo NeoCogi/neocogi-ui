@@ -62,3 +62,7 @@ mod test_recipe;
 /// Immutable test data does not enable any optional production feature.
 #[cfg(test)]
 mod test_support;
+
+// This unit-test executable owns one runtime; normal library builds never embed it.
+#[cfg(test)]
+extern crate nc_com as _;
