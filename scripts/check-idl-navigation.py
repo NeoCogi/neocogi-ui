@@ -38,6 +38,8 @@ pub fn probe(
 ) {
     let _ = FillStates::/*flag*/HOVER;
     let _ = /*constructor*/LayoutTrack::/*variant*/Fixed { /*field*/extent: 8 };
+    let _ = SliderOptions::/*type_metadata*/IDL_TYPE;
+    let _ = TextboxAbi::/*interface_metadata*/IDL_INTERFACE;
 }
 '''
 
@@ -72,6 +74,8 @@ PROBES = (
     Probe("constructor", "LayoutTrack", "layout.ncidl", "enum LayoutTrack:", "enum LayoutTrack:", "LayoutTrack"),
     Probe("variant", "Fixed", "layout.ncidl", "enum LayoutTrack:", "    Fixed {", "Fixed"),
     Probe("field", "extent", "layout.ncidl", "enum LayoutTrack:", "        extent: i32,", "extent"),
+    Probe("type_metadata", "IDL_TYPE", "widgets.ncidl", "struct SliderOptions {", "struct SliderOptions {", "SliderOptions"),
+    Probe("interface_metadata", "IDL_INTERFACE", "widgets.ncidl", "interface Textbox:", "interface Textbox:", "Textbox"),
 )
 
 
