@@ -31,6 +31,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Contract dependency ownership and child toolchain checks
+        run: python3 -m unittest discover -s scripts -p test_contract_checks.py
+      - name: Independent event consumers and generated-only COM control
+        run: python3 scripts/check-contract-consumers.py
       - run: cargo test -p neocogi-ui-runtime -p neocogi-ui-nodes -p neocogi-ui-support
       - run: cargo test -p neocogi-ui -p neocogi-ui-core-contracts -p neocogi-ui-nodes-contracts -p neocogi-ui-document --features neocogi-com/runtime
 
