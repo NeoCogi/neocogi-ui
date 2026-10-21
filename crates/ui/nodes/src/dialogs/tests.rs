@@ -3,6 +3,8 @@ use super::*;
 use neocogi_com::NcValueRef;
 use neocogi_com::events::EventOrigin;
 use neocogi_ui_support::test_support::events::TestApp;
+
+mod allocations;
 /// Terminal recorder extracts the native path while it owns the event.
 fn completion(event: &ComBox<neocogi_com::events::IEventAbi>) -> Result<Option<PathBuf>, NcStatus> {
     match event.query_weak::<IFileAcceptedEventAbi>() {
@@ -52,6 +54,10 @@ impl Fixture {
     }
     /// Supplies specialized test mappings before the widget and its window exist.
     fn with_queue(queue: ComPtr<neocogi_com::events::IEventReceiverAbi>) -> Self {
+        Self::with_completion(Some(queue))
+    }
+    /// Exercises the same factory with either an upstream receiver or no observation.
+    fn with_completion(queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>) -> Self {
         let bundle = crate::SkinBundle::from_atlas(crate::test_support::test_atlas());
         let source = crate::test_support::assets::export_bundle(&bundle).unwrap();
         let gfx = neocogi_ui_support::test_support::gfx_factory();
@@ -60,7 +66,7 @@ impl Fixture {
         let body = ui.widgets().button_unobserved("background").unwrap();
         let owner = ui.window("owner", OWNER_RECT, body).unwrap();
         let services = crate::factory::NodeServices::bind(runtime.as_com_ref()).unwrap();
-        let widget = FileDialog::new(services, owner.as_com_ref(), Some(queue)).unwrap();
+        let widget = FileDialog::new(services, owner.as_com_ref(), queue).unwrap();
         let interface = widget.query().unwrap();
         let handle = neocogi_ui::FileDialog::from_interface(interface);
         Self {
@@ -105,6 +111,166 @@ impl Fixture {
 /// Connects the real picker completion protocol to a consumer-owned inbox.
 fn session(fixture: &mut Fixture) -> std::sync::mpsc::Receiver<Option<PathBuf>> {
     fixture.messages.take().expect("one consumer per constructed picker")
+}
+
+/// Accepts the real completion ABI without allocating an application message.
+#[com_object(interfaces(neocogi_com::events::IEventReceiver))]
+struct DiscardingCompletion;
+impl neocogi_com::events::IEventReceiver for DiscardingCompletion {
+    /// An unhandled fact is consumed and destroyed synchronously by this receiver.
+    fn post(
+        &mut self,
+        _origin: NcValueRef<'_, EventOrigin>,
+        _event: ComBox<neocogi_com::events::IEventAbi>,
+    ) -> Result<(), (NcStatus, ComBox<neocogi_com::events::IEventAbi>)> {
+        Ok(())
+    }
+}
+
+/// Measures actual built-in construction through both completion paths. Pre-hiding
+/// avoids a new window notification; a measured idempotent visibility edit accounts
+/// for the manager's own work. The production call still commits an Active request.
+#[test]
+fn active_completions_construct_and_drop_snapshots_with_or_without_a_receiver() {
+    use allocations::{Counts, measure};
+    let path = PathBuf::from("selected file");
+    let (_, cancelled) = measure(|| drop(neocogi_ui_core_contracts::events::file_cancelled().unwrap()));
+    assert_eq!(cancelled, Counts { allocations: 1, deallocations: 1 });
+    let (_, accepted) = measure(|| {
+        drop(neocogi_ui_core_contracts::events::file_accepted(neocogi_ui::NativePath::new(&path).into_interface()).unwrap());
+    });
+    let (_, path_copy) = measure(|| drop(path.clone()));
+    for observed in [false, true] {
+        let queue = observed.then(|| DiscardingCompletion::from_value(DiscardingCompletion).query().unwrap());
+        let mut fixture = Fixture::with_completion(queue);
+        let directory = tempfile::tempdir().unwrap();
+        fixture.open(directory.path());
+        fixture.handle.window().unwrap().set_visibility(Visibility::Hidden).unwrap();
+        let window = fixture.handle.window().unwrap();
+        let (result, hide) = measure(|| window.set_visibility(Visibility::Hidden));
+        assert_eq!(result, Ok(()));
+        assert_eq!(fixture.handle.active(), Ok(true));
+        let (result, counts) = measure(|| fixture.handle.cancel());
+        assert_eq!(result, Ok(true));
+        assert_eq!(
+            counts,
+            Counts {
+                allocations: hide.allocations + cancelled.allocations,
+                deallocations: hide.deallocations + cancelled.deallocations,
+            },
+            "observed={observed}: cancel must construct and release its one event"
+        );
+        assert_eq!(fixture.handle.active(), Ok(false));
+        let (result, counts) = measure(|| fixture.handle.cancel());
+        assert_eq!(result, Ok(false));
+        assert_eq!(counts, Counts::default(), "Idle has no cancellation occurrence");
+
+        fixture.open(directory.path());
+        fixture.handle.window().unwrap().set_visibility(Visibility::Hidden).unwrap();
+        fixture.widget.with_mut(|dialog| dialog.model.selected = Some(path.clone())).unwrap();
+        let (result, counts) = measure(|| fixture.widget.with_mut(|dialog| dialog.model.accept()));
+        assert_eq!(result, Ok(Ok(())));
+        assert_eq!(
+            counts,
+            Counts {
+                allocations: hide.allocations + path_copy.allocations + accepted.allocations,
+                deallocations: hide.deallocations + path_copy.deallocations + accepted.deallocations,
+            },
+            "observed={observed}: accept must capture and release its native-path event"
+        );
+        assert_eq!(fixture.handle.active(), Ok(false));
+        let (result, counts) = measure(|| fixture.widget.with_mut(|dialog| dialog.model.accept()));
+        assert_eq!(result, Ok(Ok(())));
+        assert_eq!(counts, path_copy, "Idle must not construct another acceptance event");
+        fixture.handle.close().unwrap();
+    }
+}
+
+/// A counted real COM value distinguishes destruction from weak storage lifetime.
+#[com_object(interfaces(IFileCancelledEvent), ownership = exclusive)]
+struct CountedCancellation {
+    /// Shared test observation requires Cell because Drop has no exclusive counter owner.
+    drops: Rc<std::cell::Cell<usize>>,
+}
+impl neocogi_com::events::IEvent for CountedCancellation {}
+impl IFileCancelledEvent for CountedCancellation {}
+impl Drop for CountedCancellation {
+    fn drop(&mut self) {
+        self.drops.set(self.drops.get() + 1);
+    }
+}
+
+/// Direct posting consumes exactly one owner for absence, real queue delivery and
+/// ABI rejection. Phase is already committed and cannot be changed by transport.
+#[test]
+fn direct_completion_post_preserves_or_destroys_the_supplied_owner_once() {
+    let fixture = Fixture::with_completion(None);
+    let origin = EventOrigin::Widget(fixture.handle.as_interface().clone().into_unknown());
+    let (queue, messages) = neocogi_com::events::channel();
+    let refusing = RefusingCompletion::from_value(RefusingCompletion).query().unwrap();
+    for (destination, expected, queued) in [
+        (None, Ok(()), false),
+        (Some(queue), Ok(()), true),
+        (Some(refusing), Err(NC_E_INVALID_ARG), false),
+    ] {
+        let drops = Rc::new(std::cell::Cell::new(0));
+        let event = CountedCancellation::into_box(CountedCancellation { drops: drops.clone() })
+            .query::<neocogi_com::events::IEventAbi>()
+            .unwrap();
+        let observer = event.downgrade();
+        let mut request = Request {
+            phase: RequestPhase::Idle,
+            completed: destination.map(|queue| (queue, origin.clone())),
+        };
+        assert_eq!(request.post(event), expected);
+        assert_eq!(request.phase, RequestPhase::Idle);
+        assert_eq!(drops.get(), usize::from(!queued));
+        assert_eq!(observer.is_alive(), queued);
+        if queued {
+            let message = messages.try_recv().unwrap();
+            assert_eq!(message.event.as_raw().object, observer.as_raw().object);
+            assert!(
+                message
+                    .origin
+                    .widget::<IFileDialogAbi>()
+                    .unwrap()
+                    .unwrap()
+                    .same_object(fixture.handle.as_interface())
+            );
+            drop(message);
+        }
+        assert_eq!(drops.get(), 1);
+        assert!(!observer.is_alive());
+    }
+}
+
+/// Explicit out-of-traversal completion queues a weak dialog identity and an owned
+/// snapshot that remains readable after the reusable picker is removed.
+#[test]
+fn queued_completion_keeps_its_snapshot_after_dialog_destruction() {
+    let (queue, messages) = neocogi_com::events::channel();
+    let mut fixture = Fixture::with_queue(queue);
+    let directory = tempfile::tempdir().unwrap();
+    fixture.open(directory.path());
+    fixture.handle.cancel().unwrap();
+    fixture.open(directory.path());
+    let path = directory.path().join("captured path");
+    fixture
+        .widget
+        .with_mut(|dialog| {
+            dialog.model.selected = Some(path.clone());
+            dialog.model.accept().unwrap();
+        })
+        .unwrap();
+    fixture.handle.close().unwrap();
+    for expected in [None, Some(path)] {
+        let message = messages.try_recv().unwrap();
+        let origin = message.origin.widget::<IFileDialogAbi>().unwrap().unwrap();
+        assert!(origin.same_object(fixture.handle.as_interface()));
+        assert!(!origin.is_alive());
+        assert_eq!(completion(&message.event).unwrap(), expected);
+    }
+    assert!(messages.try_recv().is_err());
 }
 
 /// Save suggestions retain exact paths, accept new names with Enter, and do not leak into later Open requests.
@@ -572,49 +738,158 @@ impl neocogi_com::events::IEventReceiver for RefusingCompletion {
     }
 }
 
-/// Delegates to the real modal while refusing its first explicit removal.
+/// One retryable window operation rejected before its real mutation.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum WindowOperation {
+    /// Refuse the first hide, before the request may commit Idle.
+    Hide,
+    /// Refuse the first removal, after cancellation has committed.
+    Remove,
+}
+
+/// Delegates to the real modal while refusing one selected operation once.
 #[com_object(interfaces(IWindow))]
-struct RefusingRemoval {
+struct RefusingWindow {
     /// The original window remains the actual owner of the picker tree.
     window: ComPtr<IWindowAbi>,
-    /// The shared IWindow::close signature requires synchronized attempt counting.
+    /// Selects the failure boundary without creating a second window implementation.
+    operation: WindowOperation,
+    /// Shared IWindow methods require synchronized counting across COM projections.
     attempts: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
-impl IWindow for RefusingRemoval {
+impl RefusingWindow {
+    /// Refuses only the selected operation's first attempt; all other calls delegate.
+    fn refuse(&self, operation: WindowOperation) -> bool {
+        self.operation == operation && self.attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0
+    }
+}
+impl IWindow for RefusingWindow {
     /// Preserves observation of the real modal after refused removal.
-    fn snapshot(&self) -> Result<WindowSnapshot, NcStatus> { self.window.snapshot() }
+    fn snapshot(&self) -> Result<WindowSnapshot, NcStatus> {
+        self.window.snapshot()
+    }
     /// Preserves title observation.
-    fn title(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> { self.window.title() }
+    fn title(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+        self.window.title()
+    }
     /// Delegates ordinary title editing.
-    fn set_title(&self, title: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> { self.window.set_title(title) }
-    /// Delegates ordinary visibility changes.
-    fn set_visibility(&self, visibility: Visibility) -> Result<(), NcStatus> { self.window.set_visibility(visibility) }
+    fn set_title(&self, title: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
+        self.window.set_title(title)
+    }
+    /// A rejected hide leaves the real modal visible and the request Active.
+    fn set_visibility(&self, visibility: Visibility) -> Result<(), NcStatus> {
+        if visibility == Visibility::Hidden && self.refuse(WindowOperation::Hide) {
+            Err(UI_E_BUSY)
+        } else {
+            self.window.set_visibility(visibility)
+        }
+    }
     /// Delegates ordinary presentation changes.
-    fn set_options(&self, options: WindowOptions) -> Result<(), NcStatus> { self.window.set_options(options) }
+    fn set_options(&self, options: WindowOptions) -> Result<(), NcStatus> {
+        self.window.set_options(options)
+    }
     /// Delegates layer validation to the real modal.
-    fn set_layer(&self, layer: u8) -> Result<(), NcStatus> { self.window.set_layer(layer) }
+    fn set_layer(&self, layer: u8) -> Result<(), NcStatus> {
+        self.window.set_layer(layer)
+    }
     /// Preserves normal stacking behavior.
-    fn raise(&self) -> Result<(), NcStatus> { self.window.raise() }
+    fn raise(&self) -> Result<(), NcStatus> {
+        self.window.raise()
+    }
     /// Preserves parent-owned clipping behavior.
-    fn set_child_clip(&self, clip: ChildClip) -> Result<(), NcStatus> { self.window.set_child_clip(clip) }
+    fn set_child_clip(&self, clip: ChildClip) -> Result<(), NcStatus> {
+        self.window.set_child_clip(clip)
+    }
     /// Delegates normal allocation changes.
-    fn set_rect(&self, rect: Rect) -> Result<(), NcStatus> { self.window.set_rect(rect) }
+    fn set_rect(&self, rect: Rect) -> Result<(), NcStatus> {
+        self.window.set_rect(rect)
+    }
     /// The first refusal preserves ownership; the next call removes it normally.
     fn close(&self) -> Result<(), NcStatus> {
-        match self.attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst) {
-            0 => Err(UI_E_BUSY),
-            _ => self.window.close(),
+        if self.refuse(WindowOperation::Remove) {
+            Err(UI_E_BUSY)
+        } else {
+            self.window.close()
         }
     }
 }
 
 /// Installs a temporary failure boundary without replacing the actual modal tree.
-fn refuse_first_removal(fixture: &Fixture) -> std::sync::Arc<std::sync::atomic::AtomicUsize> {
+fn refuse_first(fixture: &Fixture, operation: WindowOperation) -> std::sync::Arc<std::sync::atomic::AtomicUsize> {
     let attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let window = fixture.handle.window().unwrap();
-    let proxy = RefusingRemoval::from_value(RefusingRemoval { window, attempts: attempts.clone() }).query().unwrap();
+    let proxy = RefusingWindow::from_value(RefusingWindow {
+        window,
+        operation,
+        attempts: attempts.clone(),
+    })
+    .query()
+    .unwrap();
     fixture.widget.clone().with_mut(|dialog| dialog.model.window = Some(proxy)).unwrap();
     attempts
+}
+
+/// Hide refusal is pre-commit: both acceptance and cancellation leave the active
+/// request and visible modal intact, then retry with one eventual completion.
+#[test]
+fn failed_hide_preserves_the_active_request_until_completion_can_commit() {
+    for accept in [false, true] {
+        let mut fixture = Fixture::new();
+        let directory = tempfile::tempdir().unwrap();
+        let messages = session(&mut fixture);
+        fixture.open(directory.path());
+        let path = directory.path().join("selected");
+        fixture.widget.with_mut(|dialog| dialog.model.selected = Some(path.clone())).unwrap();
+        let attempts = refuse_first(&fixture, WindowOperation::Hide);
+        let complete = |fixture: &mut Fixture| {
+            if accept {
+                fixture.widget.with_mut(|dialog| dialog.model.accept()).unwrap()
+            } else {
+                fixture.handle.cancel().map(|_| ())
+            }
+        };
+        assert_eq!(complete(&mut fixture), Err(UI_E_BUSY));
+        assert_eq!(fixture.handle.active(), Ok(true));
+        assert_eq!(fixture.handle.window().unwrap().snapshot().unwrap().visibility, Visibility::Visible);
+        assert!(messages.try_recv().is_err());
+        assert_eq!(complete(&mut fixture), Ok(()));
+        assert_eq!(fixture.handle.active(), Ok(false));
+        assert_eq!(fixture.handle.window().unwrap().snapshot().unwrap().visibility, Visibility::Hidden);
+        assert_eq!(messages.try_recv().unwrap(), accept.then_some(path));
+        assert!(messages.try_recv().is_err());
+        assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 2);
+        fixture.handle.close().unwrap();
+    }
+}
+
+/// Delivery refusal is post-commit: it leaves an idle reusable modal, and an Idle
+/// retry cannot post again. Both accepted and cancelled completions obey this rule.
+#[test]
+fn refused_completion_stays_idle_hidden_and_reusable() {
+    for accept in [false, true] {
+        let queue = RefusingCompletion::from_value(RefusingCompletion).query().unwrap();
+        let mut fixture = Fixture::with_queue(queue);
+        let directory = tempfile::tempdir().unwrap();
+        fixture.open(directory.path());
+        fixture
+            .widget
+            .with_mut(|dialog| dialog.model.selected = Some(directory.path().join("selected")))
+            .unwrap();
+        let result = if accept {
+            fixture.widget.with_mut(|dialog| dialog.model.accept()).unwrap()
+        } else {
+            fixture.handle.cancel().map(|_| ())
+        };
+        assert_eq!(result, Err(NC_E_INVALID_ARG));
+        assert_eq!(fixture.handle.active(), Ok(false));
+        assert_eq!(fixture.handle.window().unwrap().snapshot().unwrap().visibility, Visibility::Hidden);
+        assert_eq!(fixture.handle.cancel(), Ok(false));
+        fixture.open(directory.path());
+        assert_eq!(fixture.handle.active(), Ok(true));
+        assert_eq!(fixture.handle.cancel(), Err(NC_E_INVALID_ARG));
+        assert_eq!(fixture.handle.cancel(), Ok(false));
+        fixture.handle.close().unwrap();
+    }
 }
 
 /// Delivery failure must not strand a terminal request inside a still-visible modal.
@@ -638,7 +913,7 @@ fn close_retries_refused_removal_without_reposting_the_completed_request() {
     let directory = tempfile::tempdir().unwrap();
     fixture.open(directory.path());
     let events = session(&mut fixture);
-    let attempts = refuse_first_removal(&fixture);
+    let attempts = refuse_first(&fixture, WindowOperation::Remove);
     assert_eq!(fixture.handle.close(), Err(UI_E_BUSY));
     assert_eq!(fixture.handle.active(), Ok(false));
     assert!(fixture.handle.as_interface().is_alive());
@@ -656,7 +931,7 @@ fn close_reports_removal_failure_when_both_cleanup_steps_fail() {
     let mut fixture = Fixture::with_queue(queue);
     let directory = tempfile::tempdir().unwrap();
     fixture.open(directory.path());
-    let attempts = refuse_first_removal(&fixture);
+    let attempts = refuse_first(&fixture, WindowOperation::Remove);
     assert_eq!(fixture.handle.close(), Err(UI_E_BUSY));
     assert_eq!(fixture.handle.active(), Ok(false));
     assert_eq!(fixture.handle.close(), Ok(()));

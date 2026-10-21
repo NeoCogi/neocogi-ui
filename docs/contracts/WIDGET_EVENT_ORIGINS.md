@@ -130,6 +130,11 @@ factory obtains that identity after ordinary allocation, connects completion
 through checked local access, then registers the dialog's root with the runtime.
 It cannot push or pop the runtime's origin stack. A weak completion identity
 requires neither cyclic construction nor access to an uninitialized Rust value.
+The weak identity selects only the completion's origin. It does not gate snapshot
+construction: active accept/cancel commits the request before capturing a concrete
+event, including when no upstream receiver was supplied. Modal hiding precedes
+the Idle commit; failed construction or posting cannot create a second occurrence
+when the caller retries an already Idle request.
 
 ## Forms and stale facts
 

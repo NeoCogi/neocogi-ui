@@ -46,18 +46,14 @@ impl Request {
         }
     }
 
-    /// Emits one committed outcome after the modal has become idle.
-    fn finish(&mut self, snapshot: impl FnOnce() -> Result<ComBox<neocogi_com::events::IEventAbi>, NcStatus>) -> Result<(), NcStatus> {
-        match self.phase {
-            RequestPhase::Active => {
-                self.phase = RequestPhase::Idle;
-                if let Some((queue, origin)) = &mut self.completed {
-                    queue.post(neocogi_com::NcValueRef::new(origin)?, snapshot()?).map_err(|(status, _event)| status)?;
-                }
-            }
-            RequestPhase::Idle => {}
+    /// Transfers an already captured completion, or drops it when no receiver was supplied.
+    /// Request completion is committed separately; delivery failure cannot reactivate it.
+    /// A refused owner is dropped here after preserving the receiver's exact status.
+    fn post(&mut self, event: ComBox<neocogi_com::events::IEventAbi>) -> Result<(), NcStatus> {
+        match &mut self.completed {
+            Some((queue, origin)) => queue.post(neocogi_com::NcValueRef::new(origin)?, event).map_err(|(status, _event)| status),
+            None => Ok(()),
         }
-        Ok(())
     }
 
 }
@@ -127,15 +123,30 @@ impl Model {
             self.directory.clone()
         })
     }
-    /// Hides before emitting the outcome so later messages observe an idle reusable component.
-    fn finish(&mut self, snapshot: impl FnOnce() -> Result<ComBox<neocogi_com::events::IEventAbi>, NcStatus>) -> Result<(), NcStatus> {
-        if self.request.active() {
-            if self.window().is_ok_and(|window| window.snapshot().is_ok()) {
-                self.window()?.set_visibility(Visibility::Hidden)?;
+    /// Hides and commits an active request before its completion event is constructed.
+    /// Idle requests have no new occurrence. A hide failure leaves Active; after
+    /// committing Idle, construction or delivery failure never rolls the request back.
+    fn finish_request(&mut self) -> Result<bool, NcStatus> {
+        match self.request.phase {
+            RequestPhase::Idle => Ok(false),
+            RequestPhase::Active => {
+                if self.window().is_ok_and(|window| window.snapshot().is_ok()) {
+                    self.window()?.set_visibility(Visibility::Hidden)?;
+                }
+                self.request.phase = RequestPhase::Idle;
+                Ok(true)
             }
-            self.request.finish(snapshot)?;
         }
-        Ok(())
+    }
+    /// Captures one cancellation after committing, even without a completion receiver.
+    /// Explicit application calls use the stored weak dialog origin outside traversal.
+    fn cancel(&mut self) -> Result<bool, NcStatus> {
+        if !self.finish_request()? {
+            return Ok(false);
+        }
+        let event = neocogi_ui_core_contracts::events::file_cancelled()?;
+        self.request.post(event)?;
+        Ok(true)
     }
     /// Accepts exact native row identity, or a nonempty untrimmed filename entered by the user.
     fn accept(&mut self) -> Result<(), NcStatus> {
@@ -150,7 +161,11 @@ impl Model {
         };
         // Capture the exact native identity once at commit, not through a lossy
         // display label or a dispatcher-time reconstruction of this model.
-        self.finish(|| neocogi_ui_core_contracts::events::file_accepted(neocogi_ui::NativePath::new(&path).into_interface()))
+        if self.finish_request()? {
+            let event = neocogi_ui_core_contracts::events::file_accepted(neocogi_ui::NativePath::new(&path).into_interface())?;
+            self.request.post(event)?;
+        }
+        Ok(())
     }
 }
 
@@ -531,7 +546,7 @@ impl Model {
                 let close = event.query::<IWindowCloseRequestedEventAbi>()?.is_some();
                 let hidden = event.query::<IWindowHiddenEventAbi>()?.is_some()
                     && self.window()?.snapshot().is_ok_and(|s| s.visibility == Visibility::Hidden);
-                if close || hidden { self.finish(neocogi_ui_core_contracts::events::file_cancelled)?; }
+                if close || hidden { self.cancel()?; }
             }
             return Ok(());
         }
@@ -571,7 +586,7 @@ impl Model {
                 None
             }
             Command::Cancel => {
-                self.finish(neocogi_ui_core_contracts::events::file_cancelled)?;
+                self.cancel()?;
                 None
             }
             Command::Folder(path) => Some(path),
@@ -724,9 +739,7 @@ impl IFileDialog for FileDialog {
     fn cancel(&mut self) -> Result<bool, NcStatus> {
         let model = &mut self.model;
         model.owner()?;
-        let active = model.request.active();
-        model.finish(neocogi_ui_core_contracts::events::file_cancelled)?;
-        Ok(active)
+        model.cancel()
     }
     /// Copies diagnostics while the dialog owner exists; expired handles fail at entry.
     fn diagnostic(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {

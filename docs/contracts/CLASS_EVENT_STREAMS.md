@@ -90,6 +90,14 @@ reject posts with `NC_E_CLOSED`. No attachment, replacement or reopening operati
 exists. Posting through a shared port temporarily pins the source; the queued
 message still contains only its weak identity.
 
+FileDialog follows the same concrete-owner rule for acceptance and cancellation.
+An active request hides its modal, commits Idle, then constructs one completion
+snapshot and posts or drops that owner. An already Idle request has no new
+completion occurrence. Failure while hiding leaves the request Active; a
+construction or delivery failure after the Idle commit never reactivates it.
+The request's direct `post(event)` transports an existing owner and does not
+change request phase or decide whether its event should be constructed.
+
 Queued event data survives source destruction. Consumers decide whether source
 expiry makes a fact irrelevant; file completion may remain useful. Document receivers additionally support [reload generation and current field identity](RELOAD_GENERATION_IDENTITY.md)
 before event queries. The shared library receiver transports the same COM event and
