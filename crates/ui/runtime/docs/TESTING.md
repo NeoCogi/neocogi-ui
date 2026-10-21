@@ -127,5 +127,5 @@ through `VK_INSTANCE_LAYERS`. Browser tests execute WebGL, real DOM file/IME
 listeners, exact imported bytes and downloaded JSON, resizing, readback and teardown.
 Synthetic pointer tests stub only the browser's trusted capture-token handshake;
 native tests verify capture/outside-release, modal exclusion, and cancellation
-through both real UI routers. The performance report
+through both real UI routers. The [live-edit benchmark](../../../../tools/theme-editor/src/app/benchmark.rs)
 distinguishes measured command-to-render-return latency from display scanout.

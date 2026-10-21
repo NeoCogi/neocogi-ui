@@ -247,11 +247,9 @@ are recorded in [widget dispatch verification](WIDGET_EVENT_DISPATCH.md#verifica
 
 ## Measured implementation cost
 
-The size correction report records the
-matched min-size builds, Cargo Bloat attribution, and remaining cost of admitted
-weak calls. Shared services select no execution token; exclusive widgets use a
-non-null token and a single-handle facade. The report distinguishes the original
-ownership migration from the later removal of its avoidable overhead.
+Shared services select no execution token; exclusive widgets use a non-null
+token and a single-handle facade. The original ownership migration and later
+overhead removal were measured separately.
 
 ### Parent-controlled removal
 
@@ -290,17 +288,16 @@ the window, calls `cancel`, and only after that provider call returns calls
 removal is still attempted when completion delivery fails. Foreign applications
 use the same sequence of ordinary interface calls.
 
-The subsequent synchronous Drop size analysis
-records the preceding ABI v14 implementation, a 7,616-byte deployment reduction and
+The preceding ABI v14 synchronous Drop implementation recorded a 7,616-byte deployment reduction and
 the removal of one word of exclusive allocation overhead.
 
-The ABI v15 follow-up report records removal of
-`ComBoxInput` and automatic close approval, a **3,992-byte deployment increase**,
+The ABI v15 implementation removed `ComBoxInput` and automatic close approval.
+Its historical results were a **3,992-byte deployment increase**,
 887 passing workspace tests, and fresh independent/mixed-compiler plugin checks.
 It supersedes the earlier reports' current-API descriptions while preserving their
 historical measurements.
 
-The latest construction size follow-up shares
+The subsequent construction implementation shares
 construction work after interface selection, avoids restoring discarded candidates'
 concrete types, resolves identical owner projections at compile time, and removes
 temporary weak projections. It recovers **7,328 bytes** without changing ABI 15 or

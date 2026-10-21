@@ -140,9 +140,8 @@ installation, texture churn, and excessive plugin activation. Bounded streams,
 revision/identity checks, retained renderer resources, and activation-time
 capability discovery address those cases. Benchmarks should measure commands,
 vertices, uploads, and dynamic calls per frame so a future boundary change cannot
-silently turn a bulk transaction into fine-grained IPC. The exact min-size cost and
-symbol attribution of this boundary are recorded in
-COM_PERFORMANCE.md.
+silently turn a bulk transaction into fine-grained IPC. Measure actual min-size code and relevant frame workloads before changing
+this boundary.
 
 ## Resource deployment
 
@@ -165,4 +164,4 @@ interactive preview, and cached state sheet use separate compositors/sessions on
 one renderer device. `neocogi-skin-authoring` provides its document/compiler;
 there is no editor-specific runtime schema or reflected property framework.
 See [the guide](../../tools/theme-editor/README.md), [coverage](../validation/THEME_EDITOR_COVERAGE.md),
-and measured live-edit costs.
+and the [live-edit benchmark](../../tools/theme-editor/src/app/benchmark.rs).

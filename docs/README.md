@@ -10,8 +10,7 @@ IDL, plugins, retained UI, rendering and authoring tools. Start with the
 | --- | --- |
 | [Optimization opportunities](optimizations/README.md) | Navigation to performance and simplification work in the open review backlog |
 | [Contracts](contracts/README.md) | Current API, ABI, ownership, event, document and resource rules |
-| [Experiments](experiments/README.md) | Prototype reports, hypotheses, outcomes and implementation status |
-| Measurements | Historical performance/size results, raw data, fixtures and reproduction commands |
+| [Experiments](experiments/README.md) | Consolidated prototype outcomes, retained decisions and implementation status |
 | [Architecture](architecture/README.md) | Component boundaries and implementation structure |
 | [Guides](guides/README.md) | Authoring, deployment, examples and tooling instructions |
 | [Validation](validation/README.md) | Coverage, compatibility and maintained acceptance checks |
@@ -43,7 +42,7 @@ One open review backlog owns remaining findings, investigations, decisions and
 optimization opportunities. The optimization index links into it. Fixes
 record verification, update owning contracts/tests and remove completed entries.
 Experiment reports record the revision actually tested and distinguish prototypes
-from applied changes; measurements retain workloads, artifacts and limits.
+from applied changes and retain workload limits. Raw run artifacts stay outside Git.
 
-validation and dated results under `external run artifacts`. Do not maintain competing
-current ledgers.
+validation. Keep raw run artifacts outside version control; do not maintain
+competing current ledgers.

@@ -152,7 +152,7 @@
   a local guard temporarily blocks entry. Cache descendant-first delivery order.
 - Accept explicitly borrowed marked messages in ordinary IDL parameters. Rebuild
   changed UI contracts and their consumers together. See the
-  owned-event measurements for dynamic and monolithic
+  the historical owned-event implementation for dynamic and monolithic
   min-size comparisons, lifecycle tests and the idle-allocation regression.
 
 - Consolidate nine COM production crates into five: move runtime link declarations
@@ -530,7 +530,7 @@ wrappers. [COM_DESIGN.md](../architecture/COM_DESIGN.md) defines the accepted ar
   to the runtime's single display list without per-widget lists or renderers.
 - Skip discarded fixed-grid measurements and retain paint/text/custom-geometry
   buffers. Remaining native throughput and deployment-size overhead are recorded
-  in COM_PERFORMANCE.md.
+  at the named historical source revision.
 
 See [author contracts](../contracts/COM_AUTHORS.md) for explicit external-state, skipped-update,
 painting, lifecycle and callback responsibilities. Resize and retained setter

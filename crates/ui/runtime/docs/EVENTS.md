@@ -267,9 +267,8 @@ The COM process runtime has no UI event loop. Hosts and plugins use the same
 contracts and must be rebuilt together after this ABI change.
 
 [Widget dispatch](../../../../docs/contracts/WIDGET_EVENT_DISPATCH.md) records the design
-and ownership rules. Owned-event measurements
-and the [channel experiment](../../../../docs/experiments/EVENT_CHANNEL_EXPERIMENT.md) describe
-superseded implementations; their measurements are not results for this change.
+and ownership rules. The [channel experiment](../../../../docs/experiments/README.md#standard-channel)
+describes a superseded implementation rather than current event performance.
 
 ## Caption intent and parent policy
 

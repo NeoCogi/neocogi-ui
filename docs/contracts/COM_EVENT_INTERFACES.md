@@ -198,6 +198,6 @@ also measure empty, nonempty and Unicode labels through real COM updates for
 pointer, Enter and Space activation. They verify one marker allocation per activation independently of label size,
 exact weak source identity after edits/destruction and state preservation on rejected delivery.
 
-The [October 4 benchmark](../experiments/COM_EVENT_DOWNCAST_2026-10-04.md) measured
+The [October 4 benchmark](../experiments/README.md#event-downcasts) measured
 shared `ComPtr` queries. Its exact timings do not measure this exclusive event
 transfer and weak-projection path.
