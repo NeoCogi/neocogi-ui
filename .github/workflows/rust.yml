@@ -35,6 +35,14 @@ jobs:
         run: python3 -m unittest discover -s scripts -p test_contract_checks.py
       - name: Independent event consumers and generated-only COM control
         run: python3 scripts/check-contract-consumers.py
+      - name: Navigation probe and exact source-map boundaries
+        run: python3 -m unittest discover -s scripts -p test_idl_navigation.py
+      - name: Compile the actual editor navigation probe
+        run: python3 scripts/check-idl-navigation.py --compile-only
+      - name: Install the selected workspace language-server component
+        run: rustup component add rust-analyzer
+      - name: Actual editor definitions and exact authored IDL origins
+        run: python3 scripts/check-idl-navigation.py
       - run: cargo test -p neocogi-ui-runtime -p neocogi-ui-nodes -p neocogi-ui-support
       - run: cargo test -p neocogi-ui -p neocogi-ui-core-contracts -p neocogi-ui-nodes-contracts -p neocogi-ui-document --features neocogi-com/runtime
 
