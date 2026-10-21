@@ -75,14 +75,32 @@ fn compositor_extreme_patch_sides_cover_an_ordinary_destination() {
     let blue = u32::from_le_bytes([0, 0, 255, 255]);
     for (leading, trailing, split) in [(i32::MAX, i32::MAX, 55.0), (1_500_000_000, 1_000_000_000, 65.0)] {
         compositor.begin(Size { width: 120, height: 40 }, 0).unwrap();
-        compositor.nine_patch(destination, destination, NinePatchDraw {
-            insets: Insets { left: leading, right: trailing, top: 0, bottom: 0 },
-            center_visible: 1,
-            patch: AssetPatch::Flat {
-                top_left: 0, top: 0, top_right: 0, left: red, center: 0, right: blue,
-                bottom_left: 0, bottom: 0, bottom_right: 0,
-            },
-        }).unwrap();
+        compositor
+            .nine_patch(
+                destination,
+                destination,
+                NinePatchDraw {
+                    insets: Insets {
+                        left: leading,
+                        right: trailing,
+                        top: 0,
+                        bottom: 0,
+                    },
+                    center_visible: 1,
+                    patch: AssetPatch::Flat {
+                        top_left: 0,
+                        top: 0,
+                        top_right: 0,
+                        left: red,
+                        center: 0,
+                        right: blue,
+                        bottom_left: 0,
+                        bottom: 0,
+                        bottom_right: 0,
+                    },
+                },
+            )
+            .unwrap();
         compositor.submit(renderer.as_com_ref()).unwrap();
         let vertices = capture.vertices.borrow();
         assert_eq!(vertices.len(), 12);
@@ -111,7 +129,12 @@ fn compositor_source_shrink_overlays_pink_and_preserves_valid_frame_work() {
         content_color: 0,
         patch: AssetPatch::Image {
             icon,
-            source: Insets { left: i32::MAX, right: i32::MAX, top: 0, bottom: 0 },
+            source: Insets {
+                left: i32::MAX,
+                right: i32::MAX,
+                top: 0,
+                bottom: 0,
+            },
             tint: 0xff000000,
         },
     };
@@ -127,16 +150,31 @@ fn compositor_source_shrink_overlays_pink_and_preserves_valid_frame_work() {
     let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { capture: capture.clone() }).query().unwrap();
     for visual in [visual, stored_visual] {
         compositor.begin(Size { width: 100, height: 20 }, 0).unwrap();
-        let draw = NinePatchDraw { insets: visual.insets, center_visible: visual.center_visible, patch: visual.patch };
+        let draw = NinePatchDraw {
+            insets: visual.insets,
+            center_visible: visual.center_visible,
+            patch: visual.patch,
+        };
         compositor.nine_patch(destination, destination, draw).unwrap();
         // An invalid later patch must leave the complete earlier image/overlay operation intact.
-        let bad = AssetPatch::Image { icon, source: Insets { left: -1, ..Insets::default() }, tint: 0xffffffff };
-        assert_eq!(compositor.nine_patch(destination, destination, NinePatchDraw { patch: bad, ..draw }), Err(NC_E_INVALID_ARG));
+        let bad = AssetPatch::Image {
+            icon,
+            source: Insets { left: -1, ..Insets::default() },
+            tint: 0xffffffff,
+        };
+        assert_eq!(
+            compositor.nine_patch(destination, destination, NinePatchDraw { patch: bad, ..draw }),
+            Err(NC_E_INVALID_ARG)
+        );
         compositor.submit(renderer.as_com_ref()).unwrap();
         let vertices = capture.vertices.borrow();
         assert_eq!(vertices.len(), 24);
         for (index, quad) in vertices.chunks_exact(6).enumerate() {
-            let expected_color = if index % 2 == 0 { 0xff000000 } else { u32::from_le_bytes([255, 192, 203, 128]) };
+            let expected_color = if index % 2 == 0 {
+                0xff000000
+            } else {
+                u32::from_le_bytes([255, 192, 203, 128])
+            };
             assert!(quad.iter().all(|v| v.rgba == expected_color));
             let expected = if index < 2 { (0.0, 0.0, 50.0, 20.0) } else { (50.0, 0.0, 100.0, 20.0) };
             assert_eq!(quad_bounds(quad), expected);
@@ -150,9 +188,17 @@ fn compositor_source_shrink_overlays_pink_and_preserves_valid_frame_work() {
     // Diagnostics use the same effective clip as the image, with no unbounded overlay quad.
     compositor.begin(Size { width: 100, height: 20 }, 0).unwrap();
     let clip = Rect { x: 20, y: 0, width: 60, height: 20 };
-    compositor.nine_patch(clip, destination, NinePatchDraw {
-        insets: visual.insets, center_visible: visual.center_visible, patch: visual.patch,
-    }).unwrap();
+    compositor
+        .nine_patch(
+            clip,
+            destination,
+            NinePatchDraw {
+                insets: visual.insets,
+                center_visible: visual.center_visible,
+                patch: visual.patch,
+            },
+        )
+        .unwrap();
     compositor.submit(renderer.as_com_ref()).unwrap();
     let clipped = capture.vertices.borrow();
     assert_eq!(clipped.len(), 24);
@@ -163,11 +209,26 @@ fn compositor_source_shrink_overlays_pink_and_preserves_valid_frame_work() {
     drop(clipped);
     // Destination-only shrinking, including an exact source fit, must remain untinted.
     compositor.begin(Size { width: 100, height: 20 }, 0).unwrap();
-    compositor.nine_patch(destination, destination, NinePatchDraw {
-        insets: Insets { left: i32::MAX, right: i32::MAX, top: 0, bottom: 0 },
-        center_visible: 1,
-        patch: AssetPatch::Image { icon, source: Insets { left: 2, right: 2, top: 0, bottom: 0 }, tint: 0xff000000 },
-    }).unwrap();
+    compositor
+        .nine_patch(
+            destination,
+            destination,
+            NinePatchDraw {
+                insets: Insets {
+                    left: i32::MAX,
+                    right: i32::MAX,
+                    top: 0,
+                    bottom: 0,
+                },
+                center_visible: 1,
+                patch: AssetPatch::Image {
+                    icon,
+                    source: Insets { left: 2, right: 2, top: 0, bottom: 0 },
+                    tint: 0xff000000,
+                },
+            },
+        )
+        .unwrap();
     compositor.submit(renderer.as_com_ref()).unwrap();
     assert_eq!(capture.vertices.borrow().len(), 12);
     assert!(capture.vertices.borrow().iter().all(|v| v.rgba == 0xff000000));
@@ -540,7 +601,10 @@ fn glyph_acceleration_preserves_unicode_fallback_and_revision_publication() {
         match char::from_u32(glyph.scalar).unwrap() {
             'A' => glyph.advance_x = 3,
             '_' => glyph.advance_x = 5,
-            'B' => { glyph.scalar = u32::from('Ω'); glyph.advance_x = 7; },
+            'B' => {
+                glyph.scalar = u32::from('Ω');
+                glyph.advance_x = 7;
+            }
             _ => {}
         }
     }
@@ -565,8 +629,9 @@ fn glyph_acceleration_preserves_unicode_fallback_and_revision_publication() {
             compositor.install_assets(revision.as_com_ref()).unwrap();
         }
         compositor.begin(size, 0).unwrap();
-        compositor.text(clip, 0, DrawPoint { x: 0, y: 0 }, 0xffffffff,
-            NcCopyFromBufferOffset::new(0, "ABΩ€".as_bytes())).unwrap();
+        compositor
+            .text(clip, 0, DrawPoint { x: 0, y: 0 }, 0xffffffff, NcCopyFromBufferOffset::new(0, "ABΩ€".as_bytes()))
+            .unwrap();
         compositor.submit(renderer.as_com_ref()).unwrap();
         let vertices = capture.vertices.borrow();
         assert_eq!(vertices.len(), 24);

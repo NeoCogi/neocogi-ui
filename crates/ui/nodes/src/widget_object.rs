@@ -12,7 +12,6 @@ use crate::WidgetOption;
 
 /// Private semantic algorithms reused by each statically known built-in class.
 pub(crate) trait WidgetAlgorithm: crate::Widget {
-
     /// Adds concrete state-dependent routing policy to the common caller-authored options.
     fn effective_options(&self, options: WidgetOption) -> WidgetOption {
         options
@@ -278,7 +277,11 @@ macro_rules! direct_widget_phase_impl {
                 let shared = crate::Widget::take_shared_change(self);
                 let common = <$name as crate::widget_object::HostedWidget>::runtime_mut(self).state.take_change()?;
                 // Collection consumes markers, it does not announce a new mutation.
-                Ok(if shared { neocogi_ui_core_contracts::GeometryChange::Changed } else { common })
+                Ok(if shared {
+                    neocogi_ui_core_contracts::GeometryChange::Changed
+                } else {
+                    common
+                })
             }
 
             /// Paints semantic fields directly into the runtime-owned scoped frame context.
@@ -523,7 +526,9 @@ impl CompositeEvents {
         let (queue, messages) = if observed {
             let (queue, messages) = neocogi_com::events::channel();
             (Some(queue), Some(messages))
-        } else { (None, None) };
+        } else {
+            (None, None)
+        };
         (Self { messages }, queue)
     }
 
@@ -532,7 +537,9 @@ impl CompositeEvents {
     /// Rejected delivery leaves the semantic transition committed, as direct posts do.
     pub(crate) fn dispatch_next(&mut self, state: &mut neocogi_ui::com::widget::WidgetState) -> Result<bool, neocogi_com::NcStatus> {
         state.writable()?;
-        let Some(message) = self.messages.as_ref().and_then(|messages| messages.try_recv().ok()) else { return Ok(false) };
+        let Some(message) = self.messages.as_ref().and_then(|messages| messages.try_recv().ok()) else {
+            return Ok(false);
+        };
         state.post(message.event)?;
         Ok(true)
     }

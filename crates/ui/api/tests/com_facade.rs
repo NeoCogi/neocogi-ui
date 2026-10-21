@@ -85,7 +85,6 @@ mod tests {
     impl IWidget for TestButton {
         /// This widget forwards outputs and has no private inbox.
 
-
         /// This standalone facade fixture deliberately has no mountable runtime owner.
         fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
             Err(neocogi_com::NC_E_NOINTERFACE)
@@ -184,7 +183,9 @@ mod tests {
             label: String::from("initial"),
             requested_flags: WidgetOptions::NONE,
             changed: false,
-        }).query::<ButtonAbi>().unwrap();
+        })
+        .query::<ButtonAbi>()
+        .unwrap();
         let mut owner = OwnedWidget::from_interface(object);
         owner.set_label("before insertion")?;
         let mut field = owner.handle();

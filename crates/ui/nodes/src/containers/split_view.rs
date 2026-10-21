@@ -8,7 +8,7 @@ use crate::{
 use crate::math::RectExt;
 use crate::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
 use neocogi_com::{ComPtr, NcStatus, NC_E_INVALID_ARG, NC_E_OUT_OF_RANGE};
-use neocogi_ui_core_contracts::{ GeometryChange, IChildrenAbi, IChildrenEditorAbi, IWidgetHostAbi};
+use neocogi_ui_core_contracts::{GeometryChange, IChildrenAbi, IChildrenEditorAbi, IWidgetHostAbi};
 use neocogi_ui_nodes_contracts::{SplitAxis, SplitOptions, SplitViewAbi};
 
 /// Pointer offset within the divider prevents an initial jump when its edge is grabbed.
@@ -192,7 +192,6 @@ impl HostedWidget for SplitView {
     fn runtime_mut(&mut self) -> &mut WidgetRuntime {
         &mut self.runtime
     }
-
 }
 
 impl crate::widget_object::WidgetAlgorithm for SplitView {
@@ -212,7 +211,11 @@ impl neocogi_ui_nodes_contracts::SplitView for SplitView {
         self.editor.view()
     }
     /// Checks the two-pane capacity before the new child consumes its attachment claim.
-    fn insert(&mut self, index: u32, child: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
+    fn insert(
+        &mut self,
+        index: u32,
+        child: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
+    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
         let prepared = (|| {
             self.runtime.state.writable()?;
             if self.count >= 2 {
@@ -220,19 +223,27 @@ impl neocogi_ui_nodes_contracts::SplitView for SplitView {
             }
             Ok(())
         })();
-        if let Err(status) = prepared { return Err((status, child)); }
+        if let Err(status) = prepared {
+            return Err((status, child));
+        }
         self.editor.insert(index, child)?;
         self.count += 1;
         self.invalidate();
         Ok(())
     }
     /// Publishes invalidation after the editor commits replacement and drops the old owner.
-    fn replace(&mut self, index: u32, child: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
+    fn replace(
+        &mut self,
+        index: u32,
+        child: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
+    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
         let prepared = (|| {
             self.runtime.state.writable()?;
             Ok(())
         })();
-        if let Err(status) = prepared { return Err((status, child)); }
+        if let Err(status) = prepared {
+            return Err((status, child));
+        }
         self.editor.replace(index, child)?;
         self.invalidate();
         Ok(())

@@ -75,7 +75,9 @@ impl<E> EdgeEdit<E> {
         match self {
             Self::Insert { index, edge } => values.insert(index, edge),
             Self::Replace { index, edge } => values[index] = edge,
-            Self::Remove { index } => { values.remove(index); }
+            Self::Remove { index } => {
+                values.remove(index);
+            }
             Self::Clear => values.clear(),
         }
     }
@@ -146,7 +148,8 @@ macro_rules! container_edges {
             let edge = $decode(edge)?;
             let previous = <Self as crate::containers::ContainerAlgorithm>::edge(self, index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
             if previous != edge {
-                let prepared = <Self as crate::containers::ContainerAlgorithm>::prepare_edges(self, crate::containers::EdgeEdit::Replace { index: index as usize, edge })?;
+                let prepared =
+                    <Self as crate::containers::ContainerAlgorithm>::prepare_edges(self, crate::containers::EdgeEdit::Replace { index: index as usize, edge })?;
                 <Self as crate::containers::ContainerAlgorithm>::commit_edges(self, prepared);
                 <Self as crate::widget_object::HostedWidget>::runtime_mut(self)
                     .state

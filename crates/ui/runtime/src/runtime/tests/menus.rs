@@ -32,9 +32,12 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
         .item_with_queue(
             "Disabled",
             Some(
-                neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, session_tx.clone(), |_queue, _origin, event| { event.query_ref::<neocogi_ui::IActivatedEventAbi>()?; "disabled-command".to_owned() })
-                    .unwrap()
-                    .as_com_ref(),
+                neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, session_tx.clone(), |_queue, _origin, event| {
+                    event.query_ref::<neocogi_ui::IActivatedEventAbi>()?;
+                    "disabled-command".to_owned()
+                })
+                .unwrap()
+                .as_com_ref(),
             ),
         )
         .unwrap();
@@ -45,9 +48,12 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
         .item_with_queue(
             "old",
             Some(
-                neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, session_tx.clone(), |_queue, _origin, event| { event.query_ref::<neocogi_ui::IActivatedEventAbi>()?; "menu-command".to_owned() })
-                    .unwrap()
-                    .as_com_ref(),
+                neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, session_tx.clone(), |_queue, _origin, event| {
+                    event.query_ref::<neocogi_ui::IActivatedEventAbi>()?;
+                    "menu-command".to_owned()
+                })
+                .unwrap()
+                .as_com_ref(),
             ),
         )
         .unwrap();
@@ -146,9 +152,12 @@ fn standalone_menu_popup_submits_then_hides_without_destroying_its_live_rows() {
         .item_with_queue(
             "Run",
             Some(
-                neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, session_tx.clone(), |_queue, _origin, event| { event.query_ref::<neocogi_ui::IActivatedEventAbi>()?; "Run".to_owned() })
-                    .unwrap()
-                    .as_com_ref(),
+                neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, session_tx.clone(), |_queue, _origin, event| {
+                    event.query_ref::<neocogi_ui::IActivatedEventAbi>()?;
+                    "Run".to_owned()
+                })
+                .unwrap()
+                .as_com_ref(),
             ),
         )
         .unwrap();

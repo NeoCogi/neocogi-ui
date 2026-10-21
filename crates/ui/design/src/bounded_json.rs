@@ -34,7 +34,8 @@ fn encode<T: Serialize + ?Sized>(value: &T, limit: usize, format: Format, output
     match format {
         Format::Compact => serde_json::to_writer(&mut writer, value),
         Format::Pretty => serde_json::to_writer_pretty(&mut writer, value),
-    }.map_err(|error| error.to_string())?;
+    }
+    .map_err(|error| error.to_string())?;
     Ok(writer.length)
 }
 
@@ -61,7 +62,8 @@ impl Write for Writer<'_> {
                     // Retain geometric growth without requesting capacity beyond
                     // the selected policy. A failed reservation is recoverable.
                     let capacity = required.max(output.capacity().saturating_mul(2)).min(self.limit);
-                    output.try_reserve_exact(capacity - output.len())
+                    output
+                        .try_reserve_exact(capacity - output.len())
                         .map_err(|_| io::Error::new(io::ErrorKind::OutOfMemory, "JSON output allocation failed"))?;
                 }
                 output.extend_from_slice(bytes);
@@ -73,7 +75,9 @@ impl Write for Writer<'_> {
     }
 
     /// No external device or delayed writes exist; each append is synchronous.
-    fn flush(&mut self) -> io::Result<()> { Ok(()) }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -90,7 +94,8 @@ mod tests {
                 let expected = match format {
                     Format::Compact => serde_json::to_vec(&value),
                     Format::Pretty => serde_json::to_vec_pretty(&value),
-                }.unwrap();
+                }
+                .unwrap();
                 let limit = expected.len();
                 assert_eq!(encoded_len(&value, limit, format).unwrap(), limit);
                 assert_eq!(to_vec(&value, limit, format).unwrap(), expected);
@@ -106,7 +111,11 @@ mod tests {
     #[test]
     fn rejected_write_does_not_extend_or_reserve_output() {
         let mut output = Vec::new();
-        let mut writer = Writer { output: Some(&mut output), length: 0, limit: 8 };
+        let mut writer = Writer {
+            output: Some(&mut output),
+            length: 0,
+            limit: 8,
+        };
         writer.write_all(b"1234").unwrap();
         let capacity = writer.output.as_ref().unwrap().capacity();
         assert!(writer.write_all(b"56789").is_err());

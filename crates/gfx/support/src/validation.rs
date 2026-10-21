@@ -301,13 +301,16 @@ fn validate_insets(insets: Insets) -> Result<(), NcStatus> {
     Ok(())
 }
 
-
-
 /// Acquires an exact fresh table after its header bounded the requested capacity.
 /// A short successful foreign result is a protocol error, never default-filled data.
-fn read_output<T: neocogi_com::ComInlineValue>(count: usize, copy: impl FnOnce(neocogi_com::NcOutput<'_, T>) -> Result<(), NcStatus>) -> Result<Vec<T>, NcStatus> {
+fn read_output<T: neocogi_com::ComInlineValue>(
+    count: usize,
+    copy: impl FnOnce(neocogi_com::NcOutput<'_, T>) -> Result<(), NcStatus>,
+) -> Result<Vec<T>, NcStatus> {
     let mut output = neocogi_com::NcOutputBuffer::new();
     copy(output.output(0, count))?;
-    if output.len() != count { return Err(NC_E_INVALID_ARG); }
+    if output.len() != count {
+        return Err(NC_E_INVALID_ARG);
+    }
     Ok(output.into_vec())
 }

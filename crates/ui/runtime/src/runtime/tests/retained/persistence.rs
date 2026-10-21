@@ -3,8 +3,8 @@
 
 use super::*;
 use neocogi_com::{
-    ComBox, WeakComBox, binary, com_object, guid_from_qualified_name, ComDeserialize, ComSerialize, ComRef, INcBytesAbi, IUnknown, NcBytes, NcCopyFromBufferOffset, NcGuid,
-    NC_E_ABI_VERSION, NC_E_INVALID_ARG, NC_E_OUT_OF_RANGE,
+    ComBox, WeakComBox, binary, com_object, guid_from_qualified_name, ComDeserialize, ComSerialize, ComRef, INcBytesAbi, IUnknown, NcBytes,
+    NcCopyFromBufferOffset, NcGuid, NC_E_ABI_VERSION, NC_E_INVALID_ARG, NC_E_OUT_OF_RANGE,
 };
 use neocogi_com::persistence::{snapshot, FactoryRegistry, ObjectRecord};
 use neocogi_idl_example_contracts::{ICompositionRoot, ICompositionRootAbi};
@@ -129,12 +129,9 @@ impl neocogi_com::persistence::IPersistenceFactory for SettingsFactory {
             &state.checkbox_label,
             state.checked,
             Some(
-                neocogi_ui::test_event_queue!(
-                    neocogi_ui::CheckboxAbi,
-                    AppEvent,
-                    self.sender.clone(),
-                    |_queue, _origin, value| AppEvent::Enabled(value.query_weak::<ICheckboxChangedEventAbi>()?.checked()?)
-                )?
+                neocogi_ui::test_event_queue!(neocogi_ui::CheckboxAbi, AppEvent, self.sender.clone(), |_queue, _origin, value| {
+                    AppEvent::Enabled(value.query_weak::<ICheckboxChangedEventAbi>()?.checked()?)
+                })?
                 .as_com_ref(),
             ),
         )?;
@@ -149,7 +146,8 @@ impl neocogi_com::persistence::IPersistenceFactory for SettingsFactory {
                     main: LayoutTrack::Fixed { extent: 32 },
                     cross: ChildCrossSize::Stretch,
                 },
-            ).map_err(|(status, _candidate)| status)?;
+            )
+            .map_err(|(status, _candidate)| status)?;
             root.insert(
                 1,
                 checkbox,
@@ -157,7 +155,8 @@ impl neocogi_com::persistence::IPersistenceFactory for SettingsFactory {
                     main: LayoutTrack::Fixed { extent: 32 },
                     cross: ChildCrossSize::Stretch,
                 },
-            ).map_err(|(status, _candidate)| status)
+            )
+            .map_err(|(status, _candidate)| status)
         })();
         result?;
         Ok(SettingsView::from_value(SettingsView {
@@ -218,7 +217,13 @@ fn persisted_component_builds_real_ui_and_binds_without_child_handles() {
             .query::<CheckboxAbi>()
             .is_err()
     );
-    let mountable = component.query::<ICompositionRootAbi>().unwrap().take_root().unwrap().query::<IWidgetAbi>().unwrap();
+    let mountable = component
+        .query::<ICompositionRootAbi>()
+        .unwrap()
+        .take_root()
+        .unwrap()
+        .query::<IWidgetAbi>()
+        .unwrap();
     let owner = window(
         &fixture.ui,
         "loaded",
@@ -242,7 +247,13 @@ fn persisted_component_builds_real_ui_and_binds_without_child_handles() {
     drop(component);
     let restored = registry.restore(&saved).unwrap();
     assert_eq!(snapshot(restored.as_com_ref()).unwrap(), saved);
-    let mountable = restored.query::<ICompositionRootAbi>().unwrap().take_root().unwrap().query::<IWidgetAbi>().unwrap();
+    let mountable = restored
+        .query::<ICompositionRootAbi>()
+        .unwrap()
+        .take_root()
+        .unwrap()
+        .query::<IWidgetAbi>()
+        .unwrap();
     let _owner = window(
         &fixture.ui,
         "reloaded",

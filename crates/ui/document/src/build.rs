@@ -26,7 +26,9 @@ pub(crate) struct Construction<'a> {
 }
 /// Erases only the concrete widget projection through checked QueryInterface.
 fn root<T: ComInterface>(widget: OwnedWidget<T>) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
-    Ok(OwnedWidget::from_interface(widget.into_interface().query().map_err(|(status, _unpublished)| status)?))
+    Ok(OwnedWidget::from_interface(
+        widget.into_interface().query().map_err(|(status, _unpublished)| status)?,
+    ))
 }
 /// Turns a persistent text policy into the existing runtime enum.
 fn wrapping(value: &Wrapping) -> TextWrapping {
@@ -57,24 +59,13 @@ impl Construction<'_> {
         let factory = self.ui.widgets();
         let queue = self.events.take(&node.key);
         let mut widget = match &node.widget {
-            WidgetSpec::Button { text } => {
-                root(factory.button_with_queue(text, queue.as_ref().map(ComPtr::as_com_ref))?)?
-            }
-            WidgetSpec::Checkbox { text, checked } => root(factory.checkbox_with_queue(
-                text,
-                *checked,
-                queue.as_ref().map(ComPtr::as_com_ref),
-            )?)?,
-            WidgetSpec::Textbox { text } => {
-                root(factory.textbox_with_queue(text, queue.as_ref().map(ComPtr::as_com_ref))?)?
-            }
+            WidgetSpec::Button { text } => root(factory.button_with_queue(text, queue.as_ref().map(ComPtr::as_com_ref))?)?,
+            WidgetSpec::Checkbox { text, checked } => root(factory.checkbox_with_queue(text, *checked, queue.as_ref().map(ComPtr::as_com_ref))?)?,
+            WidgetSpec::Textbox { text } => root(factory.textbox_with_queue(text, queue.as_ref().map(ComPtr::as_com_ref))?)?,
             WidgetSpec::TextBlock { text, wrapping: policy } => root(factory.text_block(text, wrapping(policy))?)?,
-            WidgetSpec::TextArea { text, wrapping: policy, scrolling } => root(factory.text_area_with_queue(
-                text,
-                wrapping(policy),
-                *scrolling,
-                queue.as_ref().map(ComPtr::as_com_ref),
-            )?)?,
+            WidgetSpec::TextArea { text, wrapping: policy, scrolling } => {
+                root(factory.text_area_with_queue(text, wrapping(policy), *scrolling, queue.as_ref().map(ComPtr::as_com_ref))?)?
+            }
             WidgetSpec::Slider { value, low, high, step, precision } => root(factory.slider_with_queue(
                 SliderOptions {
                     value: *value,
@@ -94,12 +85,8 @@ impl Construction<'_> {
                 queue.as_ref().map(ComPtr::as_com_ref),
             )?)?,
             WidgetSpec::ColorSwatch { text, rgba } => root(factory.color_swatch(*rgba, text)?)?,
-            WidgetSpec::ListItem { text } => {
-                root(factory.list_item_with_queue(text, queue.as_ref().map(ComPtr::as_com_ref))?)?
-            }
-            WidgetSpec::ListBox { text } => {
-                root(factory.list_box_with_queue(text, queue.as_ref().map(ComPtr::as_com_ref))?)?
-            }
+            WidgetSpec::ListItem { text } => root(factory.list_item_with_queue(text, queue.as_ref().map(ComPtr::as_com_ref))?)?,
+            WidgetSpec::ListBox { text } => root(factory.list_box_with_queue(text, queue.as_ref().map(ComPtr::as_com_ref))?)?,
             WidgetSpec::Scrollbar { vertical, viewport, content, offset } => root(factory.scrollbar_with_queue(
                 ScrollRange {
                     axis: if *vertical { ScrollAxis::Vertical } else { ScrollAxis::Horizontal },
@@ -111,12 +98,9 @@ impl Construction<'_> {
             )?)?,
             WidgetSpec::Combo { labels, selected, placeholder } => {
                 let parent = self.parent.ok_or(NC_E_INVALID_ARG)?;
-                let mut combo = self.ui.combo_box_with_queue(
-                    parent.as_com_ref(),
-                    labels,
-                    selection(*selected),
-                    queue.as_ref().map(ComPtr::as_com_ref),
-                )?;
+                let mut combo = self
+                    .ui
+                    .combo_box_with_queue(parent.as_com_ref(), labels, selection(*selected), queue.as_ref().map(ComPtr::as_com_ref))?;
                 combo.set_placeholder(placeholder)?;
                 root(combo)?
             }
@@ -163,7 +147,7 @@ impl Construction<'_> {
                     return Err(NC_E_INVALID_ARG);
                 }
                 root(factory.scroll_area(children.remove(0), *enabled).map_err(|(status, _unpublished)| status)?)?
-            },
+            }
             WidgetSpec::Disclosure { text, tree, expanded } => {
                 root(factory.disclosure(text, if *tree { DisclosureStyle::Tree } else { DisclosureStyle::Header }, *expanded)?)?
             }
@@ -191,7 +175,8 @@ impl Construction<'_> {
                 (WidgetSpec::Grid { .. }, Edge::Grid { columns, rows }) => widget
                     .as_interface()
                     .observe::<GridAbi>()?
-                    .insert(index, child.into_interface(), GridExtent { columns: *columns, rows: *rows }).map_err(|(status, _unpublished)| status)?,
+                    .insert(index, child.into_interface(), GridExtent { columns: *columns, rows: *rows })
+                    .map_err(|(status, _unpublished)| status)?,
                 (WidgetSpec::Form { .. }, Edge::Position { x, y, width, height }) => widget
                     .as_interface()
                     .observe::<FormAbi>()?
@@ -204,11 +189,13 @@ impl Construction<'_> {
                             width: *width,
                             height: *height,
                         },
-                    ).map_err(|(status, _unpublished)| status)?,
+                    )
+                    .map_err(|(status, _unpublished)| status)?,
                 (WidgetSpec::Split { .. }, Edge::Pane) => widget
                     .as_interface()
                     .observe::<SplitViewAbi>()?
-                    .insert(index, child.into_interface()).map_err(|(status, _unpublished)| status)?,
+                    .insert(index, child.into_interface())
+                    .map_err(|(status, _unpublished)| status)?,
                 (WidgetSpec::Scroll { .. }, Edge::Pane) => {} // The constructor already adopted its sole child.
                 _ => return Err(NC_E_INVALID_ARG),
             }

@@ -830,10 +830,7 @@ impl ResourceRecipe {
                 };
                 images.reserve(appearance_paths.len());
                 for path in appearance_paths {
-                    images.push(ImageResourceRecipe {
-                        path,
-                        purpose: ImagePurpose::Appearance,
-                    });
+                    images.push(ImageResourceRecipe { path, purpose: ImagePurpose::Appearance });
                 }
                 Ok(Self::Derive(DerivedResourceRecipe {
                     size,
@@ -897,7 +894,8 @@ impl DerivedResourceRecipe {
             let placement = match image.purpose {
                 ImagePurpose::Semantic(role) => builder.add_icon_bytes(NcCopyFromBufferOffset::new(0, icon_role_name(role).as_bytes()), png),
                 ImagePurpose::Appearance => builder.add_artwork_bytes(png),
-            }.map_err(|status| gfx_failure("image decoding", Some(image.path.clone()), status, builder_diagnostics.as_ref()))?;
+            }
+            .map_err(|status| gfx_failure("image decoding", Some(image.path.clone()), status, builder_diagnostics.as_ref()))?;
             match image.purpose {
                 ImagePurpose::Semantic(_) => {}
                 ImagePurpose::Appearance => {

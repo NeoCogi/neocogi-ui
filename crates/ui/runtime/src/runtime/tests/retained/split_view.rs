@@ -205,9 +205,11 @@ fn split_position_setter_preserves_policy_and_checks_the_real_com_boundary() {
             .split_view_with_queue(
                 settings(axis),
                 Some(
-                    neocogi_ui::test_event_queue!(neocogi_ui::SplitViewAbi, i32, send, |_queue, _origin, event| event.query_weak::<ISplitChangedEventAbi>()?.position()?)
-                        .unwrap()
-                        .as_com_ref(),
+                    neocogi_ui::test_event_queue!(neocogi_ui::SplitViewAbi, i32, send, |_queue, _origin, event| event
+                        .query_weak::<ISplitChangedEventAbi>()?
+                        .position()?)
+                    .unwrap()
+                    .as_com_ref(),
                 ),
             )
             .unwrap();
@@ -260,19 +262,24 @@ fn split_position_setter_cancels_active_drag_and_relayouts_panes() {
         .split_view_with_queue(
             settings(SplitAxis::Horizontal),
             Some(
-                neocogi_ui::test_event_queue!(neocogi_ui::SplitViewAbi, i32, send, |_queue, _origin, event| event.query_weak::<ISplitChangedEventAbi>()?.position()?)
-                    .unwrap()
-                    .as_com_ref(),
+                neocogi_ui::test_event_queue!(neocogi_ui::SplitViewAbi, i32, send, |_queue, _origin, event| event
+                    .query_weak::<ISplitChangedEventAbi>()?
+                    .position()?)
+                .unwrap()
+                .as_com_ref(),
             ),
         )
         .unwrap();
     let mut split = split_owner.handle();
     let (first, state) = probe::<0>(&fixture.ui, Size { width: 10, height: 10 }, WidgetOptions::NONE);
     split.insert(0, first).unwrap();
-    split
-        .insert(1, fixture.ui.widgets().text_block("second", TextWrapping::None).unwrap())
-        .unwrap();
-    let _owner = window(&fixture.ui, "setter during capture", Rect { x: 10, y: 10, width: 400, height: 120 }, split_owner);
+    split.insert(1, fixture.ui.widgets().text_block("second", TextWrapping::None).unwrap()).unwrap();
+    let _owner = window(
+        &fixture.ui,
+        "setter during capture",
+        Rect { x: 10, y: 10, width: 400, height: 120 },
+        split_owner,
+    );
     fixture.frame(VIEW).unwrap();
     pointer(&fixture.ui, Point { x: 134, y: 40 }, true);
     fixture.frame(VIEW).unwrap();

@@ -75,7 +75,6 @@ impl LeafContent for Leaf {
     fn paint(&mut self, _: WidgetPaint, _: &mut Painter<'_>) -> Result<(), NcStatus> {
         Ok(())
     }
-
 }
 
 /// Mounts one real widget and retains only its weak observation and logical window.

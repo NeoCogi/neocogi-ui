@@ -19,16 +19,15 @@ pub(super) struct Composite<Processor: MessageProcessor> {
 }
 impl<Processor: MessageProcessor> Composite<Processor> {
     /// Builds an unmounted composite and exposes its ordinary child-editing capability.
-    pub(super) fn build(ui: &neocogi_ui::Ui, processor: Processor, messages: Receiver<Processor::Message>) -> (neocogi_com::LocalBox<Self>, neocogi_ui::LinearWidget) {
+    pub(super) fn build(
+        ui: &neocogi_ui::Ui,
+        processor: Processor,
+        messages: Receiver<Processor::Message>,
+    ) -> (neocogi_com::LocalBox<Self>, neocogi_ui::LinearWidget) {
         let shell = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
         let layout = shell.node_interface().unwrap().query().unwrap();
         let handle = shell.handle();
-        let local = Self::into_local_box(Self {
-            shell,
-            layout,
-            processor,
-            messages,
-        });
+        let local = Self::into_local_box(Self { shell, layout, processor, messages });
         (local, handle)
     }
 }

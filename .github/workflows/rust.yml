@@ -96,6 +96,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: rustup toolchain install nightly --profile minimal
+      - name: Complete COM quality gate, including workspace formatting and strict rustdoc
+        run: bash crates/com/scripts/test-quality.sh
       - name: Local ABI, compile cases, inspector and static runtime selection
         run: cargo test -p neocogi-com-core -p neocogi-com-codegen -p neocogi-com-macros -p neocogi-com-runtime -p neocogi-inspect -p neocogi-com --features neocogi-com/runtime
       # A debug-only overflow assertion previously let optimized retain return

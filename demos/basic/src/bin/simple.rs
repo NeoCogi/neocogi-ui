@@ -61,9 +61,13 @@ impl AppState for State {
     type Message = neocogi_com::events::EventMessage;
     /// Approves this demo's close request after the caption handler has returned.
     fn update(&mut self, message: Self::Message) -> Result<(), neocogi_com::NcStatus> {
-        let Some(origin) = message.origin.service::<IWindowAbi>()? else { return Ok(()); };
-        if message.query::<IWindowCloseRequestedEventAbi>()?.is_some() {
-            if let Some(window) = origin.upgrade()? { window.close()?; }
+        let Some(origin) = message.origin.service::<IWindowAbi>()? else {
+            return Ok(());
+        };
+        if message.query::<IWindowCloseRequestedEventAbi>()?.is_some()
+            && let Some(window) = origin.upgrade()?
+        {
+            window.close()?;
         }
         Ok(())
     }
@@ -76,9 +80,11 @@ fn run() -> Result<(), HostError> {
     let mut hello = host.ui.widgets().button_unobserved("Hello World!")?;
     hello.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
     let mut tree = host.ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Stretch)?;
-    tree.insert(0, hello, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 })).map_err(|(status, _candidate)| status)?;
+    tree.insert(0, hello, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
+        .map_err(|(status, _candidate)| status)?;
     let (queue, messages) = neocogi_com::events::channel();
-    host.ui.window_with_queue("Hello Window", Rect { x: 40, y: 40, width: 300, height: 400 }, tree, Some(queue.as_com_ref()))
+    host.ui
+        .window_with_queue("Hello Window", Rect { x: 40, y: 40, width: 300, height: 400 }, tree, Some(queue.as_com_ref()))
         .map_err(|(status, _candidate)| status)?;
     host.run(State, messages)
 }

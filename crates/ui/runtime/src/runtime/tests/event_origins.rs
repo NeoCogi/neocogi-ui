@@ -110,14 +110,7 @@ fn text_area_captures_public_identity_and_order_from_its_private_editor() {
     for (message, text) in messages.iter().zip(["first", "first second"]) {
         assert!(message.origin.widget::<TextAreaAbi>().unwrap().unwrap().same_object(observer.as_interface()));
         assert_eq!(
-            message
-                .query::<ITextChangedEventAbi>()
-                .unwrap()
-                .unwrap()
-                .text()
-                .unwrap()
-                .to_string()
-                .unwrap(),
+            message.query::<ITextChangedEventAbi>().unwrap().unwrap().text().unwrap().to_string().unwrap(),
             text
         );
     }

@@ -360,7 +360,6 @@ impl crate::widget_object::HostedWidget for Disclosure {
     fn runtime_mut(&mut self) -> &mut crate::widget_object::WidgetRuntime {
         &mut self.runtime
     }
-
 }
 
 impl crate::widget_object::WidgetAlgorithm for DisclosureHeader {}
@@ -521,8 +520,12 @@ fn prepare_children(
     let editor = host.create_children()?;
     let header_view = header.downgrade();
     let body_view = body.downgrade();
-    editor.insert(0, header.query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?).map_err(|(status, _unpublished)| status)?;
-    editor.insert(1, body.query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?).map_err(|(status, _unpublished)| status)?;
+    editor
+        .insert(0, header.query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?)
+        .map_err(|(status, _unpublished)| status)?;
+    editor
+        .insert(1, body.query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?)
+        .map_err(|(status, _unpublished)| status)?;
     let header = header_view;
     let body = body_view;
     Ok(DisclosureChildren { editor, header, body })

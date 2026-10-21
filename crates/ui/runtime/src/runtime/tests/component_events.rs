@@ -44,7 +44,9 @@ impl PrivateRecord {
             Edit::None => {}
             Edit::Close(window) => window.close()?,
             Edit::RequestClose { window, requests } => requests.send(window).map_err(|_| UI_E_CLOSED)?,
-            Edit::Insert { mut parent, child } => parent.insert(0, child, LinearEdge::new(LayoutTrack::Content)).map_err(|(status, _candidate)| status)?,
+            Edit::Insert { mut parent, child } => parent
+                .insert(0, child, LinearEdge::new(LayoutTrack::Content))
+                .map_err(|(status, _candidate)| status)?,
         }
         Ok(())
     }
@@ -185,7 +187,14 @@ fn descendant_close_intent_leaves_parent_and_siblings_live_until_parent_approves
     let (requests, decisions) = std::sync::mpsc::channel();
     let app = TestApp::new((), decisions, |(), window: ComPtr<IWindowAbi>| window.close());
     let mut source = Emitter::create();
-    let (child, _) = component(&ui, &trace, "remover", &mut source, None, Edit::RequestClose { window: window.clone(), requests });
+    let (child, _) = component(
+        &ui,
+        &trace,
+        "remover",
+        &mut source,
+        None,
+        Edit::RequestClose { window: window.clone(), requests },
+    );
     shell.insert(0, child, LinearEdge::new(LayoutTrack::Content)).unwrap();
     let mut sibling_source = Emitter::create();
     let (sibling, _) = component(&ui, &trace, "sibling", &mut sibling_source, None, Edit::None);
@@ -260,7 +269,14 @@ fn close_intent_does_not_silently_discard_pending_private_messages() {
     let (requests, decisions) = std::sync::mpsc::channel();
     let app = TestApp::new((), decisions, |(), window: ComPtr<IWindowAbi>| window.close());
     let mut source = Emitter::create();
-    let (child, _) = component(&ui, &trace, "remover", &mut source, None, Edit::RequestClose { window: window.clone(), requests });
+    let (child, _) = component(
+        &ui,
+        &trace,
+        "remover",
+        &mut source,
+        None,
+        Edit::RequestClose { window: window.clone(), requests },
+    );
     parent.insert(0, child, LinearEdge::new(LayoutTrack::Content)).unwrap();
     emit(&source);
     emit(&source);

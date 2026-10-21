@@ -116,10 +116,7 @@ fn window_cycle_can_resume_after_focus_moves_through_an_embedded_scope() {
         ui.input(input, "").unwrap();
         ui.update(SIZE).unwrap();
     }
-    assert!(matches!(
-        ui.text_input_area().unwrap(),
-        TextInputArea::Area(_)
-    ));
+    assert!(matches!(ui.text_input_area().unwrap(), TextInputArea::Area(_)));
     for pressed in [true, false] {
         ui.input(key(KeyCode::Function, 6, 2, pressed), "").unwrap();
         ui.update(SIZE).unwrap();

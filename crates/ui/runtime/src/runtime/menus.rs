@@ -327,7 +327,9 @@ impl IMenus for Runtime {
         let mut context = self.storage.context()?;
         context.window_manager.window_visible(&parent).map_err(windows::status)?;
         let menu = declaration.menu.try_borrow_mut().map_err(|_| UI_E_BUSY)?.take().ok_or(UI_E_CLOSED)?;
-        let popup = context.window_manager.create_menu_popup(&parent, menu, None)
+        let popup = context
+            .window_manager
+            .create_menu_popup(&parent, menu, None)
             .unwrap_or_else(|_| unreachable!("authenticated parent cannot disappear before registration"));
         let (identity, surface) = windows::LogicalPopup::create(Rc::downgrade(&self.storage), &mut context.window_manager, popup, queue);
         self.storage.mounts.borrow_mut().push(SurfaceMount { surface, identity: identity.clone() });

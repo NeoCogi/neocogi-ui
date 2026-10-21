@@ -143,7 +143,13 @@ fn button(ui: &Ui, events_tx: &mut Inputs, text: &str, action: Action) -> Result
 }
 /// A disclosure body is its actual editable Linear COM object, with no placeholder replacement tree.
 #[inline(never)]
-fn section(ui: &Ui, parent: &mut nodes::LinearClient<neocogi_com::ThreadLocal>, text: &str, style: DisclosureStyle, expanded: bool) -> Result<LinearWidget, NcStatus> {
+fn section(
+    ui: &Ui,
+    parent: &mut nodes::LinearClient<neocogi_com::ThreadLocal>,
+    text: &str,
+    style: DisclosureStyle,
+    expanded: bool,
+) -> Result<LinearWidget, NcStatus> {
     let section = ui.widgets().disclosure(text, style, expanded)?;
     let body = section.body()?;
     neocogi_ui_samples::append_widget(parent, into_widget(section)?, LayoutTrack::Content)?;
@@ -424,7 +430,9 @@ impl State {
         } else if message.query::<IWindowCloseRequestedEventAbi>()?.is_some() {
             self.demo.set_visibility(Visibility::Hidden)?;
             return self.write_log("Closed Demo Window; use Grid > Show Demo Window to restore it");
-        } else { return Ok(()); };
+        } else {
+            return Ok(());
+        };
         if clamp && (area.width < 240 || area.height < 300) {
             area.width = area.width.max(240);
             area.height = area.height.max(300);
@@ -493,7 +501,9 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<neocogi_com::event
     let mut events_tx = Inputs::new(receiver);
     let grid = Rc::new(RefCell::new(GridState::default()));
     let grid_widget = ui.widgets().leaf(GridViewWidget::new(grid.clone()), WidgetOptions::NONE)?;
-    let desktop = ui.window("X-Y Grid Surface", rect(0, 0, 1200, 800), into_widget(grid_widget)?).map_err(|(status, _candidate)| status)?;
+    let desktop = ui
+        .window("X-Y Grid Surface", rect(0, 0, 1200, 800), into_widget(grid_widget)?)
+        .map_err(|(status, _candidate)| status)?;
     desktop.set_layer(0)?;
     desktop.set_child_clip(ChildClip::Content)?;
     desktop.set_options(WindowOptions::NO_TITLE | WindowOptions::NO_CLOSE | WindowOptions::NO_RESIZE | WindowOptions::NO_PADDING)?;
@@ -503,21 +513,18 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<neocogi_com::event
     let mut main_body = main_body_handle;
     let main_scroll_handle = main_scroll.handle();
     let lifecycle = events_tx.queue.clone();
-    let demo = ui.child_window_with_queue(
-        desktop.as_com_ref(),
-        "Demo Window",
-        rect(40, 40, 300, 450),
-        into_widget(main_scroll)?,
-        Some(lifecycle.as_com_ref()),
-    ).map_err(|(status, _candidate)| status)?;
+    let demo = ui
+        .child_window_with_queue(
+            desktop.as_com_ref(),
+            "Demo Window",
+            rect(40, 40, 300, 450),
+            into_widget(main_scroll)?,
+            Some(lifecycle.as_com_ref()),
+        )
+        .map_err(|(status, _candidate)| status)?;
     demo.set_options(WindowOptions::FRAME | WindowOptions::MINIMIZE_BUTTON | WindowOptions::MAXIMIZE_BUTTON)?;
     let info = [label(ui, "40, 40")?, label(ui, "300, 450")?, label(ui, "0.0")?];
-    let combo = ui.combo_box_with_queue(
-        demo.as_com_ref(),
-        &FRUIT,
-        ChoiceSelection::Selected(0),
-        Some(events_tx.queue.as_com_ref()),
-    )?;
+    let combo = ui.combo_box_with_queue(demo.as_com_ref(), &FRUIT, ChoiceSelection::Selected(0), Some(events_tx.queue.as_com_ref()))?;
     let menus = ui.menus()?;
     let popup_menu = menus.create("Test Popup")?;
     menu_item(&popup_menu, &mut events_tx, "Hello", Action::Log)?;
@@ -566,7 +573,13 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<neocogi_com::event
     let mut entry = ui.widgets().textbox_with_queue("", Some(entry_sink.as_com_ref()))?;
     entry.set_font_role(FontRole::Mono)?;
     let (style, style_root) = StyleEditor::new(ui, &mut events_tx)?;
-    floating(ui, desktop.as_com_ref(), "Flat Palette / Skin Metrics", rect(350, 250, 300, 240), into_widget(style_root)?)?;
+    floating(
+        ui,
+        desktop.as_com_ref(),
+        "Flat Palette / Skin Metrics",
+        rect(350, 250, 300, 240),
+        into_widget(style_root)?,
+    )?;
     let background = ui.widgets().color_swatch(grid.borrow().background, "#5A5F64")?;
     #[cfg(not(target_arch = "wasm32"))]
     let file_dialog = Some(ui.file_dialog_with_queue(demo.as_com_ref(), Some(events_tx.queue.as_com_ref()))?);
@@ -612,7 +625,14 @@ pub(super) fn run() -> Result<(), HostError> {
 }
 
 /// Builds the main scrolling control sampler without duplicating widget state or storing authoring closures.
-fn build_controls(host: &Host, state: &mut State, content: &mut LinearWidget, info_owners: [OwnedWidget<TextBlockAbi>; 3], combo_owner: OwnedWidget<ComboAbi>, background_owner: OwnedWidget<ColorSwatchAbi>) -> Result<(), HostError> {
+fn build_controls(
+    host: &Host,
+    state: &mut State,
+    content: &mut LinearWidget,
+    info_owners: [OwnedWidget<TextBlockAbi>; 3],
+    combo_owner: OwnedWidget<ComboAbi>,
+    background_owner: OwnedWidget<ColorSwatchAbi>,
+) -> Result<(), HostError> {
     let events_tx = &mut state.inputs;
     let ui = &state.ui;
     let mut info = section(ui, content.as_interface_mut(), "Window Info", DisclosureStyle::Header, false)?;
@@ -811,28 +831,60 @@ impl State {
         use neocogi_com::events::EventOrigin;
         match &message.origin {
             EventOrigin::Widget(origin) if origin.is_alive() => {
-                if let Some(action) = self.inputs.buttons.iter().find(|(control, _)| control.same_object(origin)).map(|(_, action)| *action) {
-                    if message.query::<IActivatedEventAbi>()?.is_some() { self.activate(action)?; }
-                } else if let Some(target) = self.inputs.sliders.iter().find(|(control, _)| control.same_object(origin)).map(|(_, target)| *target) {
+                if let Some(action) = self
+                    .inputs
+                    .buttons
+                    .iter()
+                    .find(|(control, _)| control.same_object(origin))
+                    .map(|(_, action)| *action)
+                {
+                    if message.query::<IActivatedEventAbi>()?.is_some() {
+                        self.activate(action)?;
+                    }
+                } else if let Some(target) = self
+                    .inputs
+                    .sliders
+                    .iter()
+                    .find(|(control, _)| control.same_object(origin))
+                    .map(|(_, target)| *target)
+                {
                     if let Some(event) = message.query::<INumericChangedEventAbi>()? {
                         let value = event.value()?;
-                        if !value.is_finite() { return Err(NC_E_INVALID_ARG); }
+                        if !value.is_finite() {
+                            return Err(NC_E_INVALID_ARG);
+                        }
                         self.command(target.message(value))?;
                     }
                 } else if origin.same_object(self.entry.as_interface()) {
-                    if let Some(event) = message.query::<ITextSubmittedEventAbi>()? { self.text_submitted(&event.text()?.to_string()?)?; }
+                    if let Some(event) = message.query::<ITextSubmittedEventAbi>()? {
+                        self.text_submitted(&event.text()?.to_string()?)?;
+                    }
                 } else if origin.same_object(self.combo.as_interface()) {
-                    if let Some(event) = message.query::<IChoiceChangedEventAbi>()? { self.choice_changed(&event.selection()?)?; }
+                    if let Some(event) = message.query::<IChoiceChangedEventAbi>()? {
+                        self.choice_changed(&event.selection()?)?;
+                    }
                 } else if self.file_dialog.as_ref().is_some_and(|dialog| origin.same_object(dialog.as_interface())) {
                     if let Some(event) = message.query::<IFileAcceptedEventAbi>()? {
                         self.file_selected(Some(neocogi_ui::path::decode(event.path()?.as_com_ref())?))?;
-                    } else if message.query::<IFileCancelledEventAbi>()?.is_some() { self.file_selected(None)?; }
+                    } else if message.query::<IFileCancelledEventAbi>()?.is_some() {
+                        self.file_selected(None)?;
+                    }
                 }
             }
             EventOrigin::Service(origin) if origin.upgrade()?.is_some() => {
-                if let Some(action) = self.inputs.menus.iter().find(|(control, _)| control.same_object(origin)).map(|(_, action)| *action) {
-                    if message.query::<IActivatedEventAbi>()?.is_some() { self.activate(action)?; }
-                } else if origin.same_object(&self.demo.downgrade()?) { self.window_changed(message)?; }
+                if let Some(action) = self
+                    .inputs
+                    .menus
+                    .iter()
+                    .find(|(control, _)| control.same_object(origin))
+                    .map(|(_, action)| *action)
+                {
+                    if message.query::<IActivatedEventAbi>()?.is_some() {
+                        self.activate(action)?;
+                    }
+                } else if origin.same_object(&self.demo.downgrade()?) {
+                    self.window_changed(message)?;
+                }
             }
             _ => {}
         }

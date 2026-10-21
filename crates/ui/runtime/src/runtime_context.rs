@@ -80,14 +80,7 @@ impl RuntimeContext {
     pub(crate) fn submit(&mut self, size: Size, clear: u32, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
         // Clone the cheap immutable atlas handle before mutably borrowing the display list.
         let atlas = self.window_manager.skin_bundle().atlas().clone();
-        crate::render::compositor::submit(
-            self.window_manager.display_list_mut(),
-            &atlas,
-            &mut self.compositor,
-            renderer,
-            size,
-            clear,
-        )
+        crate::render::compositor::submit(self.window_manager.display_list_mut(), &atlas, &mut self.compositor, renderer, size, clear)
     }
 
     /// Installs the copied resource revision in the GFX owner before UI publishes its projection.

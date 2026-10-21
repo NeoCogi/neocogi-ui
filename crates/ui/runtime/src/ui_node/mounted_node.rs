@@ -48,7 +48,9 @@ impl ComNode {
     /// This inspects the existing borrow word and authoritative child collection;
     /// no second lifetime flag, ownership graph, or provider callback is needed.
     pub(crate) fn ensure_idle(&self) -> Result<(), NcStatus> {
-        if !self.widget.is_idle() { return Err(UI_E_BUSY); }
+        if !self.widget.is_idle() {
+            return Err(UI_E_BUSY);
+        }
         match &self.layout {
             NodeLayoutKind::Leaf(_) => Ok(()),
             NodeLayoutKind::Branch { children, .. } => children.ensure_idle(),
@@ -97,9 +99,11 @@ impl ComNode {
         let state = super::input_contract::snapshot(ctx, input, self.policy().1);
         let (event, text) = super::input_contract::event(input);
         let origin = neocogi_com::events::EventOrigin::Widget(self.widget.downgrade().into_unknown());
-        let result = self.services.state.event_origins.with_origin(origin, || {
-            self.widget.update(state, event, NcCopyFromBufferOffset::new(0, text))
-        })?;
+        let result = self
+            .services
+            .state
+            .event_origins
+            .with_origin(origin, || self.widget.update(state, event, NcCopyFromBufferOffset::new(0, text)))?;
         let change = match result {
             Ok(GeometryChange::Changed) => Change::Changed,
             Ok(GeometryChange::NoChange) => Change::NoChange,
@@ -238,7 +242,7 @@ impl ComNode {
         };
         match change {
             Ok(GeometryChange::Changed) => self.dirty.set(true),
-            Ok(GeometryChange::NoChange) => {},
+            Ok(GeometryChange::NoChange) => {}
             invalid => {
                 self.dirty.set(true);
                 return Err(match invalid {
@@ -269,7 +273,10 @@ impl Drop for ComNode {
         self.services.state.dispatch_order_changed.set(true);
         self.services.state.changes_pending.set(true);
         if self.dispatcher.is_some() {
-            self.services.state.dispatcher_count.set(self.services.state.dispatcher_count.get().checked_sub(1).expect("counted dispatcher node"));
+            self.services
+                .state
+                .dispatcher_count
+                .set(self.services.state.dispatcher_count.get().checked_sub(1).expect("counted dispatcher node"));
         }
     }
 }

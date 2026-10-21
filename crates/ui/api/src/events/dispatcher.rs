@@ -164,10 +164,18 @@ mod tests {
     fn pending_changes_follow_messages_and_share_the_same_mutable_gate() {
         for disconnect in [false, true] {
             let (send, messages) = mpsc::channel();
-            let local = Dispatcher::into_local(Dispatcher::new(PendingProcessor { trace: Vec::new(), pending: Pending::None }, messages));
+            let local = Dispatcher::into_local(Dispatcher::new(
+                PendingProcessor {
+                    trace: Vec::new(),
+                    pending: Pending::None,
+                },
+                messages,
+            ));
             let mut dispatcher = local.query::<IApplicationDispatcherAbi>().unwrap();
             send.send(()).unwrap();
-            if disconnect { drop(send); }
+            if disconnect {
+                drop(send);
+            }
             assert_eq!(dispatcher.dispatch_next(), Ok(ApplicationDispatch::MessageHandled));
             assert_eq!(local.try_borrow().unwrap().processor.trace, ["handled"]);
             {
@@ -185,7 +193,13 @@ mod tests {
     #[test]
     fn pending_change_error_propagates_without_implicit_replay() {
         let (_send, messages) = mpsc::channel();
-        let local = Dispatcher::into_local(Dispatcher::new(PendingProcessor { trace: Vec::new(), pending: Pending::Apply(Err(neocogi_com::NC_E_INVALID_ARG)) }, messages));
+        let local = Dispatcher::into_local(Dispatcher::new(
+            PendingProcessor {
+                trace: Vec::new(),
+                pending: Pending::Apply(Err(neocogi_com::NC_E_INVALID_ARG)),
+            },
+            messages,
+        ));
         let mut dispatcher = local.query::<IApplicationDispatcherAbi>().unwrap();
         assert_eq!(dispatcher.dispatch_next(), Err(neocogi_com::NC_E_INVALID_ARG));
         assert_eq!(dispatcher.dispatch_next(), Ok(ApplicationDispatch::Idle));

@@ -65,7 +65,12 @@ fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
             )
         }
         /// Binding generation never constructs a live widget.
-        fn create(&self, _: &Ui, _: &[u8], _: Option<neocogi_com::ComPtr<neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
+        fn create(
+            &self,
+            _: &Ui,
+            _: &[u8],
+            _: Option<neocogi_com::ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+        ) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
             Err(NC_E_INVALID_ARG)
         }
     }
@@ -88,7 +93,10 @@ fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
     assert_eq!(Document::from_json(&document.to_json().unwrap()).unwrap(), document);
     assert_eq!(Document::from_binary(&document.to_binary().unwrap()).unwrap(), document);
     let events = neocogi_demo_contracts::CounterAbi::IDL_INTERFACE.events;
-    assert_eq!(events.iter().map(|event| event.qualified_name).collect::<Vec<_>>(), ["neocogi.ui.core.IActivatedEvent", "neocogi.demo.ICounterChangedEvent"]);
+    assert_eq!(
+        events.iter().map(|event| event.qualified_name).collect::<Vec<_>>(),
+        ["neocogi.ui.core.IActivatedEvent", "neocogi.demo.ICounterChangedEvent"]
+    );
     assert_eq!(events[1].fields[0].name, "value");
     assert_eq!(events[1].fields[0].ty, neocogi_com::design::IdlValueType::Scalar("u32"));
     assert!(document.rust_bindings().unwrap_err().contains("not registered"));
@@ -115,7 +123,10 @@ fn custom_factory_cannot_omit_its_event_getter_value_graph() {
         events: &[neocogi_com::design::IdlEvent {
             qualified_name: "example.IMissingEvent",
             abi: &neocogi_demo_contracts::ICounterChangedEventAbi::INTERFACE_DESCRIPTOR,
-            fields: &[neocogi_com::design::IdlField { name: "value", ty: neocogi_com::design::IdlValueType::Named("example.Missing") }],
+            fields: &[neocogi_com::design::IdlField {
+                name: "value",
+                ty: neocogi_com::design::IdlValueType::Named("example.Missing"),
+            }],
         }],
         values: &[],
     };
@@ -127,7 +138,12 @@ fn custom_factory_cannot_omit_its_event_getter_value_graph() {
             neocogi_ui_document::design::DesignWidgetManifest::from_idl("hidden.counter", vec![], &HIDDEN)
         }
         /// Registration rejects this provider before construction is possible.
-        fn create(&self, _: &Ui, _: &[u8], _: Option<neocogi_com::ComPtr<neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
+        fn create(
+            &self,
+            _: &Ui,
+            _: &[u8],
+            _: Option<neocogi_com::ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+        ) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
             Err(NC_E_INVALID_ARG)
         }
     }

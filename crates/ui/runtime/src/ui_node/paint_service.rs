@@ -240,9 +240,7 @@ impl IPainter for Recorder {
             let position = crate::ui_node::text_layout::control_text_position_with_font(skin, atlas, font, label, rect, WidgetOption::NONE);
             (font, color, position)
         };
-        self.with_painter(scope, |painter| {
-            painter.with_clip(rect, |painter| painter.text(font, label, position, color))
-        })
+        self.with_painter(scope, |painter| painter.with_clip(rect, |painter| painter.text(font, label, position, color)))
     }
 
     /// Resolves one compact semantic patch in the runtime and records it without widget-local geometry.

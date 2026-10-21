@@ -179,7 +179,9 @@ fn streamed_glyphs_preserve_order_fallback_and_newline_positioning() {
     for text in ["a?\na", "a?\r\na"] {
         let mut fixture = Composition::new(atlas());
         let font = fixture.atlas.font_id("body").unwrap();
-        crate::render::Painter::screen_space(&mut fixture.list, Recti::new(0, 0, 32, 32)).text(font, text, Vec2i::new(10, 10), color(255, 255, 255, 255)).unwrap();
+        crate::render::Painter::screen_space(&mut fixture.list, Recti::new(0, 0, 32, 32))
+            .text(font, text, Vec2i::new(10, 10), color(255, 255, 255, 255))
+            .unwrap();
         fixture.submit(Size { width: 32, height: 32 }).unwrap();
         let capture = fixture.capture.borrow();
         assert_eq!(capture.vertices.len(), 18);
@@ -194,7 +196,9 @@ fn streamed_glyphs_preserve_order_fallback_and_newline_positioning() {
 #[test]
 fn atlas_rectangle_clipping_preserves_fractional_uvs() {
     let mut fixture = Composition::new(atlas());
-    crate::render::Painter::screen_space(&mut fixture.list, Recti::new(20, 20, 40, 40)).fill_rect(Recti::new(0, 0, 100, 100), color(255, 255, 255, 255)).unwrap();
+    crate::render::Painter::screen_space(&mut fixture.list, Recti::new(20, 20, 40, 40))
+        .fill_rect(Recti::new(0, 0, 100, 100), color(255, 255, 255, 255))
+        .unwrap();
     fixture.submit(Size { width: 100, height: 100 }).unwrap();
     let capture = fixture.capture.borrow();
     assert_eq!(capture.vertices.len(), 6);
@@ -211,18 +215,23 @@ fn external_texture_clipping_preserves_uv_mapping_and_stream_order() {
     let rect = Recti::new(0, 0, 100, 100);
     fixture
         .list
-        .push_icon(rect, fixture.atlas.white_icon(), Recti::new(0, 0, 1, 1), color(255, 255, 255, 255)).unwrap();
-    fixture.list.push_com_texture(
-        Recti::new(20, 20, 40, 40),
-        rect,
-        TextureRegion { u0: 0., v0: 0., u1: 1., v1: 1. },
-        color(255, 255, 255, 255),
-        texture,
-    ).unwrap();
+        .push_icon(rect, fixture.atlas.white_icon(), Recti::new(0, 0, 1, 1), color(255, 255, 255, 255))
+        .unwrap();
+    fixture
+        .list
+        .push_com_texture(
+            Recti::new(20, 20, 40, 40),
+            rect,
+            TextureRegion { u0: 0., v0: 0., u1: 1., v1: 1. },
+            color(255, 255, 255, 255),
+            texture,
+        )
+        .unwrap();
     fixture.list.push_com_item(Recti::new(10, 10, 20, 20), rect, item).unwrap();
     fixture
         .list
-        .push_icon(rect, fixture.atlas.white_icon(), Recti::new(20, 0, 1, 1), color(255, 255, 255, 255)).unwrap();
+        .push_icon(rect, fixture.atlas.white_icon(), Recti::new(20, 0, 1, 1), color(255, 255, 255, 255))
+        .unwrap();
     fixture.submit(Size { width: 100, height: 100 }).unwrap();
     let capture = fixture.capture.borrow();
     assert!(matches!(
@@ -251,7 +260,9 @@ fn image_nine_patch_submits_nine_sliced_atlas_quads_without_a_flush() {
     let mut fixture = Composition::new(atlas());
     let image = crate::NinePatchImage::new(fixture.atlas.icon_id("close").unwrap(), SliceInsets::uniform(1), color(255, 255, 255, 255));
     let patch = crate::NinePatch::image(SliceInsets::new(4, 3, 5, 4), image);
-    crate::render::Painter::screen_space(&mut fixture.list, Recti::new(0, 0, 64, 64)).nine_patch(Recti::new(0, 0, 30, 24), patch).unwrap();
+    crate::render::Painter::screen_space(&mut fixture.list, Recti::new(0, 0, 64, 64))
+        .nine_patch(Recti::new(0, 0, 30, 24), patch)
+        .unwrap();
     fixture.submit(Size { width: 64, height: 64 }).unwrap();
     let capture = fixture.capture.borrow();
     assert_eq!(capture.vertices.len(), 54);
@@ -269,7 +280,9 @@ fn image_nine_patch_submits_nine_sliced_atlas_quads_without_a_flush() {
 fn flat_nine_patch_filters_its_hidden_center_during_gfx_expansion() {
     let mut fixture = Composition::new(atlas());
     let patch = crate::NinePatch::framed(SliceInsets::uniform(2), color(10, 20, 30, 255), Some(color(40, 50, 60, 255))).without_center();
-    crate::render::Painter::screen_space(&mut fixture.list, Recti::new(0, 0, 32, 32)).nine_patch(Recti::new(4, 5, 20, 18), patch).unwrap();
+    crate::render::Painter::screen_space(&mut fixture.list, Recti::new(0, 0, 32, 32))
+        .nine_patch(Recti::new(4, 5, 20, 18), patch)
+        .unwrap();
 
     fixture.submit(Size { width: 32, height: 32 }).unwrap();
 
@@ -297,12 +310,15 @@ fn frame_finish_failure_is_observable_and_the_next_frame_can_complete() {
 fn invalid_frame_dimensions_discard_commands_before_renderer_submission() {
     let mut fixture = Composition::new(atlas());
     for size in [Size { width: 0, height: 32 }, Size { width: 32, height: -1 }] {
-        fixture.list.push_icon(
-            Recti::new(0, 0, 32, 32),
-            fixture.atlas.white_icon(),
-            Recti::new(0, 0, 1, 1),
-            color(255, 255, 255, 255),
-        ).unwrap();
+        fixture
+            .list
+            .push_icon(
+                Recti::new(0, 0, 32, 32),
+                fixture.atlas.white_icon(),
+                Recti::new(0, 0, 1, 1),
+                color(255, 255, 255, 255),
+            )
+            .unwrap();
         assert!(fixture.submit(size).is_err());
         assert!(fixture.list.is_empty());
     }
@@ -314,33 +330,36 @@ fn invalid_frame_dimensions_discard_commands_before_renderer_submission() {
 #[test]
 fn clipped_atlas_triangles_interpolate_edge_attributes() {
     let mut fixture = Composition::new(atlas());
-    fixture.list.push_atlas_triangles(
-        Recti::new(0, 0, 10, 10),
-        Vec2i::default(),
-        &[
-            RenderVertex {
-                x: -10.,
-                y: 0.,
-                u: 0.,
-                v: 0.,
-                rgba: 0xff0000ff,
-            },
-            RenderVertex {
-                x: 10.,
-                y: 0.,
-                u: 1.,
-                v: 0.,
-                rgba: 0xffff0000,
-            },
-            RenderVertex {
-                x: 0.,
-                y: 10.,
-                u: 0.5,
-                v: 1.,
-                rgba: 0xff00ff00,
-            },
-        ],
-    ).unwrap();
+    fixture
+        .list
+        .push_atlas_triangles(
+            Recti::new(0, 0, 10, 10),
+            Vec2i::default(),
+            &[
+                RenderVertex {
+                    x: -10.,
+                    y: 0.,
+                    u: 0.,
+                    v: 0.,
+                    rgba: 0xff0000ff,
+                },
+                RenderVertex {
+                    x: 10.,
+                    y: 0.,
+                    u: 1.,
+                    v: 0.,
+                    rgba: 0xffff0000,
+                },
+                RenderVertex {
+                    x: 0.,
+                    y: 10.,
+                    u: 0.5,
+                    v: 1.,
+                    rgba: 0xff00ff00,
+                },
+            ],
+        )
+        .unwrap();
     fixture.submit(Size { width: 20, height: 20 }).unwrap();
     let capture = fixture.capture.borrow();
     let edge = capture
@@ -383,7 +402,10 @@ fn contained_atlas_triangles_preserve_both_windings() {
     ];
     for triangle in [vertices, [vertices[0], vertices[2], vertices[1]]] {
         let mut fixture = Composition::new(atlas());
-        fixture.list.push_atlas_triangles(Recti::new(0, 0, 100, 100), Vec2i::default(), &triangle).unwrap();
+        fixture
+            .list
+            .push_atlas_triangles(Recti::new(0, 0, 100, 100), Vec2i::default(), &triangle)
+            .unwrap();
         fixture.submit(Size { width: 100, height: 100 }).unwrap();
         assert_eq!(fixture.capture.borrow().vertices, triangle);
     }
@@ -396,22 +418,31 @@ fn fully_clipped_operations_leave_existing_output_unchanged() {
         let mut fixture = Composition::new(atlas());
         let texture: ComPtr<ITextureAbi> = Texture::from_value(Texture).query().unwrap();
         let item: ComPtr<IRenderItemAbi> = Item::from_value(Item).query().unwrap();
-        fixture.list.push_icon(
-            Recti::new(0, 0, 40, 40),
-            fixture.atlas.white_icon(),
-            Recti::new(0, 0, 1, 1),
-            color(255, 255, 255, 255),
-        ).unwrap();
+        fixture
+            .list
+            .push_icon(
+                Recti::new(0, 0, 40, 40),
+                fixture.atlas.white_icon(),
+                Recti::new(0, 0, 1, 1),
+                color(255, 255, 255, 255),
+            )
+            .unwrap();
         let destination = Recti::new(20, 20, 10, 10);
-        fixture.list.push_com_texture(
-            clip,
-            destination,
-            TextureRegion { u0: 0., v0: 0., u1: 1., v1: 1. },
-            color(255, 255, 255, 255),
-            texture,
-        ).unwrap();
+        fixture
+            .list
+            .push_com_texture(
+                clip,
+                destination,
+                TextureRegion { u0: 0., v0: 0., u1: 1., v1: 1. },
+                color(255, 255, 255, 255),
+                texture,
+            )
+            .unwrap();
         fixture.list.push_com_item(clip, destination, item).unwrap();
-        fixture.list.push_icon(clip, fixture.atlas.white_icon(), destination, color(255, 255, 255, 255)).unwrap();
+        fixture
+            .list
+            .push_icon(clip, fixture.atlas.white_icon(), destination, color(255, 255, 255, 255))
+            .unwrap();
         fixture.submit(Size { width: 40, height: 40 }).unwrap();
         let capture = fixture.capture.borrow();
         assert_eq!(capture.vertices.len(), 6);
@@ -424,13 +455,16 @@ fn fully_clipped_operations_leave_existing_output_unchanged() {
 fn extreme_integer_destinations_keep_texture_vertices_finite_and_inside_the_clip() {
     let mut fixture = Composition::new(atlas());
     let texture: ComPtr<ITextureAbi> = Texture::from_value(Texture).query().unwrap();
-    fixture.list.push_com_texture(
-        Recti::new(10, 10, 20, 20),
-        Recti::new(-10, -10, i32::MAX, i32::MAX),
-        TextureRegion { u0: 0., v0: 0., u1: 1., v1: 1. },
-        color(255, 255, 255, 255),
-        texture,
-    ).unwrap();
+    fixture
+        .list
+        .push_com_texture(
+            Recti::new(10, 10, 20, 20),
+            Recti::new(-10, -10, i32::MAX, i32::MAX),
+            TextureRegion { u0: 0., v0: 0., u1: 1., v1: 1. },
+            color(255, 255, 255, 255),
+            texture,
+        )
+        .unwrap();
     fixture.submit(Size { width: 40, height: 40 }).unwrap();
     let capture = fixture.capture.borrow();
     assert_eq!(capture.vertices.len(), 4);
@@ -477,7 +511,9 @@ fn solid_replay_preserves_order_across_staging_chunks() {
             vertices.push(neocogi_ui_core_contracts::ColoredVertex { x, y, rgba: 0xff000000 | index });
         }
     }
-    crate::render::Painter::screen_space(&mut fixture.list, Recti::new(0, 0, 32, 32)).colored_triangles(&vertices).unwrap();
+    crate::render::Painter::screen_space(&mut fixture.list, Recti::new(0, 0, 32, 32))
+        .colored_triangles(&vertices)
+        .unwrap();
     fixture.submit(Size { width: 32, height: 32 }).unwrap();
     let capture = fixture.capture.borrow();
     assert_eq!(capture.vertices.len(), vertices.len());

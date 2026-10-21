@@ -460,7 +460,6 @@ impl crate::LeafWidget for Scrollbar {
 }
 
 impl crate::widget_object::WidgetAlgorithm for Scrollbar {
-
     /// A zero range paints a full thumb but must not establish meaningless pointer capture.
     fn effective_options(&self, options: WidgetOption) -> WidgetOption {
         if self.max_offset() > 0 {

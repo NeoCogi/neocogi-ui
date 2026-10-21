@@ -231,9 +231,7 @@ impl Widget for Button {
     }
 }
 
-impl crate::widget_object::WidgetAlgorithm for Button {
-
-}
+impl crate::widget_object::WidgetAlgorithm for Button {}
 
 impl crate::widget_object::HostedWidget for Button {
     /// Borrows the common runtime without exposing semantic fields through it.
@@ -441,5 +439,8 @@ fn com_object_control_is_independent_of_interface_count() {
         core::mem::size_of::<Button>(),
         core::mem::size_of::<neocogi_com::__ComBoxStorage<Button>>()
     );
-    assert_eq!(core::mem::size_of::<neocogi_com::__ComBoxStorage<Button>>(), core::mem::size_of::<Button>() + 24);
+    assert_eq!(
+        core::mem::size_of::<neocogi_com::__ComBoxStorage<Button>>(),
+        core::mem::size_of::<Button>() + 24
+    );
 }

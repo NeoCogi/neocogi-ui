@@ -41,13 +41,7 @@ impl Fixture {
     /// Uses public production runtime and node-provider construction, exactly as plugin clients do.
     fn new() -> Self {
         let (send, messages) = std::sync::mpsc::channel();
-        let queue = neocogi_ui::test_event_queue!(
-            neocogi_ui::IFileDialogAbi,
-            Option<PathBuf>,
-            send,
-            |_queue, _origin, event| completion(event)?
-        )
-        .unwrap();
+        let queue = neocogi_ui::test_event_queue!(neocogi_ui::IFileDialogAbi, Option<PathBuf>, send, |_queue, _origin, event| completion(event)?).unwrap();
         let mut fixture = Self::with_queue(queue);
         fixture.messages = Some(messages);
         fixture
@@ -105,7 +99,9 @@ impl Fixture {
     }
     /// Returns the actual current dynamic file root to verify transactional replacement and handle preservation.
     fn file_root(&self) -> WeakComBox<IWidgetAbi> {
-        self.widget.with(|dialog| dialog.model.files.content().unwrap().node_interface().unwrap()).unwrap()
+        self.widget
+            .with(|dialog| dialog.model.files.content().unwrap().node_interface().unwrap())
+            .unwrap()
     }
 }
 /// Connects the real picker completion protocol to a consumer-owned inbox.
@@ -294,10 +290,7 @@ fn save_request_preserves_suggested_filename_and_rejects_directory_components() 
     fixture.tabs(6);
     fixture.key(KeyCode::Enter, 0);
     fixture.ui.update(SIZE).unwrap();
-    assert_eq!(
-        events.try_recv().unwrap(),
-        Some(directory.path().join("new theme.json"))
-    );
+    assert_eq!(events.try_recv().unwrap(), Some(directory.path().join("new theme.json")));
     assert!(!fixture.handle.active().unwrap());
     fixture.open(directory.path());
     assert_eq!(fixture.widget.with(|dialog| dialog.model.accept.label().unwrap()).unwrap(), "Open");
@@ -469,12 +462,15 @@ fn unreadable_navigation_preserves_selection_directory_and_dynamic_widget_identi
     fixture.key(KeyCode::Space, 0);
     fixture.ui.update(SIZE).unwrap();
     assert_eq!(fixture.file_root().as_raw().object, root.as_raw().object);
-    fixture.widget.with(|dialog| {
-    let model = &dialog.model;
-    assert_eq!(model.selected.as_ref(), Some(&file));
-    assert_eq!(model.directory, directory.path());
-    assert!(model.error.text().unwrap().contains("Cannot read"));
-    }).unwrap();
+    fixture
+        .widget
+        .with(|dialog| {
+            let model = &dialog.model;
+            assert_eq!(model.selected.as_ref(), Some(&file));
+            assert_eq!(model.directory, directory.path());
+            assert!(model.error.text().unwrap().contains("Cannot read"));
+        })
+        .unwrap();
     fixture.handle.close().unwrap();
 }
 
@@ -564,12 +560,9 @@ fn application_callback_opens_picker_and_later_input_reaches_its_new_modal_scope
     let directory = tempfile::tempdir().unwrap();
     // A separate activator lets the picker retain its original ordinary owner and tests cross-window modal routing.
     let (events_tx, events) = std::sync::mpsc::channel();
-    let queue = neocogi_ui::test_event_queue!(
-        neocogi_ui::IFileDialogAbi,
-        AppMessage,
-        events_tx.clone(),
-        |_queue, _origin, event| AppMessage::Completed(completion(event)?)
-    )
+    let queue = neocogi_ui::test_event_queue!(neocogi_ui::IFileDialogAbi, AppMessage, events_tx.clone(), |_queue, _origin, event| {
+        AppMessage::Completed(completion(event)?)
+    })
     .unwrap();
     let mut fixture = Fixture::with_queue(queue);
     let button = fixture
@@ -578,14 +571,9 @@ fn application_callback_opens_picker_and_later_input_reaches_its_new_modal_scope
         .button_with_queue(
             "open picker",
             Some(
-                neocogi_ui::test_event_queue!(
-                    neocogi_ui::ButtonAbi,
-                    AppMessage,
-                    events_tx.clone(),
-                    |_queue, _origin, _| { AppMessage::Open }
-                )
-                .unwrap()
-                .as_com_ref(),
+                neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, AppMessage, events_tx.clone(), |_queue, _origin, _| { AppMessage::Open })
+                    .unwrap()
+                    .as_com_ref(),
             ),
         )
         .unwrap();
@@ -649,15 +637,10 @@ fn closed_picker_preserves_all_completed_requests_during_manual_handler_runtime_
 fn completion_mapping_reentry_uses_the_widget_com_gate() {
     let directory = tempfile::tempdir().unwrap();
     let (events_tx, events) = std::sync::mpsc::channel();
-    let queue = neocogi_ui::test_event_queue!(
-        neocogi_ui::IFileDialogAbi,
-        Option<PathBuf>,
-        events_tx,
-        |_queue, origin, message| {
-            assert_eq!(origin.active(), Err(neocogi_com::NC_E_BUSY));
-            completion(message)?
-        }
-    )
+    let queue = neocogi_ui::test_event_queue!(neocogi_ui::IFileDialogAbi, Option<PathBuf>, events_tx, |_queue, origin, message| {
+        assert_eq!(origin.active(), Err(neocogi_com::NC_E_BUSY));
+        completion(message)?
+    })
     .unwrap();
     let mut fixture = Fixture::with_queue(queue);
     fixture.open(directory.path());
@@ -698,32 +681,40 @@ fn shared_child_queue_discards_events_from_replaced_directory_rows() {
     let replacement = tempfile::tempdir().unwrap();
     std::fs::write(directory.path().join("old.txt"), b"old").unwrap();
     fixture.open(directory.path());
-    let (mut queue, old) = fixture.widget.with(|dialog| {
-        let queue = dialog.model.nodes.queue.query::<neocogi_com::events::IEventReceiverAbi>().unwrap();
-        let buttons = dialog.model.nodes.queue.query::<neocogi_com::events::IEventReceiverAbi>().unwrap();
-        let text = dialog.model.nodes.queue.query::<neocogi_com::events::IEventReceiverAbi>().unwrap();
-        assert!(queue.as_com_ref().same_object(buttons.as_com_ref()));
-        assert!(queue.as_com_ref().same_object(text.as_com_ref()));
-        let old = dialog
-            .model
-            .rows
-            .iter()
-            .find(|(_, action)| matches!(action, Command::File(_)))
-            .unwrap()
-            .0
-            .clone();
-        (queue, old)
-    }).unwrap();
+    let (mut queue, old) = fixture
+        .widget
+        .with(|dialog| {
+            let queue = dialog.model.nodes.queue.query::<neocogi_com::events::IEventReceiverAbi>().unwrap();
+            let buttons = dialog.model.nodes.queue.query::<neocogi_com::events::IEventReceiverAbi>().unwrap();
+            let text = dialog.model.nodes.queue.query::<neocogi_com::events::IEventReceiverAbi>().unwrap();
+            assert!(queue.as_com_ref().same_object(buttons.as_com_ref()));
+            assert!(queue.as_com_ref().same_object(text.as_com_ref()));
+            let old = dialog
+                .model
+                .rows
+                .iter()
+                .find(|(_, action)| matches!(action, Command::File(_)))
+                .unwrap()
+                .0
+                .clone();
+            (queue, old)
+        })
+        .unwrap();
     // Post through the real generated ABI before replacing the row's membership.
     let event = neocogi_ui::events::activated().unwrap();
-    queue.post(NcValueRef::new(&EventOrigin::Widget(old.clone().into_unknown())).unwrap(), event).unwrap();
-    fixture.widget.with_mut(|dialog| {
-        let listing = dialog.model.candidate(replacement.path()).unwrap();
-        dialog.model.install(replacement.path().to_owned(), listing, true).unwrap();
-        while IWidgetDispatcher::dispatch_next(&mut *dialog).unwrap() {}
-        assert!(dialog.model.selected.is_none());
-        assert_eq!(dialog.model.filename.text().unwrap(), "");
-    }).unwrap();
+    queue
+        .post(NcValueRef::new(&EventOrigin::Widget(old.clone().into_unknown())).unwrap(), event)
+        .unwrap();
+    fixture
+        .widget
+        .with_mut(|dialog| {
+            let listing = dialog.model.candidate(replacement.path()).unwrap();
+            dialog.model.install(replacement.path().to_owned(), listing, true).unwrap();
+            while IWidgetDispatcher::dispatch_next(&mut *dialog).unwrap() {}
+            assert!(dialog.model.selected.is_none());
+            assert_eq!(dialog.model.filename.text().unwrap(), "");
+        })
+        .unwrap();
     // The old row has been destroyed; queued facts retain only its weak identity.
     assert!(!old.is_alive());
 }
@@ -733,7 +724,11 @@ fn shared_child_queue_discards_events_from_replaced_directory_rows() {
 struct RefusingCompletion;
 impl neocogi_com::events::IEventReceiver for RefusingCompletion {
     /// Distinguishes delivery refusal from the window's temporary busy status.
-    fn post(&mut self, _origin: NcValueRef<'_, EventOrigin>, event: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
+    fn post(
+        &mut self,
+        _origin: NcValueRef<'_, EventOrigin>,
+        event: neocogi_com::ComBox<neocogi_com::events::IEventAbi>,
+    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
         Err((NC_E_INVALID_ARG, event))
     }
 }
@@ -939,7 +934,6 @@ fn close_reports_removal_failure_when_both_cleanup_steps_fail() {
     assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 2);
 }
 
-
 /// Reopening starts a fresh interaction: old caption intent cannot cancel the
 /// new request. A current intent cancels once while retaining the dialog widget.
 #[test]
@@ -949,19 +943,36 @@ fn caption_intent_cancels_current_request_without_destroying_or_crossing_reopen(
     let completions = session(&mut fixture);
     fixture.open(directory.path());
     let window = fixture.handle.window().unwrap();
-    let mut queue = fixture.widget.with(|dialog| dialog.model.nodes.queue.query::<neocogi_com::events::IEventReceiverAbi>()).unwrap().unwrap();
-    queue.post(NcValueRef::new(&EventOrigin::Service(window.downgrade().unwrap().into_unknown())).unwrap(), neocogi_ui::events::window_close_requested().unwrap()).unwrap();
+    let mut queue = fixture
+        .widget
+        .with(|dialog| dialog.model.nodes.queue.query::<neocogi_com::events::IEventReceiverAbi>())
+        .unwrap()
+        .unwrap();
+    queue
+        .post(
+            NcValueRef::new(&EventOrigin::Service(window.downgrade().unwrap().into_unknown())).unwrap(),
+            neocogi_ui::events::window_close_requested().unwrap(),
+        )
+        .unwrap();
     assert_eq!(fixture.handle.cancel(), Ok(true));
     fixture.open(directory.path());
     fixture.ui.update(SIZE).unwrap();
     assert_eq!(fixture.handle.active(), Ok(true), "old caption intent belongs to the superseded request");
     assert_eq!(completions.try_iter().count(), 1, "only explicit cancellation completed the old request");
-    queue.post(NcValueRef::new(&EventOrigin::Service(window.downgrade().unwrap().into_unknown())).unwrap(), neocogi_ui::events::window_close_requested().unwrap()).unwrap();
+    queue
+        .post(
+            NcValueRef::new(&EventOrigin::Service(window.downgrade().unwrap().into_unknown())).unwrap(),
+            neocogi_ui::events::window_close_requested().unwrap(),
+        )
+        .unwrap();
     fixture.ui.update(SIZE).unwrap();
     assert_eq!(fixture.handle.active(), Ok(false));
     assert_eq!(window.snapshot().unwrap().visibility, Visibility::Hidden);
     assert_eq!(completions.try_iter().count(), 1);
-    assert!(fixture.handle.as_interface().is_alive(), "request cancellation does not destroy its reusable widget");
+    assert!(
+        fixture.handle.as_interface().is_alive(),
+        "request cancellation does not destroy its reusable widget"
+    );
     fixture.handle.close().unwrap();
     assert!(!fixture.handle.as_interface().is_alive());
 }

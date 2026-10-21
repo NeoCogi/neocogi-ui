@@ -1,13 +1,26 @@
 //! Pending-change outcomes control real private dispatch, input ordering and update admission.
 use super::*;
 use super::composite_fixture::Composite;
-use neocogi_ui::{ButtonWidget, events::{ApplyOutcome, MessageProcessor}};
+use neocogi_ui::{
+    ButtonWidget,
+    events::{ApplyOutcome, MessageProcessor},
+};
 use neocogi_ui_support::test_support::events::TestApp;
 use std::sync::mpsc;
 
 /// Posts one real key press without synthesizing a semantic button activation.
 fn key(ui: &neocogi_ui::Ui, key: KeyCode) {
-    ui.input(UiInput::Key(KeyStroke { key, value: 0, pressed: true, repeat: false, modifiers: 0 }), "").unwrap();
+    ui.input(
+        UiInput::Key(KeyStroke {
+            key,
+            value: 0,
+            pressed: true,
+            repeat: false,
+            modifiers: 0,
+        }),
+        "",
+    )
+    .unwrap();
 }
 
 /// Private child work changes a real button only when the scheduler revisits this inbox.
@@ -37,22 +50,40 @@ fn applied_pending_changes_dispatch_children_before_the_first_queued_input() {
         |queue, _origin, event| {
             event.query_ref::<neocogi_ui::IActivatedEventAbi>()?;
             queue.trace.borrow_mut().push("activated");
-        }, { trace: std::rc::Rc<std::cell::RefCell<Vec<&'static str>>> = trace.clone() }).unwrap();
+        }, { trace: std::rc::Rc<std::cell::RefCell<Vec<&'static str>>> = trace.clone() })
+    .unwrap();
     let button = ui.widgets().button_with_queue("before", Some(queue.as_com_ref())).unwrap();
     let observed = button.handle();
     let (child_send, child_messages) = mpsc::channel();
-    let (child, mut shell) = Composite::build(&ui, RenameButton { button: button.handle(), trace: trace.clone() }, child_messages);
+    let (child, mut shell) = Composite::build(
+        &ui,
+        RenameButton {
+            button: button.handle(),
+            trace: trace.clone(),
+        },
+        child_messages,
+    );
     shell.insert(0, button, LinearEdge::new(LayoutTrack::Content)).unwrap();
     let window = ui.window("pending child work", RECT, child.into_interface::<IWidgetAbi>().unwrap()).unwrap();
     // Establish focus and drain all construction notifications before scheduling pending work.
     key(&ui, KeyCode::Tab);
     ui.update(SIZE).unwrap();
-    let app = TestApp::with_context((Some(child_send), Vec::new()), messages,
-        |(_, labels), label| { labels.push(label); Ok(()) }, (),
+    let app = TestApp::with_context(
+        (Some(child_send), Vec::new()),
+        messages,
+        |(_, labels), label| {
+            labels.push(label);
+            Ok(())
+        },
+        (),
         |(pending, _), ()| match pending.take() {
-            Some(sender) => { sender.send(()).unwrap(); Ok(ApplyOutcome::ChangesApplied) }
+            Some(sender) => {
+                sender.send(()).unwrap();
+                Ok(ApplyOutcome::ChangesApplied)
+            }
             None => Ok(ApplyOutcome::NothingPending),
-        });
+        },
+    );
     key(&ui, KeyCode::Space);
     app.update(&ui, SIZE).unwrap();
     assert_eq!(app.state().1, [()]);
@@ -69,20 +100,36 @@ fn pending_changes_charge_the_budget_and_preserve_unattempted_requests() {
         let source = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
         let compositor = neocogi_gfx_impl::GfxCompositorObject::create(source.as_com_ref()).unwrap();
         let assets = crate::assets::ImportedAssets::read(source.as_com_ref(), None).unwrap();
-        let runtime = Runtime { storage: create_storage(assets, compositor) };
+        let runtime = Runtime {
+            storage: create_storage(assets, compositor),
+        };
         let (_send, messages) = mpsc::channel::<()>();
-        let app = TestApp::with_context((requested, 0), messages, |_, ()| unreachable!(), (),
+        let app = TestApp::with_context(
+            (requested, 0),
+            messages,
+            |_, ()| unreachable!(),
+            (),
             |(pending, completed), ()| match *pending {
                 0 => Ok(ApplyOutcome::NothingPending),
-                _ => { *pending -= 1; *completed += 1; Ok(ApplyOutcome::ChangesApplied) }
-            });
+                _ => {
+                    *pending -= 1;
+                    *completed += 1;
+                    Ok(ApplyOutcome::ChangesApplied)
+                }
+            },
+        );
         let mut budget = 2;
         let mut widgets = DispatchWidgets::default();
-        assert_eq!(runtime.dispatch_boundary(Some(app.as_interface()), Dimensioni::new(SIZE.width, SIZE.height), &mut budget, &mut widgets), Err(UI_E_EVENT_LIMIT));
+        assert_eq!(
+            runtime.dispatch_boundary(Some(app.as_interface()), Dimensioni::new(SIZE.width, SIZE.height), &mut budget, &mut widgets),
+            Err(UI_E_EVENT_LIMIT)
+        );
         assert_eq!(*app.state(), (requested - 2, 2));
         assert_eq!(budget, 0);
         let mut budget = 2;
-        runtime.dispatch_boundary(Some(app.as_interface()), Dimensioni::new(SIZE.width, SIZE.height), &mut budget, &mut widgets).unwrap();
+        runtime
+            .dispatch_boundary(Some(app.as_interface()), Dimensioni::new(SIZE.width, SIZE.height), &mut budget, &mut widgets)
+            .unwrap();
         assert_eq!(*app.state(), (0, requested));
     }
 }
@@ -116,7 +163,10 @@ fn unknown_application_dispatch_outcome_stops_before_input_and_allows_retry() {
     assert_eq!(ui.update_with_events(SIZE, dispatcher.as_com_ref()), Err(neocogi_com::NC_E_INVALID_TAG));
     let (renderer, _) = renderer();
     assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
-    let app = TestApp::new(0, messages, |count, ()| { *count += 1; Ok(()) });
+    let app = TestApp::new(0, messages, |count, ()| {
+        *count += 1;
+        Ok(())
+    });
     app.update(&ui, SIZE).unwrap();
     assert_eq!(*app.state(), 1);
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
@@ -133,12 +183,22 @@ fn failed_pending_changes_leave_input_queued_and_the_frame_uncommitted() {
     let window = ui.window("pending failure", RECT, button).unwrap();
     key(&ui, KeyCode::Tab);
     ui.update(SIZE).unwrap();
-    let app = TestApp::with_context((Some(NC_E_INVALID_ARG), Vec::new()), messages,
-        |(_, trace), ()| { trace.push("input"); Ok(()) }, (),
+    let app = TestApp::with_context(
+        (Some(NC_E_INVALID_ARG), Vec::new()),
+        messages,
+        |(_, trace), ()| {
+            trace.push("input");
+            Ok(())
+        },
+        (),
         |(pending, trace), ()| match pending.take() {
-            Some(error) => { trace.push("failed"); Err(error) }
+            Some(error) => {
+                trace.push("failed");
+                Err(error)
+            }
             None => Ok(ApplyOutcome::NothingPending),
-        });
+        },
+    );
     key(&ui, KeyCode::Space);
     assert_eq!(app.update(&ui, SIZE), Err(NC_E_INVALID_ARG));
     assert_eq!(app.state().1, ["failed"]);
@@ -159,11 +219,18 @@ fn idle_application_outcome_still_reconciles_notified_geometry() {
     let window = ui.window("idle notification", RECT, button).unwrap();
     ui.update(SIZE).unwrap();
     let (_send, messages) = mpsc::channel::<()>();
-    let app = TestApp::with_context(Some(observed), messages, |_, ()| unreachable!(), (),
+    let app = TestApp::with_context(
+        Some(observed),
+        messages,
+        |_, ()| unreachable!(),
+        (),
         |pending, ()| {
-            if let Some(mut button) = pending.take() { button.set_label("notified geometry")?; }
+            if let Some(mut button) = pending.take() {
+                button.set_label("notified geometry")?;
+            }
             Ok(ApplyOutcome::NothingPending)
-        });
+        },
+    );
     app.update(&ui, SIZE).unwrap();
     let (renderer, _) = renderer();
     ui.render(SIZE, renderer.as_com_ref()).unwrap();

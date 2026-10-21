@@ -170,7 +170,13 @@ impl UiRuntime {
     }
 
     /// Updates one persistent root node and its eligible descendants.
-    pub(crate) fn update_tree_root(&mut self, root: &mut Node, style: &Skin, atlas: crate::AtlasHandle, input: InputSnapshot) -> Result<(), neocogi_com::NcStatus> {
+    pub(crate) fn update_tree_root(
+        &mut self,
+        root: &mut Node,
+        style: &Skin,
+        atlas: crate::AtlasHandle,
+        input: InputSnapshot,
+    ) -> Result<(), neocogi_com::NcStatus> {
         // Update is parent-first and consumes at most one event previously routed to one identity.
         self.update_node_ref(root, self.root_transform, style, atlas, input)?;
         // Topology may change during update; remove identities whose retained path no longer

@@ -7,8 +7,12 @@ impl WindowManager {
     /// the caller holds exclusive manager access and has not exposed the handle.
     /// This is private factory wiring, not a runtime receiver replacement API.
     pub(crate) fn connect_window_events(&mut self, window: &WindowHandle, events: neocogi_com::events::EventPort) {
-        self.surfaces.root_node_mut(window.id()).expect("new window remains registered")
-            .root_mut().expect("window has root policy").events = events;
+        self.surfaces
+            .root_node_mut(window.id())
+            .expect("new window remains registered")
+            .root_mut()
+            .expect("window has root policy")
+            .events = events;
     }
 
     /// Completes an application popup's delivery in its creating transaction,
@@ -185,6 +189,11 @@ impl WindowManager {
         self.register_window(RootMode::Normal { layer: DEFAULT_LAYER }, None, window, WindowOption::FRAME, true, queue)
     }
 
+    /// Creates a structural child, returning the unchanged Window if its parent is rejected.
+    #[allow(
+        clippy::result_large_err,
+        reason = "Rejected creation returns the caller's unique input inline without another allocation."
+    )]
     pub fn create_child_window(
         &mut self,
         parent: &WindowHandle,
@@ -201,6 +210,11 @@ impl WindowManager {
         Ok(self.register_window(RootMode::Child, Some(parent), window, WindowOption::FRAME, true, queue))
     }
 
+    /// Creates a hidden dialog, returning the unchanged Window if its owner is rejected.
+    #[allow(
+        clippy::result_large_err,
+        reason = "Rejected creation returns the caller's unique input inline without another allocation."
+    )]
     pub fn create_dialog(
         &mut self,
         owner: &WindowHandle,
@@ -216,6 +230,11 @@ impl WindowManager {
         Ok(self.register_window(RootMode::Modal, Some(owner), window, WindowOption::FRAME, false, queue))
     }
 
+    /// Creates an application popup, returning the unchanged Node if its owner is rejected.
+    #[allow(
+        clippy::result_large_err,
+        reason = "Rejected creation returns the caller's unique input inline without another allocation."
+    )]
     pub fn create_popup(
         &mut self,
         owner: &WindowHandle,
@@ -809,8 +828,7 @@ impl WindowManager {
             // Commit the final fact before removing the record. Consumer queues own it
             // independently, so components can settle requests after native teardown.
             let node = self.root_node_mut(id)?;
-            let result = neocogi_ui_core_contracts::events::window_destroyed()
-                .and_then(|event| node.emit_window_event(event));
+            let result = neocogi_ui_core_contracts::events::window_destroyed().and_then(|event| node.emit_window_event(event));
             self.posted(result);
         }
         self.surfaces.remove_roots(&removed);

@@ -10,7 +10,6 @@ use std::fmt;
 
 /// Validates assembly selections against actual statically linked factory descriptors.
 
-
 #[cfg(target_arch = "wasm32")]
 mod browser;
 
@@ -129,7 +128,9 @@ pub trait AppState: 'static {
     /// returns NothingPending; consuming work returns ChangesApplied so child work is revisited.
     /// The host/runtime retains no traversal borrow here. Geometry edits still need their ordinary
     /// notifications. Errors preserve committed edits; native rendering belongs in after_update.
-    fn apply_pending_changes(&mut self, _host: &Host, _size: Size) -> Result<ApplyOutcome, NcStatus> { Ok(ApplyOutcome::NothingPending) }
+    fn apply_pending_changes(&mut self, _host: &Host, _size: Size) -> Result<ApplyOutcome, NcStatus> {
+        Ok(ApplyOutcome::NothingPending)
+    }
 
     /// Runs after input dispatch returns and before painting. Embedded renderers may
     /// safely install resources, render previews, and synchronize paint-only content here.
@@ -190,8 +191,7 @@ impl Host {
         let runtime_factory = runtime.acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
         let mut ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
         ui_runtime.set_clipboard(window.query::<neocogi_ui::com::ITextClipboardAbi>()?.as_com_ref())?;
-        let node_provider =
-            runtime.acquire_plugin_root::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
+        let node_provider = runtime.acquire_plugin_root::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
         let factory = node_provider.bind(ui_runtime.as_com_ref())?;
         let ui = Ui::from_interfaces(ui_runtime, factory)?;
         let (send, observations) = std::sync::mpsc::channel();
@@ -211,7 +211,14 @@ impl Host {
         // Both local frame hooks and foreign dispatch use this allocation's
         // existing COM borrow gate. Resolve its owner projection only once.
         let host = std::rc::Rc::new(self);
-        let state = neocogi_ui::events::Dispatcher::into_local(neocogi_ui::events::Dispatcher::new(Application { state, host: host.clone(), size: Size::default() }, events));
+        let state = neocogi_ui::events::Dispatcher::into_local(neocogi_ui::events::Dispatcher::new(
+            Application {
+                state,
+                host: host.clone(),
+                size: Size::default(),
+            },
+            events,
+        ));
         let owner = state.query()?;
         let driver = Driver {
             host,
@@ -503,7 +510,9 @@ fn register() -> Result<(), HostError> {
     let runtime = neocogi_com::Runtime::global();
     for descriptor in descriptors {
         // SAFETY: descriptors and provider code remain linked for process lifetime.
-        unsafe { runtime.register_plugin_descriptor(descriptor)?; }
+        unsafe {
+            runtime.register_plugin_descriptor(descriptor)?;
+        }
     }
     Ok(())
 }

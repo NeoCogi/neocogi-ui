@@ -6,9 +6,7 @@ use neocogi_ui_support::test_support::events::TestApp;
 fn column(ui: &Ui, children: impl IntoIterator<Item = OwnedWidget<IWidgetAbi>>) -> OwnedWidget<LinearAbi> {
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     for (index, child) in children.into_iter().enumerate() {
-        column
-            .insert(index as u32, child, LinearEdge::new(LayoutTrack::Fixed { extent: 30 }))
-            .unwrap();
+        column.insert(index as u32, child, LinearEdge::new(LayoutTrack::Fixed { extent: 30 })).unwrap();
     }
     column
 }
@@ -96,9 +94,7 @@ fn replacing_a_captured_child_closes_it_and_does_not_transfer_focus() {
     fixture.frame(VIEW).unwrap();
     assert!(update(&a).active);
     let (replacement, b) = probe::<1>(&fixture.ui, Size::default(), WidgetOptions::NONE);
-    column
-        .replace(0, replacement, LinearEdge::new(LayoutTrack::Fixed { extent: 30 }))
-        .unwrap();
+    column.replace(0, replacement, LinearEdge::new(LayoutTrack::Fixed { extent: 30 })).unwrap();
     assert!(a.borrow().closed);
     fixture.ui.input(UiInput::Pointer(Point { x: 70, y: 20 }), "").unwrap();
     pointer(&fixture.ui, Point { x: 70, y: 20 }, false);
@@ -257,7 +253,8 @@ fn foreign_surface_owner_rejection_returns_content_for_retry() {
     let foreign = window(&other.ui, "foreign", Rect { x: 0, y: 0, width: 100, height: 80 }, foreign_body);
     let candidate_owner = fixture.ui.widgets().button_unobserved("candidate").unwrap();
     let candidate = candidate_owner.handle();
-    let (status, candidate_owner) = fixture.ui
+    let (status, candidate_owner) = fixture
+        .ui
         .child_window(foreign.as_com_ref(), "bad", Rect { x: 0, y: 0, width: 100, height: 80 }, candidate_owner)
         .unwrap_err();
     assert_eq!(status, UI_E_OWNER);
@@ -488,7 +485,6 @@ fn fresh_press_replaces_revoked_capture_across_window_layers() {
     }
 }
 
-
 /// Application policy is independent of caption dispatch and widget lifetime.
 #[derive(Clone, Copy)]
 enum CaptionDecision {
@@ -511,10 +507,20 @@ fn caption_close_obeys_the_parents_explicit_decision() {
         let body_owner = fixture.ui.widgets().button_unobserved("live").unwrap();
         let body = body_owner.handle();
         let (queue, messages) = neocogi_com::events::channel();
-        let window = fixture.ui.window_with_queue("close policy", Rect { x: 30, y: 30, width: 180, height: 120 }, body_owner, Some(queue.as_com_ref())).unwrap();
+        let window = fixture
+            .ui
+            .window_with_queue(
+                "close policy",
+                Rect { x: 30, y: 30, width: 180, height: 120 },
+                body_owner,
+                Some(queue.as_com_ref()),
+            )
+            .unwrap();
         fixture.frame(VIEW).unwrap();
         let app = TestApp::new((window.clone(), decision), messages, |(window, decision), event| {
-            if event.query::<IWindowCloseRequestedEventAbi>()?.is_none() { return Ok(()); }
+            if event.query::<IWindowCloseRequestedEventAbi>()?.is_none() {
+                return Ok(());
+            }
             match *decision {
                 CaptionDecision::Keep => Ok(()),
                 CaptionDecision::Fail => Err(neocogi_com::NC_E_INVALID_ARG),
@@ -527,20 +533,26 @@ fn caption_close_obeys_the_parents_explicit_decision() {
         let result = app.update(&fixture.ui, VIEW);
         match decision {
             CaptionDecision::Keep | CaptionDecision::Fail => {
-                assert_eq!(result, match decision { CaptionDecision::Fail => Err(neocogi_com::NC_E_INVALID_ARG), _ => Ok(()) });
+                assert_eq!(
+                    result,
+                    match decision {
+                        CaptionDecision::Fail => Err(neocogi_com::NC_E_INVALID_ARG),
+                        _ => Ok(()),
+                    }
+                );
                 assert_eq!(window.snapshot().unwrap().visibility, Visibility::Visible);
                 assert_eq!(body.label().unwrap(), "live");
-            },
+            }
             CaptionDecision::Hide => {
                 result.unwrap();
                 assert_eq!(window.snapshot().unwrap().visibility, Visibility::Hidden);
                 assert_eq!(body.label().unwrap(), "live");
-            },
+            }
             CaptionDecision::Remove => {
                 result.unwrap();
                 assert_eq!(window.snapshot(), Err(UI_E_CLOSED));
                 assert_eq!(body.label(), Err(neocogi_com::NC_E_DROPPED));
-            },
+            }
         }
     }
 }
@@ -558,8 +570,17 @@ fn rejected_caption_event_leaves_the_window_visible_and_live() {
             Err(neocogi_com::NC_E_NOINTERFACE) => (),
             Err(status) => return Err(status),
         }
-    }).unwrap();
-    let window = fixture.ui.window_with_queue("failed intent", Rect { x: 30, y: 30, width: 180, height: 120 }, body_owner, Some(queue.as_com_ref())).unwrap();
+    })
+    .unwrap();
+    let window = fixture
+        .ui
+        .window_with_queue(
+            "failed intent",
+            Rect { x: 30, y: 30, width: 180, height: 120 },
+            body_owner,
+            Some(queue.as_com_ref()),
+        )
+        .unwrap();
     fixture.frame(VIEW).unwrap();
     pointer(&fixture.ui, Point { x: 200, y: 40 }, true);
     pointer(&fixture.ui, Point { x: 200, y: 40 }, false);

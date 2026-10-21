@@ -161,5 +161,4 @@ impl WidgetState {
             Attachment::Mounted => Err(UI_E_OWNER),
         }
     }
-
 }

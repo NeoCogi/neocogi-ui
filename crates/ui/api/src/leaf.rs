@@ -152,29 +152,51 @@ struct DispatchingLeafObject<Content: DispatchingLeafContent> {
 }
 impl<Content: DispatchingLeafContent> IWidget for DispatchingLeafObject<Content> {
     /// Delegates directly to the inline leaf under this allocation's common admission gate.
-    fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> { self.leaf.host() }
+    fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
+        self.leaf.host()
+    }
     /// Delegates directly to the inline leaf under this allocation's common admission gate.
-    fn mount(&mut self) -> Result<(), NcStatus> { self.leaf.mount() }
+    fn mount(&mut self) -> Result<(), NcStatus> {
+        self.leaf.mount()
+    }
     /// Delegates directly to the inline leaf under this allocation's common admission gate.
-    fn properties(&self) -> Result<WidgetProperties, NcStatus> { self.leaf.properties() }
+    fn properties(&self) -> Result<WidgetProperties, NcStatus> {
+        self.leaf.properties()
+    }
     /// Delegates directly to the inline leaf under this allocation's common admission gate.
-    fn requested_flags(&self) -> Result<WidgetOptions, NcStatus> { self.leaf.requested_flags() }
+    fn requested_flags(&self) -> Result<WidgetOptions, NcStatus> {
+        self.leaf.requested_flags()
+    }
     /// Delegates directly to the inline leaf under this allocation's common admission gate.
-    fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> { self.leaf.replace_flags(flags) }
+    fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.leaf.replace_flags(flags)
+    }
     /// Delegates directly to the inline leaf under this allocation's common admission gate.
-    fn set_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> { self.leaf.set_flags(flags) }
+    fn set_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.leaf.set_flags(flags)
+    }
     /// Delegates directly to the inline leaf under this allocation's common admission gate.
-    fn clear_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> { self.leaf.clear_flags(flags) }
+    fn clear_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.leaf.clear_flags(flags)
+    }
     /// Delegates directly to the inline leaf under this allocation's common admission gate.
-    fn update(&mut self, state: WidgetUpdate, event: WidgetEvent, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> { self.leaf.update(state, event, text) }
+    fn update(&mut self, state: WidgetUpdate, event: WidgetEvent, text: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
+        self.leaf.update(state, event, text)
+    }
     /// Delegates directly to the inline leaf under this allocation's common admission gate.
-    fn take_change(&mut self) -> Result<GeometryChange, NcStatus> { self.leaf.take_change() }
+    fn take_change(&mut self) -> Result<GeometryChange, NcStatus> {
+        self.leaf.take_change()
+    }
     /// Delegates directly to the inline leaf under this allocation's common admission gate.
-    fn paint(&mut self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> { self.leaf.paint(scope, state, painter) }
+    fn paint(&mut self, scope: PaintScope, state: WidgetPaint, painter: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
+        self.leaf.paint(scope, state, painter)
+    }
 }
 impl<Content: DispatchingLeafContent> ILeafLayout for DispatchingLeafObject<Content> {
     /// Uses the same validated observational content call as passive leaves.
-    fn measure(&mut self, bounds: LayoutLimits, metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> { self.leaf.measure(bounds, metrics) }
+    fn measure(&mut self, bounds: LayoutLimits, metrics: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
+        self.leaf.measure(bounds, metrics)
+    }
 }
 impl<Content: DispatchingLeafContent> IWidgetDispatcher for DispatchingLeafObject<Content> {
     /// Admission uses common runtime authority before entering concrete private behavior.
@@ -192,7 +214,10 @@ impl WidgetFactory {
     pub fn dispatching_leaf<Content: DispatchingLeafContent>(&self, content: Content, options: WidgetOptions) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
         options.validate()?;
         let object = DispatchingLeafObject::into_box(DispatchingLeafObject {
-            leaf: LeafObject { state: WidgetState::new(self.host()?, options), content },
+            leaf: LeafObject {
+                state: WidgetState::new(self.host()?, options),
+                content,
+            },
         });
         Ok(OwnedWidget::from_interface(object.query().expect("dispatching leaf declares IWidget")))
     }

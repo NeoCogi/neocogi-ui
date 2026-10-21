@@ -32,12 +32,9 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
             &["first", "second"],
             ChoiceSelection::Selected(1),
             Some(
-                neocogi_ui::test_event_queue!(
-                    neocogi_ui::ComboAbi,
-                    ChoiceSelection,
-                    session_tx.clone(),
-                    |_queue, _origin, event| event.query_weak::<IChoiceChangedEventAbi>()?.selection()?
-                )
+                neocogi_ui::test_event_queue!(neocogi_ui::ComboAbi, ChoiceSelection, session_tx.clone(), |_queue, _origin, event| event
+                    .query_weak::<IChoiceChangedEventAbi>()?
+                    .selection()?)
                 .unwrap()
                 .as_com_ref(),
             ),
@@ -138,12 +135,9 @@ fn combo_choice_menu_uses_shared_submenu_navigation() {
             &menu,
             ChoiceSelection::Selected(10),
             Some(
-                neocogi_ui::test_event_queue!(
-                    neocogi_ui::ComboAbi,
-                    ChoiceSelection,
-                    session_tx.clone(),
-                    |_queue, _origin, event| event.query_weak::<IChoiceChangedEventAbi>()?.selection()?
-                )
+                neocogi_ui::test_event_queue!(neocogi_ui::ComboAbi, ChoiceSelection, session_tx.clone(), |_queue, _origin, event| event
+                    .query_weak::<IChoiceChangedEventAbi>()?
+                    .selection()?)
                 .unwrap()
                 .as_com_ref(),
             ),
@@ -197,12 +191,15 @@ struct RemoveComboDuringPost {
 }
 impl neocogi_com::events::IEventReceiver for RemoveComboDuringPost {
     /// A receiver cannot destroy the composite whose dispatch call is active.
-    fn post(&mut self, _: neocogi_com::NcValueRef<'_, neocogi_com::events::EventOrigin>, event_owner: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
+    fn post(
+        &mut self,
+        _: neocogi_com::NcValueRef<'_, neocogi_com::events::EventOrigin>,
+        event_owner: neocogi_com::ComBox<neocogi_com::events::IEventAbi>,
+    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
         let result = (|| -> Result<(), NcStatus> {
-        event_owner.query_weak::<neocogi_ui::IChoiceChangedEventAbi>()?;
-        self.calls.set(self.calls.get() + 1);
-        self.root.clear()
-
+            event_owner.query_weak::<neocogi_ui::IChoiceChangedEventAbi>()?;
+            self.calls.set(self.calls.get() + 1);
+            self.root.clear()
         })();
         result.map_err(|status| (status, event_owner))
     }
@@ -218,9 +215,17 @@ fn combo_forwarding_rejects_active_removal_then_releases_menu_and_queue() {
     let window = ui.window("reentrant combo destruction", RECT, root_owner).unwrap();
     let calls = Rc::new(Cell::new(0));
     let queue = RemoveComboDuringPost::from_value(RemoveComboDuringPost { root: root.clone(), calls: calls.clone() })
-        .query::<neocogi_com::events::IEventReceiverAbi>().unwrap();
+        .query::<neocogi_com::events::IEventReceiverAbi>()
+        .unwrap();
     let weak_queue = queue.downgrade().unwrap();
-    let combo_owner = ui.combo_box_with_queue(window.as_com_ref(), &["first", "second"], ChoiceSelection::Selected(0), Some(queue.as_com_ref())).unwrap();
+    let combo_owner = ui
+        .combo_box_with_queue(
+            window.as_com_ref(),
+            &["first", "second"],
+            ChoiceSelection::Selected(0),
+            Some(queue.as_com_ref()),
+        )
+        .unwrap();
     let combo = combo_owner.handle();
     root.insert(0, combo_owner, LinearEdge::new(LayoutTrack::Content)).unwrap();
     drop(queue);
@@ -232,7 +237,10 @@ fn combo_forwarding_rejects_active_removal_then_releases_menu_and_queue() {
     assert_eq!(combo.selection(), Ok(ChoiceSelection::Selected(1)));
     root.clear().unwrap();
     assert_eq!(combo.selection(), Err(neocogi_com::NC_E_DROPPED));
-    assert!(weak_queue.upgrade().unwrap().is_none(), "the popup coordinator must not retain the dead header's destination");
+    assert!(
+        weak_queue.upgrade().unwrap().is_none(),
+        "the popup coordinator must not retain the dead header's destination"
+    );
     assert_eq!(root.children().unwrap().child_count(), Ok(0));
     let (renderer, _) = renderer();
     ui.update(SIZE).unwrap();

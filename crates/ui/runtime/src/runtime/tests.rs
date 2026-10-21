@@ -4,19 +4,19 @@ use neocogi_ui_nodes_contracts::*;
 use neocogi_com::{ComBox, WeakComBox, INcStringComPtrExt, NC_E_BUSY, NcOutputWriter};
 mod composite_fixture;
 mod containers;
-mod embedded_input;
-mod widget_flags;
-mod dispatch_errors;
-mod recovery;
-mod dispatch_geometry;
-mod pending_changes;
-mod input_boundaries;
-mod shutdown;
-mod documentation;
-mod resource_refresh;
-mod ordinary_construction;
-mod retention;
 mod direct_posting;
+mod dispatch_errors;
+mod dispatch_geometry;
+mod documentation;
+mod embedded_input;
+mod input_boundaries;
+mod ordinary_construction;
+mod pending_changes;
+mod recovery;
+mod resource_refresh;
+mod retention;
+mod shutdown;
+mod widget_flags;
 
 /// Positive drawable size shared by the deterministic headless fixtures.
 const SIZE: Size = Size { width: 640, height: 400 };
@@ -48,7 +48,9 @@ fn oversized_window_title_returns_the_unmounted_root_for_retry() {
     let observed = root.downgrade();
     let oversized = vec![b'x'; MAX_WINDOW_TITLE_BYTES + 1];
     let result = manager.create_window(
-        NcCopyFromBufferOffset::new(0, &oversized), RECT, root.query().unwrap(),
+        NcCopyFromBufferOffset::new(0, &oversized),
+        RECT,
+        root.query().unwrap(),
         neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
     );
     let (status, root) = result.unwrap_err();
@@ -166,10 +168,7 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
     calls.set(0);
     let label = NcCopyFromBufferOffset::new(0, b"shared");
     let button = factory
-        .create_button(
-            label,
-            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
-        )
+        .create_button(label, neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap())
         .unwrap();
     let _checkbox = factory
         .create_checkbox(
@@ -179,10 +178,7 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
         )
         .unwrap();
     let _textbox = factory
-        .create_textbox(
-            label,
-            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
-        )
+        .create_textbox(label, neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap())
         .unwrap();
     let _text_block = factory.create_text_block(label, TextWrapping::Word).unwrap();
     let _slider = factory
@@ -205,16 +201,10 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
         .unwrap();
     let _swatch = factory.create_color_swatch(u32::MAX, label).unwrap();
     let _list_item = factory
-        .create_list_item(
-            label,
-            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
-        )
+        .create_list_item(label, neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap())
         .unwrap();
     let _list_box = factory
-        .create_list_box(
-            label,
-            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
-        )
+        .create_list_box(label, neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap())
         .unwrap();
     let _scrollbar = factory
         .create_scrollbar(
@@ -230,7 +220,11 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
     let _linear = factory.create_linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let tracks = [LayoutTrack::Content];
     let _grid = factory
-        .create_grid(NcCopyFromBufferOffset::new(0, &tracks), NcCopyFromBufferOffset::new(0, &tracks), neocogi_ui::GridLimits { max_columns: 2, max_rows: 2 })
+        .create_grid(
+            NcCopyFromBufferOffset::new(0, &tracks),
+            NcCopyFromBufferOffset::new(0, &tracks),
+            neocogi_ui::GridLimits { max_columns: 2, max_rows: 2 },
+        )
         .unwrap();
     let _disclosure = factory.create_disclosure(label, DisclosureStyle::Header, false).unwrap();
     let content = button.query::<IWidgetAbi>().unwrap();
@@ -251,12 +245,15 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
 
 /// Mounts the common capability through the production manager's transactional boundary.
 fn mount(runtime: &ComPtr<UiRuntimeAbi>, root: ComBox<IWidgetAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
-    runtime.query::<IWindowManagerAbi>()?.create_window(
-        NcCopyFromBufferOffset::new(0, b"test"),
-        RECT,
-        root,
-        neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
-    ).map_err(|(status, _rejected)| status)
+    runtime
+        .query::<IWindowManagerAbi>()?
+        .create_window(
+            NcCopyFromBufferOffset::new(0, b"test"),
+            RECT,
+            root,
+            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
+        )
+        .map_err(|(status, _rejected)| status)
 }
 
 /// Observable state retained by a fake backend independently of its COM allocation.
@@ -443,11 +440,12 @@ impl ILeafLayout for RetainingWidget {
 }
 impl Drop for RetainingWidget {
     /// Unique-owner destruction is the only terminal transition.
-    fn drop(&mut self) { self.probe.closes.set(self.probe.closes.get() + 1); }
+    fn drop(&mut self) {
+        self.probe.closes.set(self.probe.closes.get() + 1);
+    }
 }
 impl IWidget for RetainingWidget {
     /// This widget forwards outputs and has no private inbox.
-
 
     /// Returns the shared owner without exposing runtime storage.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
@@ -712,7 +710,8 @@ fn child_creation_rejects_foreign_and_modal_parents_before_mounting() {
                 node,
                 neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
             )
-            .unwrap_err().0,
+            .unwrap_err()
+            .0,
         UI_E_OWNER
     );
     assert!(!rejected.is_alive());
@@ -734,7 +733,8 @@ fn child_creation_rejects_foreign_and_modal_parents_before_mounting() {
                 button(&first).query().unwrap(),
                 neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
             )
-            .unwrap_err().0,
+            .unwrap_err()
+            .0,
         UI_E_POLICY
     );
     let valid = manager
@@ -829,9 +829,7 @@ fn com_nodes_update_without_activation_and_collect_hidden_widget_changes() {
     runtime.input(tab.into(), NcCopyFromBufferOffset::new(0, &[])).unwrap();
     runtime.update(SIZE).unwrap();
     let measured = probe.measures.get();
-    runtime
-        .input(UiInput::Text, NcCopyFromBufferOffset::new(0, "hello ☃".as_bytes()))
-        .unwrap();
+    runtime.input(UiInput::Text, NcCopyFromBufferOffset::new(0, "hello ☃".as_bytes())).unwrap();
     let (renderer, _) = renderer();
     assert_eq!(runtime.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
     runtime.update(SIZE).unwrap();
@@ -878,14 +876,8 @@ fn input_validation_and_explicit_teardown_preserve_their_error_boundaries() {
         modifiers: 0,
     });
     assert_eq!(runtime.input(bad_key.into(), NcCopyFromBufferOffset::new(0, &[])), Err(NC_E_INVALID_ARG));
-    assert_eq!(
-        runtime.input(UiInput::Text, NcCopyFromBufferOffset::new(1, b"bad")),
-        Err(NC_E_INVALID_ARG)
-    );
-    assert_eq!(
-        runtime.input(UiInput::Text, NcCopyFromBufferOffset::new(0, &[0xff])),
-        Err(NC_E_INVALID_ARG)
-    );
+    assert_eq!(runtime.input(UiInput::Text, NcCopyFromBufferOffset::new(1, b"bad")), Err(NC_E_INVALID_ARG));
+    assert_eq!(runtime.input(UiInput::Text, NcCopyFromBufferOffset::new(0, &[0xff])), Err(NC_E_INVALID_ARG));
     assert_eq!(
         runtime.input(UiInput::Cancel, NcCopyFromBufferOffset::new(0, b"unexpected")),
         Err(NC_E_INVALID_ARG)
@@ -933,11 +925,17 @@ fn child_editor_rejects_inputs_without_leaking_owners_and_expires_retained_views
     assert_eq!(view.query::<IChildrenEditorAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     let invalid = button(&runtime);
     let rejected = invalid.downgrade();
-    assert_eq!(editor.insert(1, invalid.query().unwrap()).map_err(|(status, _rejected)| status), Err(neocogi_com::NC_E_OUT_OF_RANGE));
+    assert_eq!(
+        editor.insert(1, invalid.query().unwrap()).map_err(|(status, _rejected)| status),
+        Err(neocogi_com::NC_E_OUT_OF_RANGE)
+    );
     assert!(!rejected.is_alive());
     let foreign = button(&other);
     let rejected = foreign.downgrade();
-    assert_eq!(editor.insert(0, foreign.query().unwrap()).map_err(|(status, _rejected)| status), Err(UI_E_OWNER));
+    assert_eq!(
+        editor.insert(0, foreign.query().unwrap()).map_err(|(status, _rejected)| status),
+        Err(UI_E_OWNER)
+    );
     assert!(!rejected.is_alive());
     editor.insert(0, button(&runtime).query().unwrap()).unwrap();
     let held_child = view.child(0).unwrap();
@@ -1018,7 +1016,10 @@ fn builtin_facade_editing_preserves_normalization_geometry_and_resource_validati
     textbox.set_text("é\n☃").unwrap();
     assert_eq!(textbox.cursor().unwrap(), 5);
     assert_eq!(common.take_change().unwrap(), GeometryChange::NoChange);
-    assert_eq!(textbox.as_interface().downgrade().set_text(NcCopyFromBufferOffset::new(0, &[0xff])), Err(NC_E_INVALID_ARG));
+    assert_eq!(
+        textbox.as_interface().downgrade().set_text(NcCopyFromBufferOffset::new(0, &[0xff])),
+        Err(NC_E_INVALID_ARG)
+    );
     assert_eq!(textbox.text().unwrap(), "é☃");
     textbox.clear().unwrap();
     assert_eq!(textbox.cursor().unwrap(), 0);
@@ -1174,8 +1175,18 @@ fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
     window.close().unwrap();
 
     let roots = [
-        ui.widgets().button_unobserved("button").unwrap().into_interface().query::<IWidgetAbi>().unwrap(),
-        ui.widgets().text_block("display\ntext", TextWrapping::Word).unwrap().into_interface().query::<IWidgetAbi>().unwrap(),
+        ui.widgets()
+            .button_unobserved("button")
+            .unwrap()
+            .into_interface()
+            .query::<IWidgetAbi>()
+            .unwrap(),
+        ui.widgets()
+            .text_block("display\ntext", TextWrapping::Word)
+            .unwrap()
+            .into_interface()
+            .query::<IWidgetAbi>()
+            .unwrap(),
         ui.widgets()
             .slider_unobserved(SliderOptions {
                 value: 2.0,
@@ -1185,16 +1196,33 @@ fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
                 precision: 0,
             })
             .unwrap()
-            .into_interface().query::<IWidgetAbi>()
+            .into_interface()
+            .query::<IWidgetAbi>()
             .unwrap(),
         ui.widgets()
             .number_unobserved(NumberOptions { value: 42.0, step: 1.0, precision: 0 })
             .unwrap()
-            .into_interface().query::<IWidgetAbi>()
+            .into_interface()
+            .query::<IWidgetAbi>()
             .unwrap(),
-        ui.widgets().color_swatch(0xff00ffff, "swatch").unwrap().into_interface().query::<IWidgetAbi>().unwrap(),
-        ui.widgets().list_item_unobserved("item").unwrap().into_interface().query::<IWidgetAbi>().unwrap(),
-        ui.widgets().list_box_unobserved("list box").unwrap().into_interface().query::<IWidgetAbi>().unwrap(),
+        ui.widgets()
+            .color_swatch(0xff00ffff, "swatch")
+            .unwrap()
+            .into_interface()
+            .query::<IWidgetAbi>()
+            .unwrap(),
+        ui.widgets()
+            .list_item_unobserved("item")
+            .unwrap()
+            .into_interface()
+            .query::<IWidgetAbi>()
+            .unwrap(),
+        ui.widgets()
+            .list_box_unobserved("list box")
+            .unwrap()
+            .into_interface()
+            .query::<IWidgetAbi>()
+            .unwrap(),
         ui.widgets()
             .scrollbar_unobserved(ScrollRange {
                 axis: ScrollAxis::Vertical,
@@ -1203,7 +1231,8 @@ fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
                 offset: 30,
             })
             .unwrap()
-            .into_interface().query::<IWidgetAbi>()
+            .into_interface()
+            .query::<IWidgetAbi>()
             .unwrap(),
     ];
     for root in roots {
@@ -1354,10 +1383,10 @@ fn builtin_scoped_paint_preserves_alignment_with_inline_semantic_state() {
 }
 
 mod component_events;
-mod event_queues;
-mod event_origins;
-mod events;
 mod document_events;
+mod event_origins;
+mod event_queues;
+mod events;
 mod list_item_events;
 mod widget_dispatch;
 
@@ -1482,7 +1511,6 @@ impl neocogi_ui::LeafContent for LocalContent {
             ColoredVertex { x: 8.0, y: 9.0, rgba: 0xff060504 },
         ])
     }
-
 }
 impl Drop for LocalContent {
     /// The final inline value has one destructor, independent of the number of COM projections.
@@ -1605,8 +1633,9 @@ impl neocogi_ui::LeafContent for ReviewDispatchTrace {
     fn measure(&self, _: LayoutLimits, _: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
         Ok(Size { width: 20, height: 20 })
     }
-    fn paint(&mut self, _: WidgetPaint, _: &mut neocogi_ui::Painter<'_>) -> Result<(), NcStatus> { Ok(()) }
-
+    fn paint(&mut self, _: WidgetPaint, _: &mut neocogi_ui::Painter<'_>) -> Result<(), NcStatus> {
+        Ok(())
+    }
 }
 
 #[test]
@@ -1614,16 +1643,26 @@ fn review_dispatch_cache_follows_raised_root_chronology() {
     let runtime = runtime();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
     let trace = Rc::new(RefCell::new(Vec::new()));
-    let first = ui.widgets().dispatching_leaf(ReviewDispatchTrace { name: "first", trace: trace.clone() }, WidgetOptions::NONE).unwrap();
+    let first = ui
+        .widgets()
+        .dispatching_leaf(ReviewDispatchTrace { name: "first", trace: trace.clone() }, WidgetOptions::NONE)
+        .unwrap();
     let first = ui.window("first", RECT, first).unwrap();
-    let second = ui.widgets().dispatching_leaf(ReviewDispatchTrace { name: "second", trace: trace.clone() }, WidgetOptions::NONE).unwrap();
+    let second = ui
+        .widgets()
+        .dispatching_leaf(ReviewDispatchTrace { name: "second", trace: trace.clone() }, WidgetOptions::NONE)
+        .unwrap();
     let _second = ui.window("second", RECT, second).unwrap();
     ui.update(SIZE).unwrap();
     assert_eq!(&trace.borrow()[..2], &["second", "first"]);
     trace.borrow_mut().clear();
     first.raise().unwrap();
     ui.update(SIZE).unwrap();
-    assert_eq!(&trace.borrow()[..2], &["first", "second"], "a fresh authoritative reverse-chronology snapshot follows raise");
+    assert_eq!(
+        &trace.borrow()[..2],
+        &["first", "second"],
+        "a fresh authoritative reverse-chronology snapshot follows raise"
+    );
 }
 
 #[test]
@@ -1632,14 +1671,31 @@ fn review_dispatch_child_surface_precedes_raised_parent() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let manager: ComPtr<IWindowManagerAbi> = runtime.query().unwrap();
     let trace = Rc::new(RefCell::new(Vec::new()));
-    let parent = ui.widgets().dispatching_leaf(ReviewDispatchTrace { name: "parent", trace: trace.clone() }, WidgetOptions::NONE).unwrap();
+    let parent = ui
+        .widgets()
+        .dispatching_leaf(ReviewDispatchTrace { name: "parent", trace: trace.clone() }, WidgetOptions::NONE)
+        .unwrap();
     let parent = ui.window("parent", RECT, parent).unwrap();
-    let child = ui.widgets().dispatching_leaf(ReviewDispatchTrace { name: "child", trace: trace.clone() }, WidgetOptions::NONE).unwrap();
-    let _child = manager.create_child(parent.as_com_ref(), NcCopyFromBufferOffset::new(0, b"child"), RECT,
-        child.into_interface(), neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap()).unwrap();
+    let child = ui
+        .widgets()
+        .dispatching_leaf(ReviewDispatchTrace { name: "child", trace: trace.clone() }, WidgetOptions::NONE)
+        .unwrap();
+    let _child = manager
+        .create_child(
+            parent.as_com_ref(),
+            NcCopyFromBufferOffset::new(0, b"child"),
+            RECT,
+            child.into_interface(),
+            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
+        )
+        .unwrap();
     parent.raise().unwrap();
     ui.update(SIZE).unwrap();
-    assert_eq!(&trace.borrow()[..2], &["child", "parent"], "documented descendant-first delivery survives ancestor raising");
+    assert_eq!(
+        &trace.borrow()[..2],
+        &["child", "parent"],
+        "documented descendant-first delivery survives ancestor raising"
+    );
 }
 
 impl neocogi_ui::DispatchingLeafContent for ReviewDispatchTrace {
@@ -1660,14 +1716,28 @@ impl IWidget for ReviewStickyWidget {
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
         self.state.host().try_add_ref()
     }
-    fn mount(&mut self) -> Result<(), NcStatus> { self.state.mount() }
-    fn properties(&self) -> Result<WidgetProperties, NcStatus> {
-        Ok(WidgetProperties { options: self.state.requested_flags()?, keyboard: 0, frame: WidgetFrame::Generic })
+    fn mount(&mut self) -> Result<(), NcStatus> {
+        self.state.mount()
     }
-    fn requested_flags(&self) -> Result<WidgetOptions, NcStatus> { self.state.requested_flags() }
-    fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> { self.state.replace_flags(flags) }
-    fn set_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> { self.state.set_flags(flags) }
-    fn clear_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> { self.state.clear_flags(flags) }
+    fn properties(&self) -> Result<WidgetProperties, NcStatus> {
+        Ok(WidgetProperties {
+            options: self.state.requested_flags()?,
+            keyboard: 0,
+            frame: WidgetFrame::Generic,
+        })
+    }
+    fn requested_flags(&self) -> Result<WidgetOptions, NcStatus> {
+        self.state.requested_flags()
+    }
+    fn replace_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.state.replace_flags(flags)
+    }
+    fn set_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.state.set_flags(flags)
+    }
+    fn clear_flags(&mut self, flags: WidgetOptions) -> Result<(), NcStatus> {
+        self.state.clear_flags(flags)
+    }
     fn update(&mut self, _: WidgetUpdate, _: WidgetEvent, _: NcCopyFromBufferOffset<'_, u8>) -> Result<GeometryChange, NcStatus> {
         Ok(GeometryChange::NoChange)
     }
@@ -1675,13 +1745,22 @@ impl IWidget for ReviewStickyWidget {
         self.collections.set(self.collections.get() + 1);
         let own = std::mem::replace(&mut self.sticky, false);
         let common = self.state.take_change()?;
-        Ok(if own || common == GeometryChange::Changed { GeometryChange::Changed } else { GeometryChange::NoChange })
+        Ok(if own || common == GeometryChange::Changed {
+            GeometryChange::Changed
+        } else {
+            GeometryChange::NoChange
+        })
     }
-    fn paint(&mut self, _: PaintScope, _: WidgetPaint, _: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> { Ok(()) }
+    fn paint(&mut self, _: PaintScope, _: WidgetPaint, _: ComRef<'_, IPainterAbi>) -> Result<(), NcStatus> {
+        Ok(())
+    }
 }
 impl ILeafLayout for ReviewStickyWidget {
     fn measure(&mut self, _: LayoutLimits, _: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
-        Ok(Size { width: self.text.len() as i32 * 10, height: 20 })
+        Ok(Size {
+            width: self.text.len() as i32 * 10,
+            height: 20,
+        })
     }
 }
 impl ITextContent for ReviewStickyWidget {
@@ -1690,7 +1769,9 @@ impl ITextContent for ReviewStickyWidget {
     }
     fn set_text(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.state.writable()?;
-        if input.offset() != 0 { return Err(NC_E_INVALID_ARG); }
+        if input.offset() != 0 {
+            return Err(NC_E_INVALID_ARG);
+        }
         let text = std::str::from_utf8(input.as_slice()).map_err(|_| NC_E_INVALID_ARG)?;
         if self.text != text {
             self.text = text.to_owned();
@@ -1706,7 +1787,9 @@ fn review_sticky_widget(runtime: &ComPtr<UiRuntimeAbi>) -> (ComBox<IWidgetAbi>, 
     let host = runtime.construction_host().unwrap().host().unwrap();
     let object = ReviewStickyWidget::into_box(ReviewStickyWidget {
         state: neocogi_ui::com::widget::WidgetState::new(host, WidgetOptions::NONE),
-        text: "a".to_owned(), sticky: false, collections: collections.clone(),
+        text: "a".to_owned(),
+        sticky: false,
+        collections: collections.clone(),
     });
     let text = object.query_weak::<ITextContentAbi>().unwrap();
     (object.query::<IWidgetAbi>().unwrap(), text, collections)
@@ -1743,13 +1826,19 @@ struct RaiseDuringDispatch {
     trace: Rc<RefCell<Vec<&'static str>>>,
 }
 impl neocogi_ui::LeafContent for RaiseDuringDispatch {
-    fn measure(&self, _: LayoutLimits, _: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> { Ok(Size { width: 20, height: 20 }) }
-    fn paint(&mut self, _: WidgetPaint, _: &mut neocogi_ui::Painter<'_>) -> Result<(), NcStatus> { Ok(()) }
+    fn measure(&self, _: LayoutLimits, _: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
+        Ok(Size { width: 20, height: 20 })
+    }
+    fn paint(&mut self, _: WidgetPaint, _: &mut neocogi_ui::Painter<'_>) -> Result<(), NcStatus> {
+        Ok(())
+    }
 }
 impl neocogi_ui::DispatchingLeafContent for RaiseDuringDispatch {
     fn dispatch_next(&mut self, _: &mut neocogi_ui::LeafDispatchContext<'_>) -> Result<bool, NcStatus> {
         self.trace.borrow_mut().push("raising");
-        if let Some(target) = self.target.take() { target.raise()?; }
+        if let Some(target) = self.target.take() {
+            target.raise()?;
+        }
         Ok(false)
     }
 }
@@ -1758,11 +1847,26 @@ impl neocogi_ui::DispatchingLeafContent for RaiseDuringDispatch {
 fn false_dispatch_callback_reconciles_raised_surface_before_next_receiver() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let trace = Rc::new(RefCell::new(Vec::new()));
-    let first = ui.widgets().dispatching_leaf(ReviewDispatchTrace { name: "first", trace: trace.clone() }, WidgetOptions::NONE).unwrap();
+    let first = ui
+        .widgets()
+        .dispatching_leaf(ReviewDispatchTrace { name: "first", trace: trace.clone() }, WidgetOptions::NONE)
+        .unwrap();
     let first = ui.window("first", RECT, first).unwrap();
-    let later = ui.widgets().dispatching_leaf(ReviewDispatchTrace { name: "later", trace: trace.clone() }, WidgetOptions::NONE).unwrap();
+    let later = ui
+        .widgets()
+        .dispatching_leaf(ReviewDispatchTrace { name: "later", trace: trace.clone() }, WidgetOptions::NONE)
+        .unwrap();
     let _later = ui.window("later", RECT, later).unwrap();
-    let raising = ui.widgets().dispatching_leaf(RaiseDuringDispatch { target: Some(first), trace: trace.clone() }, WidgetOptions::NONE).unwrap();
+    let raising = ui
+        .widgets()
+        .dispatching_leaf(
+            RaiseDuringDispatch {
+                target: Some(first),
+                trace: trace.clone(),
+            },
+            WidgetOptions::NONE,
+        )
+        .unwrap();
     let _raising = ui.window("raising", RECT, raising).unwrap();
     ui.update(SIZE).unwrap();
     assert_eq!(&trace.borrow()[..4], &["raising", "first", "raising", "later"]);

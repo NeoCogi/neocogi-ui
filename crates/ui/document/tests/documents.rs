@@ -106,9 +106,12 @@ fn removed_inputs_and_previous_document_revisions_are_rejected() {
     let document = Document::new("widget methods");
     let source: serde_json::Value = serde_json::from_slice(&document.to_json().unwrap()).unwrap();
     assert!(source.get("inputs").is_none());
-    for obsolete in [serde_json::json!([]), serde_json::json!([
-        {"name": "title", "node": "title", "kind": "Text"}
-    ])] {
+    for obsolete in [
+        serde_json::json!([]),
+        serde_json::json!([
+            {"name": "title", "node": "title", "kind": "Text"}
+        ]),
+    ] {
         let mut legacy = source.clone();
         legacy["inputs"] = obsolete;
         let error = Document::from_json(&serde_json::to_vec(&legacy).unwrap()).unwrap_err();
@@ -116,7 +119,11 @@ fn removed_inputs_and_previous_document_revisions_are_rejected() {
     }
     let mut legacy = source;
     legacy["version"] = serde_json::json!(VERSION - 1);
-    assert!(Document::from_json(&serde_json::to_vec(&legacy).unwrap()).unwrap_err().contains("Unsupported UI document revision"));
+    assert!(
+        Document::from_json(&serde_json::to_vec(&legacy).unwrap())
+            .unwrap_err()
+            .contains("Unsupported UI document revision")
+    );
 
     // The persistence envelope and inner document each carry an independent
     // revision. Reject either mismatch before publishing any widget tree.
@@ -124,12 +131,20 @@ fn removed_inputs_and_previous_document_revisions_are_rejected() {
     let bytes = document.to_binary().unwrap();
     let mut envelope: ObjectRecord = binary::from_slice(&bytes).unwrap();
     envelope.schema_version = VERSION - 1;
-    assert!(Document::from_binary(&binary::to_vec(&envelope).unwrap()).unwrap_err().contains("Unsupported UI component recipe or revision"));
+    assert!(
+        Document::from_binary(&binary::to_vec(&envelope).unwrap())
+            .unwrap_err()
+            .contains("Unsupported UI component recipe or revision")
+    );
     envelope.schema_version = VERSION;
     let mut legacy = document;
     legacy.version = VERSION - 1;
     envelope.state = binary::to_vec(&legacy).unwrap();
-    assert!(Document::from_binary(&binary::to_vec(&envelope).unwrap()).unwrap_err().contains("Unsupported UI document revision"));
+    assert!(
+        Document::from_binary(&binary::to_vec(&envelope).unwrap())
+            .unwrap_err()
+            .contains("Unsupported UI document revision")
+    );
 }
 
 /// The outer state's Vec<u8> is charged as values, even when inner text fits its
@@ -157,7 +172,10 @@ fn binary_admission_includes_outer_state_and_matches_saved_round_trip() {
 fn binary_admission_charges_aggregate_fields_and_portable_text_growth() {
     let mut document = Document::new("");
     document.name = "a".repeat(600_000);
-    document.root.children[0].node.widget = WidgetSpec::TextBlock { text: "b".repeat(600_000), wrapping: Wrapping::None };
+    document.root.children[0].node.widget = WidgetSpec::TextBlock {
+        text: "b".repeat(600_000),
+        wrapping: Wrapping::None,
+    };
     assert!(document.validate_binary().is_err());
     document.name.clear();
     document.validate_binary().unwrap();
@@ -174,7 +192,9 @@ fn json_byte_limit_counts_escaped_text_and_aggregate_overhead() {
     let base = document.to_json().unwrap().len();
     let available = MAX_BYTES - base;
     document.name = "\n".repeat(available / 2);
-    if available % 2 != 0 { document.name.push('x'); }
+    if available % 2 != 0 {
+        document.name.push('x');
+    }
     let exact = document.to_json().unwrap();
     assert_eq!(exact.len(), MAX_BYTES);
     assert_eq!(Document::from_json(&exact).unwrap(), document);

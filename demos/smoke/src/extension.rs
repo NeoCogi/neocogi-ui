@@ -14,7 +14,9 @@ impl events::MessageProcessor for Model {
     type Message = neocogi_com::events::EventMessage;
     /// Handles the independent plugin's concrete public event protocol.
     fn handle(&mut self, message: Self::Message) -> Result<(), NcStatus> {
-        let Some(origin) = message.origin.widget::<CounterAbi>()? else { return Ok(()); };
+        let Some(origin) = message.origin.widget::<CounterAbi>()? else {
+            return Ok(());
+        };
         if !origin.is_alive() {
             return Ok(());
         }
@@ -33,8 +35,8 @@ impl events::MessageProcessor for Model {
 
 /// Runs real routing, layout, GPU recording and lifecycle through three independently built assemblies.
 pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
-    let provider = neocogi_com::Runtime::global()
-        .acquire_plugin_root::<ExtensionProviderAbi>(neocogi_com::guid_from_qualified_name("neocogi.example.ui-extension"))?;
+    let provider =
+        neocogi_com::Runtime::global().acquire_plugin_root::<ExtensionProviderAbi>(neocogi_com::guid_from_qualified_name("neocogi.example.ui-extension"))?;
     let host = ui.widgets().host()?;
     // Exercise rejection through the independent extension and runtime DLLs.
     // B belongs to A, so accepting A under B would form an owning cycle. Every
@@ -75,7 +77,9 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     // The second parent cannot acquire the same owner: set_child consumes it.
     let root = neocogi_ui::OwnedWidget::from_interface(inset_owner);
     // Capability discovery happens once while wiring the application, never during UI phases.
-    let window = ui.window("Independent extension", Rect { x: 10, y: 10, width: 400, height: 200 }, root).map_err(|(status, _candidate)| status)?;
+    let window = ui
+        .window("Independent extension", Rect { x: 10, y: 10, width: 400, height: 200 }, root)
+        .map_err(|(status, _candidate)| status)?;
     let app = events::Dispatcher::into_local(events::Dispatcher::new(
         Model {
             labels: Vec::new(),

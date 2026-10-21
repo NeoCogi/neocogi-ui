@@ -12,11 +12,8 @@ pub type ScrollAreaWidget = Widget<ScrollAreaAbi>;
 pub type SplitViewWidget = Widget<SplitViewAbi>;
 
 impl<P> Widget<SplitViewAbi, P>
-
 where
-
     P: WidgetStorage<SplitViewAbi> + core::ops::DerefMut<Target = <SplitViewAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
-
 {
     /// Observes pane identities without exposing the container's topology writer.
     pub fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
@@ -57,11 +54,8 @@ where
 pub type DisclosureWidget = Widget<DisclosureAbi>;
 
 impl<P> Widget<DisclosureAbi, P>
-
 where
-
     P: WidgetStorage<DisclosureAbi> + core::ops::DerefMut<Target = <DisclosureAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
-
 {
     /// Reads expansion shared by the containing layout and its interactive header.
     pub fn expanded(&self) -> Result<bool, NcStatus> {
@@ -114,11 +108,8 @@ macro_rules! scrolling_proxy {
 scrolling_proxy!(IScrollingAbi);
 
 impl<P> Widget<ScrollAreaAbi, P>
-
 where
-
     P: WidgetStorage<ScrollAreaAbi> + core::ops::DerefMut<Target = <ScrollAreaAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
-
 {
     /// Reads actual offset requests through this class's shared scrolling protocol.
     pub fn info(&self) -> Result<ScrollInfo, NcStatus> {
@@ -193,11 +184,8 @@ container_proxy!(LinearAbi, LinearEdge);
 container_proxy!(GridAbi, GridExtent);
 
 impl<P> Widget<LinearAbi, P>
-
 where
-
     P: WidgetStorage<LinearAbi> + core::ops::DerefMut<Target = <LinearAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
-
 {
     /// Returns the complete axis and leading-edge choice.
     pub fn direction(&self) -> Result<FlowDirection, NcStatus> {
@@ -224,7 +212,11 @@ enum Axis {
 }
 impl Axis {
     /// Executes the selected concrete copied-policy read.
-    fn copy(&self, grid: &neocogi_ui_nodes_contracts::GridClient<neocogi_com::ThreadLocal>, output: neocogi_com::NcOutput<'_, LayoutTrack>) -> Result<u32, NcStatus> {
+    fn copy(
+        &self,
+        grid: &neocogi_ui_nodes_contracts::GridClient<neocogi_com::ThreadLocal>,
+        output: neocogi_com::NcOutput<'_, LayoutTrack>,
+    ) -> Result<u32, NcStatus> {
         match self {
             Self::Columns => grid.columns(output),
             Self::Rows => grid.rows(output),
@@ -268,7 +260,11 @@ where
 
 impl WidgetFactory {
     /// Creates an empty split; insert panes in first/second ownership order.
-    pub fn split_view_with_queue(&self, settings: SplitOptions, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<SplitViewAbi>, NcStatus> {
+    pub fn split_view_with_queue(
+        &self,
+        settings: SplitOptions,
+        queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>,
+    ) -> Result<OwnedWidget<SplitViewAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_split_view(
             settings,
             neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::from_queue(queue)?)?,
@@ -284,11 +280,7 @@ impl WidgetFactory {
     }
     /// Constructs a framed scroll composite around one unmounted application widget.
     pub fn scroll_area<W: Mountable>(&self, content: W, enabled: bool) -> Result<OwnedWidget<ScrollAreaAbi>, (NcStatus, W)> {
-        content.with_mount(|content| {
-            Ok(OwnedWidget::from_interface(
-                self.interface.create_scroll_area(content, enabled)?,
-            ))
-        })
+        content.with_mount(|content| Ok(OwnedWidget::from_interface(self.interface.create_scroll_area(content, enabled)?)))
     }
     /// Creates an empty directional container with one complete axis/cross configuration.
     pub fn linear(&self, direction: FlowDirection, cross: CrossSize) -> Result<OwnedWidget<LinearAbi>, NcStatus> {

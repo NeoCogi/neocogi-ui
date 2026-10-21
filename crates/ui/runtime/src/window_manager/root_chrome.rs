@@ -84,8 +84,6 @@ pub(super) enum RootCaptionButton {
     Close,
 }
 
-
-
 /// Stable lookup identity; the manager or declaration owns all presentation and delivery state.
 #[derive(Clone)]
 pub struct WindowHandle {
@@ -885,7 +883,8 @@ mod tests {
                 true,
                 true,
                 RootChromeVisualState::idle(),
-            ).unwrap();
+            )
+            .unwrap();
             display_list.debug_operation_count()
         };
 
@@ -969,7 +968,8 @@ mod tests {
             true,
             true,
             RootChromeVisualState::idle(),
-        ).unwrap();
+        )
+        .unwrap();
 
         let backdrop_rects = display_list
             .debug_nine_patches()

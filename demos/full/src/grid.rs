@@ -363,11 +363,22 @@ mod grid_tests {
         let data = Rc::new(RefCell::new(GridState::default()));
         let mut widget = GridWidget::new(data);
         let full = Rect { x: 0, y: 0, width: 200, height: 100 };
-        widget.update(crate::viewport_test_support::update_state(full, full), WidgetEvent::None, "").unwrap();
+        widget
+            .update(crate::viewport_test_support::update_state(full, full), WidgetEvent::None, "")
+            .unwrap();
         let visible = Rect { x: 37, y: 23, width: 91, height: 57 };
         let (recorder, output) = crate::viewport_test_support::recorder();
         let mut painter = Painter::from_call(recorder.as_com_ref(), PaintScope { invocation: 1, clip: visible });
-        widget.paint(WidgetPaint { rect: full, clip: visible, ..WidgetPaint::default() }, &mut painter).unwrap();
+        widget
+            .paint(
+                WidgetPaint {
+                    rect: full,
+                    clip: visible,
+                    ..WidgetPaint::default()
+                },
+                &mut painter,
+            )
+            .unwrap();
         let expected = build_xy_grid_vertices(local_rect(visible), true, initial_grid_pvm(local_rect(visible)));
         let output = output.borrow();
         assert!(!output.vertices.is_empty());

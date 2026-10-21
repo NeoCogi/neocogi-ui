@@ -45,13 +45,7 @@ fn text_change_and_submission_are_distinct_typed_events() {
     for text in ["line\ntwo", ""] {
         let submitted = snapshot::text_submitted(text).unwrap();
         assert_eq!(
-            submitted
-                .query_weak::<ITextSubmittedEventAbi>()
-                .unwrap()
-                .text()
-                .unwrap()
-                .to_string()
-                .unwrap(),
+            submitted.query_weak::<ITextSubmittedEventAbi>().unwrap().text().unwrap().to_string().unwrap(),
             text
         );
         assert_eq!(submitted.query_weak::<ITextChangedEventAbi>().unwrap_err(), NC_E_NOINTERFACE);
@@ -98,10 +92,7 @@ impl INumericChangedEvent for RejectedNumeric {
 #[test]
 fn foreign_event_getter_errors_remain_visible() {
     let event: ComBox<IEventAbi> = RejectedNumeric::into_box(RejectedNumeric).query().unwrap();
-    assert_eq!(
-        event.query_weak::<INumericChangedEventAbi>().unwrap().value(),
-        Err(NC_E_INVALID_ARG)
-    );
+    assert_eq!(event.query_weak::<INumericChangedEventAbi>().unwrap().value(), Err(NC_E_INVALID_ARG));
     assert_eq!(event.query_weak::<ICheckboxChangedEventAbi>().unwrap_err(), NC_E_NOINTERFACE);
 }
 

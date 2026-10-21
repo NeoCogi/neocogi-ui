@@ -148,7 +148,8 @@ impl UiRuntime {
                     )?;
                 }
                 Ok::<(), neocogi_com::NcStatus>(())
-            }).transpose()?;
+            })
+            .transpose()?;
         }
         Ok(())
     }

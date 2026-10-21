@@ -34,10 +34,14 @@ impl ChildStore {
     /// Checks the actual owned descendants without entering any COM method.
     /// A checked-out traversal is busy: it must return ownership before removal.
     pub(super) fn ensure_idle(&self) -> Result<(), NcStatus> {
-        if self.closed.get() { return Ok(()); }
+        if self.closed.get() {
+            return Ok(());
+        }
         let storage = self.nodes.try_borrow().map_err(|_| UI_E_BUSY)?;
         let nodes = storage.as_ref().ok_or(UI_E_BUSY)?;
-        for node in nodes.iter() { node.data.ensure_idle()?; }
+        for node in nodes.iter() {
+            node.data.ensure_idle()?;
+        }
         Ok(())
     }
 
@@ -263,15 +267,16 @@ impl IChildrenEditor for ChildEditor {
         let mut nodes = self.store.take()?;
         // Validate every child before dropping any, preserving the collection
         // unchanged if one descendant is executing a recursive removal attempt.
-        for node in nodes.iter() { node.data.ensure_idle()?; }
+        for node in nodes.iter() {
+            node.data.ensure_idle()?;
+        }
         if !nodes.is_empty() {
             self.store.dirty.set(true);
-        self.store.factory.state.changes_pending.set(true);
+            self.store.factory.state.changes_pending.set(true);
             nodes.clear();
         }
         Ok(())
     }
-
 }
 impl Drop for ChildEditor {
     /// Final writer release logically closes children without invoking application callbacks.

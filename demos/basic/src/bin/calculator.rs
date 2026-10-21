@@ -343,7 +343,9 @@ impl AppState for State {
     type Message = neocogi_com::events::EventMessage;
     /// Consumes one command using exclusive access to the ordinary arithmetic model.
     fn update(&mut self, message: Self::Message) -> Result<(), NcStatus> {
-        let Some(origin) = message.origin.widget::<ButtonAbi>()? else { return Ok(()); };
+        let Some(origin) = message.origin.widget::<ButtonAbi>()? else {
+            return Ok(());
+        };
         if !origin.is_alive() || message.query::<IActivatedEventAbi>()?.is_none() {
             return Ok(());
         }
@@ -379,12 +381,17 @@ fn run() -> Result<(), HostError> {
     )?;
     let mut tree = host.ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     let display_handle = display.handle();
-    tree.insert(0, display, LinearEdge::new(LayoutTrack::Flex { weight: DISPLAY_HEIGHT_FRACTION })).map_err(|(status, _candidate)| status)?;
+    tree.insert(0, display, LinearEdge::new(LayoutTrack::Flex { weight: DISPLAY_HEIGHT_FRACTION }))
+        .map_err(|(status, _candidate)| status)?;
     let grid_handle = grid.handle();
-    tree.insert(1, grid, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 - DISPLAY_HEIGHT_FRACTION })).map_err(|(status, _candidate)| status)?;
+    tree.insert(1, grid, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 - DISPLAY_HEIGHT_FRACTION }))
+        .map_err(|(status, _candidate)| status)?;
     let mut grid = grid_handle;
     let display = display_handle;
-    let window = host.ui.window("Calculator", Rect { x: 0, y: 0, width: 320, height: 420 }, tree).map_err(|(status, _candidate)| status)?;
+    let window = host
+        .ui
+        .window("Calculator", Rect { x: 0, y: 0, width: 320, height: 420 }, tree)
+        .map_err(|(status, _candidate)| status)?;
     window.set_options(WindowOptions::FRAME | WindowOptions::NO_RESIZE | WindowOptions::NO_TITLE)?;
     let mut state = State {
         window,
@@ -421,7 +428,8 @@ fn run() -> Result<(), HostError> {
         let mut button = host.ui.widgets().button_with_queue(label, Some(queue.as_com_ref()))?;
         state.keys.push((button.as_interface().downgrade(), action));
         button.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
-        grid.insert(index as u32, button, GridExtent { columns: 1, rows: 1 }).map_err(|(status, _candidate)| status)?;
+        grid.insert(index as u32, button, GridExtent { columns: 1, rows: 1 })
+            .map_err(|(status, _candidate)| status)?;
     }
     host.run(state, events)
 }

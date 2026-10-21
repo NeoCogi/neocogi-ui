@@ -1,7 +1,10 @@
 //! Admission tests use the real loader, generated catalog calls and allocation counters.
 use super::*;
 use neocogi_ui_document::{*, design::DesignWidgetManifest};
-use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 
 /// A real COM catalog whose constructor calls can be observed independently of
 /// factory lifetime. Atomics are test instrumentation shared with a COM receiver.
@@ -16,16 +19,25 @@ struct BudgetCatalog {
 }
 impl neocogi_ui_document::contracts::IDesignWidgetCatalog for BudgetCatalog {
     /// This test provider offers construction/metadata only, without a settings editor.
-    fn create_editor(&self, _: u32, _: neocogi_com::ComRef<'_, neocogi_ui::UiFactoryAbi>, _: neocogi_com::NcCopyFromBufferOffset<'_, u8>) -> Result<neocogi_com::ComBox<neocogi_ui_document::contracts::IDesignSettingsEditorAbi>, neocogi_com::NcStatus> {
+    fn create_editor(
+        &self,
+        _: u32,
+        _: neocogi_com::ComRef<'_, neocogi_ui::UiFactoryAbi>,
+        _: neocogi_com::NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<neocogi_com::ComBox<neocogi_ui_document::contracts::IDesignSettingsEditorAbi>, neocogi_com::NcStatus> {
         Err(neocogi_com::NC_E_NOINTERFACE)
     }
 
     /// This fixture exposes exactly one independently discoverable kind.
-    fn widget_count(&self) -> Result<u32, NcStatus> { Ok(1) }
+    fn widget_count(&self) -> Result<u32, NcStatus> {
+        Ok(1)
+    }
 
     /// Copies the same stable descriptor on length query and subsequent read.
     fn describe(&self, index: u32, mut output: neocogi_com::NcOutputWriter<'_, u8>) -> Result<u32, NcStatus> {
-        if index != 0 || output.offset() != 0 { return Err(neocogi_com::NC_E_INVALID_ARG); }
+        if index != 0 || output.offset() != 0 {
+            return Err(neocogi_com::NC_E_INVALID_ARG);
+        }
         if output.capacity() >= self.description.len() {
             output.extend_from_slice(&self.description)?;
         }
@@ -34,15 +46,23 @@ impl neocogi_ui_document::contracts::IDesignWidgetCatalog for BudgetCatalog {
 
     /// Crosses real generated thunks; any entry is counted before validating input.
     fn create_widget(
-        &self, index: u32, _host: neocogi_com::ComRef<'_, IWidgetHostAbi>,
+        &self,
+        index: u32,
+        _host: neocogi_com::ComRef<'_, IWidgetHostAbi>,
         settings: neocogi_com::NcCopyFromBufferOffset<'_, u8>,
         _events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
     ) -> Result<neocogi_com::ComBox<IWidgetAbi>, NcStatus> {
         self.calls.fetch_add(1, Ordering::Relaxed);
-        if index != 0 || settings.offset() != 0 { return Err(neocogi_com::NC_E_INVALID_ARG); }
+        if index != 0 || settings.offset() != 0 {
+            return Err(neocogi_com::NC_E_INVALID_ARG);
+        }
         let text: String = design::decode_settings(settings.as_slice()).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
-        self.ui.widgets().text_block(&text, TextWrapping::None)?.into_interface()
-            .query::<IWidgetAbi>().map_err(|(status, _owner)| status)
+        self.ui
+            .widgets()
+            .text_block(&text, TextWrapping::None)?
+            .into_interface()
+            .query::<IWidgetAbi>()
+            .map_err(|(status, _owner)| status)
     }
 }
 
@@ -51,13 +71,19 @@ fn catalog_loader(ui: &Ui) -> (Loader, Document, Arc<AtomicUsize>) {
     let settings = design::encode_settings("").unwrap();
     let manifest = DesignWidgetManifest::from_idl("test.text", settings.clone(), &TextBlockAbi::IDL_INTERFACE).unwrap();
     let calls = Arc::new(AtomicUsize::new(0));
-    let catalog = BudgetCatalog::from_value(BudgetCatalog { ui: ui.clone(), description: manifest.encode().unwrap(), calls: calls.clone() });
+    let catalog = BudgetCatalog::from_value(BudgetCatalog {
+        ui: ui.clone(),
+        description: manifest.encode().unwrap(),
+        calls: calls.clone(),
+    });
     let mut registry = CustomWidgetRegistry::new();
     registry.register_catalog(catalog.query().unwrap()).unwrap();
     assert!(registry.create_editor("test.text", ui, &settings).unwrap().is_none());
     let loader = Loader::new_with_custom(ui.clone(), None, Resources::new(), registry, GridLimits { max_columns: 64, max_rows: 256 }).unwrap();
     let document = Document {
-        version: VERSION, name: "catalog admission".into(), outputs: vec![],
+        version: VERSION,
+        name: "catalog admission".into(),
+        outputs: vec![],
         root: Node::new("custom", WidgetSpec::Custom { kind: "test.text".into(), settings }),
     };
     (loader, document, calls)
@@ -145,7 +171,15 @@ fn unsaveable_reload_preserves_published_form_and_queued_identity() {
     let mut title = slot.component().unwrap().widget::<TextBlockAbi>("title").unwrap();
     let saved = slot.component().unwrap().save().unwrap();
     document.name = "x".repeat(2 * 1024 * 1024);
-    assert!(slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| panic!("rejected recipe reached binding")).is_err());
+    assert!(
+        slot.reload(
+            &document,
+            Resources::new(),
+            |_| Ok(EventBindings::new()),
+            |_, _| panic!("rejected recipe reached binding")
+        )
+        .is_err()
+    );
     assert!(slot.accepts(first.generation));
     assert_eq!(slot.component().unwrap().save().unwrap(), saved);
     title.set_text("still live").unwrap();

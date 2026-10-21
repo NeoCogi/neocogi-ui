@@ -152,7 +152,14 @@ impl TextArea {
         model: std::rc::Rc<crate::ScrollModel>,
         events: crate::widget_object::CompositeEvents,
     ) -> Self {
-        Self { runtime, editor, text, font, model, events }
+        Self {
+            runtime,
+            editor,
+            text,
+            font,
+            model,
+            events,
+        }
     }
 }
 
@@ -202,7 +209,6 @@ impl crate::widget_object::HostedWidget for TextArea {
     fn runtime_mut(&mut self) -> &mut crate::widget_object::WidgetRuntime {
         &mut self.runtime
     }
-
 }
 
 /// Runtime-only cursor navigation state retained by the editable leaf.
@@ -675,12 +681,9 @@ impl TextEditor {
         self.reveal_caret = true;
     }
 }
-impl crate::widget_object::WidgetAlgorithm for TextEditor {
-
-}
+impl crate::widget_object::WidgetAlgorithm for TextEditor {}
 
 impl crate::widget_object::HostedWidget for TextEditor {
-
     /// Borrows common phase state stored directly beside the editable text fields.
     fn runtime(&self) -> &crate::widget_object::WidgetRuntime {
         &self.runtime
@@ -806,15 +809,23 @@ impl TextArea {
         let mut editor_runtime = crate::widget_object::WidgetRuntime::for_resources(host.clone(), crate::WidgetOption::NONE, Some(&resources))?;
         editor_runtime.state = editor_runtime.state.with_events(receiver);
         let editor = TextEditor::into_local_box(TextEditor::from_runtime(
-            editor_runtime, text_value, wrap, crate::FontRef::Role(crate::FontRole::Body), Some(parts.model.clone()),
+            editor_runtime,
+            text_value,
+            wrap,
+            crate::FontRef::Role(crate::FontRole::Body),
+            Some(parts.model.clone()),
         ));
         let text: neocogi_com::WeakComBox<IMultilineEditorAbi> = editor.query()?;
         let font = text.query()?;
-        parts.content.insert(0, editor.into_interface::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?).map_err(|(status, _unpublished)| status)?;
+        parts
+            .content
+            .insert(0, editor.into_interface::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?)
+            .map_err(|(status, _unpublished)| status)?;
         let mut runtime = crate::widget_object::WidgetRuntime::for_resources(host, crate::WidgetOption::FRAME, Some(&resources))?;
         runtime.state = runtime.state.with_events(queue);
         Self::into_box(Self::from_runtime(runtime, parts.editor, text, font, parts.model, events))
-            .query().map_err(|(status, _unpublished)| status)
+            .query()
+            .map_err(|(status, _unpublished)| status)
     }
 }
 
@@ -907,10 +918,7 @@ mod tests {
             value.runtime.state = value.runtime.state.with_events(receiver);
             let editor = TextEditor::into_local_box(value);
             let observer = editor.downgrade();
-            parts
-                .content
-                .insert(0, editor.into_interface::<IWidgetAbi>().unwrap())
-                .unwrap();
+            parts.content.insert(0, editor.into_interface::<IWidgetAbi>().unwrap()).unwrap();
             let runtime = crate::widget_object::WidgetRuntime::for_resources(host, crate::WidgetOption::FRAME, None).unwrap();
             let mut value = TextArea::from_runtime(runtime, parts.editor, observer.query().unwrap(), observer.query().unwrap(), parts.model, inbox);
             value.runtime.state = value.runtime.state.with_events(Some(queue));
@@ -993,18 +1001,25 @@ mod tests {
         let text_area = TextEditor::new_editor(TextAreaParameters::new(""));
         let (mut text_area, mut dispatcher) = text_dispatcher(text_area);
         let inner_origin = neocogi_com::events::EventOrigin::Widget(text_area.1.query::<IWidgetAbi>().unwrap().into_unknown());
-        text_area.with_origin(inner_origin, |parts| parts.1.with_mut(|text_area| update_text_area(
-            text_area,
-            vec![
-                UiInputEvent::Text { text: "line".into() },
-                UiInputEvent::Key {
-                    event: KeyEvent::pressed(Key::Control, Modifiers::CTRL),
-                },
-                UiInputEvent::Key {
-                    event: KeyEvent::pressed(Key::Enter, Modifiers::CTRL),
-                },
-            ],
-        )).unwrap());
+        text_area.with_origin(inner_origin, |parts| {
+            parts
+                .1
+                .with_mut(|text_area| {
+                    update_text_area(
+                        text_area,
+                        vec![
+                            UiInputEvent::Text { text: "line".into() },
+                            UiInputEvent::Key {
+                                event: KeyEvent::pressed(Key::Control, Modifiers::CTRL),
+                            },
+                            UiInputEvent::Key {
+                                event: KeyEvent::pressed(Key::Enter, Modifiers::CTRL),
+                            },
+                        ],
+                    )
+                })
+                .unwrap()
+        });
         let outer_origin = neocogi_com::events::EventOrigin::Widget(text_area.0.downgrade().into_unknown());
         text_area.with_origin(outer_origin, |parts| {
             let mut dispatcher = parts.0.query_weak::<neocogi_ui_core_contracts::IWidgetDispatcherAbi>().unwrap();

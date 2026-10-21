@@ -299,7 +299,9 @@ impl WindowManager {
     }
 
     /// Consumes surface changes only after selection can be rebuilt; node edits have their own marker.
-    pub(crate) fn take_dispatch_order_changed(&mut self) -> bool { std::mem::take(&mut self.dispatch_order_changed) }
+    pub(crate) fn take_dispatch_order_changed(&mut self) -> bool {
+        std::mem::take(&mut self.dispatch_order_changed)
+    }
 
     /// Borrows the atomic resolved skin and atlas installed in this manager.
     pub(crate) fn skin_bundle(&self) -> &SkinBundle {

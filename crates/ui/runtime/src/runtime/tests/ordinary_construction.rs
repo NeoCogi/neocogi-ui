@@ -10,18 +10,32 @@ fn fresh_window_capabilities_deliver_direct_closure_with_their_own_identity() {
     let manager: ComPtr<IWindowManagerAbi> = runtime.query().unwrap();
     let (queue, messages) = channel();
     let binding = EventBinding::Observed(queue);
-    let root = manager.create_window(
-        NcCopyFromBufferOffset::new(0, b"root"), RECT,
-        button(&runtime).query().unwrap(), neocogi_com::NcValueRef::new(&binding).unwrap(),
-    ).unwrap();
-    let child = manager.create_child(
-        root.as_com_ref(), NcCopyFromBufferOffset::new(0, b"child"), RECT,
-        button(&runtime).query().unwrap(), neocogi_com::NcValueRef::new(&binding).unwrap(),
-    ).unwrap();
-    let dialog = manager.create_dialog(
-        root.as_com_ref(), NcCopyFromBufferOffset::new(0, b"dialog"), RECT,
-        button(&runtime).query().unwrap(), neocogi_com::NcValueRef::new(&binding).unwrap(),
-    ).unwrap();
+    let root = manager
+        .create_window(
+            NcCopyFromBufferOffset::new(0, b"root"),
+            RECT,
+            button(&runtime).query().unwrap(),
+            neocogi_com::NcValueRef::new(&binding).unwrap(),
+        )
+        .unwrap();
+    let child = manager
+        .create_child(
+            root.as_com_ref(),
+            NcCopyFromBufferOffset::new(0, b"child"),
+            RECT,
+            button(&runtime).query().unwrap(),
+            neocogi_com::NcValueRef::new(&binding).unwrap(),
+        )
+        .unwrap();
+    let dialog = manager
+        .create_dialog(
+            root.as_com_ref(),
+            NcCopyFromBufferOffset::new(0, b"dialog"),
+            RECT,
+            button(&runtime).query().unwrap(),
+            neocogi_com::NcValueRef::new(&binding).unwrap(),
+        )
+        .unwrap();
     assert!(messages.try_recv().is_err(), "creation must not call the receiver");
     for window in [dialog, child, root] {
         let expected = window.downgrade().unwrap();
@@ -45,10 +59,14 @@ fn fresh_popup_connects_dismissal_before_the_first_application_call() {
     let root = mount(&runtime, button(&runtime).query().unwrap()).unwrap();
     let (queue, messages) = channel();
     let binding = EventBinding::Observed(queue);
-    let mut popup = manager.create_popup(
-        root.as_com_ref(), NcCopyFromBufferOffset::new(0, b"popup"),
-        button(&runtime).query().unwrap(), neocogi_com::NcValueRef::new(&binding).unwrap(),
-    ).unwrap();
+    let mut popup = manager
+        .create_popup(
+            root.as_com_ref(),
+            NcCopyFromBufferOffset::new(0, b"popup"),
+            button(&runtime).query().unwrap(),
+            neocogi_com::NcValueRef::new(&binding).unwrap(),
+        )
+        .unwrap();
     assert!(messages.try_recv().is_err());
     runtime.update(SIZE).unwrap();
     popup.show_at(RECT).unwrap();

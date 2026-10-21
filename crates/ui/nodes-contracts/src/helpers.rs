@@ -5,10 +5,7 @@ use crate::{ChildCrossSize, LayoutTrack, LinearEdge};
 impl LinearEdge {
     /// Creates an ordinary relationship that follows the Linear line's resolved cross extent.
     pub fn new(main: LayoutTrack) -> Self {
-        Self {
-            main,
-            cross: ChildCrossSize::Stretch,
-        }
+        Self { main, cross: ChildCrossSize::Stretch }
     }
 
     /// Requests an exact cross extent; the receiving container validates it before mutation.
@@ -29,8 +26,7 @@ impl crate::GridLimits {
         }
         let cells = (self.max_columns as usize).checked_mul(self.max_rows as usize);
         match cells {
-            Some(cells) if cells <= isize::MAX as usize
-                && self.max_columns <= i32::MAX as u32 && self.max_rows <= i32::MAX as u32 => Ok(()),
+            Some(cells) if cells <= isize::MAX as usize && self.max_columns <= i32::MAX as u32 && self.max_rows <= i32::MAX as u32 => Ok(()),
             _ => Err(neocogi_com::NC_E_OUT_OF_RANGE),
         }
     }

@@ -166,9 +166,7 @@ impl Widget for Checkbox {
     }
 }
 
-impl crate::widget_object::WidgetAlgorithm for Checkbox {
-
-}
+impl crate::widget_object::WidgetAlgorithm for Checkbox {}
 
 impl crate::widget_object::HostedWidget for Checkbox {
     /// Borrows common lifecycle and resource state without a second checkbox representation.
@@ -292,5 +290,8 @@ fn com_object_control_is_independent_of_interface_count() {
         core::mem::size_of::<Checkbox>(),
         core::mem::size_of::<neocogi_com::__ComBoxStorage<Checkbox>>()
     );
-    assert_eq!(core::mem::size_of::<neocogi_com::__ComBoxStorage<Checkbox>>(), core::mem::size_of::<Checkbox>() + 24);
+    assert_eq!(
+        core::mem::size_of::<neocogi_com::__ComBoxStorage<Checkbox>>(),
+        core::mem::size_of::<Checkbox>() + 24
+    );
 }

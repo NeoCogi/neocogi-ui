@@ -387,12 +387,9 @@ impl From<SliderParameters> for crate::test_support::algorithm::Algorithm<Slider
     }
 }
 
-impl crate::widget_object::WidgetAlgorithm for Slider {
-
-}
+impl crate::widget_object::WidgetAlgorithm for Slider {}
 
 impl crate::widget_object::HostedWidget for Slider {
-
     /// Borrows common lifecycle and resource state without a second slider representation.
     fn runtime(&self) -> &crate::widget_object::WidgetRuntime {
         &self.runtime

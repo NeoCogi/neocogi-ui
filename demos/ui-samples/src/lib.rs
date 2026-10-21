@@ -53,12 +53,17 @@ pub fn weights(ui: &Ui, queue: Option<ComRef<'_, neocogi_com::events::IEventRece
         ui.widgets().text_block("Grid row weights: 1 : 2", TextWrapping::None)?,
         LayoutTrack::Content,
     )?;
-    let mut grid = ui.widgets().grid(&[FLEX; 3], &[FLEX, LayoutTrack::Flex { weight: 2.0 }], neocogi_ui::GridLimits { max_columns: 3, max_rows: 2 })?;
+    let mut grid = ui.widgets().grid(
+        &[FLEX; 3],
+        &[FLEX, LayoutTrack::Flex { weight: 2.0 }],
+        neocogi_ui::GridLimits { max_columns: 3, max_rows: 2 },
+    )?;
     for index in 0..6 {
         let control = button(ui, &format!("Cell {}", index + 1), queue)?;
         buttons.push(control.handle());
         let control = control.into_interface().query::<IWidgetAbi>().map_err(|(status, _candidate)| status)?;
-        grid.as_interface_mut().insert(index, control, GridExtent { columns: 1, rows: 1 })
+        grid.as_interface_mut()
+            .insert(index, control, GridExtent { columns: 1, rows: 1 })
             .map_err(|(status, _candidate)| status)?;
     }
     append(&mut content, grid, FLEX)?;
@@ -81,7 +86,9 @@ fn button(ui: &Ui, text: &str, queue: Option<ComRef<'_, neocogi_com::events::IEv
 /// then share the same insertion body without converting a rejected owner back.
 #[inline]
 pub fn append<I: ComInterface, P>(parent: &mut Widget<LinearAbi, P>, child: OwnedWidget<I>, track: LayoutTrack) -> Result<(), NcStatus>
-where P: WidgetStorage<LinearAbi> + core::ops::DerefMut<Target = nodes::LinearClient<ThreadLocal>> {
+where
+    P: WidgetStorage<LinearAbi> + core::ops::DerefMut<Target = nodes::LinearClient<ThreadLocal>>,
+{
     let child = child.into_interface().query::<IWidgetAbi>().map_err(|(status, _candidate)| status)?;
     append_widget(parent.as_interface_mut(), child, track)
 }

@@ -268,7 +268,8 @@ impl Combo {
         let mut runtime = crate::widget_object::WidgetRuntime::for_resources(host, parameters.opt, Some(&resources))?;
         runtime.state = runtime.state.with_events(queue);
         Self::into_box(Self::from_runtime(runtime, parameters, menu, placeholder, events))
-            .query().map_err(|(status, _unpublished)| status)
+            .query()
+            .map_err(|(status, _unpublished)| status)
     }
 }
 

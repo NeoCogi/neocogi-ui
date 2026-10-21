@@ -106,7 +106,9 @@ impl GridItems {
             return Ok(Self::default());
         }
         let mut spans = Vec::new();
-        spans.try_reserve_exact(len.max(self.spans.len())).map_err(|_| neocogi_com::NC_E_OUT_OF_MEMORY)?;
+        spans
+            .try_reserve_exact(len.max(self.spans.len()))
+            .map_err(|_| neocogi_com::NC_E_OUT_OF_MEMORY)?;
         spans.extend_from_slice(&self.spans);
         if let Some(edit) = edit {
             edit.apply(&mut spans);
@@ -214,7 +216,6 @@ impl crate::widget_object::HostedWidget for Grid {
     fn runtime_mut(&mut self) -> &mut crate::widget_object::WidgetRuntime {
         &mut self.runtime
     }
-
 }
 
 impl super::ContainerAlgorithm for Grid {
@@ -344,7 +345,9 @@ fn local_tracks(tracks: NcCopyFromBufferOffset<'_, LayoutTrack>, maximum: u32) -
 fn copy_tracks(tracks: &[TrackSize], mut output: NcOutputWriter<'_, LayoutTrack>) -> Result<u32, NcStatus> {
     let offset = usize::try_from(output.offset()).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
     let source = tracks.get(offset..).ok_or(neocogi_com::NC_E_INVALID_ARG)?;
-    for track in source.iter().take(output.capacity()) { output.push(super::layout_track(*track))?; }
+    for track in source.iter().take(output.capacity()) {
+        output.push(super::layout_track(*track))?;
+    }
     u32::try_from(tracks.len()).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)
 }
 
@@ -755,7 +758,9 @@ struct GridPlacement {
 /// no storage is allocated for unused policy headroom.
 fn grid_placements(spans: &[GridSpan], columns: usize, max_rows: usize) -> Result<Vec<GridPlacement>, NcStatus> {
     let columns = columns.max(1);
-    let maximum = columns.checked_mul(max_rows).filter(|cells| *cells <= isize::MAX as usize)
+    let maximum = columns
+        .checked_mul(max_rows)
+        .filter(|cells| *cells <= isize::MAX as usize)
         .ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
     if spans.len() > maximum || spans.iter().any(|span| span.rows() > max_rows) {
         return Err(neocogi_com::NC_E_OUT_OF_RANGE);
@@ -769,17 +774,27 @@ fn grid_placements(spans: &[GridSpan], columns: usize, max_rows: usize) -> Resul
         let (row, column) = first_free_grid_rectangle(&occupied, columns, search_row, search_column, span, max_rows)?;
         let column_span = span.columns().min(columns - column);
         let end_row = row.checked_add(span.rows()).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
-        let required = end_row.checked_mul(columns).filter(|cells| *cells <= maximum)
+        let required = end_row
+            .checked_mul(columns)
+            .filter(|cells| *cells <= maximum)
             .ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
         if required > occupied.len() {
-            occupied.try_reserve_exact(required - occupied.len()).map_err(|_| neocogi_com::NC_E_OUT_OF_MEMORY)?;
+            occupied
+                .try_reserve_exact(required - occupied.len())
+                .map_err(|_| neocogi_com::NC_E_OUT_OF_MEMORY)?;
             occupied.resize(required, false);
         }
         // Search checked this exact rectangle; marking and publication cannot fail.
         for y in row..end_row {
             occupied[y * columns + column..y * columns + column + column_span].fill(true);
         }
-        placements.push(GridPlacement { child_index: index, column, row, column_span, row_span: span.rows() });
+        placements.push(GridPlacement {
+            child_index: index,
+            column,
+            row,
+            column_span,
+            row_span: span.rows(),
+        });
         search_row = row;
         search_column = column + column_span;
         if search_column == columns {
@@ -793,15 +808,22 @@ fn grid_placements(spans: &[GridSpan], columns: usize, max_rows: usize) -> Resul
 /// Finds the first entirely free effective rectangle, or exhausts the row ceiling.
 /// Empty unallocated rows require no scanning. The right-edge clamp is applied
 /// here exactly as in publication, so a smaller footprint can fit at the last column.
-fn first_free_grid_rectangle(occupied: &[bool], columns: usize, mut row: usize, mut column: usize, span: GridSpan, max_rows: usize) -> Result<(usize, usize), NcStatus> {
+fn first_free_grid_rectangle(
+    occupied: &[bool],
+    columns: usize,
+    mut row: usize,
+    mut column: usize,
+    span: GridSpan,
+    max_rows: usize,
+) -> Result<(usize, usize), NcStatus> {
     loop {
-        let end_row = row.checked_add(span.rows()).filter(|end| *end <= max_rows)
+        let end_row = row
+            .checked_add(span.rows())
+            .filter(|end| *end <= max_rows)
             .ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
         while column < columns {
             let end_column = column + span.columns().min(columns - column);
-            let free = (row..end_row.min(occupied.len() / columns)).all(|y| {
-                occupied[y * columns + column..y * columns + end_column].iter().all(|cell| !cell)
-            });
+            let free = (row..end_row.min(occupied.len() / columns)).all(|y| occupied[y * columns + column..y * columns + end_column].iter().all(|cell| !cell));
             if free {
                 return Ok((row, column));
             }
@@ -827,10 +849,7 @@ mod tests {
 
     #[test]
     fn placement_uses_validated_spans_and_clamps_only_at_the_right_edge() {
-        let placements = grid_placements(
-            &[GridSpan::new(2, 1), GridSpan::new(8, 1), GridSpan::new(1, 2)],
-            3, 3,
-        ).unwrap();
+        let placements = grid_placements(&[GridSpan::new(2, 1), GridSpan::new(8, 1), GridSpan::new(1, 2)], 3, 3).unwrap();
 
         assert_eq!(
             placements,
@@ -863,17 +882,23 @@ mod tests {
     /// A wide span must skip a free origin when a tall earlier child occupies its interior.
     #[test]
     fn placement_checks_the_whole_rectangle_and_preserves_edge_clamping() {
-        let placements = grid_placements(&[
-            GridSpan::ONE, GridSpan::new(1, 2), GridSpan::ONE, GridSpan::new(2, 1),
-        ], 3, 2).unwrap();
-        assert_eq!(placements[3], GridPlacement {
-            child_index: 3, column: 2, row: 1, column_span: 1, row_span: 1,
-        });
+        let placements = grid_placements(&[GridSpan::ONE, GridSpan::new(1, 2), GridSpan::ONE, GridSpan::new(2, 1)], 3, 2).unwrap();
+        assert_eq!(
+            placements[3],
+            GridPlacement {
+                child_index: 3,
+                column: 2,
+                row: 1,
+                column_span: 1,
+                row_span: 1,
+            }
+        );
         // Check every pair independently of the occupancy representation.
         for (index, a) in placements.iter().enumerate() {
             for b in &placements[index + 1..] {
-                assert!(a.column + a.column_span <= b.column || b.column + b.column_span <= a.column
-                    || a.row + a.row_span <= b.row || b.row + b.row_span <= a.row);
+                assert!(
+                    a.column + a.column_span <= b.column || b.column + b.column_span <= a.column || a.row + a.row_span <= b.row || b.row + b.row_span <= a.row
+                );
             }
         }
     }
@@ -898,7 +923,13 @@ mod tests {
     /// Enumerate small spanning layouts and check geometric exclusion without reading the bitmap.
     #[test]
     fn accepted_small_plans_have_no_overlaps_and_stay_within_the_policy() {
-        let choices = [GridSpan::ONE, GridSpan::new(1, 2), GridSpan::new(2, 1), GridSpan::new(2, 2), GridSpan::new(4, 1)];
+        let choices = [
+            GridSpan::ONE,
+            GridSpan::new(1, 2),
+            GridSpan::new(2, 1),
+            GridSpan::new(2, 2),
+            GridSpan::new(4, 1),
+        ];
         let mut accepted = 0;
         for mut encoded in 0..choices.len().pow(4) {
             let spans = core::array::from_fn::<_, 4, _>(|_| {
@@ -908,7 +939,10 @@ mod tests {
             });
             let placements = match grid_placements(&spans, 3, 3) {
                 Ok(placements) => placements,
-                Err(status) => { assert_eq!(status, neocogi_com::NC_E_OUT_OF_RANGE); continue; }
+                Err(status) => {
+                    assert_eq!(status, neocogi_com::NC_E_OUT_OF_RANGE);
+                    continue;
+                }
             };
             accepted += 1;
             assert_eq!(placements.len(), spans.len());
@@ -918,8 +952,12 @@ mod tests {
                 assert_eq!(a.column_span, spans[index].columns().min(3 - a.column));
                 assert_eq!(a.row_span, spans[index].rows());
                 for b in &placements[index + 1..] {
-                    assert!(a.column + a.column_span <= b.column || b.column + b.column_span <= a.column
-                        || a.row + a.row_span <= b.row || b.row + b.row_span <= a.row);
+                    assert!(
+                        a.column + a.column_span <= b.column
+                            || b.column + b.column_span <= a.column
+                            || a.row + a.row_span <= b.row
+                            || b.row + b.row_span <= a.row
+                    );
                 }
             }
         }
@@ -951,7 +989,13 @@ mod tests {
     fn fixed_grid_resolves_both_axes_without_measuring_children() {
         let mut grid = crate::test_support::algorithm::Algorithm::new(crate::WidgetOption::NONE, |runtime| {
             let editor = runtime.state.host().create_children().unwrap();
-            Grid::from_runtime(runtime, editor, vec![TrackSize::Fixed(24); 32], vec![TrackSize::Fixed(24); 32], GridLimits { max_columns: 32, max_rows: 32 })
+            Grid::from_runtime(
+                runtime,
+                editor,
+                vec![TrackSize::Fixed(24); 32],
+                vec![TrackSize::Fixed(24); 32],
+                GridLimits { max_columns: 32, max_rows: 32 },
+            )
         });
         let items = &mut grid.items;
         items.spans = vec![GridSpan::ONE; 1024];
@@ -989,7 +1033,13 @@ mod tests {
     fn grid_measurement_stops_at_the_first_failed_child() {
         let mut grid = crate::test_support::algorithm::Algorithm::new(crate::WidgetOption::NONE, |runtime| {
             let editor = runtime.state.host().create_children().unwrap();
-            Grid::from_runtime(runtime, editor, vec![TrackSize::Content; 2], vec![TrackSize::Content; 2], GridLimits { max_columns: 2, max_rows: 2 })
+            Grid::from_runtime(
+                runtime,
+                editor,
+                vec![TrackSize::Content; 2],
+                vec![TrackSize::Content; 2],
+                GridLimits { max_columns: 2, max_rows: 2 },
+            )
         });
         let items = &mut grid.items;
         items.spans = vec![GridSpan::ONE; 4];

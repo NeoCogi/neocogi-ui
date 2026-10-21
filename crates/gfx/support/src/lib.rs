@@ -10,8 +10,8 @@ use neocogi_renderer_contracts::{IRgbaImageAbi, IRgbaImageVtblFor};
 use neocogi_com::{ComPtr, ComRef, NcOutputWriter, NcStatus, NC_E_INVALID_ARG, com_object};
 use std::borrow::Cow;
 
-mod validation;
 mod glyph_index;
+mod validation;
 pub use glyph_index::AsciiGlyphIndex;
 
 /// Concrete appearance states used while compiling and resolving complete records.

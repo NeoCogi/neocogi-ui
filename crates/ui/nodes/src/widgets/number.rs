@@ -246,12 +246,9 @@ impl From<NumberParameters> for crate::test_support::algorithm::Algorithm<Number
     }
 }
 
-impl crate::widget_object::WidgetAlgorithm for Number {
-
-}
+impl crate::widget_object::WidgetAlgorithm for Number {}
 
 impl crate::widget_object::HostedWidget for Number {
-
     /// Borrows common lifecycle and resource state without a second number representation.
     fn runtime(&self) -> &crate::widget_object::WidgetRuntime {
         &self.runtime

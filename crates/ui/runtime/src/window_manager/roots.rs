@@ -35,10 +35,10 @@ use std::{
     fmt,
 };
 
-mod lifecycle;
 mod interaction;
-mod traversal;
+mod lifecycle;
 mod synchronization;
+mod traversal;
 
 use super::*;
 use crate::menu::{MenuAction, MenuEntry, MenuSlot, MenuSurface};
@@ -143,8 +143,6 @@ impl<T> std::error::Error for SurfaceCreationError<T> {
         Some(&self.reason)
     }
 }
-
-
 
 /// Process-unique identifier for one popup definition inside its owning window.
 ///
@@ -894,10 +892,18 @@ pub(super) struct SurfaceForest {
 
 impl SurfaceForest {
     /// Walks one authoritative subtree in postorder without callbacks or new adjacency storage.
-    fn collect_dispatch_tree(&self, key: SurfaceKey, drivers: &mut Vec<neocogi_com::WeakComBox<neocogi_ui_core_contracts::IWidgetDispatcherAbi>>) -> Result<(), neocogi_com::NcStatus> {
+    fn collect_dispatch_tree(
+        &self,
+        key: SurfaceKey,
+        drivers: &mut Vec<neocogi_com::WeakComBox<neocogi_ui_core_contracts::IWidgetDispatcherAbi>>,
+    ) -> Result<(), neocogi_com::NcStatus> {
         let entry = &self.index[&key];
-        for child in entry.children.iter().rev() { self.collect_dispatch_tree(*child, drivers)?; }
-        if let SurfaceBody::Widgets { root, .. } = &self.nodes[entry.position].surface.body { root.collect_dispatch_widgets(drivers)?; }
+        for child in entry.children.iter().rev() {
+            self.collect_dispatch_tree(*child, drivers)?;
+        }
+        if let SurfaceBody::Widgets { root, .. } = &self.nodes[entry.position].surface.body {
+            root.collect_dispatch_widgets(drivers)?;
+        }
         Ok(())
     }
 
@@ -909,7 +915,9 @@ impl SurfaceForest {
         if let SurfaceBody::Widgets { root, .. } = &self.nodes[entry.position].surface.body {
             root.data.ensure_idle().map_err(|_| SurfaceMutationError::Busy)?;
         }
-        for &child in &entry.children { self.ensure_subtree_idle(child)?; }
+        for &child in &entry.children {
+            self.ensure_subtree_idle(child)?;
+        }
         Ok(())
     }
 

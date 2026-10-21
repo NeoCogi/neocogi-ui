@@ -137,23 +137,27 @@ impl Workload {
                 for _ in 0..64 {
                     let mut parent = factory.linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
                     let child = Widget::from_interface(root);
-                    parent.insert(0, child, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 })).map_err(|(status, _)| status)?;
+                    parent
+                        .insert(0, child, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
+                        .map_err(|(status, _)| status)?;
                     root = parent.into_interface().query::<IWidgetAbi>().map_err(|(status, _)| status)?;
                 }
             }
             root
         };
         let root = Widget::from_interface(root);
-        let window = ui.window(
-            "COM benchmark",
-            Rect {
-                x: 0,
-                y: 0,
-                width: SIZE.width,
-                height: SIZE.height,
-            },
-            root,
-        ).map_err(|(status, _)| status)?;
+        let window = ui
+            .window(
+                "COM benchmark",
+                Rect {
+                    x: 0,
+                    y: 0,
+                    width: SIZE.width,
+                    height: SIZE.height,
+                },
+                root,
+            )
+            .map_err(|(status, _)| status)?;
         let recorder = Recorder::from_value(Recorder {
             buffers: RefCell::new(Some(Buffers::default())),
         })
@@ -236,7 +240,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             Some(value) if value == "--counts" => true,
             _ => return Err("usage: neocogi-com-bench --buffers [--counts]".into()),
         };
-        if arguments.next().is_some() { return Err("extra argument".into()); }
+        if arguments.next().is_some() {
+            return Err("extra argument".into());
+        }
         return output_bench::run(counts);
     }
     let shape = arguments.next().ok_or("missing shape")?.into_string().map_err(|_| "invalid shape")?;
@@ -287,9 +293,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         tree.as_nanos()
     );
     memory()?;
-    let iterations = if counts { 1 } else { std::env::var("NEOCOGI_BENCH_ITERATIONS").ok().and_then(|v| v.parse().ok()).unwrap_or(64) };
+    let iterations = if counts {
+        1
+    } else {
+        std::env::var("NEOCOGI_BENCH_ITERATIONS").ok().and_then(|v| v.parse().ok()).unwrap_or(64)
+    };
     for operation in [Operation::Update, Operation::Edit, Operation::Resize, Operation::Render] {
-        if std::env::var("NEOCOGI_BENCH_OPERATION").is_ok_and(|name| name != operation.name()) { continue; }
+        if std::env::var("NEOCOGI_BENCH_OPERATION").is_ok_and(|name| name != operation.name()) {
+            continue;
+        }
         for sample in 0..if counts { 1 } else { 7 } {
             let elapsed = workload.sample(operation, iterations)?;
             println!(

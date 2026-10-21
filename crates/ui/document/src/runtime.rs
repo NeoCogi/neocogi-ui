@@ -1,8 +1,6 @@
 //! COM reconstruction and explicit authored snapshots, independent from file transport.
 use crate::{*, build::Construction};
-use neocogi_com::{
-    binary, ComPtr, IUnknown, NcStatus, NcGuid, NcBytes, INcBytesAbi, NcCopyFromBufferOffset, NC_E_INVALID_ARG, NC_E_NOT_FOUND, NC_E_OUT_OF_RANGE,
-};
+use neocogi_com::{binary, ComPtr, IUnknown, NcStatus, NcGuid, NcBytes, INcBytesAbi, NcCopyFromBufferOffset, NC_E_INVALID_ARG, NC_E_NOT_FOUND, NC_E_OUT_OF_RANGE};
 use neocogi_com::persistence::{ObjectRecord, IPersistable};
 use neocogi_ui::{Ui, Widget, OwnedWidget, IWidgetAbi, IWindowAbi, ITextureAbi};
 use std::collections::BTreeMap;
@@ -64,7 +62,9 @@ impl Document {
         // The serializer's finite value/depth budgets protect this traversal even
         // before structural validation can build name indexes or format errors.
         let state = binary::encoded_len_with_limits(self, policy).map_err(|error| error.to_string())?;
-        let reserved = state.checked_add(additional_bytes).filter(|size| *size <= policy.bytes)
+        let reserved = state
+            .checked_add(additional_bytes)
+            .filter(|size| *size <= policy.bytes)
             .ok_or("UI document exceeds the binary byte limit")?;
         // A Vec<u8> envelope charges every state byte as a value. Checking only
         // the inner encoding would miss the stricter outer cumulative budget.
@@ -113,10 +113,22 @@ impl Loader {
         Self::new_with_custom(ui, parent, resources, crate::CustomWidgetRegistry::new(), grid_limits)
     }
     /// Binds trusted custom COM factories alongside the ordinary built-in constructors.
-    pub fn new_with_custom(ui: Ui, parent: Option<ComPtr<IWindowAbi>>, resources: Resources, custom: crate::CustomWidgetRegistry, grid_limits: neocogi_ui::GridLimits) -> Result<Self, NcStatus> {
+    pub fn new_with_custom(
+        ui: Ui,
+        parent: Option<ComPtr<IWindowAbi>>,
+        resources: Resources,
+        custom: crate::CustomWidgetRegistry,
+        grid_limits: neocogi_ui::GridLimits,
+    ) -> Result<Self, NcStatus> {
         grid_limits.validate()?;
         Ok(Self {
-            services: Services { ui, parent, resources, custom, grid_limits },
+            services: Services {
+                ui,
+                parent,
+                resources,
+                custom,
+                grid_limits,
+            },
         })
     }
     /// Validates typed source and constructs directly, without a binary persistence round trip.
@@ -159,7 +171,8 @@ impl Component {
     /// prove resources/bindings are unchanged; this validates the exact authored constructor tree.
     pub fn replace_metadata(&mut self, document: &Document) -> Result<(), NcStatus> {
         let bytes = document.to_binary().map_err(|_| NC_E_INVALID_ARG)?;
-        self.object.query::<contracts::IUiComponentMetadataAbi>()?
+        self.object
+            .query::<contracts::IUiComponentMetadataAbi>()?
             .replace_metadata(NcCopyFromBufferOffset::new(0, &bytes))
     }
     /// Transfers the root into a window/container; repeated transfers fail.
@@ -184,29 +197,35 @@ impl Component {
 
 impl Component {
     /// Restore the unmounted root on failure so a failed reload can be retried.
-    fn try_mount<R>(&mut self, operation: impl FnOnce(neocogi_com::ComBox<IWidgetAbi>) -> Result<R, (NcStatus, neocogi_com::ComBox<IWidgetAbi>)>)
-        -> Result<R, NcStatus> {
+    fn try_mount<R>(
+        &mut self,
+        operation: impl FnOnce(neocogi_com::ComBox<IWidgetAbi>) -> Result<R, (NcStatus, neocogi_com::ComBox<IWidgetAbi>)>,
+    ) -> Result<R, NcStatus> {
         let root = self.take_root()?.into_interface();
         match operation(root) {
             Ok(value) => Ok(value),
             Err((status, root)) => {
                 self.root_owner = Some(OwnedWidget::from_interface(root));
                 Err(status)
-            },
+            }
         }
     }
 }
 impl Mountable for Component {
     /// Release the recipe on successful transfer; return the full component on failure.
-    fn with_mount<R>(mut self, operation: impl FnOnce(neocogi_com::ComBox<IWidgetAbi>) -> Result<R, (NcStatus, neocogi_com::ComBox<IWidgetAbi>)>)
-        -> Result<R, (NcStatus, Self)> {
+    fn with_mount<R>(
+        mut self,
+        operation: impl FnOnce(neocogi_com::ComBox<IWidgetAbi>) -> Result<R, (NcStatus, neocogi_com::ComBox<IWidgetAbi>)>,
+    ) -> Result<R, (NcStatus, Self)> {
         self.try_mount(operation).map_err(|status| (status, self))
     }
 }
 impl Mountable for &mut Component {
     /// Preserve recipe/lookups and restore the root before returning a rejected borrow.
-    fn with_mount<R>(self, operation: impl FnOnce(neocogi_com::ComBox<IWidgetAbi>) -> Result<R, (NcStatus, neocogi_com::ComBox<IWidgetAbi>)>)
-        -> Result<R, (NcStatus, Self)> {
+    fn with_mount<R>(
+        self,
+        operation: impl FnOnce(neocogi_com::ComBox<IWidgetAbi>) -> Result<R, (NcStatus, neocogi_com::ComBox<IWidgetAbi>)>,
+    ) -> Result<R, (NcStatus, Self)> {
         self.try_mount(operation).map_err(|status| (status, self))
     }
 }

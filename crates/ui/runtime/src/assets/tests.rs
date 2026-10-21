@@ -97,10 +97,7 @@ fn round_trip_preserves_complete_resources_and_image_patches() {
     // An invalid source range must not publish any result, including a valid prefix.
     let mut output = neocogi_com::NcOutputBuffer::new();
     let count = source.info().unwrap().rgba_bytes().unwrap();
-    assert_eq!(
-        source.image().unwrap().pixels(output.output(count as u64 - 1, 2)),
-        Err(NC_E_INVALID_ARG)
-    );
+    assert_eq!(source.image().unwrap().pixels(output.output(count as u64 - 1, 2)), Err(NC_E_INVALID_ARG));
     assert!(output.is_empty());
 }
 
@@ -122,7 +119,10 @@ fn derived_identity_is_preserved_but_unrelated_and_incomplete_catalogs_are_rejec
     assert!(matches!(ImportedAssets::read(unrelated.as_com_ref(), Some(&first.catalog())), Err(UI_E_OWNER)));
     let incomplete = SkinBundle::from_atlas(crate::test_support::test_atlas());
     let incomplete = export_bundle_data(&incomplete).unwrap().into_revision(source.as_com_ref()).unwrap();
-    assert!(matches!(ImportedAssets::read(incomplete.as_com_ref(), Some(&first.catalog())), Err(NC_E_INVALID_ARG)));
+    assert!(matches!(
+        ImportedAssets::read(incomplete.as_com_ref(), Some(&first.catalog())),
+        Err(NC_E_INVALID_ARG)
+    ));
 }
 
 /// Malformed Unicode, partitions, pixels, dimensions and tagged geometry fail before native construction.
@@ -173,15 +173,21 @@ fn unknown_nested_asset_tag_is_rejected_at_the_output_boundary() {
         written: *mut u64,
     ) -> NcStatus {
         let data = export_bundle_data(&bundle()).unwrap();
-        if count != data.tables.controls.len() as u64 { return NC_E_INVALID_ARG; }
+        if count != data.tables.controls.len() as u64 {
+            return NC_E_INVALID_ARG;
+        }
         for (index, value) in data.tables.controls.iter().enumerate() {
             let mut wire = neocogi_com::encode_inline(value).unwrap();
             wire.disabled.patch.tag = 255;
             // SAFETY: generated caller supplied count writable raw elements.
-            unsafe { output.add(index).write(wire); }
+            unsafe {
+                output.add(index).write(wire);
+            }
         }
         // SAFETY: raw ABI supplies a distinct writable prefix count.
-        unsafe { *written = count; }
+        unsafe {
+            *written = count;
+        }
         neocogi_com::NC_OK
     }
     let source = export_bundle(&bundle()).unwrap();
@@ -324,14 +330,9 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
         .button_with_queue(
             "switch theme",
             Some(
-                neocogi_ui::test_event_queue!(
-                    neocogi_ui::ButtonAbi,
-                    (),
-                    session_tx.clone(),
-                    |_queue, _origin, _event| ()
-                )
-                .unwrap()
-                .as_com_ref(),
+                neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, (), session_tx.clone(), |_queue, _origin, _event| ())
+                    .unwrap()
+                    .as_com_ref(),
             ),
         )
         .unwrap();
@@ -504,9 +505,18 @@ fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision
     let mut output = core::mem::MaybeUninit::uninit();
     // SAFETY: the live base capability, initialized metrics and wire enum, and
     // writable result all satisfy the raw call's storage/lifetime obligations.
-    assert_eq!(unsafe {
-        ((*raw.vtable).derive_style)(raw.object, source.as_raw(), neocogi_com::encode_inline(&metrics).unwrap(), invalid, output.as_mut_ptr())
-    }, neocogi_com::NC_E_INVALID_TAG);
+    assert_eq!(
+        unsafe {
+            ((*raw.vtable).derive_style)(
+                raw.object,
+                source.as_raw(),
+                neocogi_com::encode_inline(&metrics).unwrap(),
+                invalid,
+                output.as_mut_ptr(),
+            )
+        },
+        neocogi_com::NC_E_INVALID_TAG
+    );
     assert_eq!(ui.assets().unwrap().as_raw().object, source.as_raw().object);
     ui.close().unwrap();
     // Compilation owns no UI lifetime: retained resource data remains authorable after closure.

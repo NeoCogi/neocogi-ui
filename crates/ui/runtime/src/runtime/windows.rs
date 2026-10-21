@@ -138,7 +138,8 @@ impl RuntimeStorage {
                 LogicalWindow::create(Rc::downgrade(self), manager, placement, Window::new(title, local_rect(rect), node), queue)
             }
             Placement::Popup(parent, queue) => {
-                let popup = manager.create_popup(&parent, &title, node, None)
+                let popup = manager
+                    .create_popup(&parent, &title, node, None)
                     .expect("authenticated popup owner cannot disappear during an exclusive transaction");
                 LogicalPopup::create(Rc::downgrade(self), manager, popup, queue)
             }
@@ -282,9 +283,16 @@ impl LogicalWindow {
                 .create_dialog(&parent, window, None)
                 .expect("authenticated ordinary owner cannot change during an exclusive transaction"),
         };
-        let local = Self::into_local(Self { runtime, window: window.clone(), closed: Cell::new(false) });
-        let origin = local.query::<IWindowAbi>().expect("LogicalWindow declares IWindow")
-            .downgrade().expect("LogicalWindow has shared ownership");
+        let local = Self::into_local(Self {
+            runtime,
+            window: window.clone(),
+            closed: Cell::new(false),
+        });
+        let origin = local
+            .query::<IWindowAbi>()
+            .expect("LogicalWindow declares IWindow")
+            .downgrade()
+            .expect("LogicalWindow has shared ownership");
         // Registration emits no events. The exclusive manager transaction keeps
         // this record private until its initialized COM identity is connected.
         manager.connect_window_events(&window, neocogi_com::events::EventPort::with_queue(queue, origin));
@@ -441,9 +449,16 @@ impl LogicalPopup {
         popup: PopupHandle,
         queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
     ) -> (ComPtr<IUnknown>, NativeSurface) {
-        let local = Self::into_local(Self { runtime, popup: popup.clone(), closed: false });
-        let origin = local.query::<IPopupAbi>().expect("LogicalPopup declares IPopup")
-            .downgrade().expect("LogicalPopup has shared ownership");
+        let local = Self::into_local(Self {
+            runtime,
+            popup: popup.clone(),
+            closed: false,
+        });
+        let origin = local
+            .query::<IPopupAbi>()
+            .expect("LogicalPopup declares IPopup")
+            .downgrade()
+            .expect("LogicalPopup has shared ownership");
         manager.connect_popup_events(&popup, neocogi_com::events::EventPort::with_queue(queue, origin));
         (local.query().expect("every generated object declares IUnknown"), NativeSurface::Popup(popup))
     }
@@ -555,9 +570,12 @@ mod tests {
             .item_with_queue(
                 "Run at pointer",
                 Some(
-                    neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, events_tx.clone(), |_queue, _origin, event| { event.query_ref::<neocogi_ui::IActivatedEventAbi>()?; "Run at pointer".to_owned() })
-                        .unwrap()
-                        .as_com_ref(),
+                    neocogi_ui::test_event_queue!(neocogi_ui::IMenuItemAbi, String, events_tx.clone(), |_queue, _origin, event| {
+                        event.query_ref::<neocogi_ui::IActivatedEventAbi>()?;
+                        "Run at pointer".to_owned()
+                    })
+                    .unwrap()
+                    .as_com_ref(),
                 ),
             )
             .unwrap();
@@ -638,16 +656,22 @@ mod placement_tests {
         for (index, window) in [&root, &child, &dialog].into_iter().enumerate() {
             window.set_visibility(Visibility::Visible).unwrap();
             window.set_visibility(Visibility::Hidden).unwrap();
-            let found = events
-                .try_iter()
-                .any(|message| message.origin.service::<IWindowAbi>().unwrap().unwrap().same_object(&origins[index]) && message.query::<IWindowHiddenEventAbi>().unwrap().is_some());
+            let found = events.try_iter().any(|message| {
+                message.origin.service::<IWindowAbi>().unwrap().unwrap().same_object(&origins[index])
+                    && message.query::<IWindowHiddenEventAbi>().unwrap().is_some()
+            });
             assert!(found, "placement {index} must identify its own visibility event");
             window.set_visibility(Visibility::Visible).unwrap();
         }
         root.close().unwrap();
         let closed: Vec<_> = events
             .try_iter()
-            .filter_map(|message| message.query::<IWindowDestroyedEventAbi>().unwrap().map(|_| message.origin.service::<IWindowAbi>().unwrap().unwrap()))
+            .filter_map(|message| {
+                message
+                    .query::<IWindowDestroyedEventAbi>()
+                    .unwrap()
+                    .map(|_| message.origin.service::<IWindowAbi>().unwrap().unwrap())
+            })
             .collect();
         assert_eq!(closed.len(), 3);
         assert!(closed.iter().any(|origin| origin.same_object(&origins[0])));

@@ -16,8 +16,6 @@ struct SceneView {
     scene: ComPtr<IRenderItemAbi>,
 }
 impl IWidget for SceneView {
-
-
     /// Authorizes this independent class to join the selected UI's tree.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
         self.state.host().try_add_ref()
@@ -146,9 +144,12 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
             texture,
             scene: scene.query()?,
         })
-        .query().map_err(|(status, _candidate)| status)?,
+        .query()
+        .map_err(|(status, _candidate)| status)?,
     );
-    let window = ui.window("Native COM mesh and image", Rect { x: 20, y: 20, width: 560, height: 320 }, root).map_err(|(status, _candidate)| status)?;
+    let window = ui
+        .window("Native COM mesh and image", Rect { x: 20, y: 20, width: 560, height: 320 }, root)
+        .map_err(|(status, _candidate)| status)?;
     ui.update(size)?;
     ui.render(size, renderer)?;
     window.close()?;

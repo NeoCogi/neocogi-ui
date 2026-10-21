@@ -145,7 +145,9 @@ fn run() -> Result<(), HostError> {
     let host = Host::new("COM solid cube", Size { width: 640, height: 480 }, neocogi_demo_assets::load_bundle()?)?;
     let angle = Rc::new(Cell::new(0.0));
     let cube = host.ui.widgets().leaf(Cube { angle: angle.clone() }, WidgetOptions::NO_INTERACT)?;
-    host.ui.window("Solid painter cube", Rect { x: 40, y: 40, width: 360, height: 360 }, cube).map_err(|(status, _candidate)| status)?;
+    host.ui
+        .window("Solid painter cube", Rect { x: 40, y: 40, width: 360, height: 360 }, cube)
+        .map_err(|(status, _candidate)| status)?;
     host.run(State { angle }, std::sync::mpsc::channel().1)
 }
 

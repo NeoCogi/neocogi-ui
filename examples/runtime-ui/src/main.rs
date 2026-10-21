@@ -32,7 +32,10 @@ impl State {
             }
             None => Document::new("Runtime-loaded UI"),
         };
-        let queue = self.queue.query::<neocogi_com::events::IEventReceiverAbi>().map_err(|error| error.to_string())?;
+        let queue = self
+            .queue
+            .query::<neocogi_com::events::IEventReceiverAbi>()
+            .map_err(|error| error.to_string())?;
         self.slot.reload(
             &document,
             Resources::new(),
@@ -55,12 +58,16 @@ impl AppState for State {
     fn update(&mut self, event: Self::Message) -> Result<(), NcStatus> {
         if let Some(origin) = event.origin.service::<IWindowAbi>()? {
             if event.query::<IWindowCloseRequestedEventAbi>()?.is_some() {
-                if let Some(window) = origin.upgrade()? { window.set_visibility(Visibility::Hidden)?; }
+                if let Some(window) = origin.upgrade()? {
+                    window.set_visibility(Visibility::Hidden)?;
+                }
             }
         } else if let Some(origin) = event.origin.service::<IMenuItemAbi>()? {
             if let Some(origin) = origin.upgrade()? {
                 if origin.as_com_ref().same_object(self.reload_item.as_interface()) && event.query::<IActivatedEventAbi>()?.is_some() {
-                    if let Err(error) = self.reload() { eprintln!("Reload: {error}"); }
+                    if let Err(error) = self.reload() {
+                        eprintln!("Reload: {error}");
+                    }
                 }
             }
         } else if let Some(origin) = event.origin.widget::<ButtonAbi>()? {
@@ -68,7 +75,9 @@ impl AppState for State {
                 if let Some(component) = self.slot.component() {
                     if origin.same_object(component.widget::<ButtonAbi>("save")?.as_interface()) && event.query::<IActivatedEventAbi>()?.is_some() {
                         self.saves += 1;
-                        component.widget::<TextBlockAbi>("title")?.set_text(&format!("Save requested {} times", self.saves))?;
+                        component
+                            .widget::<TextBlockAbi>("title")?
+                            .set_text(&format!("Save requested {} times", self.saves))?;
                     }
                 }
             }
@@ -88,11 +97,20 @@ fn run() -> Result<(), HostError> {
     let lifecycle = queue.query::<neocogi_com::events::IEventReceiverAbi>()?;
     let root = host.ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     let root_handle = root.handle();
-    let window = host.ui.window_with_queue("Loaded component", Rect { x: 20, y: 20, width: 740, height: 540 }, root, Some(lifecycle.as_com_ref())).map_err(|(status, _candidate)| status)?;
+    let window = host
+        .ui
+        .window_with_queue(
+            "Loaded component",
+            Rect { x: 20, y: 20, width: 740, height: 540 },
+            root,
+            Some(lifecycle.as_com_ref()),
+        )
+        .map_err(|(status, _candidate)| status)?;
     let mut root = root_handle;
 
     let mut slot = ReloadSlot::new(&mut reload_ids, host.ui.clone(), window.clone(), GridLimits { max_columns: 64, max_rows: 256 })?;
-    root.insert(0, slot.take_widget()?, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 })).map_err(|(status, _candidate)| status)?;
+    root.insert(0, slot.take_widget()?, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
+        .map_err(|(status, _candidate)| status)?;
     let menus = host.ui.menus()?;
     let bar = menus.create("Runtime UI")?;
     let reload_item = bar

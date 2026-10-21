@@ -141,7 +141,7 @@ fn copied_nine_patch(patch: super::NinePatch, atlas: &AtlasHandle) -> NinePatchD
     NinePatchDraw {
         insets,
         center_visible: u8::from(patch.center_visible),
-        patch: content.into(),
+        patch: content,
     }
 }
 

@@ -10,9 +10,7 @@ impl IEvent for Activated {}
 impl IActivatedEvent for Activated {}
 /// Captures activation without copying presentation text or owning its source.
 pub fn activated() -> Result<ComBox<IEventAbi>, NcStatus> {
-    Activated::into_box(Activated)
-        .query()
-        .map_err(|(status, _unpublished)| status)
+    Activated::into_box(Activated).query().map_err(|(status, _unpublished)| status)
 }
 
 #[neocogi_com::com_object(interfaces(crate::ITextChangedEvent), ownership = exclusive)]

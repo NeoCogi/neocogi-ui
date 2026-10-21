@@ -99,9 +99,7 @@ impl<'a> PolyMesh {
         };
         // Seed from real geometry so one-sided meshes do not accidentally include the origin.
         let point = &self.v_positions[first.pos].position;
-        vertices.fold(Box3f::new(point, point), |bounds, vertex| {
-            bounds.add(&self.v_positions[vertex.pos].position)
-        })
+        vertices.fold(Box3f::new(point, point), |bounds, vertex| bounds.add(&self.v_positions[vertex.pos].position))
     }
 
     pub fn set_vertices(&mut self, positions: Vec<Vec3f>, normals: Vec<Vec3f>, tex: Vec<Vec2f>) {

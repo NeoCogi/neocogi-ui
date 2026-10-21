@@ -25,11 +25,17 @@ impl IRenderStream for Source {
     }
 
     /// The transport fixture contains records only; vertex access is unsupported.
-    fn vertices(&self, _: u64, _: NcOutputWriter<'_, RenderVertex>) -> Result<u32, NcStatus> { Err(NC_E_INVALID_ARG) }
+    fn vertices(&self, _: u64, _: NcOutputWriter<'_, RenderVertex>) -> Result<u32, NcStatus> {
+        Err(NC_E_INVALID_ARG)
+    }
     /// No resource capabilities are needed to measure copied record transport.
-    fn texture(&self, _: u64, _: u32) -> Result<ComPtr<ITextureAbi>, NcStatus> { Err(NC_E_INVALID_ARG) }
+    fn texture(&self, _: u64, _: u32) -> Result<ComPtr<ITextureAbi>, NcStatus> {
+        Err(NC_E_INVALID_ARG)
+    }
     /// Custom records are structural fixtures and have no renderer-specific object.
-    fn item(&self, _: u64, _: u32) -> Result<ComPtr<IRenderItemAbi>, NcStatus> { Err(NC_E_INVALID_ARG) }
+    fn item(&self, _: u64, _: u32) -> Result<ComPtr<IRenderItemAbi>, NcStatus> {
+        Err(NC_E_INVALID_ARG)
+    }
 }
 
 /// Makes every alternative observable without loading a renderer or GPU driver.
@@ -38,7 +44,12 @@ fn record(index: usize) -> RenderBatch {
         0 => RenderBatch::Atlas { first: index as u32, count: 3 },
         1 => RenderBatch::Texture { first: index as u32 },
         _ => RenderBatch::Item {
-            rect: Rect { x: index as i32, y: 2, width: 3, height: 4 },
+            rect: Rect {
+                x: index as i32,
+                y: 2,
+                width: 3,
+                height: 4,
+            },
             clip: Rect { x: 0, y: 0, width: 1000, height: 1000 },
         },
     }
@@ -56,22 +67,35 @@ fn read(source: &ComPtr<IRenderStreamAbi>, destination: &mut neocogi_com::NcOutp
 pub(super) fn run(counts: bool) -> Result<(), Box<dyn Error>> {
     let iterations: u32 = match counts {
         true => 1,
-        false => std::env::var("NEOCOGI_BENCH_ITERATIONS").ok().and_then(|value| value.parse().ok()).unwrap_or(3000),
+        false => std::env::var("NEOCOGI_BENCH_ITERATIONS")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(3000),
     };
     for count in [1, 1024, 8192] {
-        let source = Source::from_value(Source { records: (0..count).map(record).collect() }).query::<IRenderStreamAbi>()?;
+        let source = Source::from_value(Source {
+            records: (0..count).map(record).collect(),
+        })
+        .query::<IRenderStreamAbi>()?;
         let mut destination = neocogi_com::NcOutputBuffer::new();
         let start = Instant::now();
         read(&source, &mut destination, count)?;
         println!("{{\"operation\":\"bulk_output_cold\",\"count\":{count},\"ns\":{}}}", start.elapsed().as_nanos());
-        for _ in 0..4 { read(&source, &mut destination, count)?; }
+        for _ in 0..4 {
+            read(&source, &mut destination, count)?;
+        }
         for sample in 0..if counts { 1 } else { 7 } {
             neocogi_bench_begin(5);
             let start = Instant::now();
-            for _ in 0..iterations { read(&source, &mut destination, count)?; }
+            for _ in 0..iterations {
+                read(&source, &mut destination, count)?;
+            }
             let elapsed = start.elapsed();
             neocogi_bench_end();
-            println!("{{\"operation\":\"bulk_output\",\"count\":{count},\"sample\":{sample},\"iterations\":{iterations},\"ns_per_iteration\":{}}}", elapsed.as_nanos() / u128::from(iterations));
+            println!(
+                "{{\"operation\":\"bulk_output\",\"count\":{count},\"sample\":{sample},\"iterations\":{iterations},\"ns_per_iteration\":{}}}",
+                elapsed.as_nanos() / u128::from(iterations)
+            );
         }
     }
     Ok(())

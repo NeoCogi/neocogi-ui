@@ -37,8 +37,9 @@ fn activations() -> [WidgetEvent; 3] {
 /// Calls the generated widget ABI; eventless input represents an eligible pointer click.
 fn activate(driver: &crate::runtime::testing::OriginDriver, widget: &mut WeakComBox<IWidgetAbi>, input: WidgetEvent) -> Result<GeometryChange, NcStatus> {
     let origin = neocogi_com::events::EventOrigin::Widget(widget.clone().into_unknown());
-    driver.with_origin(origin, || widget.update(state(matches!(input, WidgetEvent::None)), input, NcCopyFromBufferOffset::new(0, b"")))?
-
+    driver.with_origin(origin, || {
+        widget.update(state(matches!(input, WidgetEvent::None)), input, NcCopyFromBufferOffset::new(0, b""))
+    })?
 }
 
 /// Direct unobserved posting allocates one marker per occurrence, independent of label size.

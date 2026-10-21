@@ -14,8 +14,12 @@ impl AsciiGlyphIndex {
     /// Builds bounded indices from already validated, uniquely partitioned canonical tables.
     /// Checks range arithmetic and allocation admission before publishing the complete vector.
     pub fn build(tables: &AssetTables) -> Result<Vec<Self>, NcStatus> {
-        tables.fonts.len().checked_add(tables.icons.len())
-            .filter(|&count| count <= MAX_ASSETS as usize).ok_or(NC_E_INVALID_ARG)?;
+        tables
+            .fonts
+            .len()
+            .checked_add(tables.icons.len())
+            .filter(|&count| count <= MAX_ASSETS as usize)
+            .ok_or(NC_E_INVALID_ARG)?;
         let mut indices = Vec::new();
         indices.try_reserve_exact(tables.fonts.len()).map_err(|_| NC_E_OUT_OF_MEMORY)?;
         for font in tables.fonts.iter() {
@@ -33,6 +37,10 @@ impl AsciiGlyphIndex {
     }
     /// Returns an exact ASCII slot or absence, without applying a font's fallback policy.
     pub fn get(&self, scalar: u32) -> Option<usize> {
-        self.slots.get(scalar as usize).copied().filter(|slot| *slot != u32::MAX).map(|slot| slot as usize)
+        self.slots
+            .get(scalar as usize)
+            .copied()
+            .filter(|slot| *slot != u32::MAX)
+            .map(|slot| slot as usize)
     }
 }

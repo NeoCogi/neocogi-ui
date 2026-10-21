@@ -60,7 +60,6 @@ impl TestContainer {
 impl IWidget for TestContainer {
     /// This widget forwards outputs and has no private inbox.
 
-
     /// Common authority carries no runtime tree pointer.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
         self.state.host().try_add_ref()
@@ -209,9 +208,7 @@ fn nested_container_layout_scopes_expire_and_teardown_closes_descendants() {
     let (child, child_editor, child_probe) = container(&runtime, Rc::clone(&history));
     let leaf_owner = button(&runtime);
     let mut leaf = leaf_owner.downgrade();
-    child_editor
-        .insert(0, leaf_owner.query::<IWidgetAbi>().unwrap())
-        .unwrap();
+    child_editor.insert(0, leaf_owner.query::<IWidgetAbi>().unwrap()).unwrap();
     parent_editor.insert(0, child).unwrap();
     let child_view = child_editor.view().unwrap();
     let window = mount(&runtime, parent).unwrap();
@@ -357,12 +354,9 @@ fn builtin_linear_reuses_track_resolution_and_validates_edges_before_mounting() 
     assert_eq!(status, NC_E_INVALID_ARG);
     assert!(first.as_interface().is_alive());
     assert_eq!(a.closes.get(), 0);
-    row.insert(0, first_owner, LinearEdge::new(LayoutTrack::Fixed { extent: 40 }))
-        .unwrap();
-    row.insert(1, second, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
-        .unwrap();
-    row.insert(2, third, LinearEdge::new(LayoutTrack::Flex { weight: 2.0 }))
-        .unwrap();
+    row.insert(0, first_owner, LinearEdge::new(LayoutTrack::Fixed { extent: 40 })).unwrap();
+    row.insert(1, second, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 })).unwrap();
+    row.insert(2, third, LinearEdge::new(LayoutTrack::Flex { weight: 2.0 })).unwrap();
     let common = row.node_interface().unwrap();
     assert_eq!(common.query::<IContainerAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
     assert_eq!(
@@ -406,7 +400,10 @@ fn builtin_grid_reuses_span_placement_and_bulk_track_validation() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let columns = [LayoutTrack::Fixed { extent: 40 }, LayoutTrack::Fixed { extent: 60 }];
     let rows = [LayoutTrack::Fixed { extent: 20 }, LayoutTrack::Fixed { extent: 30 }];
-    let grid_owner = ui.widgets().grid(&columns, &rows, neocogi_ui::GridLimits { max_columns: 2, max_rows: 2 }).unwrap();
+    let grid_owner = ui
+        .widgets()
+        .grid(&columns, &rows, neocogi_ui::GridLimits { max_columns: 2, max_rows: 2 })
+        .unwrap();
     let mut grid = grid_owner.handle();
     let (first_owner, a) = recorded_leaf(&runtime);
     let first = first_owner.handle();
@@ -453,13 +450,25 @@ fn builtin_grid_reuses_span_placement_and_bulk_track_validation() {
 fn builtin_grid_spans_never_overlap_a_tall_previous_child() {
     let runtime = runtime();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
-    let owner = ui.widgets().grid(&[LayoutTrack::Fixed { extent: 30 }; 3], &[LayoutTrack::Fixed { extent: 20 }; 2], neocogi_ui::GridLimits { max_columns: 3, max_rows: 2 }).unwrap();
+    let owner = ui
+        .widgets()
+        .grid(
+            &[LayoutTrack::Fixed { extent: 30 }; 3],
+            &[LayoutTrack::Fixed { extent: 20 }; 2],
+            neocogi_ui::GridLimits { max_columns: 3, max_rows: 2 },
+        )
+        .unwrap();
     let mut grid = owner.handle();
     let mut probes = Vec::new();
     for (index, edge) in [
-        GridExtent { columns: 1, rows: 1 }, GridExtent { columns: 1, rows: 2 },
-        GridExtent { columns: 1, rows: 1 }, GridExtent { columns: 2, rows: 1 },
-    ].into_iter().enumerate() {
+        GridExtent { columns: 1, rows: 1 },
+        GridExtent { columns: 1, rows: 2 },
+        GridExtent { columns: 1, rows: 1 },
+        GridExtent { columns: 2, rows: 1 },
+    ]
+    .into_iter()
+    .enumerate()
+    {
         let (child, probe) = recorded_leaf(&runtime);
         grid.insert(index as u32, child, edge).unwrap();
         probes.push(probe);
@@ -484,8 +493,7 @@ fn builtin_container_replacement_preserves_metadata_and_rejects_reentry() {
     let mut row = row_owner.handle();
     let (first, previous) = recorded_leaf(&runtime);
 
-    row.insert(0, first, LinearEdge::new(LayoutTrack::Fixed { extent: 40 }))
-        .unwrap();
+    row.insert(0, first, LinearEdge::new(LayoutTrack::Fixed { extent: 40 })).unwrap();
     let window = ui.window("replace", RECT, row_owner).unwrap();
     runtime.update(SIZE).unwrap();
     let (second, replacement) = recorded_leaf(&runtime);
@@ -579,9 +587,7 @@ fn nested_com_scroll_areas_preserve_boundary_bubbling() {
     let mut inner = inner_owner.handle();
     let tail = ui.widgets().text_block(&"outer content\n".repeat(60), TextWrapping::None).unwrap();
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
-    column
-        .insert(0, inner_owner, LinearEdge::new(LayoutTrack::Fixed { extent: 110 }))
-        .unwrap();
+    column.insert(0, inner_owner, LinearEdge::new(LayoutTrack::Fixed { extent: 110 })).unwrap();
     column.insert(1, tail, LinearEdge::new(LayoutTrack::Content)).unwrap();
     let outer_owner = ui.widgets().scroll_area(column, true).unwrap();
     let outer = outer_owner.handle();
@@ -634,8 +640,7 @@ fn disclosure_com_header_controls_the_actual_body_without_a_parent_backpointer()
         body.node_interface().unwrap().query::<IUnknown>().unwrap().as_raw().object
     );
     let (leaf, probe) = recorded_leaf(&runtime);
-    body.insert(0, leaf, LinearEdge::new(LayoutTrack::Fixed { extent: 33 }))
-        .unwrap();
+    body.insert(0, leaf, LinearEdge::new(LayoutTrack::Fixed { extent: 33 })).unwrap();
     let window = ui.window("disclosure", RECT, disclosure_owner).unwrap();
     runtime.update(SIZE).unwrap();
     assert!(probe.latest.get().is_none());
@@ -820,15 +825,11 @@ fn reentrant_child_clear_rejection_preserves_the_parent_and_its_children() {
     let retained = ui.widgets().button_unobserved("retained descendant").unwrap();
     let retained_owner = retained;
     let retained = retained_owner.handle();
-    victim
-        .insert(0, retained_owner, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
-        .unwrap();
+    victim.insert(0, retained_owner, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 })).unwrap();
     let mut unrelated = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let (candidate, probe) = recorded_leaf(&runtime);
     *probe.clear_on_mount.borrow_mut() = Some(victim.node_interface().unwrap());
-    unrelated
-        .insert(0, candidate, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
-        .unwrap();
+    unrelated.insert(0, candidate, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 })).unwrap();
     assert_eq!(probe.clear_mount_result.get(), Some(Err(UI_E_BUSY)));
     assert!(victim.node_interface().unwrap().properties().is_ok());
     assert_eq!(retained.label().unwrap(), "retained descendant");
@@ -845,9 +846,7 @@ fn dropping_a_parent_destroys_its_child_once_despite_retained_weak_views() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let mut parent = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
     let (child, probe) = recorded_leaf(&runtime);
-    parent
-        .insert(0, child, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
-        .unwrap();
+    parent.insert(0, child, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 })).unwrap();
     let observed = parent.node_interface().unwrap();
     drop(parent);
     assert_eq!(observed.properties(), Err(neocogi_com::NC_E_DROPPED));

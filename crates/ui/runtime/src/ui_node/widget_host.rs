@@ -31,7 +31,6 @@ pub(crate) struct HostState {
 }
 
 impl HostState {
-
     /// Preserves the first failure so later callbacks cannot accidentally clear it.
     pub(crate) fn fail(&self, error: NcStatus) {
         self.changes_pending.set(true);
@@ -50,8 +49,14 @@ pub(crate) struct WidgetHost {
 
 impl IWidgetHost for WidgetHost {
     /// Reads the active scoped origin without exposing stack control over COM.
-    fn post_event(&self, receiver: neocogi_com::ComRef<'_, neocogi_com::events::IEventReceiverAbi>, event: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
-        if let Err(status) = self.check_mutation() { return Err((status, event)); }
+    fn post_event(
+        &self,
+        receiver: neocogi_com::ComRef<'_, neocogi_com::events::IEventReceiverAbi>,
+        event: neocogi_com::ComBox<neocogi_com::events::IEventAbi>,
+    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
+        if let Err(status) = self.check_mutation() {
+            return Err((status, event));
+        }
         self.state.event_origins.post(receiver, event)
     }
     /// Notification is not a widget mutation and remains legal during recovery/collection.
@@ -77,7 +82,13 @@ impl IWidgetHost for WidgetHost {
     /// Issues a private writer and distinct read-only view for a new empty collection.
     fn create_children(&self) -> Result<neocogi_com::ComBox<IChildrenEditorAbi>, NcStatus> {
         self.check_mutation()?;
-        let factory = self.state.factory.try_borrow().map_err(|_| UI_E_BUSY)?.upgrade().ok_or(neocogi_com::NC_E_DROPPED)?;
+        let factory = self
+            .state
+            .factory
+            .try_borrow()
+            .map_err(|_| UI_E_BUSY)?
+            .upgrade()
+            .ok_or(neocogi_com::NC_E_DROPPED)?;
         Ok(super::child_store::create(factory))
     }
 
@@ -120,6 +131,5 @@ impl Drop for Observation<'_> {
     /// Restores observation authority on every exit path.
     fn drop(&mut self) {
         self.host.observing.set(self.previous);
-
     }
 }

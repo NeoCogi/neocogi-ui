@@ -44,7 +44,11 @@ impl Form {
     /// Creates a host-bound form after validating its preferred dimensions.
     /// Initial requested flags are size-independent; size changes content geometry
     /// only. Authoring tools can inspect one fresh Form for its frame policy.
-    pub(crate) fn create_com(host: ComPtr<IWidgetHostAbi>, resources: crate::widget_object::SharedAssets, size: Size) -> Result<neocogi_com::ComBox<FormAbi>, NcStatus> {
+    pub(crate) fn create_com(
+        host: ComPtr<IWidgetHostAbi>,
+        resources: crate::widget_object::SharedAssets,
+        size: Size,
+    ) -> Result<neocogi_com::ComBox<FormAbi>, NcStatus> {
         let size = dimensions(size)?;
         let editor = host.create_children()?;
         let runtime = WidgetRuntime::for_resources(host, WidgetOption::NO_INTERACT, Some(&resources))?;
@@ -62,7 +66,6 @@ impl HostedWidget for Form {
     fn runtime_mut(&mut self) -> &mut WidgetRuntime {
         &mut self.runtime
     }
-
 }
 impl crate::widget_object::WidgetAlgorithm for Form {}
 impl super::ContainerAlgorithm for Form {
@@ -76,7 +79,9 @@ impl super::ContainerAlgorithm for Form {
     /// Fixed rectangles need only validated indices and reserved relationship storage.
     fn prepare_edges(&mut self, edit: Self::Prepared) -> Result<Self::Prepared, NcStatus> {
         let len = edit.resulting_len(self.edges.len())?;
-        self.edges.try_reserve(len.saturating_sub(self.edges.len())).map_err(|_| neocogi_com::NC_E_OUT_OF_MEMORY)?;
+        self.edges
+            .try_reserve(len.saturating_sub(self.edges.len()))
+            .map_err(|_| neocogi_com::NC_E_OUT_OF_MEMORY)?;
         Ok(edit)
     }
 

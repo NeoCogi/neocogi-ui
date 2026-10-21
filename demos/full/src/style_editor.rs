@@ -219,7 +219,11 @@ impl StyleEditor {
             let swatch_handle = swatch.handle();
             append(&mut line, swatch, LayoutTrack::Flex { weight: 1. })?;
             append(&mut content, line, LayoutTrack::Content)?;
-            colors.push(ColorRow { role, channels: channel_handles, swatch: swatch_handle });
+            colors.push(ColorRow {
+                role,
+                channels: channel_handles,
+                swatch: swatch_handle,
+            });
         }
         let mut values = Vec::new();
         for metric in Metric::ALL {
@@ -283,7 +287,7 @@ impl StyleEditor {
             installed = ui.assets()?;
             installed.as_com_ref()
         };
-        self.pending = Some(self.compiler.derive_style(current, self.metrics, palette.into())?);
+        self.pending = Some(self.compiler.derive_style(current, self.metrics, palette)?);
         Ok(())
     }
     /// Installs the latest candidate only after the active event-dispatch call has returned.

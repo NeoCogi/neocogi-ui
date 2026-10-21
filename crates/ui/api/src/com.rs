@@ -7,7 +7,8 @@
 
 pub use neocogi_renderer_contracts::{
     Color, IRenderDiagnostics, IRenderDiagnosticsAbi, IRenderItem, IRenderItemAbi, IRenderStream, IRenderStreamAbi, IRenderer, IRendererAbi, IRgbaImage,
-    IRgbaImageAbi, ITexture, ITextureAbi, ITextureFactory, ITextureFactoryAbi, MAX_IMAGE_BYTES, MAX_RENDER_BATCHES, MAX_RENDER_VERTICES, Rect, RenderBatch, RenderInfo, RenderVertex, Size, TextureRegion, color, rgba_bytes,
+    IRgbaImageAbi, ITexture, ITextureAbi, ITextureFactory, ITextureFactoryAbi, MAX_IMAGE_BYTES, MAX_RENDER_BATCHES, MAX_RENDER_VERTICES, Rect, RenderBatch,
+    RenderInfo, RenderVertex, Size, TextureRegion, color, rgba_bytes,
 };
 pub use neocogi_platform_contracts::{
     IInputSink, IInputSinkAbi, IPlatformWindow, IPlatformWindowAbi, KeyCode, KeyStroke, Platform, PlatformAbi, Point, PollStatus, TextInputArea, UiInput,
@@ -18,10 +19,11 @@ pub mod nodes {
     pub use neocogi_ui_nodes_contracts::*;
 }
 pub use neocogi_ui_nodes_contracts::{
-    Button, ButtonAbi, Checkbox, CheckboxAbi, ChildCrossSize, ColorSwatch, ColorSwatchAbi, Combo, ComboAbi, ContentIcon, CrossSize, Disclosure, DisclosureAbi, DisclosureStyle, FillStates, FlowDirection, Grid, GridAbi, GridExtent, GridLimits, LayoutTrack, Linear,
-    LinearAbi, LinearEdge, ListBox, ListBoxAbi, ListItem, ListItemAbi, Number, NumberAbi, NumberOptions, ScrollArea, ScrollAreaAbi, ScrollAxis, ScrollRange,
-    Scrollbar, ScrollbarAbi, Slider, FormAbi, SliderAbi, SliderOptions, SplitAxis, SplitOptions, SplitView, SplitViewAbi, TextArea, TextAreaAbi,
-    TextBlock, TextBlockAbi, Textbox, TextboxAbi, UiFactory, UiFactoryAbi,
+    Button, ButtonAbi, Checkbox, CheckboxAbi, ChildCrossSize, ColorSwatch, ColorSwatchAbi, Combo, ComboAbi, ContentIcon, CrossSize, Disclosure, DisclosureAbi,
+    DisclosureStyle, FillStates, FlowDirection, Grid, GridAbi, GridExtent, GridLimits, LayoutTrack, Linear, LinearAbi, LinearEdge, ListBox, ListBoxAbi,
+    ListItem, ListItemAbi, Number, NumberAbi, NumberOptions, ScrollArea, ScrollAreaAbi, ScrollAxis, ScrollRange, Scrollbar, ScrollbarAbi, Slider, FormAbi,
+    SliderAbi, SliderOptions, SplitAxis, SplitOptions, SplitView, SplitViewAbi, TextArea, TextAreaAbi, TextBlock, TextBlockAbi, Textbox, TextboxAbi, UiFactory,
+    UiFactoryAbi,
 };
 pub use neocogi_gfx_contracts::{
     AssetLoader, AssetLoaderAbi, DrawPoint, GfxPluginFactory, GfxPluginFactoryAbi, IAssetBuilder, IAssetBuilderAbi, IGfxDiagnostics, IGfxDiagnosticsAbi,
@@ -29,8 +31,7 @@ pub use neocogi_gfx_contracts::{
 };
 #[cfg(feature = "skin")]
 pub use neocogi_skin_contracts::{
-    ISkinDiagnostics, ISkinDiagnosticsAbi, PaletteEdit, SkinPluginFactory, SkinPluginFactoryAbi, StyleCompiler,
-    StyleCompilerAbi, ThemeLoader, ThemeLoaderAbi,
+    ISkinDiagnostics, ISkinDiagnosticsAbi, PaletteEdit, SkinPluginFactory, SkinPluginFactoryAbi, StyleCompiler, StyleCompilerAbi, ThemeLoader, ThemeLoaderAbi,
 };
 use neocogi_com::{ComBox, WeakComBox, ComInterface, ComPtr, ComRef, INcStringComPtrExt, IUnknown, NcCopyFromBufferOffset, NcStatus};
 mod containers;
@@ -97,7 +98,10 @@ impl<I: ComInterface> Clone for Widget<I> {
 impl<I: ComInterface, P: WidgetStorage<I>> Widget<I, P> {
     /// Adopts one validated owner or observer without creating any other handle.
     pub fn from_interface(interface: P) -> Self {
-        Self { interface, contract: core::marker::PhantomData }
+        Self {
+            interface,
+            contract: core::marker::PhantomData,
+        }
     }
 
     /// Borrows the exact stored handle without changing its ownership policy.
@@ -155,18 +159,17 @@ impl<I: ComInterface> OwnedWidget<I> {
         Widget::from_interface(self.interface.downgrade())
     }
     /// Transfers the sole interface owner into a lower-level constructor or container.
-    pub fn into_interface(self) -> ComBox<I> { self.interface }
+    pub fn into_interface(self) -> ComBox<I> {
+        self.interface
+    }
 }
 
 /// Static convenience wrapper around the dynamically constructed Button class projection.
 pub type ButtonWidget = Widget<ButtonAbi>;
 
 impl<P> Widget<ButtonAbi, P>
-
 where
-
     P: WidgetStorage<ButtonAbi> + core::ops::DerefMut<Target = <ButtonAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
-
 {
     /// Replaces the label with a synchronous UTF-8 copy owned by the plugin.
     pub fn set_label(&mut self, label: &str) -> Result<(), NcStatus> {
@@ -232,11 +235,8 @@ text_proxy!(ListItemAbi);
 text_proxy!(ListBoxAbi);
 
 impl<P> Widget<CheckboxAbi, P>
-
 where
-
     P: WidgetStorage<CheckboxAbi> + core::ops::DerefMut<Target = <CheckboxAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
-
 {
     /// Reads the current checked value.
     pub fn checked(&self) -> Result<bool, NcStatus> {
@@ -404,7 +404,12 @@ impl WidgetFactory {
         )?))
     }
     /// Constructs an initialized, unmounted checkbox in this runtime.
-    pub fn checkbox_with_queue(&self, label: &str, checked: bool, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<CheckboxAbi>, NcStatus> {
+    pub fn checkbox_with_queue(
+        &self,
+        label: &str,
+        checked: bool,
+        queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>,
+    ) -> Result<OwnedWidget<CheckboxAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_checkbox(
             checked,
             NcCopyFromBufferOffset::new(0, label.as_bytes()),
@@ -412,7 +417,11 @@ impl WidgetFactory {
         )?))
     }
     /// Constructs an initialized, unmounted textbox in this runtime.
-    pub fn textbox_with_queue(&self, text: &str, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<TextboxAbi>, NcStatus> {
+    pub fn textbox_with_queue(
+        &self,
+        text: &str,
+        queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>,
+    ) -> Result<OwnedWidget<TextboxAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_textbox(
             NcCopyFromBufferOffset::new(0, text.as_bytes()),
             neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::from_queue(queue)?)?,
@@ -425,14 +434,22 @@ impl WidgetFactory {
         ))
     }
     /// Constructs an initialized, unmounted slider in this runtime.
-    pub fn slider_with_queue(&self, options: SliderOptions, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<SliderAbi>, NcStatus> {
+    pub fn slider_with_queue(
+        &self,
+        options: SliderOptions,
+        queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>,
+    ) -> Result<OwnedWidget<SliderAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_slider(
             options,
             neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::from_queue(queue)?)?,
         )?))
     }
     /// Constructs an initialized, unmounted number in this runtime.
-    pub fn number_with_queue(&self, options: NumberOptions, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<NumberAbi>, NcStatus> {
+    pub fn number_with_queue(
+        &self,
+        options: NumberOptions,
+        queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>,
+    ) -> Result<OwnedWidget<NumberAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_number(
             options,
             neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::from_queue(queue)?)?,
@@ -445,21 +462,33 @@ impl WidgetFactory {
         ))
     }
     /// Constructs an initialized, unmounted list item in this runtime.
-    pub fn list_item_with_queue(&self, label: &str, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<ListItemAbi>, NcStatus> {
+    pub fn list_item_with_queue(
+        &self,
+        label: &str,
+        queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>,
+    ) -> Result<OwnedWidget<ListItemAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_list_item(
             NcCopyFromBufferOffset::new(0, label.as_bytes()),
             neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::from_queue(queue)?)?,
         )?))
     }
     /// Constructs an initialized, unmounted list box in this runtime.
-    pub fn list_box_with_queue(&self, label: &str, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<ListBoxAbi>, NcStatus> {
+    pub fn list_box_with_queue(
+        &self,
+        label: &str,
+        queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>,
+    ) -> Result<OwnedWidget<ListBoxAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_list_box(
             NcCopyFromBufferOffset::new(0, label.as_bytes()),
             neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::from_queue(queue)?)?,
         )?))
     }
     /// Constructs an initialized, unmounted scrollbar in this runtime.
-    pub fn scrollbar_with_queue(&self, range: ScrollRange, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<ScrollbarAbi>, NcStatus> {
+    pub fn scrollbar_with_queue(
+        &self,
+        range: ScrollRange,
+        queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>,
+    ) -> Result<OwnedWidget<ScrollbarAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_scrollbar(
             range,
             neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::from_queue(queue)?)?,
@@ -472,7 +501,11 @@ impl WidgetFactory {
     }
 
     /// Creates and initializes an unmounted button in one concrete API operation.
-    pub fn button_with_queue(&self, label: &str, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<OwnedWidget<ButtonAbi>, NcStatus> {
+    pub fn button_with_queue(
+        &self,
+        label: &str,
+        queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>,
+    ) -> Result<OwnedWidget<ButtonAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_button(
             NcCopyFromBufferOffset::new(0, label.as_bytes()),
             neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::from_queue(queue)?)?,
@@ -622,12 +655,10 @@ impl Ui {
         parent: ComRef<'_, IWindowAbi>,
         queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>,
     ) -> Result<crate::FileDialog, NcStatus> {
-        Ok(crate::FileDialog::from_interface(
-            self.factory
-                .interface
-                .query::<IFileDialogsAbi>()?
-                .create(parent, neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::from_queue(queue)?)?)?,
-        ))
+        Ok(crate::FileDialog::from_interface(self.factory.interface.query::<IFileDialogsAbi>()?.create(
+            parent,
+            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::from_queue(queue)?)?,
+        )?))
     }
 
     /// Queries compact menu construction on this same runtime identity without copying its forest.
@@ -672,12 +703,8 @@ impl Ui {
         };
 
         root.with_mount(|root| {
-            self.windows.create_window(
-                NcCopyFromBufferOffset::new(0, title.as_bytes()),
-                rect,
-                root,
-                binding,
-            )
+            self.windows
+                .create_window(NcCopyFromBufferOffset::new(0, title.as_bytes()), rect, root, binding)
         })
     }
     /// Mounts a structural child under a live window from this UI.
@@ -703,13 +730,8 @@ impl Ui {
         };
 
         root.with_mount(|root| {
-            self.windows.create_child(
-                parent,
-                NcCopyFromBufferOffset::new(0, title.as_bytes()),
-                rect,
-                root,
-                binding,
-            )
+            self.windows
+                .create_child(parent, NcCopyFromBufferOffset::new(0, title.as_bytes()), rect, root, binding)
         })
     }
     /// Mounts a hidden modal dialog; show it after initialization with set_visibility.
@@ -735,13 +757,8 @@ impl Ui {
         };
 
         root.with_mount(|root| {
-            self.windows.create_dialog(
-                parent,
-                NcCopyFromBufferOffset::new(0, title.as_bytes()),
-                rect,
-                root,
-                binding,
-            )
+            self.windows
+                .create_dialog(parent, NcCopyFromBufferOffset::new(0, title.as_bytes()), rect, root, binding)
         })
     }
     /// Mounts a hidden auto-sized popup with a distinct popup capability.
@@ -766,12 +783,8 @@ impl Ui {
         };
 
         root.with_mount(|root| {
-            self.windows.create_popup(
-                parent,
-                NcCopyFromBufferOffset::new(0, title.as_bytes()),
-                root,
-                binding,
-            )
+            self.windows
+                .create_popup(parent, NcCopyFromBufferOffset::new(0, title.as_bytes()), root, binding)
         })
     }
     /// Queues a typed host event while keeping its text buffer local to this call.
@@ -864,11 +877,8 @@ font_proxy!(direct ListBoxAbi);
 font_proxy!(direct ListItemAbi);
 
 impl<P> Widget<ListItemAbi, P>
-
 where
-
     P: WidgetStorage<ListItemAbi> + core::ops::DerefMut<Target = <ListItemAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
-
 {
     /// Selects an icon role directly through the concrete ListItem class contract.
     pub fn set_icon_role(&mut self, icon: ContentIcon) -> Result<(), NcStatus> {
@@ -943,11 +953,8 @@ where
     /// Atomically replaces all labels and the explicit optional selection.
     pub fn replace_items<Item: AsRef<str>>(&mut self, items: &[Item], selection: ChoiceSelection) -> Result<(), NcStatus> {
         let (menu_text, entries) = encoded_combo_items(items)?;
-        self.interface.replace_menu(
-            NcCopyFromBufferOffset::new(0, &menu_text),
-            NcCopyFromBufferOffset::new(0, &entries),
-            selection,
-        )
+        self.interface
+            .replace_menu(NcCopyFromBufferOffset::new(0, &menu_text), NcCopyFromBufferOffset::new(0, &entries), selection)
     }
     /// Atomically replaces the generated preorder hierarchy, shared text, and selection.
     pub fn replace_menu(&mut self, menu_text: &str, entries: &[ChoiceMenuEntry], selection: ChoiceSelection) -> Result<(), NcStatus> {
@@ -1000,11 +1007,8 @@ fn combo_label_range(text: &mut Vec<u8>, label: &str) -> Result<MenuTextRange, N
 }
 
 impl<P> Widget<ListBoxAbi, P>
-
 where
-
     P: WidgetStorage<ListBoxAbi> + core::ops::DerefMut<Target = <ListBoxAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
-
 {
     /// Installs this renderer-owned image directly through the concrete class contract.
     pub fn set_image(&mut self, image: ComRef<'_, ITextureAbi>, fit_width: bool) -> Result<(), NcStatus> {
@@ -1100,8 +1104,6 @@ impl Ui {
 
 /// Concrete immutable control events queried on the common owned IEvent value.
 pub use neocogi_ui_nodes_contracts::{
-    ICheckboxChangedEvent, ICheckboxChangedEventAbi,
-    INumericChangedEvent, INumericChangedEventAbi,
-    IScrollbarChangedEvent, IScrollbarChangedEventAbi,
+    ICheckboxChangedEvent, ICheckboxChangedEventAbi, INumericChangedEvent, INumericChangedEventAbi, IScrollbarChangedEvent, IScrollbarChangedEventAbi,
     ISplitChangedEvent, ISplitChangedEventAbi,
 };

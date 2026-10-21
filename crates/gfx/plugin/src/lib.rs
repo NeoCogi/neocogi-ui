@@ -52,6 +52,7 @@ impl GfxPluginFactory for GfxPluginFactoryObject {
 /// Acquires one owned root; object construction remains on its typed methods.
 #[neocogi_com::plugin(name = "neocogi.gfx.runtime")]
 fn acquire_root() -> Result<neocogi_com::ComPtr<neocogi_gfx_contracts::GfxPluginFactoryAbi>, neocogi_com::NcStatus> {
-    GfxPluginFactoryObject::from_value(GfxPluginFactoryObject).query()}
+    GfxPluginFactoryObject::from_value(GfxPluginFactoryObject).query()
+}
 
 // Exports the dynamic entrypoint only from an assembly-generated native library.

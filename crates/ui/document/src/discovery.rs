@@ -28,8 +28,15 @@ impl CustomWidgetFactory for CatalogWidgetFactory {
     }
 
     /// Absence of the optional editor is distinct from failure to open a supported editor.
-    fn create_editor(&self, ui: &Ui, settings: &[u8]) -> Result<Option<neocogi_com::ComBox<neocogi_ui_document_contracts::IDesignSettingsEditorAbi>>, NcStatus> {
-        match self.catalog.create_editor(self.index, ui.widgets().as_com_ref(), NcCopyFromBufferOffset::new(0, settings)) {
+    fn create_editor(
+        &self,
+        ui: &Ui,
+        settings: &[u8],
+    ) -> Result<Option<neocogi_com::ComBox<neocogi_ui_document_contracts::IDesignSettingsEditorAbi>>, NcStatus> {
+        match self
+            .catalog
+            .create_editor(self.index, ui.widgets().as_com_ref(), NcCopyFromBufferOffset::new(0, settings))
+        {
             Ok(editor) => Ok(Some(editor)),
             Err(neocogi_com::NC_E_NOINTERFACE) => Ok(None),
             Err(status) => Err(status),
@@ -37,7 +44,12 @@ impl CustomWidgetFactory for CatalogWidgetFactory {
     }
 
     /// Calls the plugin's common COM constructor with typed, encoded settings.
-    fn create(&self, ui: &Ui, settings: &[u8], sink: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>) -> Result<neocogi_ui::OwnedWidget<IWidgetAbi>, NcStatus> {
+    fn create(
+        &self,
+        ui: &Ui,
+        settings: &[u8],
+        sink: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+    ) -> Result<neocogi_ui::OwnedWidget<IWidgetAbi>, NcStatus> {
         // The registry preflights the complete document before construction. Keep
         // this boundary bounded too, so direct adapter calls cannot allocate an
         // arbitrarily large transport buffer before discovering its limit.
@@ -98,11 +110,15 @@ impl CustomWidgetRegistry {
 /// No UI input is dispatched between these calls; a changed size is a protocol error.
 pub fn editor_settings(editor: &neocogi_com::WeakComBox<neocogi_ui_document_contracts::IDesignSettingsEditorAbi>) -> Result<Vec<u8>, String> {
     let mut bytes = neocogi_com::NcOutputBuffer::<u8>::new();
-    let required = editor.settings(bytes.output(0, 0)).map_err(|status| format!("Invalid settings draft: {status}"))? as usize;
+    let required = editor
+        .settings(bytes.output(0, 0))
+        .map_err(|status| format!("Invalid settings draft: {status}"))? as usize;
     if required > neocogi_ui_design::MAX_SETTINGS_BYTES {
         return Err("Settings editor exceeded byte limit".into());
     }
-    let written = editor.settings(bytes.output(0, required)).map_err(|status| format!("Settings snapshot failed: {status}"))? as usize;
+    let written = editor
+        .settings(bytes.output(0, required))
+        .map_err(|status| format!("Settings snapshot failed: {status}"))? as usize;
     if required != written || bytes.len() != required {
         return Err("Settings editor changed its snapshot during copying".into());
     }
@@ -135,12 +151,16 @@ mod tests {
     }
     impl IDesignSettingsEditor for Editor {
         /// Snapshot tests never mount controls.
-        fn take_view(&mut self) -> Result<ComBox<IWidgetAbi>, NcStatus> { Err(neocogi_com::NC_E_NOT_FOUND) }
+        fn take_view(&mut self) -> Result<ComBox<IWidgetAbi>, NcStatus> {
+            Err(neocogi_com::NC_E_NOT_FOUND)
+        }
         /// Keeps responses deterministic without a call counter or interior mutability.
         fn settings(&self, mut output: NcOutputWriter<'_, u8>) -> Result<u32, NcStatus> {
             match &self.response {
                 Reply::Bytes(bytes) => {
-                    if output.capacity() >= bytes.len() { output.extend_from_slice(bytes)?; }
+                    if output.capacity() >= bytes.len() {
+                        output.extend_from_slice(bytes)?;
+                    }
                     Ok(bytes.len() as u32)
                 }
                 Reply::Oversized => {
@@ -155,12 +175,19 @@ mod tests {
     /// Invalid provider lengths/statuses cannot become accepted owned settings.
     #[test]
     fn snapshot_transport_bounds_lengths_and_preserves_errors() {
-        for (response, expected) in [(Reply::Oversized, "byte limit"), (Reply::ChangedLength, "changed"), (Reply::Failure, "OUT_OF_MEMORY")] {
+        for (response, expected) in [
+            (Reply::Oversized, "byte limit"),
+            (Reply::ChangedLength, "changed"),
+            (Reply::Failure, "OUT_OF_MEMORY"),
+        ] {
             let editor = Editor::into_box(Editor { response }).query::<IDesignSettingsEditorAbi>().ok().unwrap();
             assert!(editor_settings(&editor.downgrade()).unwrap_err().contains(expected));
         }
         let bytes = vec![0x55; neocogi_ui_design::MAX_SETTINGS_BYTES];
-        let editor = Editor::into_box(Editor { response: Reply::Bytes(bytes.clone()) }).query::<IDesignSettingsEditorAbi>().ok().unwrap();
+        let editor = Editor::into_box(Editor { response: Reply::Bytes(bytes.clone()) })
+            .query::<IDesignSettingsEditorAbi>()
+            .ok()
+            .unwrap();
         assert_eq!(editor_settings(&editor.downgrade()).unwrap(), bytes);
         let observer = editor.downgrade();
         drop(editor);

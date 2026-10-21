@@ -199,8 +199,7 @@ fn standalone_compositor_frame_does_not_block_runtime_construction_or_rendering(
 fn production_runtime_uses_the_gfx_compositor() {
     let assets = neocogi_demo_assets::load_bundle().expect("embedded test assets must load");
     let gfx = neocogi_ui_support::test_support::gfx_factory();
-    let runtime =
-        nc_ui::create_runtime_from_assets(assets.as_com_ref(), gfx.as_com_ref()).expect("matching UI and GFX resources must create a runtime");
+    let runtime = nc_ui::create_runtime_from_assets(assets.as_com_ref(), gfx.as_com_ref()).expect("matching UI and GFX resources must create a runtime");
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime).expect("the object must expose every UI capability");
     let text = ui
         .widgets()

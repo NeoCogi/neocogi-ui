@@ -65,12 +65,13 @@ impl<const KEYBOARD: u16> LeafContent for Probe<KEYBOARD> {
         }
         Ok(())
     }
-
 }
 
 impl<const KEYBOARD: u16> Drop for Probe<KEYBOARD> {
     /// Resource removal follows the unique owner, independently of test handles.
-    fn drop(&mut self) { self.observations.borrow_mut().closed = true; }
+    fn drop(&mut self) {
+        self.observations.borrow_mut().closed = true;
+    }
 }
 
 /// Creates an ordinary COM leaf and a typed observation handle for assertions.
@@ -319,5 +320,5 @@ mod policies;
 
 mod resources;
 
-mod reload;
 mod document_limits;
+mod reload;

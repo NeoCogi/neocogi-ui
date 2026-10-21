@@ -172,8 +172,7 @@ impl neocogi_ui_core_contracts::UiPluginFactory for UiPluginFactoryObject {
 
 /// Acquires one owned root; object construction remains on its typed methods.
 #[neocogi_com::plugin(name = "neocogi.ui.runtime")]
-fn acquire_root() -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::UiPluginFactoryAbi>,
-    neocogi_com::NcStatus> {
+fn acquire_root() -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::UiPluginFactoryAbi>, neocogi_com::NcStatus> {
     UiPluginFactoryObject::from_value(UiPluginFactoryObject).query()
 }
 

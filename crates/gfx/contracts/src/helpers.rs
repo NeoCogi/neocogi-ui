@@ -123,7 +123,10 @@ pub const MAX_ASSET_NAMES: u32 = MAX_ASSETS * MAX_ASSET_NAME_BYTES;
 impl AssetInfo {
     /// Checks the shared allocation policy before any consumer reserves or decodes storage.
     pub fn rgba_bytes(self) -> Result<usize, NcStatus> {
-        let assets = self.fonts.checked_add(self.icons).filter(|&count| count <= MAX_ASSETS)
+        let assets = self
+            .fonts
+            .checked_add(self.icons)
+            .filter(|&count| count <= MAX_ASSETS)
             .ok_or(neocogi_com::NC_E_INVALID_ARG)?;
         if self.schema != ASSET_SCHEMA_VERSION
             || self.size.width <= 0
@@ -257,7 +260,14 @@ mod limit_tests {
 
     /// These metadata headers exercise preallocation admission independently of table contents.
     fn header(fonts: u32, icons: u32, names: u32) -> AssetInfo {
-        AssetInfo { schema: ASSET_SCHEMA_VERSION, size: Size { width: 1, height: 1 }, fonts, icons, glyphs: 0, names }
+        AssetInfo {
+            schema: ASSET_SCHEMA_VERSION,
+            size: Size { width: 1, height: 1 },
+            fonts,
+            icons,
+            glyphs: 0,
+            names,
+        }
     }
 
     /// Both resource types share the same count, including exact and overflow boundaries.

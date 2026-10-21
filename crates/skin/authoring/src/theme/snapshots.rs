@@ -4,7 +4,9 @@ use super::*;
 /// Palette editing copies the skin section and leaves all other recipes shared.
 #[test]
 fn candidate_sections_preserve_old_versions_and_json_values() {
-    let original = ThemeDocument::from_bytes(Path::new("theme.json"), br#"{
+    let original = ThemeDocument::from_bytes(
+        Path::new("theme.json"),
+        br#"{
     "schema_version": 2,
     "name": "Shared",
     "fonts": {
@@ -57,7 +59,9 @@ fn candidate_sections_preserve_old_versions_and_json_values() {
             "path": "close.png"
         }
     }
-}"#).unwrap();
+}"#,
+    )
+    .unwrap();
     let bytes = original.to_bytes().unwrap();
     let mut next = original.clone();
     assert!(Arc::ptr_eq(&original.skin, &next.skin));

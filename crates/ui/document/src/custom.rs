@@ -14,13 +14,22 @@ pub trait CustomWidgetFactory {
     /// Returns complete, versioned metadata for this constructible widget kind.
     fn manifest(&self) -> Result<DesignWidgetManifest, String>;
     /// Optional plugin-owned editor. Absence leaves settings read-only in the designer.
-    fn create_editor(&self, _ui: &Ui, _settings: &[u8]) -> Result<Option<neocogi_com::ComBox<neocogi_ui_document_contracts::IDesignSettingsEditorAbi>>, NcStatus> {
+    fn create_editor(
+        &self,
+        _ui: &Ui,
+        _settings: &[u8],
+    ) -> Result<Option<neocogi_com::ComBox<neocogi_ui_document_contracts::IDesignSettingsEditorAbi>>, NcStatus> {
         Ok(None)
     }
     /// Constructs one concrete COM identity using the runtime's widget host.
     /// The provider validates settings and the supplied typed sink before returning.
     /// `None` constructs a permanently unobserved widget; no later attachment is allowed.
-    fn create(&self, ui: &Ui, settings: &[u8], sink: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>) -> Result<neocogi_ui::OwnedWidget<IWidgetAbi>, NcStatus>;
+    fn create(
+        &self,
+        ui: &Ui,
+        settings: &[u8],
+        sink: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+    ) -> Result<neocogi_ui::OwnedWidget<IWidgetAbi>, NcStatus>;
 }
 
 /// One installed provider and the immutable metadata validated at registration.
@@ -99,13 +108,24 @@ impl CustomWidgetRegistry {
     }
 
     /// Opens the provider's concrete draft editor; the caller owns its lifetime and view.
-    pub fn create_editor(&self, kind: &str, ui: &Ui, settings: &[u8]) -> Result<Option<neocogi_com::ComBox<neocogi_ui_document_contracts::IDesignSettingsEditorAbi>>, NcStatus> {
+    pub fn create_editor(
+        &self,
+        kind: &str,
+        ui: &Ui,
+        settings: &[u8],
+    ) -> Result<Option<neocogi_com::ComBox<neocogi_ui_document_contracts::IDesignSettingsEditorAbi>>, NcStatus> {
         neocogi_ui_design::validate_settings_size(settings).map_err(|_| NC_E_INVALID_ARG)?;
         self.entries.get(kind).ok_or(NC_E_INVALID_ARG)?.factory.create_editor(ui, settings)
     }
 
     /// Calls the installed provider and verifies its advertised concrete identity.
-    pub(crate) fn create(&self, kind: &str, ui: &Ui, settings: &[u8], sink: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>) -> Result<neocogi_ui::OwnedWidget<IWidgetAbi>, NcStatus> {
+    pub(crate) fn create(
+        &self,
+        kind: &str,
+        ui: &Ui,
+        settings: &[u8],
+        sink: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+    ) -> Result<neocogi_ui::OwnedWidget<IWidgetAbi>, NcStatus> {
         let entry = self.entries.get(kind).ok_or(NC_E_INVALID_ARG)?;
         let widget = entry.factory.create(ui, settings, sink)?;
         let interface = &entry.manifest.interface;

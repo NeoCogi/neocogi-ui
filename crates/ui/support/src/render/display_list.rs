@@ -182,7 +182,12 @@ impl DisplayList {
     }
 
     /// Retains a complete atlas batch in painter order for final viewport clipping.
-    pub fn push_atlas_triangles(&mut self, clip: Recti, origin: Vec2i, vertices: &[neocogi_ui_core_contracts::RenderVertex]) -> Result<(), neocogi_com::NcStatus> {
+    pub fn push_atlas_triangles(
+        &mut self,
+        clip: Recti,
+        origin: Vec2i,
+        vertices: &[neocogi_ui_core_contracts::RenderVertex],
+    ) -> Result<(), neocogi_com::NcStatus> {
         self.reserve_retained(core::mem::size_of_val(vertices), vertices.len())?;
         let first = self.atlas_vertices.len();
         // Translate directly into retained storage, with no intermediate per-operation vector.
@@ -204,7 +209,12 @@ impl DisplayList {
     }
 
     /// Charges a complete colored batch before conversion, avoiding partially accepted batches.
-    pub fn push_colored_triangles(&mut self, clip: Recti, origin: Vec2i, vertices: &[neocogi_ui_core_contracts::ColoredVertex]) -> Result<(), neocogi_com::NcStatus> {
+    pub fn push_colored_triangles(
+        &mut self,
+        clip: Recti,
+        origin: Vec2i,
+        vertices: &[neocogi_ui_core_contracts::ColoredVertex],
+    ) -> Result<(), neocogi_com::NcStatus> {
         use super::geometry::SolidVertex;
         self.reserve_retained(core::mem::size_of_val(vertices), vertices.len())?;
         let offset = Vec2f::new(origin.x as f32, origin.y as f32);
@@ -238,7 +248,12 @@ impl DisplayList {
     }
 
     /// Retains application GPU work without creating a callback registry entry.
-    pub fn push_com_item(&mut self, clip: Recti, rect: Recti, item: neocogi_com::ComPtr<neocogi_ui_core_contracts::IRenderItemAbi>) -> Result<(), neocogi_com::NcStatus> {
+    pub fn push_com_item(
+        &mut self,
+        clip: Recti,
+        rect: Recti,
+        item: neocogi_com::ComPtr<neocogi_ui_core_contracts::IRenderItemAbi>,
+    ) -> Result<(), neocogi_com::NcStatus> {
         self.reserve_retained(0, 0)?;
         self.push(clip, DrawKind::ComItem { item, rect });
         Ok(())
@@ -306,7 +321,13 @@ impl DisplayList {
     }
 
     /// Converts copied COM polygon points directly into the reusable tessellation workspace.
-    pub fn push_contract_polygon(&mut self, clip: Recti, points: &[neocogi_ui_core_contracts::PaintPoint], color: Color4b, offset: Vec2f) -> Result<(), neocogi_com::NcStatus> {
+    pub fn push_contract_polygon(
+        &mut self,
+        clip: Recti,
+        points: &[neocogi_ui_core_contracts::PaintPoint],
+        color: Color4b,
+        offset: Vec2f,
+    ) -> Result<(), neocogi_com::NcStatus> {
         self.reserve_retained_polygon(points.len())?;
         let points = points.iter().map(|point| Vec2f::new(point.x, point.y));
         if let Some(range) = self.solid_geometry.append_polygon_points(points, color, offset) {
@@ -394,7 +415,8 @@ mod tests {
             Recti::new(4, 5, 27, 37),
         ];
 
-        list.push_nine_patch(clips[0], Recti::new(0, 0, 2, 2), NinePatch::solid(color(1, 2, 3, 4))).unwrap();
+        list.push_nine_patch(clips[0], Recti::new(0, 0, 2, 2), NinePatch::solid(color(1, 2, 3, 4)))
+            .unwrap();
         list.push_text(clips[1], font, Vec2i::new(4, 5), color(5, 6, 7, 8), "text").unwrap();
         list.push_icon(clips[2], icon, Recti::new(6, 7, 8, 9), color(9, 10, 11, 12)).unwrap();
         list.push_com_texture(
@@ -403,7 +425,8 @@ mod tests {
             neocogi_ui_core_contracts::TextureRegion { u0: 0., v0: 0., u1: 1., v1: 1. },
             color(13, 14, 15, 16),
             crate::test_support::test_image(12, 13).into_interface(),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(list.ops.len(), clips.len());
         for (operation, expected) in list.ops.iter().zip(clips) {
@@ -420,7 +443,8 @@ mod tests {
         let mut list = DisplayList::new();
         let clip = Recti::new(0, 0, 100, 100);
         for offset in 0..32 {
-            list.push_nine_patch(clip, Recti::new(offset, offset, 1, 1), NinePatch::solid(color(255, 255, 255, 255))).unwrap();
+            list.push_nine_patch(clip, Recti::new(offset, offset, 1, 1), NinePatch::solid(color(255, 255, 255, 255)))
+                .unwrap();
         }
         list.push_solid_triangles(clip, &[triangle_at(0.0)]).unwrap();
         list.solid_geometry.reserve_polygon_capacity(32);
@@ -464,7 +488,8 @@ mod tests {
 
         list.push_solid_triangles(first_clip, &[triangle_at(0.0)]).unwrap();
         list.push_solid_triangles(second_clip, &[triangle_at(10.0)]).unwrap();
-        list.push_nine_patch(first_clip, Recti::new(0, 0, 1, 1), NinePatch::solid(color(255, 255, 255, 255))).unwrap();
+        list.push_nine_patch(first_clip, Recti::new(0, 0, 1, 1), NinePatch::solid(color(255, 255, 255, 255)))
+            .unwrap();
         list.push_solid_triangles(second_clip, &[triangle_at(20.0)]).unwrap();
 
         assert_eq!(list.ops.len(), 4);
@@ -508,7 +533,10 @@ mod tests {
         for _ in 0..neocogi_renderer_contracts::MAX_DRAW_COMMANDS {
             list.push_solid_triangles(clip, &[]).unwrap();
         }
-        assert_eq!(list.push_nine_patch(clip, clip, NinePatch::solid(color(1, 2, 3, 255))), Err(neocogi_com::NC_E_OUT_OF_RANGE));
+        assert_eq!(
+            list.push_nine_patch(clip, clip, NinePatch::solid(color(1, 2, 3, 255))),
+            Err(neocogi_com::NC_E_OUT_OF_RANGE)
+        );
         assert!(list.is_empty());
         list.clear();
         list.push_nine_patch(clip, clip, NinePatch::solid(color(1, 2, 3, 255))).unwrap();
@@ -523,9 +551,15 @@ mod tests {
         let atlas = test_atlas();
         let font = atlas.font_id("body").unwrap();
         let oversized = "x".repeat(neocogi_renderer_contracts::MAX_DRAW_WORK + 1);
-        assert_eq!(list.push_text(clip, font, Vec2i::default(), color(1, 2, 3, 255), &oversized), Err(neocogi_com::NC_E_OUT_OF_RANGE));
+        assert_eq!(
+            list.push_text(clip, font, Vec2i::default(), color(1, 2, 3, 255), &oversized),
+            Err(neocogi_com::NC_E_OUT_OF_RANGE)
+        );
         let points = vec![Vec2f::new(f32::NAN, 0.0); neocogi_renderer_contracts::MAX_POLYGON_POINTS + 1];
-        assert_eq!(list.push_polygon(clip, &points, color4b(1, 2, 3, 255), Vec2f::default()), Err(neocogi_com::NC_E_OUT_OF_RANGE));
+        assert_eq!(
+            list.push_polygon(clip, &points, color4b(1, 2, 3, 255), Vec2f::default()),
+            Err(neocogi_com::NC_E_OUT_OF_RANGE)
+        );
         assert_eq!(list.text.capacity(), 0);
         assert_eq!(list.solid_geometry.polygon_capacity(), 0);
         assert_eq!(list.solid_geometry.triangle_capacity(), 0);
@@ -533,5 +567,4 @@ mod tests {
         list.push_text(clip, font, Vec2i::default(), color(1, 2, 3, 255), "retry").unwrap();
         assert_eq!(list.text, "retry");
     }
-
 }

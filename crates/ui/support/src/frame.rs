@@ -404,7 +404,8 @@ mod tests {
                 outer,
                 NinePatch::framed(SliceInsets::uniform(1), border, Some(color(10, 11, 12, 255))),
             )
-            .unwrap().is_none()
+            .unwrap()
+            .is_none()
         );
         let recorded = list.debug_nine_patches();
         assert_eq!(recorded.len(), 1);

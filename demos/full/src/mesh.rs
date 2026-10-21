@@ -123,7 +123,8 @@ impl LeafContent for Suzanne {
                 };
                 if delta.x != 0 || delta.y != 0 {
                     let center = Vec2i::new(rect.x + rect.width / 2, rect.y + rect.height / 2);
-                    self.view.update_drag(center, Vec2i::new(center.x.saturating_add(delta.x), center.y.saturating_add(delta.y)));
+                    self.view
+                        .update_drag(center, Vec2i::new(center.x.saturating_add(delta.x), center.y.saturating_add(delta.y)));
                 }
             }
             WidgetEvent::Text => {
@@ -196,10 +197,13 @@ mod viewport_tests {
     impl IRenderItem for SceneProbe {}
     impl IMeshScene for SceneProbe {
         /// Geometry upload is unnecessary for observing transform publication.
-        fn set_mesh(&self, _: NcCopyFromBufferOffset<'_, MeshVertex>, _: NcCopyFromBufferOffset<'_, u32>) -> Result<(), NcStatus> { Ok(()) }
+        fn set_mesh(&self, _: NcCopyFromBufferOffset<'_, MeshVertex>, _: NcCopyFromBufferOffset<'_, u32>) -> Result<(), NcStatus> {
+            Ok(())
+        }
         /// Complete copied snapshots prove paint publishes the final settled aspect through COM.
         fn set_transforms(&self, transforms: SceneTransforms) -> Result<(), NcStatus> {
-            self.transforms.borrow_mut().push(transforms); Ok(())
+            self.transforms.borrow_mut().push(transforms);
+            Ok(())
         }
     }
 
@@ -209,15 +213,30 @@ mod viewport_tests {
         let transforms = Rc::new(RefCell::new(Vec::new()));
         let scene: ComPtr<IMeshSceneAbi> = SceneProbe::from_value(SceneProbe { transforms: transforms.clone() }).query().unwrap();
         let item = scene.query().unwrap();
-        let mut widget = Suzanne { view: crate::grid::create_grid_view_3d(), scene, item };
+        let mut widget = Suzanne {
+            view: crate::grid::create_grid_view_3d(),
+            scene,
+            item,
+        };
         let full = Rect { x: 0, y: 0, width: 200, height: 100 };
-        widget.update(crate::viewport_test_support::update_state(full, full), WidgetEvent::None, "").unwrap();
+        widget
+            .update(crate::viewport_test_support::update_state(full, full), WidgetEvent::None, "")
+            .unwrap();
         let earlier_projection = widget.view.projection_matrix();
         assert!(transforms.borrow().is_empty(), "input does not publish an intermediate projection");
         let visible = Rect { x: 37, y: 23, width: 91, height: 57 };
         let (recorder, output) = crate::viewport_test_support::recorder();
         let mut painter = Painter::from_call(recorder.as_com_ref(), PaintScope { invocation: 1, clip: visible });
-        widget.paint(WidgetPaint { rect: full, clip: visible, ..WidgetPaint::default() }, &mut painter).unwrap();
+        widget
+            .paint(
+                WidgetPaint {
+                    rect: full,
+                    clip: visible,
+                    ..WidgetPaint::default()
+                },
+                &mut painter,
+            )
+            .unwrap();
         let mut reference = crate::grid::create_grid_view_3d();
         reference.set_viewport(local_rect(visible));
         let expected: neocogi_render_mesh_contracts::Matrix4 = reference.pvm().into();
@@ -229,16 +248,49 @@ mod viewport_tests {
         drop(edits);
         assert_eq!(output.borrow().items.len(), 1);
         assert_eq!(output.borrow().items[0].width, full.width, "UI allocation remains full-sized");
-        widget.paint(WidgetPaint { rect: full, clip: Rect::default(), ..WidgetPaint::default() }, &mut painter).unwrap();
+        widget
+            .paint(
+                WidgetPaint {
+                    rect: full,
+                    clip: Rect::default(),
+                    ..WidgetPaint::default()
+                },
+                &mut painter,
+            )
+            .unwrap();
         assert_eq!(transforms.borrow().len(), 1);
         assert_eq!(output.borrow().items.len(), 1);
 
         // A thin visible strip can sit at the far end of an otherwise valid wide allocation.
         // Keyboard orbit must saturate its synthetic endpoint rather than overflow that origin.
-        widget.update(crate::viewport_test_support::update_state(
-            Rect { x: 0, y: 0, width: i32::MAX, height: 1 },
-            Rect { x: i32::MAX - 1, y: 0, width: 1, height: 1 },
-        ), WidgetEvent::Key(KeyStroke { key: KeyCode::ArrowRight, value: 0, pressed: true, repeat: false, modifiers: 0 }), "").unwrap();
-        assert!(widget.view.pvm().col.iter().all(|column| [column.x, column.y, column.z, column.w].iter().all(|value| value.is_finite())));
+        widget
+            .update(
+                crate::viewport_test_support::update_state(
+                    Rect { x: 0, y: 0, width: i32::MAX, height: 1 },
+                    Rect {
+                        x: i32::MAX - 1,
+                        y: 0,
+                        width: 1,
+                        height: 1,
+                    },
+                ),
+                WidgetEvent::Key(KeyStroke {
+                    key: KeyCode::ArrowRight,
+                    value: 0,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: 0,
+                }),
+                "",
+            )
+            .unwrap();
+        assert!(
+            widget
+                .view
+                .pvm()
+                .col
+                .iter()
+                .all(|column| [column.x, column.y, column.z, column.w].iter().all(|value| value.is_finite()))
+        );
     }
 }

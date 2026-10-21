@@ -112,8 +112,6 @@ impl MenuItemParameters {
     }
 }
 
-
-
 /// Failure reported when a [`Ui`](crate::Ui) cannot resolve one menu-item capability.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum MenuItemAccessError {

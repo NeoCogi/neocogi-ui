@@ -60,7 +60,11 @@ impl IConstructionHost for UiFactory {
 
 impl IFileDialogs for UiFactory {
     /// Creates the standard picker as an eventful mounted composite owned by the nodes plugin.
-    fn create(&self, parent: ComRef<'_, IWindowAbi>, events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>) -> Result<neocogi_com::WeakComBox<IFileDialogAbi>, NcStatus> {
+    fn create(
+        &self,
+        parent: ComRef<'_, IWindowAbi>,
+        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+    ) -> Result<neocogi_com::WeakComBox<IFileDialogAbi>, NcStatus> {
         crate::dialogs::create(self.services.clone(), parent, events.to_owned()?.into_queue())
     }
 }
@@ -85,7 +89,12 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     }
 
     /// Validates text and presentation before constructing either fixed structural child.
-    fn create_disclosure(&self, label: NcCopyFromBufferOffset<'_, u8>, style: DisclosureStyle, expanded: bool) -> Result<neocogi_com::ComBox<DisclosureAbi>, NcStatus> {
+    fn create_disclosure(
+        &self,
+        label: NcCopyFromBufferOffset<'_, u8>,
+        style: DisclosureStyle,
+        expanded: bool,
+    ) -> Result<neocogi_com::ComBox<DisclosureAbi>, NcStatus> {
         crate::Disclosure::create_com(self.services.host.clone(), self.services.resources.clone(), label, style, expanded)
     }
 
@@ -105,7 +114,11 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     }
 
     /// Validates sizing before allocating the split container and its sole child editor.
-    fn create_split_view(&self, settings: SplitOptions, events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>) -> Result<neocogi_com::ComBox<SplitViewAbi>, NcStatus> {
+    fn create_split_view(
+        &self,
+        settings: SplitOptions,
+        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+    ) -> Result<neocogi_com::ComBox<SplitViewAbi>, NcStatus> {
         self.services.host.check_mutation()?;
         crate::SplitView::create_com(
             self.services.host.clone(),
@@ -171,7 +184,11 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     }
 
     /// Validates every arithmetic field before allocating a slider identity.
-    fn create_slider(&self, options: SliderOptions, events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>) -> Result<neocogi_com::ComBox<SliderAbi>, NcStatus> {
+    fn create_slider(
+        &self,
+        options: SliderOptions,
+        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+    ) -> Result<neocogi_com::ComBox<SliderAbi>, NcStatus> {
         self.services.host.check_mutation()?;
         crate::Slider::create_com(
             self.services.host.clone(),
@@ -182,7 +199,11 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     }
 
     /// Validates every arithmetic field before allocating a number identity.
-    fn create_number(&self, options: NumberOptions, events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>) -> Result<neocogi_com::ComBox<NumberAbi>, NcStatus> {
+    fn create_number(
+        &self,
+        options: NumberOptions,
+        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+    ) -> Result<neocogi_com::ComBox<NumberAbi>, NcStatus> {
         self.services.host.check_mutation()?;
         crate::Number::create_com(
             self.services.host.clone(),
@@ -229,7 +250,11 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     }
 
     /// Validates axis and range arithmetic before allocating the scrollbar.
-    fn create_scrollbar(&self, range: ScrollRange, events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>) -> Result<neocogi_com::ComBox<ScrollbarAbi>, NcStatus> {
+    fn create_scrollbar(
+        &self,
+        range: ScrollRange,
+        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+    ) -> Result<neocogi_com::ComBox<ScrollbarAbi>, NcStatus> {
         self.services.host.check_mutation()?;
         crate::Scrollbar::create_com(
             self.services.host.clone(),

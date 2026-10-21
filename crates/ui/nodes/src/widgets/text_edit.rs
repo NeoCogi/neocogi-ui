@@ -454,7 +454,9 @@ mod tests {
         use std::{hint::black_box, time::Instant};
 
         fn median_ns(mut operation: impl FnMut(), iterations: u32) -> u128 {
-            for _ in 0..iterations { operation(); }
+            for _ in 0..iterations {
+                operation();
+            }
             let mut samples = [0; 7];
             for sample in &mut samples {
                 let start = Instant::now();

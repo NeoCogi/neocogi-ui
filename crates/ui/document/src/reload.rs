@@ -92,7 +92,13 @@ impl ReloadSlot {
     /// Creates a reload slot with application-installed custom COM widget factories.
     /// Uses the same shared-ID contract as new(); a reserved ID is never returned
     /// to the allocator, including when subsequent container construction fails.
-    pub fn new_with_custom(ids: &mut ReloadIds, ui: Ui, parent: ComPtr<IWindowAbi>, custom: crate::CustomWidgetRegistry, grid_limits: GridLimits) -> Result<Self, NcStatus> {
+    pub fn new_with_custom(
+        ids: &mut ReloadIds,
+        ui: Ui,
+        parent: ComPtr<IWindowAbi>,
+        custom: crate::CustomWidgetRegistry,
+        grid_limits: GridLimits,
+    ) -> Result<Self, NcStatus> {
         grid_limits.validate()?;
         let last_attempt = ids.reserve_slot()?;
         let slot = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
@@ -143,7 +149,8 @@ impl ReloadSlot {
         bind: impl FnOnce(&Component, Generation) -> Result<(), NcStatus>,
     ) -> Result<Reloaded, String> {
         let generation = self.last_attempt.reserve_next().map_err(|error| error.to_string())?;
-        let loader = Loader::new_with_custom(self.ui.clone(), Some(self.parent.clone()), resources, self.custom.clone(), self.grid_limits).map_err(|error| error.to_string())?;
+        let loader = Loader::new_with_custom(self.ui.clone(), Some(self.parent.clone()), resources, self.custom.clone(), self.grid_limits)
+            .map_err(|error| error.to_string())?;
         let receivers = events(generation).map_err(|error| error.to_string())?;
         let mut candidate = loader.compile_with_events(document, receivers)?;
         bind(&candidate, generation).map_err(|error| error.to_string())?;
@@ -151,7 +158,8 @@ impl ReloadSlot {
         match self.active {
             None => self.slot.insert(0, &mut candidate, edge),
             Some(_) => self.slot.replace(0, &mut candidate, edge),
-        }.map_err(|(status, _candidate)| status.to_string())?;
+        }
+        .map_err(|(status, _candidate)| status.to_string())?;
         self.active = Some((generation, candidate));
         Ok(Reloaded { generation })
     }

@@ -112,7 +112,10 @@ struct CounterObject {
 }
 impl CounterObject {
     /// Validates runtime authority and publishes one fully initialized counter identity.
-    fn create(host: ComRef<'_, IWidgetHostAbi>, queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>, settings: settings::Settings,
+    fn create(
+        host: ComRef<'_, IWidgetHostAbi>,
+        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+        settings: settings::Settings,
     ) -> Result<ComBox<CounterAbi>, NcStatus> {
         host.check_mutation()?;
         let mut common = Common::new(host, WidgetOptions::FRAME)?;
@@ -122,7 +125,8 @@ impl CounterObject {
             count: settings.initial(),
             settings,
         })
-        .query().map_err(|(status, _unpublished)| status)
+        .query()
+        .map_err(|(status, _unpublished)| status)
     }
 
     /// User activation commits before posting its marker and captured counter value.
@@ -154,7 +158,9 @@ impl Counter for CounterObject {
     /// Silent programmatic edits invalidate only when the scalar actually changes.
     fn set_count(&mut self, value: u32) -> Result<(), NcStatus> {
         self.common.state.writable()?;
-        if !self.settings.accepts(value) { return Err(neocogi_com::NC_E_OUT_OF_RANGE); }
+        if !self.settings.accepts(value) {
+            return Err(neocogi_com::NC_E_OUT_OF_RANGE);
+        }
         if self.count != value {
             self.count = value;
             self.common.state.record_change(GeometryChange::Changed);
@@ -192,7 +198,6 @@ impl Inset {
     fn paint_content(&self, _state: WidgetPaint, _painter: &mut Painter<'_>) -> Result<(), NcStatus> {
         Ok(())
     }
-
 }
 widget!(Inset, 0, WidgetFrame::Panel);
 impl IContainer for Inset {
@@ -323,7 +328,8 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
         if index != 0 || output.offset() != 0 {
             return Err(NC_E_INVALID_ARG);
         }
-        let manifest = DesignWidgetManifest::from_idl("example.counter", settings::Settings::default().encode()?, &CounterAbi::IDL_INTERFACE).map_err(|_| NC_E_INVALID_ARG)?;
+        let manifest = DesignWidgetManifest::from_idl("example.counter", settings::Settings::default().encode()?, &CounterAbi::IDL_INTERFACE)
+            .map_err(|_| NC_E_INVALID_ARG)?;
         let bytes = manifest.encode().map_err(|_| NC_E_INVALID_ARG)?;
         let required = u32::try_from(bytes.len()).map_err(|_| NC_E_INVALID_ARG)?;
         if output.capacity() >= bytes.len() {
@@ -354,15 +360,21 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
             },
             settings,
         )?
-        .query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)
+        .query::<IWidgetAbi>()
+        .map_err(|(status, _unpublished)| status)
     }
     /// The draft uses the designer's control factory while configuration stays inside this plugin.
-    fn create_editor(&self, index: u32, widgets: ComRef<'_, neocogi_ui::UiFactoryAbi>, settings: NcCopyFromBufferOffset<'_, u8>,
+    fn create_editor(
+        &self,
+        index: u32,
+        widgets: ComRef<'_, neocogi_ui::UiFactoryAbi>,
+        settings: NcCopyFromBufferOffset<'_, u8>,
     ) -> Result<ComBox<neocogi_ui_document_contracts::IDesignSettingsEditorAbi>, NcStatus> {
-        if index != 0 || settings.offset() != 0 { return Err(NC_E_INVALID_ARG); }
+        if index != 0 || settings.offset() != 0 {
+            return Err(NC_E_INVALID_ARG);
+        }
         settings::create(widgets, settings.as_slice())
     }
-
 }
 
 impl ExtensionProvider for ExtensionProviderObject {
@@ -384,10 +396,12 @@ impl ExtensionProvider for ExtensionProviderObject {
             padding: 4,
             editor,
         })
-        .query().map_err(|(status, _unpublished)| status)
+        .query()
+        .map_err(|(status, _unpublished)| status)
     }
 }
 /// Acquires one owned root; object construction remains on its typed methods.
 #[neocogi_com::plugin(name = "neocogi.example.ui-extension")]
 fn acquire_root() -> Result<neocogi_com::ComPtr<neocogi_demo_contracts::ExtensionProviderAbi>, neocogi_com::NcStatus> {
-    ExtensionProviderObject::from_value(ExtensionProviderObject).query()}
+    ExtensionProviderObject::from_value(ExtensionProviderObject).query()
+}

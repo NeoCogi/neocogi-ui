@@ -109,7 +109,12 @@ impl<'a> Painter<'a> {
     }
 
     /// Records an owned texture without calling foreign code while the display list is borrowed.
-    pub fn com_texture(&mut self, rect: Recti, color: Color, texture: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextureAbi>) -> Result<(), neocogi_com::NcStatus> {
+    pub fn com_texture(
+        &mut self,
+        rect: Recti,
+        color: Color,
+        texture: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextureAbi>,
+    ) -> Result<(), neocogi_com::NcStatus> {
         self.com_texture_region(rect, neocogi_ui_core_contracts::TextureRegion::FULL, color, texture)?;
         Ok(())
     }
@@ -283,7 +288,12 @@ impl<'a> Painter<'a> {
     }
 
     /// Applies the common rectangle visibility policy and records one semantic rectangle operation.
-    fn record_rect(&mut self, rect: Recti, color: Color, record: impl FnOnce(&mut DisplayList, Recti, Recti) -> Result<(), neocogi_com::NcStatus>) -> Result<(), neocogi_com::NcStatus> {
+    fn record_rect(
+        &mut self,
+        rect: Recti,
+        color: Color,
+        record: impl FnOnce(&mut DisplayList, Recti, Recti) -> Result<(), neocogi_com::NcStatus>,
+    ) -> Result<(), neocogi_com::NcStatus> {
         if !rect.has_positive_area() || color.a == 0 {
             return Ok(());
         }
@@ -373,7 +383,9 @@ mod tests {
         let mut list = DisplayList::new();
         {
             let mut painter = Painter::for_widget(&mut list, Recti::new(0, 0, 20, 20), Recti::new(0, 0, 5, 5));
-            painter.stroke_line(Vec2f::new(-10.0, 2.0), Vec2f::new(20.0, 2.0), 2.0, color(255, 0, 0, 255)).unwrap();
+            painter
+                .stroke_line(Vec2f::new(-10.0, 2.0), Vec2f::new(20.0, 2.0), 2.0, color(255, 0, 0, 255))
+                .unwrap();
         }
 
         assert_eq!(list.ops.len(), 1);
@@ -395,11 +407,15 @@ mod tests {
         let mut list = DisplayList::new();
         {
             let mut painter = Painter::for_widget(&mut list, Recti::new(5, 7, 100, 100), Recti::new(0, 0, 200, 200));
-            painter.fill_polygon(
-                &[Vec2f::new(0.0, 0.0), Vec2f::new(10.0, 0.0), Vec2f::new(10.0, 10.0), Vec2f::new(0.0, 10.0)],
-                color(255, 255, 255, 255),
-            ).unwrap();
-            painter.stroke_line(Vec2f::new(0.0, 20.0), Vec2f::new(10.0, 20.0), 2.0, color(255, 255, 255, 255)).unwrap();
+            painter
+                .fill_polygon(
+                    &[Vec2f::new(0.0, 0.0), Vec2f::new(10.0, 0.0), Vec2f::new(10.0, 10.0), Vec2f::new(0.0, 10.0)],
+                    color(255, 255, 255, 255),
+                )
+                .unwrap();
+            painter
+                .stroke_line(Vec2f::new(0.0, 20.0), Vec2f::new(10.0, 20.0), 2.0, color(255, 255, 255, 255))
+                .unwrap();
         }
 
         assert_eq!(list.ops.len(), 1, "adjacent compatible geometry should merge");
@@ -454,11 +470,13 @@ mod tests {
             let mut painter = Painter::for_widget(&mut list, Recti::new(10, 20, 100, 100), Recti::new(10, 20, 20, 20));
             painter.text(font, "label", Vec2i::new(1, 2), color(255, 255, 255, 255)).unwrap();
             painter.icon(icon, Recti::new(2, 3, 4, 5), color(255, 255, 255, 255)).unwrap();
-            painter.com_texture(
-                Recti::new(100, 100, 10, 10),
-                color(255, 255, 255, 255),
-                crate::test_support::test_image(10, 10).into_interface(),
-            ).unwrap();
+            painter
+                .com_texture(
+                    Recti::new(100, 100, 10, 10),
+                    color(255, 255, 255, 255),
+                    crate::test_support::test_image(10, 10).into_interface(),
+                )
+                .unwrap();
         }
 
         // COM textures retain their authoritative clip; GFX decides whether they contribute.
@@ -480,12 +498,18 @@ mod tests {
         {
             let mut painter = Painter::screen_space(&mut list, Recti::new(0, 0, 20, 20));
             assert_eq!(rect_tuple(painter.local_rect()), (0, 0, 20, 20));
-            painter.stroke_line(Vec2f::new(100.0, 100.0), Vec2f::new(120.0, 100.0), 2.0, color(255, 255, 255, 255)).unwrap();
-            painter.fill_polygon(
-                &[Vec2f::new(100.0, 100.0), Vec2f::new(120.0, 100.0), Vec2f::new(110.0, 120.0)],
-                color(255, 255, 255, 255),
-            ).unwrap();
-            painter.fill_polygon(&[Vec2f::new(0.0, 0.0), Vec2f::new(1.0, 1.0), Vec2f::new(2.0, 2.0)], color(255, 255, 255, 255)).unwrap();
+            painter
+                .stroke_line(Vec2f::new(100.0, 100.0), Vec2f::new(120.0, 100.0), 2.0, color(255, 255, 255, 255))
+                .unwrap();
+            painter
+                .fill_polygon(
+                    &[Vec2f::new(100.0, 100.0), Vec2f::new(120.0, 100.0), Vec2f::new(110.0, 120.0)],
+                    color(255, 255, 255, 255),
+                )
+                .unwrap();
+            painter
+                .fill_polygon(&[Vec2f::new(0.0, 0.0), Vec2f::new(1.0, 1.0), Vec2f::new(2.0, 2.0)], color(255, 255, 255, 255))
+                .unwrap();
         }
         assert!(list.is_empty());
     }

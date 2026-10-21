@@ -386,12 +386,9 @@ impl From<TextboxParameters> for crate::test_support::algorithm::Algorithm<Textb
     }
 }
 
-impl crate::widget_object::WidgetAlgorithm for Textbox {
-
-}
+impl crate::widget_object::WidgetAlgorithm for Textbox {}
 
 impl crate::widget_object::HostedWidget for Textbox {
-
     /// Borrows common lifecycle and resource state without a second textbox representation.
     fn runtime(&self) -> &crate::widget_object::WidgetRuntime {
         &self.runtime
@@ -544,7 +541,6 @@ mod tests {
         let textbox = crate::test_support::algorithm::Algorithm::<Textbox>::from(TextboxParameters::new(""));
         let (mut textbox, mut dispatcher) = text_dispatcher(textbox);
         textbox.dispatch(|mut textbox| {
-
             update_textbox(
                 &mut textbox,
                 true,
@@ -714,5 +710,8 @@ fn com_object_control_is_independent_of_interface_count() {
         core::mem::size_of::<Textbox>(),
         core::mem::size_of::<neocogi_com::__ComBoxStorage<Textbox>>()
     );
-    assert_eq!(core::mem::size_of::<neocogi_com::__ComBoxStorage<Textbox>>(), core::mem::size_of::<Textbox>() + 24);
+    assert_eq!(
+        core::mem::size_of::<neocogi_com::__ComBoxStorage<Textbox>>(),
+        core::mem::size_of::<Textbox>() + 24
+    );
 }

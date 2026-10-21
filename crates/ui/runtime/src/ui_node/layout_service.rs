@@ -7,10 +7,7 @@ use std::{
     cell::{Cell, RefCell},
     rc::Rc,
 };
-use super::{
-    child_store::ChildStore,
-    SharedAssets,
-};
+use super::{child_store::ChildStore, SharedAssets};
 use crate::Dimensioni;
 use crate::ui_node::LayoutTraversal;
 
@@ -196,7 +193,12 @@ impl LayoutService {
     }
 
     /// Measures the external policy with an owned frame, expiring its scope before returning.
-    pub(super) fn measure(&self, children: &Rc<ChildStore>, policy: &neocogi_com::WeakComBox<IContainerLayoutAbi>, bounds: LayoutLimits) -> Result<Size, NcStatus> {
+    pub(super) fn measure(
+        &self,
+        children: &Rc<ChildStore>,
+        policy: &neocogi_com::WeakComBox<IContainerLayoutAbi>,
+        bounds: LayoutLimits,
+    ) -> Result<Size, NcStatus> {
         let guard = self.begin(children, None)?;
         let mut policy = policy.clone();
         let result = policy.measure(guard.scope, bounds, self.service.as_com_ref());

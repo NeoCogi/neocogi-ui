@@ -16,15 +16,26 @@ struct WindowQueue {
 }
 impl neocogi_com::events::IEventReceiver for WindowQueue {
     /// Accepts ordinary lifecycle facts and optionally rejects terminal delivery.
-    fn post(&mut self, _: neocogi_com::NcValueRef<'_, neocogi_com::events::EventOrigin>, event_owner: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
+    fn post(
+        &mut self,
+        _: neocogi_com::NcValueRef<'_, neocogi_com::events::EventOrigin>,
+        event_owner: neocogi_com::ComBox<neocogi_com::events::IEventAbi>,
+    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
         let result = (|| -> Result<(), NcStatus> {
-        let event = if event_owner.query_weak::<neocogi_ui::IWindowDestroyedEventAbi>().is_ok() { "destroyed" }
-            else if event_owner.query_weak::<neocogi_ui::IWindowHiddenEventAbi>().is_ok() { "hidden" }
-            else { "other" };
-        let result = if event == "destroyed" && self.reject_destroyed { Err(NC_E_INVALID_ARG) } else { Ok(()) };
-        self.events.send(event).unwrap();
-        result
-
+            let event = if event_owner.query_weak::<neocogi_ui::IWindowDestroyedEventAbi>().is_ok() {
+                "destroyed"
+            } else if event_owner.query_weak::<neocogi_ui::IWindowHiddenEventAbi>().is_ok() {
+                "hidden"
+            } else {
+                "other"
+            };
+            let result = if event == "destroyed" && self.reject_destroyed {
+                Err(NC_E_INVALID_ARG)
+            } else {
+                Ok(())
+            };
+            self.events.send(event).unwrap();
+            result
         })();
         result.map_err(|status| (status, event_owner))
     }
@@ -97,7 +108,11 @@ fn runtime_shutdown_is_silent_and_preserves_already_queued_facts() {
             windows.push(window);
         }
         let (popup_send, popup_events) = mpsc::channel();
-        let popup_queue = neocogi_ui::test_event_queue!(neocogi_ui::IPopupAbi, (), popup_send, |_queue, _origin, event| { event.query_weak::<neocogi_ui::IPopupDismissedEventAbi>()?; () }).unwrap();
+        let popup_queue = neocogi_ui::test_event_queue!(neocogi_ui::IPopupAbi, (), popup_send, |_queue, _origin, event| {
+            event.query_weak::<neocogi_ui::IPopupDismissedEventAbi>()?;
+            ()
+        })
+        .unwrap();
         let owner = ui.widgets().button_unobserved("popup").unwrap();
         views.push(owner.node_interface().unwrap());
         let mut popup = ui.popup_with_queue(root.as_com_ref(), "popup", owner, Some(popup_queue.as_com_ref())).unwrap();

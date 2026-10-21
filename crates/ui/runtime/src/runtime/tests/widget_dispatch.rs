@@ -46,14 +46,21 @@ fn parent_decides_removal_after_child_returns_even_when_the_child_fails() {
         let trace = Rc::new(RefCell::new(Vec::new()));
         let (requests, decisions) = std::sync::mpsc::channel();
         let (send, messages) = std::sync::mpsc::channel();
-        let (local, _) = Composite::build(&ui, Removal { requests: Some(requests.clone()), trace: trace.clone(), fail }, messages);
+        let (local, _) = Composite::build(
+            &ui,
+            Removal {
+                requests: Some(requests.clone()),
+                trace: trace.clone(),
+                fail,
+            },
+            messages,
+        );
         let mut events = local.query::<IWidgetDispatcherAbi>().unwrap();
         let window = ui.window("owned behavior", RECT, local.into_interface::<IWidgetAbi>().unwrap()).unwrap();
-        let app = neocogi_ui_support::test_support::events::TestApp::new(
-            (window.clone(), false), decisions, |(window, approve), ()| {
-                match *approve { true => window.close(), false => Ok(()) }
-            },
-        );
+        let app = neocogi_ui_support::test_support::events::TestApp::new((window.clone(), false), decisions, |(window, approve), ()| match *approve {
+            true => window.close(),
+            false => Ok(()),
+        });
         send.send(()).unwrap();
         assert_eq!(ui.update(SIZE), if fail { Err(NC_E_INVALID_ARG) } else { Ok(()) });
         assert_eq!(&*trace.borrow(), &["handler entered", "handler returned"]);
@@ -79,7 +86,15 @@ fn parent_decides_removal_after_child_returns_even_when_the_child_fails() {
 fn composite_widget_has_one_attachment_and_expired_observers_cannot_mount() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let (_send, messages) = std::sync::mpsc::channel();
-    let (local, _) = Composite::build(&ui, Removal { requests: None, trace: Rc::default(), fail: false }, messages);
+    let (local, _) = Composite::build(
+        &ui,
+        Removal {
+            requests: None,
+            trace: Rc::default(),
+            fail: false,
+        },
+        messages,
+    );
     let mut observed = local.query::<IWidgetAbi>().unwrap();
     let first = ui.window("first", RECT, local.into_interface::<IWidgetAbi>().unwrap()).unwrap();
     assert_eq!(observed.mount(), Err(UI_E_OWNER));
@@ -119,15 +134,31 @@ fn owner_removal_rejects_active_borrows_then_destroys_before_returning() {
         let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
         let trace = Rc::new(RefCell::new(Vec::new()));
         let (send, messages) = std::sync::mpsc::channel();
-        let (local, _) = Composite::build(&ui, Removal { requests: None, trace: trace.clone(), fail: false }, messages);
+        let (local, _) = Composite::build(
+            &ui,
+            Removal {
+                requests: None,
+                trace: trace.clone(),
+                fail: false,
+            },
+            messages,
+        );
         let mut observed = local.downgrade();
         let window = ui.window("scoped local", RECT, local.into_interface::<IWidgetAbi>().unwrap()).unwrap();
-        observed.with_mut(|_| {
-            let result = match close_runtime { true => ui.close(), false => window.close() };
-            assert_eq!(result, Err(UI_E_BUSY));
-            assert!(trace.borrow().is_empty());
-        }).unwrap();
-        match close_runtime { true => ui.close().unwrap(), false => window.close().unwrap() }
+        observed
+            .with_mut(|_| {
+                let result = match close_runtime {
+                    true => ui.close(),
+                    false => window.close(),
+                };
+                assert_eq!(result, Err(UI_E_BUSY));
+                assert!(trace.borrow().is_empty());
+            })
+            .unwrap();
+        match close_runtime {
+            true => ui.close().unwrap(),
+            false => window.close().unwrap(),
+        }
         assert_eq!(&*trace.borrow(), &["closed"]);
         assert!(send.send(()).is_err());
         assert_eq!(observed.with(|_| ()), Err(neocogi_com::NC_E_DROPPED));
@@ -171,8 +202,12 @@ impl MessageProcessor for OrderedModel {
     fn handle(&mut self, message: OrderedMessage) -> Result<(), NcStatus> {
         self.trace.borrow_mut().push("handled");
         match message {
-            OrderedMessage::Remove(window) => self.requests.as_ref().expect("fixture has parent queue")
-                .send(window).map_err(|_| UI_E_CLOSED)?,
+            OrderedMessage::Remove(window) => self
+                .requests
+                .as_ref()
+                .expect("fixture has parent queue")
+                .send(window)
+                .map_err(|_| UI_E_CLOSED)?,
             OrderedMessage::Record => {}
         }
         match self.fail {
@@ -229,7 +264,10 @@ fn descendant_removal_request_drops_the_complete_tree_after_handler_return() {
         child_send.send(OrderedMessage::Remove(window)).unwrap();
         child_send.send(OrderedMessage::Record).unwrap();
         parent_send.send(OrderedMessage::Record).unwrap();
-        assert_eq!(child.query::<IWidgetDispatcherAbi>().unwrap().dispatch_next(), if fail { Err(NC_E_INVALID_ARG) } else { Ok(true) });
+        assert_eq!(
+            child.query::<IWidgetDispatcherAbi>().unwrap().dispatch_next(),
+            if fail { Err(NC_E_INVALID_ARG) } else { Ok(true) }
+        );
         assert_eq!(&*trace.borrow(), &["handled"], "requesting child has returned without destruction");
         assert_eq!(app.as_interface().dispatch_next(), Ok(ApplicationDispatch::MessageHandled));
         assert_eq!(&*trace.borrow(), &["handled", "child", "parent"]);
@@ -276,10 +314,12 @@ fn active_descendant_rejects_partial_removal_then_the_whole_tree_drops() {
     let parent_owner = parent;
     let parent_view = neocogi_ui::OwnedWidget::from_interface(parent_owner.into_interface::<IWidgetAbi>().unwrap());
     let _window = ui.window("blocked descendant", RECT, parent_view).unwrap();
-    child.with_mut(|_| {
-        assert_eq!(ui.close(), Err(UI_E_BUSY));
-        assert!(trace.borrow().is_empty(), "a refusal must preserve the parent too");
-    }).unwrap();
+    child
+        .with_mut(|_| {
+            assert_eq!(ui.close(), Err(UI_E_BUSY));
+            assert!(trace.borrow().is_empty(), "a refusal must preserve the parent too");
+        })
+        .unwrap();
     ui.close().unwrap();
     assert_eq!(&*trace.borrow(), &["child", "parent"]);
 }
@@ -300,7 +340,6 @@ impl neocogi_ui::LeafContent for TopologyEdit {
     fn paint(&mut self, _: WidgetPaint, _: &mut neocogi_ui::Painter<'_>) -> Result<(), NcStatus> {
         Ok(())
     }
-
 }
 
 /// A removed later entry must never be called from the pre-removal snapshot.

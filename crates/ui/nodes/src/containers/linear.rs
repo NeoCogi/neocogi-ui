@@ -251,7 +251,6 @@ impl crate::widget_object::HostedWidget for Linear {
     fn runtime_mut(&mut self) -> &mut crate::widget_object::WidgetRuntime {
         &mut self.runtime
     }
-
 }
 
 impl super::ContainerAlgorithm for Linear {
@@ -265,7 +264,9 @@ impl super::ContainerAlgorithm for Linear {
     /// Linear needs no placement plan; validate indices and reserve its one metadata vector.
     fn prepare_edges(&mut self, edit: Self::Prepared) -> Result<Self::Prepared, NcStatus> {
         let len = edit.resulting_len(self.specs.len())?;
-        self.specs.try_reserve(len.saturating_sub(self.specs.len())).map_err(|_| neocogi_com::NC_E_OUT_OF_MEMORY)?;
+        self.specs
+            .try_reserve(len.saturating_sub(self.specs.len()))
+            .map_err(|_| neocogi_com::NC_E_OUT_OF_MEMORY)?;
         Ok(edit)
     }
 

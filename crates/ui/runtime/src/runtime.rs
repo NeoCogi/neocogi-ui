@@ -32,10 +32,7 @@ pub fn create_runtime_from_assets(
 }
 
 /// Prepares the actual runtime value before publishing any COM projection.
-fn create_runtime_value(
-    source: ComRef<'_, IAssetBundleAbi>,
-    gfx: ComRef<'_, neocogi_gfx_contracts::GfxPluginFactoryAbi>,
-) -> Result<Runtime, NcStatus> {
+fn create_runtime_value(source: ComRef<'_, IAssetBundleAbi>, gfx: ComRef<'_, neocogi_gfx_contracts::GfxPluginFactoryAbi>) -> Result<Runtime, NcStatus> {
     // Reject invalid UI metadata before asking GFX to allocate any mutable frame state.
     let assets = crate::assets::ImportedAssets::read(source, None)?;
     // GFX imports the same immutable source during construction. Do not reinstall it into
@@ -146,7 +143,9 @@ impl RuntimeStorage {
     /// Rebuilds this update's delivery order after topology changes, reusing scratch capacity.
     fn refresh_dispatch_widgets(&self, widgets: &mut DispatchWidgets) -> Result<(), NcStatus> {
         let mut context = self.context()?;
-        if context.window_manager.take_dispatch_order_changed() { self.factory.state.dispatch_order_changed.set(true); }
+        if context.window_manager.take_dispatch_order_changed() {
+            self.factory.state.dispatch_order_changed.set(true);
+        }
         if self.factory.state.dispatcher_count.get() == 0 {
             widgets.clear();
             self.factory.state.dispatch_order_changed.set(false);
@@ -176,7 +175,9 @@ impl RuntimeStorage {
 
     /// Drains setter changes throughout the forest, including hidden subtrees.
     fn collect_changes(&self, context: &mut RuntimeContext) -> Result<(), NcStatus> {
-        if !self.factory.state.changes_pending.replace(false) { return Ok(()); }
+        if !self.factory.state.changes_pending.replace(false) {
+            return Ok(());
+        }
         self.prune_mounts(&context.window_manager);
         let _phase = Observation::begin(&self.factory.state);
         self.factory.state.error.set(None);
@@ -577,7 +578,9 @@ impl Runtime {
                     // An empty-inbox callback may publish deferred geometry. Reconcile it
                     // before routing later input, even when no message was consumed.
                     let surface_changed = self.storage.context()?.window_manager.take_dispatch_order_changed();
-                    if surface_changed { self.storage.factory.state.dispatch_order_changed.set(true); }
+                    if surface_changed {
+                        self.storage.factory.state.dispatch_order_changed.set(true);
+                    }
                     if surface_changed || self.storage.factory.state.changes_pending.get() || self.storage.factory.state.dispatch_order_changed.get() {
                         spend_dispatch_budget(remaining)?;
                     } else {
@@ -643,7 +646,9 @@ pub mod testing {
         gfx: ComRef<'_, neocogi_gfx_contracts::GfxPluginFactoryAbi>,
     ) -> Result<(ComPtr<UiRuntimeAbi>, OriginDriver), NcStatus> {
         let runtime = create_runtime_value(source, gfx)?;
-        let driver = OriginDriver { state: runtime.storage.factory.state.clone() };
+        let driver = OriginDriver {
+            state: runtime.storage.factory.state.clone(),
+        };
         Ok((Runtime::from_value(runtime).query()?, driver))
     }
 }

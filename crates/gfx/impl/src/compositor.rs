@@ -12,8 +12,8 @@ use neocogi_com::{
 use neocogi_gfx_contracts::*;
 use neocogi_gfx_support::{AssetTables, AsciiGlyphIndex};
 use neocogi_renderer_contracts::{
-    IRenderItemAbi, IRenderStream, IRenderStreamAbi, IRenderStreamVtblFor, IRgbaImageAbi, IRendererAbi, ITextureAbi, MAX_RENDER_BATCHES,
-    MAX_RENDER_VERTICES, RenderBatch, RenderInfo, RenderVertex,
+    IRenderItemAbi, IRenderStream, IRenderStreamAbi, IRenderStreamVtblFor, IRgbaImageAbi, IRendererAbi, ITextureAbi, MAX_RENDER_BATCHES, MAX_RENDER_VERTICES,
+    RenderBatch, RenderInfo, RenderVertex,
 };
 use std::{
     cell::{Cell, RefCell},
@@ -176,7 +176,9 @@ impl IRenderStream for Stream {
         let batches = self.storage.batches.try_borrow().map_err(|_| NC_E_BUSY)?;
         let source = batches.get(first..).ok_or(NC_E_INVALID_ARG)?;
         let count = source.len().min(output.capacity());
-        for batch in &source[..count] { output.push(batch.record())?; }
+        for batch in &source[..count] {
+            output.push(batch.record())?;
+        }
         u32::try_from(count).map_err(|_| NC_E_OUT_OF_RANGE)
     }
 

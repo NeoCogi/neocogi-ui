@@ -613,7 +613,6 @@ impl crate::widget_object::HostedWidget for ScrollArea {
     fn runtime_mut(&mut self) -> &mut crate::widget_object::WidgetRuntime {
         &mut self.runtime
     }
-
 }
 impl crate::widget_object::WidgetAlgorithm for ScrollSurface {}
 
@@ -627,11 +626,10 @@ impl crate::widget_object::HostedWidget for ScrollSurface {
     fn runtime_mut(&mut self) -> &mut crate::widget_object::WidgetRuntime {
         &mut self.runtime
     }
-
 }
 
 use crate::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_scrolling_impl, direct_widget_phase_impl};
-use neocogi_ui_core_contracts::{ IChildrenEditorAbi, IWidgetAbi, IWidgetHostAbi};
+use neocogi_ui_core_contracts::{IChildrenEditorAbi, IWidgetAbi, IWidgetHostAbi};
 use neocogi_ui_nodes_contracts::{ScrollAreaAbi};
 use neocogi_com::{ComPtr, NcStatus};
 
@@ -676,18 +674,13 @@ impl ScrollParts {
             .query()
             .expect("ScrollSurface declares its widget and container-layout capabilities");
         let editor = host.create_children()?;
+        editor.insert(0, surface).map_err(|(status, _unpublished)| status)?;
         editor
-            .insert(0, surface).map_err(|(status, _unpublished)| status)?;
+            .insert(1, horizontal.query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?)
+            .map_err(|(status, _unpublished)| status)?;
         editor
-            .insert(
-                1,
-                horizontal.query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?,
-            ).map_err(|(status, _unpublished)| status)?;
-        editor
-            .insert(
-                2,
-                vertical.query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?,
-            ).map_err(|(status, _unpublished)| status)?;
+            .insert(2, vertical.query::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?)
+            .map_err(|(status, _unpublished)| status)?;
         Ok(Self { editor, content: content_view, model })
     }
 }
@@ -735,7 +728,9 @@ impl neocogi_ui_nodes_contracts::ScrollArea for ScrollArea {
 
     /// Replaces only application content while preserving every fixed structural role.
     fn replace_content(&mut self, content: neocogi_com::ComBox<IWidgetAbi>) -> Result<(), (NcStatus, neocogi_com::ComBox<IWidgetAbi>)> {
-        if let Err(status) = self.runtime().state.writable() { return Err((status, content)); }
+        if let Err(status) = self.runtime().state.writable() {
+            return Err((status, content));
+        }
         self.content.replace(0, content)
     }
 }

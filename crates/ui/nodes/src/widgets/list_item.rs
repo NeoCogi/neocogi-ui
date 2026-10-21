@@ -193,9 +193,7 @@ impl From<ListItemParameters> for crate::test_support::algorithm::Algorithm<List
     }
 }
 
-impl crate::widget_object::WidgetAlgorithm for ListItem {
-
-}
+impl crate::widget_object::WidgetAlgorithm for ListItem {}
 
 impl crate::widget_object::HostedWidget for ListItem {
     /// Borrows common lifecycle and resource state without a second list-item representation.

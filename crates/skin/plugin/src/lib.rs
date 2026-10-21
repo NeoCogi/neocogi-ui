@@ -48,6 +48,7 @@ impl SkinPluginFactory for SkinPluginFactoryObject {
     dependencies = [GFX_PLUGIN_ID],
     )]
 fn acquire_root() -> Result<neocogi_com::ComPtr<neocogi_skin_contracts::SkinPluginFactoryAbi>, neocogi_com::NcStatus> {
-    SkinPluginFactoryObject::from_value(SkinPluginFactoryObject).query()}
+    SkinPluginFactoryObject::from_value(SkinPluginFactoryObject).query()
+}
 
 // Exports the dynamic entrypoint only from an assembly-generated native library.

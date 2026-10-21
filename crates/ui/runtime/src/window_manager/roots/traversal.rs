@@ -140,7 +140,12 @@ impl WindowManager {
     }
 
     /// Routes and applies one normalized event across every eligible surface.
-    pub(super) fn update_for_event(&mut self, atlas: &crate::AtlasHandle, event: &UiInputEvent, input: crate::input::InputSnapshot) -> Result<(), neocogi_com::NcStatus> {
+    pub(super) fn update_for_event(
+        &mut self,
+        atlas: &crate::AtlasHandle,
+        event: &UiInputEvent,
+        input: crate::input::InputSnapshot,
+    ) -> Result<(), neocogi_com::NcStatus> {
         if matches!(event, UiInputEvent::Cancel) {
             // Cancellation has no recipient and must never become a synthetic mouse release.
             // Editors still receive the ordinary update so they can finish their blur policy.
@@ -467,7 +472,12 @@ impl WindowManager {
     }
 
     /// Records the sole active popup path in parent-to-child order at its inherited transient tier.
-    pub(super) fn paint_active_popup_path(&mut self, style: &Skin, atlas: &crate::AtlasHandle, focus_surface: Option<SurfaceKey>) -> Result<(), neocogi_com::NcStatus> {
+    pub(super) fn paint_active_popup_path(
+        &mut self,
+        style: &Skin,
+        atlas: &crate::AtlasHandle,
+        focus_surface: Option<SurfaceKey>,
+    ) -> Result<(), neocogi_com::NcStatus> {
         // `visible_order` materializes only the active popup ancestry. Filtering it reuses that
         // allocation and preserves the existing parent-first popup paint contract.
         for index in 0..self.surfaces.visible_order.len() {

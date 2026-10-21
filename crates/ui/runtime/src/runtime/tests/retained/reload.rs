@@ -177,7 +177,8 @@ fn all_builtin_document_controls_construct_and_reload() {
         let outputs = root
             .widget
             .event_interfaces()
-            .iter().take(1)
+            .iter()
+            .take(1)
             .map(|_| Output {
                 name: "event".into(),
                 node: "root".into(),
@@ -494,7 +495,13 @@ fn authored_form_rectangles_survive_binary_reload_and_route_real_clicks() {
 fn typed_and_binary_preparation_have_equivalent_authored_state() {
     let fixture = Headless::standard();
     let document = Document::new("preparation paths");
-    let loader = Loader::new(fixture.ui.clone(), None, Resources::new(), neocogi_ui::GridLimits { max_columns: 64, max_rows: 256 }).unwrap();
+    let loader = Loader::new(
+        fixture.ui.clone(),
+        None,
+        Resources::new(),
+        neocogi_ui::GridLimits { max_columns: 64, max_rows: 256 },
+    )
+    .unwrap();
     let typed = loader.compile(&document).unwrap();
     let binary = loader.load(&document.to_binary().unwrap()).unwrap();
     assert_ne!(
@@ -695,7 +702,9 @@ fn application_owns_checkbox_actions_and_complete_event_consumption() {
         |_| {
             receiver(
                 "source",
-                neocogi_ui::test_event_queue!(neocogi_ui::CheckboxAbi, bool, sender, |_queue, _origin, event| event.query_weak::<neocogi_ui::ICheckboxChangedEventAbi>()?.checked()?)
+                neocogi_ui::test_event_queue!(neocogi_ui::CheckboxAbi, bool, sender, |_queue, _origin, event| event
+                    .query_weak::<neocogi_ui::ICheckboxChangedEventAbi>()?
+                    .checked()?)
                 .unwrap(),
             )
         },
@@ -749,13 +758,7 @@ fn textbox_enum_stream_drives_form_action_and_public_sink() {
     }];
     // The application matches the enum and edits its preview field after traversal.
     let (queue, events) = neocogi_com::events::channel();
-    slot.reload(
-        &document,
-        Resources::new(),
-        |_| receiver("name", queue),
-        |_, _| Ok(()),
-    )
-    .unwrap();
+    slot.reload(&document, Resources::new(), |_| receiver("name", queue), |_, _| Ok(())).unwrap();
     fixture.frame(VIEW).unwrap();
     let form = slot.component().unwrap().root().unwrap().as_interface().clone().query::<FormAbi>().unwrap();
     let children = form.children().unwrap();
@@ -772,14 +775,32 @@ fn textbox_enum_stream_drives_form_action_and_public_sink() {
     assert_eq!(preview.text().unwrap(), "Ada");
     key(&fixture.ui, KeyCode::Enter, 0, 0);
     fixture.frame(VIEW).unwrap();
-    assert_eq!(events.try_recv().unwrap().query::<ITextSubmittedEventAbi>().unwrap().unwrap().text().unwrap().to_string().unwrap(), "Ada");
+    assert_eq!(
+        events
+            .try_recv()
+            .unwrap()
+            .query::<ITextSubmittedEventAbi>()
+            .unwrap()
+            .unwrap()
+            .text()
+            .unwrap()
+            .to_string()
+            .unwrap(),
+        "Ada"
+    );
 }
 
 /// Constructor tables reject ambiguous ownership and nonobservable keys before publication.
 #[test]
 fn construction_bindings_reject_duplicate_unknown_and_nonemitting_sources() {
     let fixture = Headless::standard();
-    let loader = Loader::new(fixture.ui.clone(), None, Resources::new(), neocogi_ui::GridLimits { max_columns: 64, max_rows: 256 }).unwrap();
+    let loader = Loader::new(
+        fixture.ui.clone(),
+        None,
+        Resources::new(),
+        neocogi_ui::GridLimits { max_columns: 64, max_rows: 256 },
+    )
+    .unwrap();
     let document = Document::new("constructor bindings");
     for key in ["missing", "title"] {
         let (queue, messages) = neocogi_com::events::channel();
@@ -802,7 +823,9 @@ fn construction_bindings_reject_duplicate_unknown_and_nonemitting_sources() {
     events
         .insert_queue(
             "save",
-            neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, (), sender, |_queue, _origin, _| ()).unwrap().as_com_ref(),
+            neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, (), sender, |_queue, _origin, _| ())
+                .unwrap()
+                .as_com_ref(),
         )
         .unwrap();
     let (replacement, rejected) = std::sync::mpsc::channel::<()>();
@@ -830,10 +853,20 @@ fn typed_and_binary_candidates_own_constructor_mappings_and_preserve_recipe_byte
     let fixture = Headless::standard();
     let document = Document::new("observed recipe");
     let bytes = document.to_binary().unwrap();
-    let loader = Loader::new(fixture.ui.clone(), None, Resources::new(), neocogi_ui::GridLimits { max_columns: 64, max_rows: 256 }).unwrap();
+    let loader = Loader::new(
+        fixture.ui.clone(),
+        None,
+        Resources::new(),
+        neocogi_ui::GridLimits { max_columns: 64, max_rows: 256 },
+    )
+    .unwrap();
     for binary in [false, true] {
         let (sender, messages) = std::sync::mpsc::channel::<()>();
-        let events = receiver("save", neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, (), sender, |_queue, _origin, _| ()).unwrap()).unwrap();
+        let events = receiver(
+            "save",
+            neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, (), sender, |_queue, _origin, _| ()).unwrap(),
+        )
+        .unwrap();
         let candidate = match binary {
             true => loader.load_with_events(&bytes, events).unwrap(),
             false => loader.compile_with_events(&document, events).unwrap(),
@@ -861,7 +894,10 @@ fn rejected_form_field_validation_releases_new_receivers_and_keeps_previous_gene
         slot.reload(
             &document,
             Resources::new(),
-            |_| receiver("save", neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, (), sender, |_queue, _origin, _| ()).unwrap()),
+            |_| receiver(
+                "save",
+                neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, (), sender, |_queue, _origin, _| ()).unwrap()
+            ),
             |candidate, _| {
                 // Construction succeeded and owns the mapping, but the application's concrete field is wrong.
                 candidate.widget::<TextboxAbi>("save").map(drop)
@@ -880,9 +916,19 @@ fn compiled_metadata_can_drop_before_the_actual_root_is_mounted() {
     for binary in [false, true] {
         let fixture = Headless::standard();
         let document = Document::new("independent recipe lifetime");
-        let loader = Loader::new(fixture.ui.clone(), None, Resources::new(), neocogi_ui::GridLimits { max_columns: 64, max_rows: 256 }).unwrap();
+        let loader = Loader::new(
+            fixture.ui.clone(),
+            None,
+            Resources::new(),
+            neocogi_ui::GridLimits { max_columns: 64, max_rows: 256 },
+        )
+        .unwrap();
         let (sender, messages) = std::sync::mpsc::channel::<()>();
-        let events = receiver("save", neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, (), sender, |_queue, _origin, _| ()).unwrap()).unwrap();
+        let events = receiver(
+            "save",
+            neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, (), sender, |_queue, _origin, _| ()).unwrap(),
+        )
+        .unwrap();
         let mut compiled = match binary {
             true => loader.load_with_events(&document.to_binary().unwrap(), events).unwrap(),
             false => loader.compile_with_events(&document, events).unwrap(),
@@ -917,7 +963,12 @@ fn rejected_reload_closes_retained_candidate_handles_without_touching_the_live_f
     let result = slot.reload(
         &document,
         Resources::new(),
-        |_| receiver("save", neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, (), sender, |_queue, _origin, _| ()).unwrap()),
+        |_| {
+            receiver(
+                "save",
+                neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, (), sender, |_queue, _origin, _| ()).unwrap(),
+            )
+        },
         |candidate, _| {
             retained = Some((candidate.root()?, candidate.widget::<ButtonAbi>("save")?));
             Err(neocogi_com::NC_E_INVALID_ARG)
@@ -940,7 +991,13 @@ mod form_methods;
 #[test]
 fn failed_component_mount_returns_its_unmounted_root_for_retry() {
     let fixture = Headless::standard();
-    let loader = Loader::new(fixture.ui.clone(), None, Resources::new(), neocogi_ui::GridLimits { max_columns: 64, max_rows: 256 }).unwrap();
+    let loader = Loader::new(
+        fixture.ui.clone(),
+        None,
+        Resources::new(),
+        neocogi_ui::GridLimits { max_columns: 64, max_rows: 256 },
+    )
+    .unwrap();
     let mut component = loader.compile(&Document::new("retry")).unwrap();
     let root = component.root().unwrap();
     let invalid = Rect { x: 0, y: 0, width: -1, height: 100 };
@@ -950,7 +1007,9 @@ fn failed_component_mount_returns_its_unmounted_root_for_retry() {
     };
     assert_eq!(status, neocogi_com::NC_E_INVALID_ARG);
     assert!(root.as_interface().is_alive());
-    let window = fixture.ui.window("retry", Rect { x: 0, y: 0, width: 200, height: 100 }, &mut component)
+    let window = fixture
+        .ui
+        .window("retry", Rect { x: 0, y: 0, width: 200, height: 100 }, &mut component)
         .unwrap_or_else(|(status, _)| panic!("valid retry failed: {status:?}"));
     assert!(component.take_root().is_err(), "success transfers exactly once");
     window.close().unwrap();
@@ -961,13 +1020,23 @@ fn failed_component_mount_returns_its_unmounted_root_for_retry() {
 fn grid_document(spans: &[(u32, u32)]) -> Document {
     let mut document = Document::new("bounded grid");
     document.outputs.clear();
-    document.root = Node::new("grid", WidgetSpec::Grid {
-        columns: vec![Track::Content], rows: vec![Track::Content],
-    });
+    document.root = Node::new(
+        "grid",
+        WidgetSpec::Grid {
+            columns: vec![Track::Content],
+            rows: vec![Track::Content],
+        },
+    );
     for (index, &(columns, rows)) in spans.iter().enumerate() {
         document.root.children.push(Child {
             edge: Edge::Grid { columns, rows },
-            node: Node::new(format!("child{index}"), WidgetSpec::TextBlock { text: "cell".into(), wrapping: Wrapping::None }),
+            node: Node::new(
+                format!("child{index}"),
+                WidgetSpec::TextBlock {
+                    text: "cell".into(),
+                    wrapping: Wrapping::None,
+                },
+            ),
         });
     }
     document
@@ -994,7 +1063,12 @@ fn loaded_grid_uses_host_limits_on_both_construction_paths() {
     if let WidgetSpec::Grid { rows, .. } = &mut excessive_rows.root.widget {
         *rows = vec![Track::Content; 3];
     }
-    for document in [grid_document(&[(1, u32::MAX)]), grid_document(&[(1, 2), (1, 1)]), excessive_columns, excessive_rows] {
+    for document in [
+        grid_document(&[(1, u32::MAX)]),
+        grid_document(&[(1, 2), (1, 1)]),
+        excessive_columns,
+        excessive_rows,
+    ] {
         // The portable recipe can be valid for another host. Admission, not
         // serialization, applies this application's specific resource ceilings.
         let bytes = document.to_binary().unwrap();
@@ -1016,7 +1090,10 @@ fn rejected_grid_reload_preserves_published_component() {
     let committed = slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     let mut old = slot.component().unwrap().widget::<TextBlockAbi>("child0").unwrap();
     let saved = slot.component().unwrap().save().unwrap();
-    assert!(slot.reload(&grid_document(&[(1, 2), (1, 1)]), Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).is_err());
+    assert!(
+        slot.reload(&grid_document(&[(1, 2), (1, 1)]), Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(()))
+            .is_err()
+    );
     assert!(slot.accepts(committed.generation));
     assert_eq!(slot.component().unwrap().save().unwrap(), saved);
     old.set_text("Still owned by the committed Grid").unwrap();
@@ -1031,8 +1108,10 @@ fn authored_flag_absence_and_explicit_masks_round_trip_without_live_state() {
     let direct = fixture.ui.widgets().button_unobserved("Save").unwrap();
     for flags in [None, Some(0), Some((WidgetOptions::ALIGN_RIGHT | WidgetOptions::NO_INTERACT).raw())] {
         let mut document = Document {
-            version: VERSION, name: "constructor flags".into(),
-            root: Node::new("save", WidgetSpec::Button { text: "Save".into() }), outputs: vec![],
+            version: VERSION,
+            name: "constructor flags".into(),
+            root: Node::new("save", WidgetSpec::Button { text: "Save".into() }),
+            outputs: vec![],
         };
         document.root.style.options = flags;
         let expected = flags.map(WidgetOptions::from_raw).unwrap_or(direct.requested_flags().unwrap());
@@ -1069,14 +1148,30 @@ fn reload_generations_distinguish_slots_across_runtimes_on_one_channel() {
     let mut second = detached_slot(&mut ids, &second_runtime.ui);
     let document = Document::new("shared inbox");
     let (send, receive) = std::sync::mpsc::channel();
-    let a = first.reload(&document, Resources::new(), |generation| {
-        send.send((generation, "first result")).unwrap();
-        Ok(EventBindings::new())
-    }, |_, _| Ok(())).unwrap().generation;
-    let b = second.reload(&document, Resources::new(), |generation| {
-        send.send((generation, "second result")).unwrap();
-        Ok(EventBindings::new())
-    }, |_, _| Ok(())).unwrap().generation;
+    let a = first
+        .reload(
+            &document,
+            Resources::new(),
+            |generation| {
+                send.send((generation, "first result")).unwrap();
+                Ok(EventBindings::new())
+            },
+            |_, _| Ok(()),
+        )
+        .unwrap()
+        .generation;
+    let b = second
+        .reload(
+            &document,
+            Resources::new(),
+            |generation| {
+                send.send((generation, "second result")).unwrap();
+                Ok(EventBindings::new())
+            },
+            |_, _| Ok(()),
+        )
+        .unwrap()
+        .generation;
     assert_ne!(a, b, "slot-local attempt 1 must not collide across runtimes");
     assert!(first.accepts(a));
     assert!(!second.accepts(a));
@@ -1094,18 +1189,29 @@ fn recreated_reload_slot_rejects_queued_facts_from_destroyed_slot() {
     let document = Document::new("retained inbox");
     let (send, receive) = std::sync::mpsc::channel();
     let mut first = detached_slot(&mut ids, &fixture.ui);
-    let original = first.reload(&document, Resources::new(), |generation| {
-        // Only an owned payload and plain token survive in the application queue.
-        send.send((generation, String::from("old fact"))).unwrap();
-        Ok(EventBindings::new())
-    }, |_, _| Ok(())).unwrap().generation;
+    let original = first
+        .reload(
+            &document,
+            Resources::new(),
+            |generation| {
+                // Only an owned payload and plain token survive in the application queue.
+                send.send((generation, String::from("old fact"))).unwrap();
+                Ok(EventBindings::new())
+            },
+            |_, _| Ok(()),
+        )
+        .unwrap()
+        .generation;
     let old_widget = first.component().unwrap().root().unwrap();
     drop(first);
     assert!(!old_widget.as_interface().is_alive());
 
     let mut replacement = detached_slot(&mut ids, &fixture.ui);
     assert!(!replacement.accepts(original), "an unpublished slot accepts nothing");
-    let current = replacement.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap().generation;
+    let current = replacement
+        .reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(()))
+        .unwrap()
+        .generation;
     let (queued, payload) = receive.recv().unwrap();
     assert_eq!(queued, original);
     assert_eq!(payload, "old fact");
@@ -1122,31 +1228,62 @@ fn rejected_reload_attempts_never_reuse_tokens_or_replace_active_identity() {
     let mut ids = ReloadIds::new();
     let mut slot = detached_slot(&mut ids, &fixture.ui);
     let document = Document::new("attempt failures");
-    let initial = slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap().generation;
+    let initial = slot
+        .reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(()))
+        .unwrap()
+        .generation;
     let original_root = slot.component().unwrap().root().unwrap();
     let (send, receive) = std::sync::mpsc::channel();
 
-    assert!(slot.reload(&document, Resources::new(), |generation| {
-        send.send(generation).unwrap();
-        Err(neocogi_com::NC_E_INVALID_ARG)
-    }, |_, _| panic!("receiver rejection must precede field binding")).is_err());
+    assert!(
+        slot.reload(
+            &document,
+            Resources::new(),
+            |generation| {
+                send.send(generation).unwrap();
+                Err(neocogi_com::NC_E_INVALID_ARG)
+            },
+            |_, _| panic!("receiver rejection must precede field binding")
+        )
+        .is_err()
+    );
     assert!(slot.accepts(initial));
 
     let mut invalid = document.clone();
     invalid.root.children[0].node.style.font = Some("missing-constructor-resource".into());
-    assert!(slot.reload(&invalid, Resources::new(), |generation| {
-        send.send(generation).unwrap();
-        Ok(EventBindings::new())
-    }, |_, _| panic!("construction rejection must precede field binding")).is_err());
+    assert!(
+        slot.reload(
+            &invalid,
+            Resources::new(),
+            |generation| {
+                send.send(generation).unwrap();
+                Ok(EventBindings::new())
+            },
+            |_, _| panic!("construction rejection must precede field binding")
+        )
+        .is_err()
+    );
     assert!(slot.accepts(initial));
 
-    assert!(slot.reload(&document, Resources::new(), |generation| {
-        send.send(generation).unwrap();
-        Ok(EventBindings::new())
-    }, |_, _| Err(neocogi_com::NC_E_INVALID_ARG)).is_err());
+    assert!(
+        slot.reload(
+            &document,
+            Resources::new(),
+            |generation| {
+                send.send(generation).unwrap();
+                Ok(EventBindings::new())
+            },
+            |_, _| Err(neocogi_com::NC_E_INVALID_ARG)
+        )
+        .is_err()
+    );
     assert!(slot.accepts(initial));
     assert!(original_root.as_interface().is_alive());
-    assert!(original_root.as_interface().same_object(slot.component().unwrap().root().unwrap().as_interface()));
+    assert!(
+        original_root
+            .as_interface()
+            .same_object(slot.component().unwrap().root().unwrap().as_interface())
+    );
 
     let rejected = receive.try_iter().collect::<Vec<_>>();
     assert_eq!(rejected.len(), 3);
@@ -1155,7 +1292,10 @@ fn rejected_reload_attempts_never_reuse_tokens_or_replace_active_identity() {
         assert!(!rejected[..index].contains(generation));
         assert!(!slot.accepts(*generation));
     }
-    let current = slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap().generation;
+    let current = slot
+        .reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(()))
+        .unwrap()
+        .generation;
     assert!(!slot.accepts(initial));
     assert!(slot.accepts(current));
     assert!(!original_root.as_interface().is_alive());

@@ -401,11 +401,7 @@ mod browser {
         /// The successful run renders two frames; the failing run rejects its first callback.
         fn frame(&mut self, _: &Host, _: Size, _: f64) -> Result<bool, NcStatus> {
             self.frames += 1;
-            if self.fail {
-                Err(UI_E_RENDER)
-            } else {
-                Ok(self.frames < 3)
-            }
+            if self.fail { Err(UI_E_RENDER) } else { Ok(self.frames < 3) }
         }
     }
     impl Drop for Stop {

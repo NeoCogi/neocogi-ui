@@ -147,9 +147,7 @@ impl Widget for ListBox {
     }
 }
 
-impl crate::widget_object::WidgetAlgorithm for ListBox {
-
-}
+impl crate::widget_object::WidgetAlgorithm for ListBox {}
 
 impl crate::widget_object::HostedWidget for ListBox {
     /// Borrows common lifecycle and resource state without a second list-box representation.

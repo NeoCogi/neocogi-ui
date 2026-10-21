@@ -94,7 +94,10 @@ fn provider_defaults_and_requested_flags_survive_facade_and_effective_policy() {
     // flag simply because an editor reads the current widget configuration.
     let editor = ui.widgets().text_area_unobserved("scroll", TextWrapping::Word, true).unwrap();
     assert_eq!(editor.requested_flags().unwrap(), WidgetOptions::FRAME);
-    assert_ne!(editor.node_interface().unwrap().properties().unwrap().options.raw() & WidgetOptions::GRAB_SCROLL.raw(), 0);
+    assert_ne!(
+        editor.node_interface().unwrap().properties().unwrap().options.raw() & WidgetOptions::GRAB_SCROLL.raw(),
+        0
+    );
 }
 
 /// Designer coordinates may sample a Form once because dimensions do not select presentation.
@@ -102,7 +105,11 @@ fn provider_defaults_and_requested_flags_survive_facade_and_effective_policy() {
 fn form_constructor_flags_are_independent_of_content_size() {
     let runtime = runtime();
     let factory = nc_ui_nodes::UiFactory::bind(runtime.as_com_ref()).unwrap();
-    for size in [Size { width: 1, height: 1 }, Size { width: 640, height: 480 }, Size { width: 4096, height: 4096 }] {
+    for size in [
+        Size { width: 1, height: 1 },
+        Size { width: 640, height: 480 },
+        Size { width: 4096, height: 4096 },
+    ] {
         let form = factory.create_form(size).unwrap();
         assert_eq!(form.requested_flags().unwrap(), WidgetOptions::NO_INTERACT);
     }

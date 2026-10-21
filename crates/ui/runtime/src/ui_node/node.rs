@@ -178,7 +178,10 @@ impl Node {
     /// Collects actual widgets in child-first order without invoking handlers or
     /// lending retained-tree/child-store borrows to dispatch. A checkout conflict
     /// is an error, never a silently skipped subtree.
-    pub(crate) fn collect_dispatch_widgets(&self, drivers: &mut Vec<neocogi_com::WeakComBox<neocogi_ui_core_contracts::IWidgetDispatcherAbi>>) -> Result<(), NcStatus> {
+    pub(crate) fn collect_dispatch_widgets(
+        &self,
+        drivers: &mut Vec<neocogi_com::WeakComBox<neocogi_ui_core_contracts::IWidgetDispatcherAbi>>,
+    ) -> Result<(), NcStatus> {
         match &self.data.layout {
             NodeLayoutKind::Leaf(_) => {}
             NodeLayoutKind::Branch { children, .. } => {
@@ -188,7 +191,9 @@ impl Node {
                 }
             }
         }
-        if let Some(dispatcher) = &self.data.dispatcher { drivers.push(dispatcher.clone()); }
+        if let Some(dispatcher) = &self.data.dispatcher {
+            drivers.push(dispatcher.clone());
+        }
         Ok(())
     }
 
@@ -282,7 +287,8 @@ impl Node {
                     measurement_dirty |= child.synchronize_measurement_invalidation()?;
                 }
                 Ok::<(), neocogi_com::NcStatus>(())
-            }).transpose()?;
+            })
+            .transpose()?;
             Ok(measurement_dirty)
         })();
         match collected {

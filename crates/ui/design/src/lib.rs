@@ -29,7 +29,10 @@ pub fn validate_settings_size(settings: &[u8]) -> Result<(), String> {
 
 /// Shared symmetric NCB policy for plugin settings; other budgets retain COM defaults.
 fn settings_limits() -> neocogi_com::binary::Limits {
-    neocogi_com::binary::Limits { bytes: MAX_SETTINGS_BYTES, ..Default::default() }
+    neocogi_com::binary::Limits {
+        bytes: MAX_SETTINGS_BYTES,
+        ..Default::default()
+    }
 }
 
 /// Encodes a provider's concrete persistent settings without a reflective property model.
@@ -221,7 +224,14 @@ impl DesignEvent {
             iid: source.abi.interface_id.to_uuid_bytes(),
             // SAFETY: generated descriptors point to immutable static bytes.
             signature: *unsafe { source.abi.abi_signature.as_digest() }.ok_or("Event has no ABI signature")?,
-            fields: source.fields.iter().map(|field| DesignField { name: field.name.into(), ty: (&field.ty).into() }).collect(),
+            fields: source
+                .fields
+                .iter()
+                .map(|field| DesignField {
+                    name: field.name.into(),
+                    ty: (&field.ty).into(),
+                })
+                .collect(),
         })
     }
 }
@@ -292,10 +302,16 @@ impl DesignWidgetManifest {
         validate_settings_size(&self.defaults)?;
         let mut names = std::collections::BTreeSet::new();
         let mut identities = std::collections::BTreeSet::new();
-        if self.interface.events.len() > 1024 { return Err("Too many event interfaces".into()); }
+        if self.interface.events.len() > 1024 {
+            return Err("Too many event interfaces".into());
+        }
         for event in &self.interface.events {
-            if !qualified_name(&event.qualified_name) || event.iid == [0; 16] || event.signature == [0; 32]
-                || !names.insert(&event.qualified_name) || !identities.insert(event.iid) {
+            if !qualified_name(&event.qualified_name)
+                || event.iid == [0; 16]
+                || event.signature == [0; 32]
+                || !names.insert(&event.qualified_name)
+                || !identities.insert(event.iid)
+            {
                 return Err("Invalid or duplicate event interface".into());
             }
         }
@@ -394,7 +410,9 @@ fn validate_value_graph(values: &[DesignType], events: &[DesignEvent]) -> Result
     let mut remaining = 4096;
     for event in events {
         // Getter names are identifiers; tuple positions only apply to value fields.
-        if event.fields.iter().any(|field| !identifier(&field.name)) { return Err("Invalid event getter name".into()); }
+        if event.fields.iter().any(|field| !identifier(&field.name)) {
+            return Err("Invalid event getter name".into());
+        }
         fields(&event.fields, &definitions, &mut BTreeSet::new(), &mut remaining)?;
     }
     for value in values {
@@ -470,7 +488,9 @@ mod tests {
         let json = serde_json::to_string(&widget).unwrap();
         assert_eq!(serde_json::from_str::<DesignValueType>(&json).unwrap(), widget);
         let mut manifest = counter_manifest();
-        let DesignShape::Enum(variants) = &mut manifest.interface.values[0].shape else { panic!("event enum") };
+        let DesignShape::Enum(variants) = &mut manifest.interface.values[0].shape else {
+            panic!("event enum")
+        };
         variants[0].fields.push(DesignField { name: "source".into(), ty: weak });
         variants[0].fields.push(DesignField { name: "widget".into(), ty: widget });
         manifest.validate().unwrap();
@@ -493,7 +513,10 @@ mod tests {
                     qualified_name: "example.ICounterEvent".into(),
                     iid: [2; 16],
                     signature: [3; 32],
-                    fields: vec![DesignField { name: "value".into(), ty: DesignValueType::Named("example.CounterEvent".into()) }],
+                    fields: vec![DesignField {
+                        name: "value".into(),
+                        ty: DesignValueType::Named("example.CounterEvent".into()),
+                    }],
                 }],
             },
         };
@@ -521,7 +544,10 @@ mod tests {
                 2 => manifest.interface.events[0].signature = [0; 32],
                 3 => manifest.interface.events.push(manifest.interface.events[0].clone()),
                 4 => manifest.interface.events[0].fields[0].name = "0".into(),
-                5 => { let field = manifest.interface.events[0].fields[0].clone(); manifest.interface.events[0].fields.push(field); },
+                5 => {
+                    let field = manifest.interface.events[0].fields[0].clone();
+                    manifest.interface.events[0].fields.push(field);
+                }
                 6 => manifest.interface.events[0].fields[0].ty = DesignValueType::Named("example.Missing".into()),
                 _ => unreachable!(),
             }

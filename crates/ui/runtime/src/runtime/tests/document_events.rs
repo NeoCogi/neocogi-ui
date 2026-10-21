@@ -90,21 +90,18 @@ fn shared_document_receiver_rejects_foreign_and_replaced_forms_before_dispatch()
         assert!(slot.accepts(message.generation));
         assert!(!foreign_slot.accepts(message.generation));
         if let Some(event) = message.event_for(&slot, "first").unwrap() {
-            observed.push((
-                1,
-                { assert!(event.query::<IActivatedEventAbi>().unwrap().is_some()); "first".to_owned() },
-            ));
+            observed.push((1, {
+                assert!(event.query::<IActivatedEventAbi>().unwrap().is_some());
+                "first".to_owned()
+            }));
             form.widget_first_1.set_label("handled first").unwrap();
         } else if let Some(event) = message.event_for(&slot, "second").unwrap() {
-            observed.push((
-                2,
-                { assert!(event.query::<IActivatedEventAbi>().unwrap().is_some()); "second".to_owned() },
-            ));
+            observed.push((2, {
+                assert!(event.query::<IActivatedEventAbi>().unwrap().is_some());
+                "second".to_owned()
+            }));
         } else if let Some(event) = message.event_for(&slot, "text").unwrap() {
-            observed.push((
-                3,
-                event.query::<ITextChangedEventAbi>().unwrap().unwrap().text().unwrap().to_string().unwrap(),
-            ));
+            observed.push((3, event.query::<ITextChangedEventAbi>().unwrap().unwrap().text().unwrap().to_string().unwrap()));
         }
     }
     assert_eq!(observed, [(1, "first".into()), (2, "second".into()), (3, "captured text".into())]);
