@@ -145,10 +145,10 @@ mod tests {
         assert!(!result.one.is_alive());
         assert!(result.many[0].same_object(&weak));
         assert!(result.fixed[1].same_object(&weak));
-        let neocogi_com::design::IdlShape::Struct(fields) = Origins::IDL_TYPE.shape else {
+        let neocogi_com::idl_metadata::TypeShape::Struct(fields) = Origins::IDL_TYPE.shape else {
             panic!("record")
         };
-        assert_eq!(fields[0].ty, neocogi_com::design::IdlValueType::WeakBoxObject("proof.events.Widget"));
+        assert_eq!(fields[0].ty, neocogi_com::idl_metadata::ValueType::WeakBoxObject("proof.events.Widget"));
     }
 
     /// Valid raw backing can still name the wrong ownership mode, type, or null shape.

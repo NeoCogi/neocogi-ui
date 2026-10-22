@@ -530,7 +530,7 @@ impl WidgetSpec {
     }
     /// The built-in class's advertised event interfaces and inherited getter metadata.
     /// Custom kinds obtain the equivalent owned description through their COM catalog.
-    pub fn event_interfaces(&self) -> &'static [&'static neocogi_com::design::IdlInterface] {
+    pub fn event_interfaces(&self) -> &'static [&'static neocogi_com::idl_metadata::InterfaceMetadata] {
         self.event_source_metadata().map_or(&[], |metadata| metadata.events)
     }
     /// Whether authored font selection has a concrete setter, including a disclosure's header.

@@ -2,7 +2,7 @@
 #![allow(dead_code, unused_imports)]
 mod contract;
 use contract::*;
-use neocogi_com::design::{IdlMethodType as M, IdlValueType as V};
+use neocogi_com::idl_metadata::{MethodType as M, ValueType as V};
 use neocogi_ui_core_contracts::{EventSourceMetadata, UiEventSource};
 neocogi_ui_core_contracts::ui_event_sources! { SourceAbi => [GoodAbi]; }
 
@@ -29,7 +29,7 @@ fn ui_rejects_non_snapshots_and_ambiguous_getters() {
         ..neocogi_ui_core_contracts::IEventAbi::INTERFACE_DESCRIPTOR
     };
     static WRONG_CHAIN: [&neocogi_com::NcInterfaceDescriptor; 2] = [&GoodAbi::INTERFACE_DESCRIPTOR, &WRONG_ROOT];
-    let wrong_root = neocogi_com::design::IdlInterface {
+    let wrong_root = neocogi_com::idl_metadata::InterfaceMetadata {
         chain: &WRONG_CHAIN,
         ..GoodAbi::IDL_INTERFACE
     };

@@ -106,8 +106,8 @@ mod tests {
                 ["value", "left", "right", "revision"]);
             assert!(metadata.methods.iter().all(|method| method.receiver == neocogi_com::NcAbiReceiver::Shared
                 && method.parameters.is_empty()));
-            assert_eq!(metadata.methods[0].returns, neocogi_com::design::IdlMethodType::Value(
-                neocogi_com::design::IdlValueType::Named("proof.contracts.Detail")));
+            assert_eq!(metadata.methods[0].returns, neocogi_com::idl_metadata::MethodType::Value(
+                neocogi_com::idl_metadata::ValueType::Named("proof.contracts.Detail")));
         }
         assert_eq!(source::ScalarFactAbi::IDL_INTERFACE.methods.len(), 1);
         let descriptor = &source::SourceAbi::EVENT_SOURCE;

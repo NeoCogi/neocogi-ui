@@ -110,21 +110,21 @@ fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
 /// Registry registration rejects an advertised getter missing from its value graph.
 #[test]
 fn custom_factory_cannot_omit_its_event_getter_value_graph() {
-    use neocogi_com::{NcStatus, NC_E_INVALID_ARG, design::IdlInterface};
+    use neocogi_com::{NcStatus, NC_E_INVALID_ARG, idl_metadata::InterfaceMetadata};
     use neocogi_ui::{IWidgetAbi, Ui, OwnedWidget};
     use neocogi_ui_document::{CustomWidgetFactory, CustomWidgetRegistry};
     use std::rc::Rc;
 
     /// Fabricated metadata omits reachable value definitions for the declared event getters.
-    static HIDDEN_EVENT: IdlInterface = IdlInterface {
+    static HIDDEN_EVENT: InterfaceMetadata = InterfaceMetadata {
         abi: &neocogi_demo_contracts::ICounterChangedEventAbi::INTERFACE_DESCRIPTOR,
         chain: &neocogi_demo_contracts::ICounterChangedEventAbi::INTERFACE_CHAIN,
         rust_abi: "neocogi_demo_contracts::ICounterChangedEventAbi",
-        methods: &[neocogi_com::design::IdlMethod {
+        methods: &[neocogi_com::idl_metadata::MethodMetadata {
             name: "value",
             receiver: neocogi_com::NcAbiReceiver::Shared,
             parameters: &[],
-            returns: neocogi_com::design::IdlMethodType::Value(neocogi_com::design::IdlValueType::Named("example.Missing")),
+            returns: neocogi_com::idl_metadata::MethodType::Value(neocogi_com::idl_metadata::ValueType::Named("example.Missing")),
         }],
         values: &[],
     };

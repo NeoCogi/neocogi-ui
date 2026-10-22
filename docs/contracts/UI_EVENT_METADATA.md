@@ -43,6 +43,7 @@ Transfers, borrowed outputs, buffer operations, duplicate event identities and
 ambiguous getter names are rejected by UI. Legal ordinary COM interfaces remain
 usable regardless of whether UI admits them as snapshots.
 
+The generic records live in `neocogi_com::idl_metadata`.
 `IDL_INTERFACE.methods` describes generic calls, receiver access, parameter names
 and ownership, and result types. Shared plain or closed-generic ancestors appear
 once per canonical IID in base-first order; each method retains the type scope

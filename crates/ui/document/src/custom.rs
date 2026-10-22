@@ -8,7 +8,7 @@ use neocogi_ui::{IWidgetAbi, Ui};
 use std::{collections::BTreeMap, rc::Rc};
 
 /// A provider supplies one owned authoring description and a COM constructor.
-/// Static hosts can build the description from generated `IdlInterface` data;
+/// Static hosts can build the description from generated `InterfaceMetadata` data;
 /// loaded plugins implement this trait with a queried COM catalog.
 pub trait CustomWidgetFactory {
     /// Returns complete, versioned metadata for this constructible widget kind.

@@ -1,14 +1,14 @@
 //! Typed UI authoring declarations; callable interfaces remain ordinary IDL.
-use neocogi_com::{ComInterface, design::IdlInterface};
+use neocogi_com::{ComInterface, idl_metadata::InterfaceMetadata};
 
 /// Static UI publication policy for one producer, copied into an owned design catalog.
 /// Neither these Rust references nor an event list participate in COM ABI identity.
 #[derive(Clone, Copy)]
 pub struct EventSourceMetadata {
     /// Concrete producer projection and the values reachable from its ordinary methods.
-    pub interface: &'static IdlInterface,
+    pub interface: &'static InterfaceMetadata,
     /// Advertised snapshots in authored order. UI catalog publication validates their getters.
-    pub events: &'static [&'static IdlInterface],
+    pub events: &'static [&'static InterfaceMetadata],
 }
 
 /// Declares a producer's UI snapshots independently of its callable COM contract.

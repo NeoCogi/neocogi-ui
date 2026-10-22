@@ -8,7 +8,7 @@
 
 pub mod bounded_json;
 
-use neocogi_com::design::{IdlInterface, IdlMethodType, IdlShape};
+use neocogi_com::idl_metadata::{InterfaceMetadata, MethodType, TypeShape};
 use neocogi_ui_core_contracts::{EventSourceMetadata, IEventAbi};
 use serde::{Deserialize, Serialize};
 use neocogi_com::{ComSerialize, ComDeserialize};
@@ -75,10 +75,10 @@ pub enum DesignValueType {
     /// Inline fixed-size array.
     Array(Box<DesignValueType>, u32),
 }
-impl From<&neocogi_com::design::IdlValueType> for DesignValueType {
+impl From<&neocogi_com::idl_metadata::ValueType> for DesignValueType {
     /// Copies structure without recursively expanding named definitions.
-    fn from(source: &neocogi_com::design::IdlValueType) -> Self {
-        use neocogi_com::design::IdlValueType as I;
+    fn from(source: &neocogi_com::idl_metadata::ValueType) -> Self {
+        use neocogi_com::idl_metadata::ValueType as I;
         match source {
             I::Unit => Self::Unit,
             I::Text => Self::Text,
@@ -163,10 +163,10 @@ pub struct DesignType {
     pub shape: DesignShape,
 }
 
-impl From<&neocogi_com::design::IdlType> for DesignType {
+impl From<&neocogi_com::idl_metadata::TypeMetadata> for DesignType {
     /// Copies a single named definition; recursive named edges remain references.
-    fn from(source: &neocogi_com::design::IdlType) -> Self {
-        fn fields(values: &[neocogi_com::design::IdlField]) -> Vec<DesignField> {
+    fn from(source: &neocogi_com::idl_metadata::TypeMetadata) -> Self {
+        fn fields(values: &[neocogi_com::idl_metadata::FieldMetadata]) -> Vec<DesignField> {
             values
                 .iter()
                 .map(|field| DesignField {
@@ -179,8 +179,8 @@ impl From<&neocogi_com::design::IdlType> for DesignType {
             qualified_name: source.qualified_name.into(),
             rust_type: source.rust_type.into(),
             shape: match source.shape {
-                IdlShape::Struct(values) => DesignShape::Struct(fields(values)),
-                IdlShape::Enum(values) => DesignShape::Enum(
+                TypeShape::Struct(values) => DesignShape::Struct(fields(values)),
+                TypeShape::Enum(values) => DesignShape::Enum(
                     values
                         .iter()
                         .map(|value| DesignVariant {
@@ -190,7 +190,7 @@ impl From<&neocogi_com::design::IdlType> for DesignType {
                         })
                         .collect(),
                 ),
-                IdlShape::BitEnum(values) => DesignShape::BitEnum(
+                TypeShape::BitEnum(values) => DesignShape::BitEnum(
                     values
                         .iter()
                         .map(|value| DesignFlag {
@@ -219,7 +219,7 @@ pub struct DesignEvent {
 }
 impl DesignEvent {
     /// Admits an ordinary interface as a UI snapshot and derives its inherited getter fields.
-    pub fn from_idl(source: &IdlInterface) -> Result<Self, String> {
+    pub fn from_idl(source: &InterfaceMetadata) -> Result<Self, String> {
         // The generated chain supplies exact identity and signature, independent of Rust paths.
         if !source.chain.iter().any(|base| {
             base.interface_id == IEventAbi::INTERFACE_DESCRIPTOR.interface_id && base.abi_signature == IEventAbi::INTERFACE_DESCRIPTOR.abi_signature
@@ -229,7 +229,7 @@ impl DesignEvent {
         let mut fields = Vec::new();
         let mut names = std::collections::BTreeSet::new();
         for method in source.methods {
-            let IdlMethodType::Value(ty) = method.returns else {
+            let MethodType::Value(ty) = method.returns else {
                 return Err(format!("Event getter {} must return a repeatable value", method.name));
             };
             if method.receiver != neocogi_com::NcAbiReceiver::Shared || !method.parameters.is_empty() {
@@ -517,12 +517,12 @@ mod tests {
     /// Transport, display and catalog validation must retain weak field ownership.
     #[test]
     fn weak_capability_metadata_round_trips_without_becoming_a_strong_object() {
-        let weak = DesignValueType::from(&neocogi_com::design::IdlValueType::WeakObject("example.Service"));
+        let weak = DesignValueType::from(&neocogi_com::idl_metadata::ValueType::WeakObject("example.Service"));
         assert_eq!(weak.to_string(), "WeakComPtr<example.Service>");
         assert_ne!(weak, DesignValueType::Object("example.Service".into()));
         let json = serde_json::to_string(&weak).unwrap();
         assert_eq!(serde_json::from_str::<DesignValueType>(&json).unwrap(), weak);
-        let widget = DesignValueType::from(&neocogi_com::design::IdlValueType::WeakBoxObject("example.Widget"));
+        let widget = DesignValueType::from(&neocogi_com::idl_metadata::ValueType::WeakBoxObject("example.Widget"));
         assert_eq!(widget.to_string(), "WeakComBox<example.Widget>");
         assert_ne!(widget, DesignValueType::WeakObject("example.Widget".into()));
         let json = serde_json::to_string(&widget).unwrap();
