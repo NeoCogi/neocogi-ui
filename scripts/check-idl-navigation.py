@@ -301,7 +301,7 @@ def main():
         directory = Path(temporary)
         environment.setdefault("CARGO_TARGET_DIR", str(directory / "target"))
         source = prepare_probe(directory, repository)
-        subprocess.run(["cargo", "check", "--offline", "--manifest-path", str(directory / "Cargo.toml")],
+        subprocess.run(["cargo", "check", "--manifest-path", str(directory / "Cargo.toml")],
                        cwd=directory, env=environment, check=True)
         print("exact navigation probe compiled", flush=True)
         if options.compile_only:

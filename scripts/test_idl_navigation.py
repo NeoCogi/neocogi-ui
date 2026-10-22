@@ -2,10 +2,12 @@
 
 import io
 import json
+import os
 from pathlib import Path
 import queue
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from test_contract_checks import load_script
 
@@ -49,6 +51,21 @@ class NavigationProbe(unittest.TestCase):
             data = tomllib.loads((directory / "Cargo.toml").read_text())
             self.assertEqual(set(data["dependencies"]), {"neocogi-ui-nodes-contracts"})
             self.assertEqual(source.read_text(), navigation.PROBE_SOURCE)
+
+    def test_compile_command_preserves_caller_cargo_network_policy(self):
+        """The navigation entrypoint allows a cold cache and honors explicit offline."""
+        for offline in (None, "true", "false"):
+            caller = {} if offline is None else {"CARGO_NET_OFFLINE": offline}
+            with self.subTest(offline=offline), patch.dict(os.environ, caller, clear=True), patch(
+                "sys.argv", ["check-idl-navigation.py", "--compile-only"]
+            ), patch("contract_check_support.subprocess.check_output", return_value="workspace-nightly\n"), patch.object(
+                navigation.subprocess, "run"
+            ) as cargo:
+                navigation.main()
+                cargo.assert_called_once()
+                self.assertNotIn("--offline", cargo.call_args.args[0])
+                self.assertEqual(cargo.call_args.kwargs["env"].get("CARGO_NET_OFFLINE"), offline)
+                self.assertEqual(os.environ, caller)
 
     def test_expected_member_is_scoped_to_its_owner(self):
         """LayoutTrack's extent cannot be confused with the other native enums."""

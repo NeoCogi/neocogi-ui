@@ -3,6 +3,8 @@
 The external consumer directories are outside the repository toolchain override.
 Resolve that selection before changing cwd; preserve explicit caller overrides
 and the meaning of a caller-relative build cache without mutating os.environ.
+Cargo owns dependency fetching; callers can opt into offline operation with
+CARGO_NET_OFFLINE when their dependencies are already cached.
 """
 
 import os
@@ -11,8 +13,8 @@ import subprocess
 
 
 def child_environment(repository):
-    """Carry the repository-selected compiler and caller cache to all children."""
-    environment = dict(os.environ, CARGO_NET_OFFLINE="true")
+    """Carry the selected compiler, caller cache and Cargo network policy to children."""
+    environment = dict(os.environ)
     selected = subprocess.check_output(
         ["rustup", "show", "active-toolchain"], cwd=repository,
         env=environment, text=True,

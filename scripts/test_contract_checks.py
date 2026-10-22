@@ -1,6 +1,7 @@
 """Exercise declaration ownership and child environment boundaries without builds."""
 
 import importlib.util
+import json
 import os
 from pathlib import Path
 import sys
@@ -61,7 +62,7 @@ class ContractDependencies(unittest.TestCase):
 
 
 class ChildEnvironment(unittest.TestCase):
-    """Resolve in repository cwd and preserve explicit compiler/cache ownership."""
+    """Resolve in repository cwd and preserve caller compiler/cache/network policy."""
 
     def test_selection_and_relative_cache_survive_external_cwd(self):
         """The selected compiler reaches children; relative paths keep caller meaning."""
@@ -80,6 +81,29 @@ class ChildEnvironment(unittest.TestCase):
             environment = child_environment(Path("/repository"))
         self.assertEqual(environment["RUSTUP_TOOLCHAIN"], "workspace-nightly")
         self.assertNotIn("CARGO_TARGET_DIR", environment)
+
+    def test_cargo_network_policy_reaches_both_consumer_commands(self):
+        """Fresh runners may fetch; explicit true/false reach event and facade checks."""
+        facade = json.dumps({"reason": "compiler-artifact", "target": {
+            "name": "neocogi_com", "kind": ["lib"]}, "features": []})
+        for offline in (None, "true", "false"):
+            caller = {} if offline is None else {"CARGO_NET_OFFLINE": offline}
+            with self.subTest(offline=offline), patch.dict(os.environ, caller, clear=True):
+                with patch("contract_check_support.subprocess.check_output", return_value="workspace-nightly\n"):
+                    environment = child_environment(Path("/repository"))
+                self.assertEqual(environment.get("CARGO_NET_OFFLINE"), offline)
+                self.assertEqual(os.environ, caller)
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    for index, consumer in enumerate((consumers.CONSUMERS[0], consumers.CONSUMERS[-1])):
+                        with patch.object(consumers.subprocess, "run") as run, patch.object(
+                            consumers.subprocess, "check_output", return_value=facade
+                        ) as output:
+                            consumers.check_consumer(consumer, root, root / str(index), environment)
+                        launched = run if consumer.implements_objects else output
+                        launched.assert_called_once()
+                        self.assertNotIn("--offline", launched.call_args.args[0])
+                        self.assertEqual(launched.call_args.kwargs["env"].get("CARGO_NET_OFFLINE"), offline)
 
 
 if __name__ == "__main__":

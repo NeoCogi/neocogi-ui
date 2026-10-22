@@ -102,7 +102,7 @@ def write_consumer(consumer, repository, directory):
 def check_consumer(consumer, repository, directory, environment):
     """Run actual event code, or inspect this invocation's pure facade features."""
     write_consumer(consumer, repository, directory)
-    command = ["cargo", "run" if consumer.implements_objects else "check", "--offline",
+    command = ["cargo", "run" if consumer.implements_objects else "check",
                "--manifest-path", str(directory / "Cargo.toml")]
     print("checking " + consumer.package, flush=True)
     if consumer.implements_objects:
