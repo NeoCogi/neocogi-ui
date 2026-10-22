@@ -29,9 +29,10 @@ if [[ -z "$browser" ]]; then
 fi
 if [[ -z "$browser" ]]; then echo "Set CHROME_BIN to a Chromium-compatible browser." >&2; exit 1; fi
 
-# Cargo's artifact message avoids selecting a stale test executable left by another feature set.
+# Keep artifact selection machine-readable while rendering compiler errors to stderr;
+# the temporary JSON stream is removed on exit, including failed compilations.
 cargo test -p "$package" --lib --no-run --no-default-features --features webgl \
-  --target wasm32-unknown-unknown --message-format=json > "$build_log"
+  --target wasm32-unknown-unknown --message-format=json-render-diagnostics > "$build_log"
 artifact="$(python3 - "$build_log" <<'PY'
 import json, sys
 for line in open(sys.argv[1]):

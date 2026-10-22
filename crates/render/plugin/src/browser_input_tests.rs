@@ -181,9 +181,11 @@ fn static_com_editing_and_webgl() {
         .unwrap();
     let widgets = nodes.bind(core.as_com_ref()).unwrap();
     let ui = neocogi_ui::Ui::from_interfaces(core, widgets).unwrap();
-    let editor = ui.widgets().textbox_unobserved("").unwrap();
+    let editor_owner = ui.widgets().textbox_unobserved("").unwrap();
+    // The window takes exclusive ownership; later assertions use only a typed weak handle.
+    let editor = editor_owner.handle();
     let window = ui
-        .window("Editable COM window", Rect { x: 10, y: 10, width: 400, height: 180 }, &editor)
+        .window("Editable COM window", Rect { x: 10, y: 10, width: 400, height: 180 }, editor_owner)
         .unwrap();
     let input = ui.input_sink().unwrap();
     exercise(canvas.unchecked_ref(), "tab");
@@ -209,6 +211,7 @@ fn static_com_editing_and_webgl() {
     ui.update(resized).unwrap();
     ui.render(resized, renderer.as_com_ref()).unwrap();
     window.close().unwrap();
+    assert!(!editor.as_interface().is_alive(), "closing the window releases its exclusively owned editor");
     ui.close().unwrap();
     drop(renderer);
     drop(native);
