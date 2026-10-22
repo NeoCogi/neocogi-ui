@@ -20,7 +20,7 @@ class NativeBuildProfiles(unittest.TestCase):
     def check_profile(self, profile, panic):
         """Compare every deployed artifact and rebuilt std with the target root."""
         result = subprocess.run(
-            ["cargo", "build", "-p", "neocogi-demo-full", "--profile", profile, "--offline",
+            ["cargo", "build", "-p", "neocogi-demo-full", "--profile", profile,
              "--no-default-features", "--features", "dynamic,vulkan",
              "-Zunstable-options", "--unit-graph"],
             cwd=ROOT, capture_output=True, text=True, check=False,

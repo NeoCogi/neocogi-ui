@@ -22,7 +22,7 @@ def build(profile, renderer="vulkan"):
     result = subprocess.run(
         ["cargo", "build", "-p", "neocogi-demo-full", "--profile", profile,
          "--no-default-features", "--features", f"dynamic,{renderer}",
-         "--offline", "--message-format=json"], cwd=ROOT,
+         "--message-format=json-render-diagnostics"], cwd=ROOT,
         capture_output=True, text=True, check=False,
     )
     assert result.returncode == 0, result.stderr
