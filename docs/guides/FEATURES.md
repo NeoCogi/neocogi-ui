@@ -10,9 +10,9 @@ retained UI imports resources and submits composed frames. Applications opt into
 | --- | --- | --- |
 | Native demos | `dynamic` (default) | Build and load Cargo cdylib artifacts against one shared runtime. |
 | Native demos | `monolith` | Link the runtime plus only the UI, renderer, GFX, and Skin implementations selected by that assembly. |
-| `neocogi-com` | defaults: `std`, `macros` | Local object/data helpers and event contracts/adapters without linking a runtime. |
-| `neocogi-com` | `macros` | Procedural macros and built-in event contracts, usable without `std` or allocation; IDL is a build dependency. |
-| `neocogi-com` | `std` with `macros` | Add standard-channel mappings and scoped/component dispatch adapters. |
+| `neocogi-com` | defaults: `std`, `macros` | Typed object/data helpers and procedural macros without linking a runtime. |
+| `neocogi-com` | `macros` | Rust object/plugin and persistence procedural macros; callable contracts come from the IDL build dependency. |
+| `neocogi-com` | `std` | Standard-library data/error support; implies `alloc`. No event transport or runtime implementation is selected. |
 | `neocogi-com` | `runtime` | Stateless runtime/persistence clients; implies `std`. Final assembly supplies linkage. |
 | `neocogi-ui` | `runtime` | Expose stateless COM runtime clients; final assembly owns linkage. |
 | `neocogi-gfx-support` | `compiled-assets` | Expand bounded zlib pixels from generated asset tables. |
