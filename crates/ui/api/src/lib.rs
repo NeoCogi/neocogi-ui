@@ -11,6 +11,10 @@
 
 #![deny(missing_docs)]
 
+// Unit-test executables own one runtime just like this package's integration tests.
+#[cfg(test)]
+extern crate nc_com as _;
+
 /// Typed clients and concrete UI interface definitions.
 pub mod com;
 pub use com::*;

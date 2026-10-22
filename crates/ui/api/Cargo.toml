@@ -25,3 +25,8 @@ test-support = []
 skin = ["dep:neocogi-skin-contracts"]
 # Deployment policy belongs to the final application, not implementation plugins.
 runtime = ["neocogi-com/runtime"]
+
+[dev-dependencies]
+# Every integration-test executable owns its linked runtime, independently of
+# production feature unification or a deployed native shared library.
+neocogi-com-runtime.workspace = true

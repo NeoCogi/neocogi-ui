@@ -1,4 +1,7 @@
 //! Concrete COM snapshots are usable independently of widget construction or Rust event enums.
+// Link this executable's runtime explicitly, including on MSVC without section GC.
+extern crate nc_com as _;
+
 use neocogi_com::{ComBox, INcStringComPtrExt, NcStatus, NC_E_DROPPED, NC_E_INVALID_ARG, NC_E_NOINTERFACE};
 use neocogi_com::events::{IEvent, IEventAbi};
 use neocogi_ui_core_contracts::*;

@@ -1,4 +1,7 @@
 //! Owner scopes capture facts now and restore callers on every synchronous exit.
+// Link this executable's runtime explicitly, including on MSVC without section GC.
+extern crate nc_com as _;
+
 use neocogi_com::{ComBox, ComPtr, INcStringComPtrExt, IUnknown, NcStatus, NC_E_CLOSED, NC_E_INVALID_ARG};
 use neocogi_ui::events::{channel, activated, text_submitted, EventOrigin, EventOriginOwner, IEventAbi, IEventReceiverAbi};
 
