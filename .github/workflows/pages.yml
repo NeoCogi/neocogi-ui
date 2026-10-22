@@ -43,11 +43,10 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      # Pages configuration belongs to trusted deployment, never to pull-request compilation.
+      # An administrator must first select Settings > Pages > Source > GitHub Actions.
+      # GITHUB_TOKEN can deploy an existing site but cannot enable Pages for the repository.
       - name: Configure Pages
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - name: Deploy Pages artifact
         id: deployment
         uses: actions/deploy-pages@v4

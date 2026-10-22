@@ -100,9 +100,13 @@ still needs interactive platform testing.
 
 The `WebGL demo` workflow builds the site and runs DOM input regressions on pull requests, pushes
 to `master`, and manual dispatch. Pull-request jobs have read-only repository permissions and never
-configure or deploy Pages. The trusted deployment job requests GitHub Pages enablement and configures Actions as the publishing source. If repository
-or organization policy prevents automatic enablement, select **GitHub Actions** in
-**Settings > Pages** once. A successful deployment publishes the demo at:
+configure or deploy Pages. Before the first deployment, a repository administrator
+must select **Settings > Pages > Build and deployment > Source > GitHub Actions**.
+The workflow's `GITHUB_TOKEN` can configure and deploy an existing site; it cannot
+create the repository's Pages site. Adding `pages: write` does not grant that
+administration capability. After enabling Pages, rerun the failed deployment job.
+See the [GitHub publishing-source instructions](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site#publishing-with-a-custom-github-actions-workflow).
+A successful deployment publishes the demo at:
 
 <https://neocogi.github.io/neocogi-ui/>
 
