@@ -51,14 +51,10 @@ CONSUMERS = (
         assert!(contract::events::numeric_changed(f32::NAN).is_err());
     '''),
     Consumer("neocogi-idl-example-contracts", "tools/idl/example-contracts", '''
-        let owner = contract::events::extent_changed(contract::Extent { width: 640, height: 480 }).unwrap();
-        {
-            let fact = owner.query_ref::<contract::IExtentChangedEventAbi>().unwrap();
-            let extent = fact.extent().unwrap();
-            assert_eq!((extent.width, extent.height), (640, 480));
-        }
-        drop(owner);
-    '''),
+        let mut delivery = contract::notifications::ExtentDelivery::Unobserved;
+        delivery.changed(contract::Extent { width: 640, height: 480 }).unwrap();
+        let _ = contract::ExtentBinding::Unobserved;
+    ''', implements_objects=False),
     Consumer("neocogi-demo-contracts", "demos/contracts", '''
         let owner = contract::events::counter_changed(73).unwrap();
         {
@@ -130,7 +126,7 @@ def main():
         environment.setdefault("CARGO_TARGET_DIR", str(root / "target"))
         for index, consumer in enumerate(CONSUMERS):
             check_consumer(consumer, repository, root / str(index), environment)
-    print("four independent event consumers and generated-only control passed", flush=True)
+    print("three independent UI event consumers and two generated-only controls passed", flush=True)
 
 
 if __name__ == "__main__":
