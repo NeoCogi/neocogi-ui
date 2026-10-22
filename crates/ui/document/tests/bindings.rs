@@ -117,8 +117,6 @@ fn custom_factory_cannot_omit_its_event_getter_value_graph() {
 
     /// Fabricated metadata omits reachable value definitions for the declared event getters.
     static HIDDEN_EVENT: InterfaceMetadata = InterfaceMetadata {
-        abi: &neocogi_demo_contracts::ICounterChangedEventAbi::INTERFACE_DESCRIPTOR,
-        chain: &neocogi_demo_contracts::ICounterChangedEventAbi::INTERFACE_CHAIN,
         rust_abi: "neocogi_demo_contracts::ICounterChangedEventAbi",
         methods: &[neocogi_com::idl_metadata::MethodMetadata {
             name: "value",
@@ -127,6 +125,7 @@ fn custom_factory_cannot_omit_its_event_getter_value_graph() {
             returns: neocogi_com::idl_metadata::MethodType::Value(neocogi_com::idl_metadata::ValueType::Named("example.Missing")),
         }],
         values: &[],
+        ..neocogi_demo_contracts::ICounterChangedEventAbi::IDL_INTERFACE
     };
     /// UI publication requires values reachable only through event getters as well.
     static HIDDEN: neocogi_ui::EventSourceMetadata = neocogi_ui::EventSourceMetadata {

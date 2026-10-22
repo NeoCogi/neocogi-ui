@@ -72,7 +72,7 @@ fn factory_queue_ownership_and_metadata() {
     assert_eq!(manifest.interface.events.len(), 2);
     assert_eq!(manifest.interface.events[0].iid, contract::IChangedEventAbi::INTERFACE_DESCRIPTOR.interface_id.to_uuid_bytes());
     assert_eq!(manifest.interface.events[0].fields.iter().map(|field| field.name.as_str()).collect::<Vec<_>>(), ["text", "enabled", "raw_0", "budget"]);
-    assert!(!description.chain.iter().any(|abi| abi.interface_id == events::IEventReceiverAbi::INTERFACE_DESCRIPTOR.interface_id));
+    assert!(!description.chain.iter().any(|identity| identity.iid == events::IEventReceiverAbi::IDL_INTERFACE.identity.iid));
     assert!(description.values.iter().any(|value| value.qualified_name == contract::Changed::IDL_TYPE.qualified_name));
     let factory = Factory::from_value(Factory).query::<contract::FactoryAbi>().unwrap();
     for explicit in [false, true] {

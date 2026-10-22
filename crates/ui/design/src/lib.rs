@@ -220,10 +220,8 @@ pub struct DesignEvent {
 impl DesignEvent {
     /// Admits an ordinary interface as a UI snapshot and derives its inherited getter fields.
     pub fn from_idl(source: &InterfaceMetadata) -> Result<Self, String> {
-        // The generated chain supplies exact identity and signature, independent of Rust paths.
-        if !source.chain.iter().any(|base| {
-            base.interface_id == IEventAbi::INTERFACE_DESCRIPTOR.interface_id && base.abi_signature == IEventAbi::INTERFACE_DESCRIPTOR.abi_signature
-        }) {
+        // Typed local identities preserve exact contract bytes without raw borrowing.
+        if !source.chain.contains(&IEventAbi::IDL_INTERFACE.identity) {
             return Err("UI snapshot must derive from neocogi.ui.core.IEvent".into());
         }
         let mut fields = Vec::new();
@@ -244,11 +242,9 @@ impl DesignEvent {
             });
         }
         Ok(Self {
-            // SAFETY: generated descriptors contain immutable static UTF-8.
-            qualified_name: unsafe { source.abi.qualified_name.as_str() }.map_err(|_| "Event has no name")?.into(),
-            iid: source.abi.interface_id.to_uuid_bytes(),
-            // SAFETY: generated descriptors point to immutable static bytes.
-            signature: *unsafe { source.abi.abi_signature.as_digest() }.ok_or("Event has no ABI signature")?,
+            qualified_name: source.qualified_name.into(),
+            iid: source.identity.iid.to_uuid_bytes(),
+            signature: *source.identity.abi_signature,
             fields,
         })
     }
@@ -289,11 +285,9 @@ impl DesignWidgetManifest {
     pub fn from_source(kind: impl Into<String>, defaults: Vec<u8>, publication: &EventSourceMetadata) -> Result<Self, String> {
         let source = publication.interface;
         let primary = source.chain.first().ok_or("IDL interface has no COM chain")?;
-        if primary.interface_id != source.abi.interface_id || primary.abi_signature != source.abi.abi_signature {
+        if *primary != source.identity {
             return Err("IDL interface has an inconsistent COM chain".into());
         }
-        // SAFETY: the generated ABI signature points to immutable static bytes.
-        let digest = *unsafe { source.abi.abi_signature.as_digest() }.ok_or("IDL interface has no signature")?;
         let events = publication
             .events
             .iter()
@@ -320,8 +314,8 @@ impl DesignWidgetManifest {
             kind: kind.into(),
             defaults,
             interface: DesignInterface {
-                iid: source.abi.interface_id.to_uuid_bytes(),
-                signature: digest,
+                iid: source.identity.iid.to_uuid_bytes(),
+                signature: *source.identity.abi_signature,
                 rust_abi: source.rust_abi.to_owned(),
                 events,
                 values,

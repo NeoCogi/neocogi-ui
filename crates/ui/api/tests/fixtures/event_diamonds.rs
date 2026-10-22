@@ -98,9 +98,53 @@ mod tests {
         }
     }
 
+    /// Compares complete local contracts to their physical projections in query order.
+    fn assert_local_identity(
+        local: &neocogi_com::idl_metadata::InterfaceMetadata,
+        descriptor: &neocogi_com::NcInterfaceDescriptor,
+        physical_chain: &[&neocogi_com::NcInterfaceDescriptor],
+        expected: &[neocogi_com::idl_metadata::InterfaceIdentity],
+    ) {
+        // SAFETY: all inputs are actual generated descriptors with static storage.
+        assert_eq!(local.qualified_name, unsafe { descriptor.qualified_name.as_str().unwrap() });
+        assert_eq!(local.identity.iid, descriptor.interface_id);
+        // SAFETY: generated signatures have readable immutable static bytes.
+        assert_eq!(local.identity.abi_signature, unsafe { descriptor.abi_signature.as_digest().unwrap() });
+        assert_eq!(local.chain, expected);
+        assert_eq!(local.chain.first(), Some(&local.identity));
+        assert_eq!(local.chain.len(), physical_chain.len());
+        for (local, physical) in local.chain.iter().zip(physical_chain) {
+            assert_eq!(local.iid, physical.interface_id);
+            // SAFETY: every generated ancestry signature has static storage.
+            assert_eq!(local.abi_signature, unsafe { physical.abi_signature.as_digest().unwrap() });
+        }
+    }
+
     /// Includes one field per semantic getter and preserves authored event/base order.
     #[test]
     fn catalog_admits_and_round_trips_all_three_diamonds() {
+        assert_local_identity(&source::SourceAbi::IDL_INTERFACE, &source::SourceAbi::INTERFACE_DESCRIPTOR,
+            &source::SourceAbi::INTERFACE_CHAIN, &[source::SourceAbi::IDL_INTERFACE.identity]);
+        assert_local_identity(&IEventAbi::IDL_INTERFACE, &IEventAbi::INTERFACE_DESCRIPTOR,
+            &IEventAbi::INTERFACE_CHAIN, &[IEventAbi::IDL_INTERFACE.identity]);
+        assert_local_identity(&source::FactAbi::IDL_INTERFACE, &source::FactAbi::INTERFACE_DESCRIPTOR,
+            &source::FactAbi::INTERFACE_CHAIN, &[
+                source::FactAbi::IDL_INTERFACE.identity, left::LeftAbi::IDL_INTERFACE.identity,
+                left::DetailSnapshotAbi::IDL_INTERFACE.identity, IEventAbi::IDL_INTERFACE.identity,
+                right::RightAbi::IDL_INTERFACE.identity,
+            ]);
+        assert_local_identity(&source::PlainFactAbi::IDL_INTERFACE, &source::PlainFactAbi::INTERFACE_DESCRIPTOR,
+            &source::PlainFactAbi::INTERFACE_CHAIN, &[
+                source::PlainFactAbi::IDL_INTERFACE.identity, left::PlainLeftAbi::IDL_INTERFACE.identity,
+                contracts::PlainAbi::IDL_INTERFACE.identity, IEventAbi::IDL_INTERFACE.identity,
+                right::PlainRightAbi::IDL_INTERFACE.identity,
+            ]);
+        assert_local_identity(&source::ScalarFactAbi::IDL_INTERFACE, &source::ScalarFactAbi::INTERFACE_DESCRIPTOR,
+            &source::ScalarFactAbi::INTERFACE_CHAIN, &[
+                source::ScalarFactAbi::IDL_INTERFACE.identity, left::ScalarLeftAbi::IDL_INTERFACE.identity,
+                left::ScalarSnapshotAbi::IDL_INTERFACE.identity, IEventAbi::IDL_INTERFACE.identity,
+                right::ScalarRightAbi::IDL_INTERFACE.identity,
+            ]);
         for metadata in [&source::FactAbi::IDL_INTERFACE, &source::PlainFactAbi::IDL_INTERFACE] {
             assert_eq!(metadata.methods.iter().map(|method| method.name).collect::<Vec<_>>(),
                 ["value", "left", "right", "revision"]);

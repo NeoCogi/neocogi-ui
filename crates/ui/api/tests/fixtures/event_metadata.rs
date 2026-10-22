@@ -24,11 +24,16 @@ fn publication_is_separate_from_abi_and_merges_event_only_values() {
 #[test]
 fn ui_rejects_non_snapshots_and_ambiguous_getters() {
     // Same root IID with incompatible bytes cannot qualify by spelling or nominal identity alone.
-    static WRONG_ROOT: neocogi_com::NcInterfaceDescriptor = neocogi_com::NcInterfaceDescriptor {
-        abi_signature: GoodAbi::INTERFACE_DESCRIPTOR.abi_signature,
-        ..neocogi_ui_core_contracts::IEventAbi::INTERFACE_DESCRIPTOR
+    const WRONG_DIGEST: [u8; 32] = {
+        let mut bytes = *neocogi_ui_core_contracts::IEventAbi::IDL_INTERFACE.identity.abi_signature;
+        bytes[31] ^= 1;
+        bytes
     };
-    static WRONG_CHAIN: [&neocogi_com::NcInterfaceDescriptor; 2] = [&GoodAbi::INTERFACE_DESCRIPTOR, &WRONG_ROOT];
+    const WRONG_ROOT: neocogi_com::idl_metadata::InterfaceIdentity = neocogi_com::idl_metadata::InterfaceIdentity {
+        abi_signature: &WRONG_DIGEST,
+        ..neocogi_ui_core_contracts::IEventAbi::IDL_INTERFACE.identity
+    };
+    static WRONG_CHAIN: [neocogi_com::idl_metadata::InterfaceIdentity; 2] = [GoodAbi::IDL_INTERFACE.identity, WRONG_ROOT];
     let wrong_root = neocogi_com::idl_metadata::InterfaceMetadata {
         chain: &WRONG_CHAIN,
         ..GoodAbi::IDL_INTERFACE
@@ -45,6 +50,33 @@ fn ui_rejects_non_snapshots_and_ambiguous_getters() {
         let error = neocogi_ui_design::DesignEvent::from_idl(interface).unwrap_err();
         assert!(error.contains(expected), "{error}");
     }
+    // Producer identity must match the first chain entry, including byte 31.
+    static WRONG_SOURCE: neocogi_com::idl_metadata::InterfaceMetadata = neocogi_com::idl_metadata::InterfaceMetadata {
+        chain: &[GoodAbi::IDL_INTERFACE.identity],
+        ..SourceAbi::IDL_INTERFACE
+    };
+    let wrong_source = EventSourceMetadata { interface: &WRONG_SOURCE, events: &[] };
+    assert!(neocogi_ui_design::DesignWidgetManifest::from_source("proof.source", vec![], &wrong_source).unwrap_err().contains("inconsistent"));
+    const WRONG_SOURCE_DIGEST: [u8; 32] = {
+        let mut bytes = *SourceAbi::IDL_INTERFACE.identity.abi_signature;
+        bytes[31] ^= 1;
+        bytes
+    };
+    static WRONG_SOURCE_SIGNATURE: neocogi_com::idl_metadata::InterfaceMetadata = neocogi_com::idl_metadata::InterfaceMetadata {
+        identity: neocogi_com::idl_metadata::InterfaceIdentity {
+            abi_signature: &WRONG_SOURCE_DIGEST,
+            ..SourceAbi::IDL_INTERFACE.identity
+        },
+        ..SourceAbi::IDL_INTERFACE
+    };
+    let wrong_signature = EventSourceMetadata { interface: &WRONG_SOURCE_SIGNATURE, events: &[] };
+    assert!(neocogi_ui_design::DesignWidgetManifest::from_source("proof.source", vec![], &wrong_signature).unwrap_err().contains("inconsistent"));
+    static EMPTY_SOURCE: neocogi_com::idl_metadata::InterfaceMetadata = neocogi_com::idl_metadata::InterfaceMetadata {
+        chain: &[],
+        ..SourceAbi::IDL_INTERFACE
+    };
+    let empty = EventSourceMetadata { interface: &EMPTY_SOURCE, events: &[] };
+    assert!(neocogi_ui_design::DesignWidgetManifest::from_source("proof.source", vec![], &empty).unwrap_err().contains("no COM chain"));
     let repeated = EventSourceMetadata { interface: &SourceAbi::IDL_INTERFACE, events: &[&GoodAbi::IDL_INTERFACE, &GoodAbi::IDL_INTERFACE] };
     assert!(neocogi_ui_design::DesignWidgetManifest::from_source("proof.source", vec![], &repeated).unwrap_err().contains("duplicate"));
 }

@@ -37,13 +37,18 @@ validates publication before copying an owned catalog record. Import
 generic snapshots, declare an ordinary concrete IDL interface derived from the
 closed template, then list its generated ABI marker in the UI declaration.
 Every event must
-derive from the actual UI `IEvent` descriptor, including its signature. Every
+derive from the actual UI `IEvent` identity, including every signature byte. Every
 inherited method must use `&self`, take no arguments, and return repeatable data.
 Transfers, borrowed outputs, buffer operations, duplicate event identities and
 ambiguous getter names are rejected by UI. Legal ordinary COM interfaces remain
 usable regardless of whether UI admits them as snapshots.
 
 The generic records live in `neocogi_com::idl_metadata`.
+Names and complete digests use ordinary static Rust borrows; UI conversion copies
+them without reading raw physical descriptor pointers. The producer's identity
+must match its first chain entry. An incompatible required IEvent ancestor is
+rejected, while a catalog may advertise another concrete event revision; queries
+against actual event objects negotiate compatibility with that revision.
 `IDL_INTERFACE.methods` describes generic calls, receiver access, parameter names
 and ownership, and result types. Shared plain or closed-generic ancestors appear
 once per canonical IID in base-first order; each method retains the type scope
