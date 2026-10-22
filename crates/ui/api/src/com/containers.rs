@@ -263,11 +263,11 @@ impl WidgetFactory {
     pub fn split_view_with_queue(
         &self,
         settings: SplitOptions,
-        queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>,
+        queue: Option<ComRef<'_, crate::events::IEventReceiverAbi>>,
     ) -> Result<OwnedWidget<SplitViewAbi>, NcStatus> {
         Ok(OwnedWidget::from_interface(self.interface.create_split_view(
             settings,
-            neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::from_queue(queue)?)?,
+            neocogi_com::NcValueRef::new(&crate::events::EventBinding::from_queue(queue)?)?,
         )?))
     }
     /// Creates a disclosure whose body starts empty and whose header owns the supplied label.

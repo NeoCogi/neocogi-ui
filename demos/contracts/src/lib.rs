@@ -11,3 +11,8 @@ include!(concat!(env!("OUT_DIR"), "/neocogi_demo.include.rs"));
 mod helpers;
 
 pub mod events;
+
+// Event publication is UI authoring policy, separate from callable IDL ABI.
+neocogi_ui_core_contracts::ui_event_sources! {
+    CounterAbi => [neocogi_ui_core_contracts::IActivatedEventAbi, ICounterChangedEventAbi];
+}

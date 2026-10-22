@@ -1,4 +1,5 @@
 //! Generated modules are compiled as ordinary Rust, not merely parsed or string-checked.
+use neocogi_ui::UiEventSource;
 use neocogi_ui_document::Document;
 
 #[rustfmt::skip]
@@ -58,19 +59,14 @@ fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
     impl CustomWidgetFactory for CounterFactory {
         /// Copies the generated projection and typed constructor defaults.
         fn manifest(&self) -> Result<neocogi_ui_document::design::DesignWidgetManifest, String> {
-            neocogi_ui_document::design::DesignWidgetManifest::from_idl(
+            neocogi_ui_document::design::DesignWidgetManifest::from_source(
                 "example.button",
                 self.defaults.clone(),
-                &neocogi_demo_contracts::CounterAbi::IDL_INTERFACE,
+                &neocogi_demo_contracts::CounterAbi::EVENT_SOURCE,
             )
         }
         /// Binding generation never constructs a live widget.
-        fn create(
-            &self,
-            _: &Ui,
-            _: &[u8],
-            _: Option<neocogi_com::ComPtr<neocogi_com::events::IEventReceiverAbi>>,
-        ) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
+        fn create(&self, _: &Ui, _: &[u8], _: Option<neocogi_com::ComPtr<neocogi_ui::events::IEventReceiverAbi>>) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
             Err(NC_E_INVALID_ARG)
         }
     }
@@ -92,13 +88,17 @@ fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
     );
     assert_eq!(Document::from_json(&document.to_json().unwrap()).unwrap(), document);
     assert_eq!(Document::from_binary(&document.to_binary().unwrap()).unwrap(), document);
-    let events = neocogi_demo_contracts::CounterAbi::IDL_INTERFACE.events;
+    let events: Vec<_> = neocogi_demo_contracts::CounterAbi::EVENT_SOURCE
+        .events
+        .iter()
+        .map(|event| neocogi_ui_document::design::DesignEvent::from_idl(event).unwrap())
+        .collect();
     assert_eq!(
-        events.iter().map(|event| event.qualified_name).collect::<Vec<_>>(),
+        events.iter().map(|event| event.qualified_name.as_str()).collect::<Vec<_>>(),
         ["neocogi.ui.core.IActivatedEvent", "neocogi.demo.ICounterChangedEvent"]
     );
     assert_eq!(events[1].fields[0].name, "value");
-    assert_eq!(events[1].fields[0].ty, neocogi_com::design::IdlValueType::Scalar("u32"));
+    assert_eq!(events[1].fields[0].ty, neocogi_ui_document::design::DesignValueType::Scalar("u32".into()));
     assert!(document.rust_bindings().unwrap_err().contains("not registered"));
     let WidgetSpec::Custom { settings, .. } = &mut document.root.children.last_mut().unwrap().node.widget else {
         unreachable!()
@@ -116,34 +116,32 @@ fn custom_factory_cannot_omit_its_event_getter_value_graph() {
     use std::rc::Rc;
 
     /// Fabricated metadata omits reachable value definitions for the declared event getters.
-    static HIDDEN: IdlInterface = IdlInterface {
-        abi: &neocogi_demo_contracts::CounterAbi::INTERFACE_DESCRIPTOR,
-        chain: &neocogi_demo_contracts::CounterAbi::INTERFACE_CHAIN,
-        rust_abi: "neocogi_demo_contracts::CounterAbi",
-        events: &[neocogi_com::design::IdlEvent {
-            qualified_name: "example.IMissingEvent",
-            abi: &neocogi_demo_contracts::ICounterChangedEventAbi::INTERFACE_DESCRIPTOR,
-            fields: &[neocogi_com::design::IdlField {
-                name: "value",
-                ty: neocogi_com::design::IdlValueType::Named("example.Missing"),
-            }],
+    static HIDDEN_EVENT: IdlInterface = IdlInterface {
+        abi: &neocogi_demo_contracts::ICounterChangedEventAbi::INTERFACE_DESCRIPTOR,
+        chain: &neocogi_demo_contracts::ICounterChangedEventAbi::INTERFACE_CHAIN,
+        rust_abi: "neocogi_demo_contracts::ICounterChangedEventAbi",
+        methods: &[neocogi_com::design::IdlMethod {
+            name: "value",
+            receiver: neocogi_com::NcAbiReceiver::Shared,
+            parameters: &[],
+            returns: neocogi_com::design::IdlMethodType::Value(neocogi_com::design::IdlValueType::Named("example.Missing")),
         }],
         values: &[],
+    };
+    /// UI publication requires values reachable only through event getters as well.
+    static HIDDEN: neocogi_ui::EventSourceMetadata = neocogi_ui::EventSourceMetadata {
+        interface: &neocogi_demo_contracts::CounterAbi::IDL_INTERFACE,
+        events: &[&HIDDEN_EVENT],
     };
     /// A provider whose advertised source metadata disagrees with the COM descriptor.
     struct HiddenFactory;
     impl CustomWidgetFactory for HiddenFactory {
         /// The deliberately inconsistent metadata fails during static conversion.
         fn manifest(&self) -> Result<neocogi_ui_document::design::DesignWidgetManifest, String> {
-            neocogi_ui_document::design::DesignWidgetManifest::from_idl("hidden.counter", vec![], &HIDDEN)
+            neocogi_ui_document::design::DesignWidgetManifest::from_source("hidden.counter", vec![], &HIDDEN)
         }
         /// Registration rejects this provider before construction is possible.
-        fn create(
-            &self,
-            _: &Ui,
-            _: &[u8],
-            _: Option<neocogi_com::ComPtr<neocogi_com::events::IEventReceiverAbi>>,
-        ) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
+        fn create(&self, _: &Ui, _: &[u8], _: Option<neocogi_com::ComPtr<neocogi_ui::events::IEventReceiverAbi>>) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
             Err(NC_E_INVALID_ARG)
         }
     }
@@ -170,7 +168,7 @@ fn form_fields_need_no_queue_or_handler_generation() {
     let document = Document::from_json(include_bytes!("fixtures/shared.ui.json")).unwrap();
     let source = document.rust_bindings().unwrap();
     assert!(!source.contains("FormQueue"));
-    assert!(!source.contains("impl neocogi_com::events::IEventReceiver"));
+    assert!(!source.contains("impl neocogi_ui::events::IEventReceiver"));
     assert!(!source.contains("bindings.insert::<"));
     assert!(source.contains("widget_first_1"));
     assert!(source.contains("widget_second_2"));
@@ -218,12 +216,12 @@ fn form_fields_allow_rust_aliases_and_independent_event_revisions() {
             &self,
             _: &neocogi_ui::Ui,
             _: &[u8],
-            _: Option<neocogi_com::ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+            _: Option<neocogi_com::ComPtr<neocogi_ui::events::IEventReceiverAbi>>,
         ) -> Result<neocogi_ui::OwnedWidget<neocogi_ui::IWidgetAbi>, neocogi_com::NcStatus> {
             Err(neocogi_com::NC_E_INVALID_ARG)
         }
     }
-    let mut metadata = DesignWidgetManifest::from_idl("alias.button", vec![], &neocogi_ui::ButtonAbi::IDL_INTERFACE).unwrap();
+    let mut metadata = DesignWidgetManifest::from_source("alias.button", vec![], &neocogi_ui::ButtonAbi::EVENT_SOURCE).unwrap();
     metadata.interface.rust_abi = "neocogi_ui::nodes::ButtonAbi".into();
     for value in &mut metadata.interface.values {
         value.rust_type = value.rust_type.replace("neocogi_ui_nodes_contracts::", "neocogi_ui::nodes::");
@@ -239,7 +237,7 @@ fn form_fields_allow_rust_aliases_and_independent_event_revisions() {
         },
     );
     let source = document.rust_bindings_with(&registry).unwrap();
-    assert!(!source.contains("impl neocogi_com::events::IEventReceiver"));
+    assert!(!source.contains("impl neocogi_ui::events::IEventReceiver"));
     fixture(source, "alias_bindings.rs", include_str!("fixtures/alias_bindings.rs"));
 
     // Event revisions negotiate against actual event objects when queried, not

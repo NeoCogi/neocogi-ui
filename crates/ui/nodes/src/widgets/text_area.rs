@@ -800,7 +800,7 @@ impl TextArea {
         text: NcCopyFromBufferOffset<'_, u8>,
         wrapping: TextWrapping,
         scrolling: bool,
-        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+        queue: Option<ComPtr<neocogi_ui::events::IEventReceiverAbi>>,
     ) -> Result<neocogi_com::ComBox<TextAreaAbi>, NcStatus> {
         let text_value = crate::boundary::text(text)?;
         let wrap = crate::widget_object::local_wrap(wrapping)?;
@@ -1000,7 +1000,7 @@ mod tests {
         // payload order and the constructor uses this exact semantic initialization path.
         let text_area = TextEditor::new_editor(TextAreaParameters::new(""));
         let (mut text_area, mut dispatcher) = text_dispatcher(text_area);
-        let inner_origin = neocogi_com::events::EventOrigin::Widget(text_area.1.query::<IWidgetAbi>().unwrap().into_unknown());
+        let inner_origin = neocogi_ui::events::EventOrigin::Widget(text_area.1.query::<IWidgetAbi>().unwrap().into_unknown());
         text_area.with_origin(inner_origin, |parts| {
             parts
                 .1
@@ -1020,7 +1020,7 @@ mod tests {
                 })
                 .unwrap()
         });
-        let outer_origin = neocogi_com::events::EventOrigin::Widget(text_area.0.downgrade().into_unknown());
+        let outer_origin = neocogi_ui::events::EventOrigin::Widget(text_area.0.downgrade().into_unknown());
         text_area.with_origin(outer_origin, |parts| {
             let mut dispatcher = parts.0.query_weak::<neocogi_ui_core_contracts::IWidgetDispatcherAbi>().unwrap();
             while dispatcher.dispatch_next().unwrap() {}

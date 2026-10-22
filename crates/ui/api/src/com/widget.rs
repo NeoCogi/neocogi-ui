@@ -25,7 +25,7 @@ pub struct WidgetState {
     /// Runtime authority shared across widgets without an ownership cycle.
     host: ComPtr<IWidgetHostAbi>,
     /// Constructor-selected posting capability; no self-reference or origin authority.
-    receiver: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+    receiver: Option<ComPtr<crate::events::IEventReceiverAbi>>,
     /// Authoritative requested flags; effective behavior-derived flags are never stored here.
     requested_flags: WidgetOptions,
     /// Geometry changes retained until the runtime collects them before layout.
@@ -48,7 +48,7 @@ impl WidgetState {
 
     /// Selects event delivery while the ordinary Rust value is being constructed.
     /// Consuming self avoids a receiver-installation operation on a published widget.
-    pub fn with_events(mut self, receiver: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>) -> Self {
+    pub fn with_events(mut self, receiver: Option<ComPtr<crate::events::IEventReceiverAbi>>) -> Self {
         self.receiver = receiver;
         self
     }
@@ -57,7 +57,7 @@ impl WidgetState {
     /// An absent destination drops the supplied event immediately. A present
     /// destination receives the same sole owner; rejection drops that owner and
     /// returns its status. Committed producer state is never rolled back.
-    pub fn post(&mut self, event: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), NcStatus> {
+    pub fn post(&mut self, event: neocogi_com::ComBox<crate::events::IEventAbi>) -> Result<(), NcStatus> {
         match &self.receiver {
             Some(receiver) => self.host.post_event(receiver.as_com_ref(), event).map_err(|(status, _event)| status),
             None => Ok(()),

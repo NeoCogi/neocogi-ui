@@ -180,7 +180,7 @@ fn combo_choice_menu_uses_shared_submenu_navigation() {
     assert_eq!(*app.state(), [ChoiceSelection::Selected(11), ChoiceSelection::Selected(11)]);
 }
 
-#[neocogi_com::com_object(interfaces(neocogi_com::events::IEventReceiver))]
+#[neocogi_com::com_object(interfaces(neocogi_ui::events::IEventReceiver))]
 /// Deliberately reentrant queue attempts removal during composite output.
 /// Application queues normally only enqueue; the active widget gate must reject this.
 struct RemoveComboDuringPost {
@@ -189,13 +189,13 @@ struct RemoveComboDuringPost {
     /// Independent observation proves one real submission crossed the ABI.
     calls: Rc<Cell<u32>>,
 }
-impl neocogi_com::events::IEventReceiver for RemoveComboDuringPost {
+impl neocogi_ui::events::IEventReceiver for RemoveComboDuringPost {
     /// A receiver cannot destroy the composite whose dispatch call is active.
     fn post(
         &mut self,
-        _: neocogi_com::NcValueRef<'_, neocogi_com::events::EventOrigin>,
-        event_owner: neocogi_com::ComBox<neocogi_com::events::IEventAbi>,
-    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
+        _: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventOrigin>,
+        event_owner: neocogi_com::ComBox<neocogi_ui::events::IEventAbi>,
+    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui::events::IEventAbi>)> {
         let result = (|| -> Result<(), NcStatus> {
             event_owner.query_weak::<neocogi_ui::IChoiceChangedEventAbi>()?;
             self.calls.set(self.calls.get() + 1);
@@ -215,7 +215,7 @@ fn combo_forwarding_rejects_active_removal_then_releases_menu_and_queue() {
     let window = ui.window("reentrant combo destruction", RECT, root_owner).unwrap();
     let calls = Rc::new(Cell::new(0));
     let queue = RemoveComboDuringPost::from_value(RemoveComboDuringPost { root: root.clone(), calls: calls.clone() })
-        .query::<neocogi_com::events::IEventReceiverAbi>()
+        .query::<neocogi_ui::events::IEventReceiverAbi>()
         .unwrap();
     let weak_queue = queue.downgrade().unwrap();
     let combo_owner = ui

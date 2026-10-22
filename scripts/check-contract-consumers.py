@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute independent event consumers and a generated-only COM macro control.
+"""Execute independent UI event consumers and generated-only COM SDK controls.
 
 Each temporary Cargo workspace has one normal contract dependency and no COM or
 dev dependency. Direct owner declarations are checked separately: a mandatory

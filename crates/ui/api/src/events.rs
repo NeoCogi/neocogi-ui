@@ -18,8 +18,13 @@ mod origin;
 pub use origin::EventOriginOwner;
 
 /// COM event interfaces, owned messages and common channel construction.
-pub use neocogi_com::events::{
-    EventBinding, EventMessage, EventOrigin, IErrorEvent, IErrorEventAbi, IEvent, IEventAbi, IEventReceiver, IEventReceiverAbi, channel, error,
+pub use neocogi_ui_core_contracts::{
+    EventBinding, EventMessage, EventOrigin, IErrorEvent, IErrorEventAbi, IEvent, IEventAbi, IEventReceiver, IEventReceiverAbi, EventPort, error,
+};
+/// Complete generated companion surface for providers using the UI event import path.
+pub use neocogi_ui_core_contracts::{
+    IEventVTable, IEventVtblFor, IEventClient, IErrorEventVTable, IErrorEventVtblFor, IErrorEventClient, IEventReceiverVTable, IEventReceiverVtblFor,
+    IEventReceiverClient,
 };
 /// Built-in immutable snapshot constructors return the sole COM event owner.
 pub use neocogi_ui_core_contracts::events::*;
@@ -27,3 +32,8 @@ pub use neocogi_ui_core_contracts::events::*;
 pub use neocogi_ui_nodes_contracts::events::*;
 /// Selection is widget state shared with event getters, rather than an event wrapper.
 pub use neocogi_ui_core_contracts::{ChoiceSelection, EVENT_DISPATCH_LIMIT};
+
+mod channel;
+pub use channel::channel;
+#[cfg(test)]
+mod binding_tests;

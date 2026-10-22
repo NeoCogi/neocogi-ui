@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+neocogi-ui-core-contracts.workspace = true
 neocogi-com = { workspace = true, features = ["std", "macros"] }
 serde.workspace = true
 serde_json.workspace = true

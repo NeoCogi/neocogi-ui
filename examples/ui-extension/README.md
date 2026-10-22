@@ -42,7 +42,7 @@ attachment and sticky invalidation. The counter stores its value
 once. `WidgetState` retains its optional receiver and posts through the existing
 host; the owning runtime supplies the origin during update/dispatch. No cached
 weak self-reference or cyclic construction is needed, including across DLLs.
-`#[events(IActivatedEvent, ICounterChangedEvent)]` advertises the captured facts.
+`ui_event_sources! { CounterAbi => [IActivatedEventAbi, ICounterChangedEventAbi]; }` advertises the captured facts.
 The counter captures each fact as an immutable `ComBox<IEvent>`, exposing the
 common `IActivatedEvent` or custom `ICounterChangedEvent` interface. Both move
 through the same `IEventReceiver` after state commits. Factories transfer widget
@@ -50,7 +50,7 @@ through the same `IEventReceiver` after state commits. Factories transfer widget
 
 The [acceptance host](../../demos/smoke/src/extension.rs) uses `events::channel()`.
 Its handler queries the public event interfaces and reads their getters after
-traversal returns. `CounterAbi::IDL_INTERFACE.events` supplies the same getter
+traversal returns. `CounterAbi::EVENT_SOURCE.events` identifies ordinary interfaces; UI derives their getter
 metadata to authoring tools. `ExtensionProvider` implements `IDesignWidgetCatalog`;
 its common constructor receives `EventBinding`. Catalog registration validates
 the event identities and getter value graph.

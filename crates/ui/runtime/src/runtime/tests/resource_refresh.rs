@@ -145,7 +145,7 @@ impl Fixture {
         let base = crate::test_support::assets::export_bundle(&bundle).unwrap();
         let runtime = crate::test_support::runtime_from_assets(base.as_com_ref()).unwrap();
         let factory = nc_ui_nodes::UiFactory::bind(runtime.as_com_ref()).unwrap();
-        let binding = neocogi_com::events::EventBinding::Unobserved;
+        let binding = neocogi_ui::events::EventBinding::Unobserved;
         let first = factory
             .create_button(NcCopyFromBufferOffset::new(0, b"first"), neocogi_com::NcValueRef::new(&binding).unwrap())
             .unwrap();

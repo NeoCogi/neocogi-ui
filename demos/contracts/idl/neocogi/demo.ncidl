@@ -1,5 +1,4 @@
-use neocogi.com.events::{EventBinding, IEvent};
-extern neocogi.com.events;
+use neocogi.ui.core::{EventBinding, IEvent};
 extern neocogi.ui.core;
 extern neocogi.ui.document;
 use neocogi.ui.core::{IActivatedEvent, IWidget, ILeafLayout, IWidgetHost, IContainer};
@@ -35,7 +34,6 @@ interface IWidgetProbe {
 
 #[version(3)]
 /// A custom control with one enum-valued event port and a concrete editing interface.
-#[events(IActivatedEvent, ICounterChangedEvent)]
 interface Counter: IWidget + ILeafLayout + IWidgetProbe {
     /// Reads the actual current activation count.
     fn count(&self) -> Result<u32>;

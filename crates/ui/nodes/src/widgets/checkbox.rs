@@ -218,7 +218,7 @@ impl Checkbox {
         resources: crate::widget_object::SharedAssets,
         checked: bool,
         label: NcCopyFromBufferOffset<'_, u8>,
-        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+        queue: Option<ComPtr<neocogi_ui::events::IEventReceiverAbi>>,
     ) -> Result<neocogi_com::ComBox<CheckboxAbi>, NcStatus> {
         let mut value = Self::build(host, checked, label, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.

@@ -1,6 +1,5 @@
-extern neocogi.com.events;
-use neocogi.com.events::EventBinding;
 extern neocogi.ui.core;
+use neocogi.ui.core::EventBinding;
 extern neocogi.ui.nodes;
 use neocogi.ui.nodes::UiFactory;
 use neocogi.ui.core::{IWidget, IWidgetHost};

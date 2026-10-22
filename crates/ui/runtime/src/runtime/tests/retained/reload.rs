@@ -4,7 +4,7 @@ use neocogi_com::INcStringComPtrExt;
 use neocogi_ui_document::*;
 
 /// Prepares the single constructor binding used by these behavioral fixtures.
-fn receiver(key: &str, queue: ComPtr<neocogi_com::events::IEventReceiverAbi>) -> Result<EventBindings, NcStatus> {
+fn receiver(key: &str, queue: ComPtr<neocogi_ui::events::IEventReceiverAbi>) -> Result<EventBindings, NcStatus> {
     let mut events = EventBindings::new();
     events.insert_queue(key, queue.as_com_ref())?;
     Ok(events)
@@ -757,7 +757,7 @@ fn textbox_enum_stream_drives_form_action_and_public_sink() {
         node: "name".into(),
     }];
     // The application matches the enum and edits its preview field after traversal.
-    let (queue, events) = neocogi_com::events::channel();
+    let (queue, events) = neocogi_ui::events::channel();
     slot.reload(&document, Resources::new(), |_| receiver("name", queue), |_, _| Ok(())).unwrap();
     fixture.frame(VIEW).unwrap();
     let form = slot.component().unwrap().root().unwrap().as_interface().clone().query::<FormAbi>().unwrap();
@@ -803,7 +803,7 @@ fn construction_bindings_reject_duplicate_unknown_and_nonemitting_sources() {
     .unwrap();
     let document = Document::new("constructor bindings");
     for key in ["missing", "title"] {
-        let (queue, messages) = neocogi_com::events::channel();
+        let (queue, messages) = neocogi_ui::events::channel();
         let mut events = EventBindings::new();
         events.insert_queue(key, queue.as_com_ref()).unwrap();
         drop(queue);
@@ -814,7 +814,7 @@ fn construction_bindings_reject_duplicate_unknown_and_nonemitting_sources() {
         );
     }
     // One common receiver is valid for any observable widget, regardless of kind.
-    let (queue, _messages) = neocogi_com::events::channel();
+    let (queue, _messages) = neocogi_ui::events::channel();
     let mut common = EventBindings::new();
     common.insert_queue("save", queue.as_com_ref()).unwrap();
     assert!(loader.compile_with_events(&document, common).is_ok());

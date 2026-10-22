@@ -58,7 +58,7 @@ use neocogi_demo_host::{AppState, Host, HostError, report_exit};
 struct State;
 impl AppState for State {
     /// Own the captured event while observing the logical window without retaining it.
-    type Message = neocogi_com::events::EventMessage;
+    type Message = neocogi_ui::events::EventMessage;
     /// Approves this demo's close request after the caption handler has returned.
     fn update(&mut self, message: Self::Message) -> Result<(), neocogi_com::NcStatus> {
         let Some(origin) = message.origin.service::<IWindowAbi>()? else {
@@ -82,7 +82,7 @@ fn run() -> Result<(), HostError> {
     let mut tree = host.ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Stretch)?;
     tree.insert(0, hello, LinearEdge::new(LayoutTrack::Flex { weight: 1.0 }))
         .map_err(|(status, _candidate)| status)?;
-    let (queue, messages) = neocogi_com::events::channel();
+    let (queue, messages) = neocogi_ui::events::channel();
     host.ui
         .window_with_queue("Hello Window", Rect { x: 40, y: 40, width: 300, height: 400 }, tree, Some(queue.as_com_ref()))
         .map_err(|(status, _candidate)| status)?;

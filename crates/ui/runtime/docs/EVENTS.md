@@ -1,6 +1,6 @@
 # COM events and widget-owned dispatch
 
-The [event object contract](../../../../docs/contracts/COM_EVENT_INTERFACES.md)
+The [event object contract](../../../../docs/contracts/UI_EVENT_INTERFACES.md)
 defines a common `IEventReceiver`, exclusive `ComBox<IEvent>` transfer, and weak
 widget/service origins. Any number of widgets share the same receiver projection.
 The application owns its inbox; a behavioral composite can own a private inbox
@@ -62,7 +62,7 @@ event. `set_settings` remains the explicit whole-policy replacement. The combo's
 
 Concrete event interfaces derive from `IEvent` and expose captured data through
 immutable getters. `EventBinding` selects delivery policy; its Observed case
-contains the common receiver. `#[events(...)]` supplies authoring metadata. A published widget has no receiver-installation method.
+contains the common receiver. `ui_event_sources!` supplies authoring metadata. A published widget has no receiver-installation method.
 
 ```rust,no_run
 use neocogi_ui::Ui;
@@ -260,7 +260,7 @@ drops the previous root; there is no separate teardown result.
 ## Static and dynamic linkage
 
 Concrete receivers, channels and message processors compile into the binary that
-owns them. `IEvent` and `IEventReceiver` belong to COM; concrete snapshot interfaces
+owns them. `IEvent` and `IEventReceiver` belong to UI core; concrete snapshot interfaces
 belong to the UI core, nodes or plugin contracts that define their facts. `IWidget`
 and the single-method `IApplicationDispatcher` belong to UI core contracts.
 The COM process runtime has no UI event loop. Hosts and plugins use the same

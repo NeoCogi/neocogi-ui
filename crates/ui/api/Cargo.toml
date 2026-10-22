@@ -27,6 +27,11 @@ skin = ["dep:neocogi-skin-contracts"]
 runtime = ["neocogi-com/runtime"]
 
 [dev-dependencies]
+neocogi-idl.workspace = true
+neocogi-ui-design.workspace = true
+tempfile.workspace = true
+trybuild.workspace = true
+
 # Every integration-test executable owns its linked runtime, independently of
 # production feature unification or a deployed native shared library.
 neocogi-com-runtime.workspace = true

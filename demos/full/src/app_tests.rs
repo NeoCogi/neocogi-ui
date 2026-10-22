@@ -50,7 +50,7 @@ fn packaged_full_host_selects_win311() {
         steps: std::array::IntoIter<Step, 8>,
     }
     impl AppState for Selection {
-        type Message = neocogi_com::events::EventMessage;
+        type Message = neocogi_ui::events::EventMessage;
         /// Preserve the production application's queued COM event handling.
         fn update(&mut self, message: Self::Message) -> Result<(), NcStatus> {
             self.state.update(message)
@@ -140,7 +140,7 @@ fn packaged_full_host_preserves_rejecting_operation() {
         failure: Failure,
     }
     impl AppState for Reject {
-        type Message = neocogi_com::events::EventMessage;
+        type Message = neocogi_ui::events::EventMessage;
         /// Preserve ordinary event handling for hooks that are not under test.
         fn update(&mut self, message: Self::Message) -> Result<(), NcStatus> {
             self.state.update(message)
@@ -189,7 +189,7 @@ fn packaged_full_host_preserves_rejecting_operation() {
 }
 
 /// Selects Win 3.11 through the real nested menu and verifies publication on the following frame.
-fn select_win311_from_menu(host: &Host, app: &TestApp<State, neocogi_com::events::EventMessage>) -> Result<(), HostError> {
+fn select_win311_from_menu(host: &Host, app: &TestApp<State, neocogi_ui::events::EventMessage>) -> Result<(), HostError> {
     let mut state = app.state();
     let size = host.window.size()?;
     let base = host.ui.assets()?;
@@ -296,7 +296,7 @@ fn construction_rejection_checks(ui: &Ui) -> Result<(), NcStatus> {
 }
 
 /// Exercises application-level composition against real runtime, platform and decoder objects.
-fn exercise() -> Result<(Host, TestApp<State, neocogi_com::events::EventMessage>), HostError> {
+fn exercise() -> Result<(Host, TestApp<State, neocogi_ui::events::EventMessage>), HostError> {
     let (host, state, events) = create()?;
     construction_rejection_checks(&host.ui)?;
     let app = TestApp::new(state, events, State::update);

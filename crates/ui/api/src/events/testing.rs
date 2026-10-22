@@ -121,7 +121,7 @@ macro_rules! test_event_queue {
     ($object:ty,
         $message:ty, $sender:expr, |$this:ident, $origin:pat_param, $event:pat_param| $body:expr
         $(, { $($field:ident: $ty:ty = $value:expr),* $(,)? })? $(,)?) => {{
-        #[neocogi_com::com_object(interfaces(neocogi_com::events::IEventReceiver))]
+        #[neocogi_com::com_object(interfaces($crate::events::IEventReceiver))]
         /// Fixture-local receiver with concrete, fully owned observation storage.
         struct RecordingQueue {
             /// Posting capability does not own the tested widget or application model.
@@ -129,11 +129,11 @@ macro_rules! test_event_queue {
             $($(/// Explicit fixture instrumentation; lifetime is owned by this queue.
                 $field: $ty,)*)?
         }
-        impl neocogi_com::events::IEventReceiver for RecordingQueue {
+        impl $crate::events::IEventReceiver for RecordingQueue {
             /// This terminal test recorder reads the snapshot while owning its COM event.
             /// Production inboxes retain EventMessage itself until dispatch.
-            fn post(&mut self, origin: neocogi_com::NcValueRef<'_, neocogi_com::events::EventOrigin>,
-                event_owner: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), (neocogi_com::NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
+            fn post(&mut self, origin: neocogi_com::NcValueRef<'_, $crate::events::EventOrigin>,
+                event_owner: neocogi_com::ComBox<$crate::events::IEventAbi>) -> Result<(), (neocogi_com::NcStatus, neocogi_com::ComBox<$crate::events::IEventAbi>)> {
                 let result = (|| -> Result<(), neocogi_com::NcStatus> {
                     #[allow(unused_imports)]
                     use neocogi_com::INcStringComPtrExt as _;
@@ -154,6 +154,6 @@ macro_rules! test_event_queue {
                 result.map_err(|status| (status, event_owner))
             }
         }
-        RecordingQueue::from_value(RecordingQueue { send: $sender, $($($field: $value,)*)? }).query::<neocogi_com::events::IEventReceiverAbi>()
+        RecordingQueue::from_value(RecordingQueue { send: $sender, $($($field: $value,)*)? }).query::<$crate::events::IEventReceiverAbi>()
     }};
 }

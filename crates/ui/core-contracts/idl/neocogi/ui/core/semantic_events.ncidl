@@ -1,4 +1,3 @@
-use neocogi.com.events::IEvent;
 
 #[version(2)]
 /// Activation occurrence shared by buttons, list items and menu commands.

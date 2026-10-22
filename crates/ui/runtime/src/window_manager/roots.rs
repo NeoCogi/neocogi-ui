@@ -547,7 +547,7 @@ struct RootState {
     /// Expanded outer height retained while the minimize button shows a compact window.
     unminimized_height: Option<i32>,
     /// Strong owner of the unified window geometry/lifecycle event stream.
-    events: neocogi_com::events::EventPort,
+    events: neocogi_ui_core_contracts::EventPort,
     /// Optional concrete menu bar laid out above the application widget body.
     menu_bar: Option<MenuSurface>,
     /// Descendant viewport policy applied when layout enters direct structural child windows.
@@ -574,7 +574,7 @@ enum PopupState {
         /// Exact screen rectangle supplied by the public popup API.
         anchor: Recti,
         /// Strong owner of policy-driven popup lifecycle events.
-        events: neocogi_com::events::EventPort,
+        events: neocogi_ui_core_contracts::EventPort,
         /// Whether the next committed layout must select this popup's first keyboard target.
         focus_on_layout: bool,
     },
@@ -773,7 +773,7 @@ impl SurfaceNode {
     }
 
     /// Emits one concrete window event at the next safe application dispatch boundary.
-    fn emit_window_event(&mut self, event: neocogi_com::ComBox<neocogi_com::events::IEventAbi>) -> Result<(), neocogi_com::NcStatus> {
+    fn emit_window_event(&mut self, event: neocogi_com::ComBox<neocogi_ui_core_contracts::IEventAbi>) -> Result<(), neocogi_com::NcStatus> {
         // The record owns its receiver; posting owns no queue and invokes no app behavior.
         let events = &mut self.root_mut().expect("window events are emitted only by roots").events;
         events.post(event)

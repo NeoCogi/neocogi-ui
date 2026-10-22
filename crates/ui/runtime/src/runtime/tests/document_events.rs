@@ -1,6 +1,6 @@
 //! Shared document delivery needs no generated event enum or receiver implementation.
 use super::*;
-use neocogi_com::events::{EventOrigin, EventMessage};
+use neocogi_ui::events::{EventOrigin, EventMessage};
 use neocogi_ui_document::{Document, DocumentEvent, EventBindings, CustomWidgetRegistry, ReloadIds, ReloadSlot, Resources, document_receiver};
 
 /// Optional generated fields remain ordinary checked widget conveniences.

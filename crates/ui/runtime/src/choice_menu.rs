@@ -51,7 +51,7 @@ pub(crate) struct ChoiceMenuState {
     /// Explicit popup lifecycle reconciled by the runtime composition owner.
     popup: ChoicePopupLifecycle,
     /// Runtime-owned source for actual user commits only.
-    changed_event: neocogi_com::events::EventPort,
+    changed_event: neocogi_ui_core_contracts::EventPort,
 }
 
 impl ChoiceMenuState {
@@ -60,7 +60,7 @@ impl ChoiceMenuState {
         menu_text: String,
         entries: Vec<ChoiceMenuEntry>,
         selection: Option<u64>,
-        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+        queue: Option<ComPtr<neocogi_ui_core_contracts::IEventReceiverAbi>>,
     ) -> Result<ComPtr<IChoiceMenuStateAbi>, NcStatus> {
         validate_menu(&menu_text, &entries, selection)?;
         let local = Self::into_local(Self {
@@ -70,12 +70,12 @@ impl ChoiceMenuState {
             revision: 0,
             popup_anchor: Rect::default(),
             popup: ChoicePopupLifecycle::Closed,
-            changed_event: neocogi_com::events::EventPort::new(),
+            changed_event: neocogi_ui_core_contracts::EventPort::new(),
         });
         // No caller can submit a choice until this factory returns. Connect its
         // weak public identity through checked local access before that boundary.
         let origin = local.query::<IChoiceMenuAbi>()?.downgrade()?;
-        local.try_borrow_mut()?.changed_event = neocogi_com::events::EventPort::with_queue(queue, origin);
+        local.try_borrow_mut()?.changed_event = neocogi_ui_core_contracts::EventPort::with_queue(queue, origin);
         local.query()
     }
 

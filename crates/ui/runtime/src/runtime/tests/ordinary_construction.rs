@@ -1,6 +1,6 @@
 //! Factories finish event wiring before exposing normally allocated capabilities.
 use super::*;
-use neocogi_com::events::{EventBinding, channel};
+use neocogi_ui::events::{EventBinding, channel};
 
 /// All window placements deliver immediate closure with the exact public source,
 /// even without a widget update supplying an ambient event origin.

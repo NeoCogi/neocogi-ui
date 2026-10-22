@@ -12,7 +12,7 @@ struct State {
     /// Source path is a host concern, never interpreted by the COM loader.
     path: Option<std::path::PathBuf>,
     /// Supplies the same concrete receiver to every replacement component.
-    queue: ComPtr<neocogi_com::events::IEventReceiverAbi>,
+    queue: ComPtr<neocogi_ui::events::IEventReceiverAbi>,
     /// Exact menu entry accepted as a reload command.
     reload_item: MenuItem,
     /// Counts application-handled button activations.
@@ -32,10 +32,7 @@ impl State {
             }
             None => Document::new("Runtime-loaded UI"),
         };
-        let queue = self
-            .queue
-            .query::<neocogi_com::events::IEventReceiverAbi>()
-            .map_err(|error| error.to_string())?;
+        let queue = self.queue.query::<neocogi_ui::events::IEventReceiverAbi>().map_err(|error| error.to_string())?;
         self.slot.reload(
             &document,
             Resources::new(),
@@ -53,7 +50,7 @@ impl State {
     }
 }
 impl AppState for State {
-    type Message = neocogi_com::events::EventMessage;
+    type Message = neocogi_ui::events::EventMessage;
     /// Runtime calls application handlers only at its normal safe mutation boundary.
     fn update(&mut self, event: Self::Message) -> Result<(), NcStatus> {
         if let Some(origin) = event.origin.service::<IWindowAbi>()? {
@@ -93,8 +90,8 @@ fn run() -> Result<(), HostError> {
     // One allocator belongs to this application's dispatch domain. Reuse it for
     // any additional/recreated slots that post into the same channel.
     let mut reload_ids = ReloadIds::new();
-    let (queue, receiver) = neocogi_com::events::channel();
-    let lifecycle = queue.query::<neocogi_com::events::IEventReceiverAbi>()?;
+    let (queue, receiver) = neocogi_ui::events::channel();
+    let lifecycle = queue.query::<neocogi_ui::events::IEventReceiverAbi>()?;
     let root = host.ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     let root_handle = root.handle();
     let window = host
@@ -115,7 +112,7 @@ fn run() -> Result<(), HostError> {
     let bar = menus.create("Runtime UI")?;
     let reload_item = bar
         .submenu("File")?
-        .item_with_queue("Reload", Some(queue.query::<neocogi_com::events::IEventReceiverAbi>()?.as_com_ref()))?;
+        .item_with_queue("Reload", Some(queue.query::<neocogi_ui::events::IEventReceiverAbi>()?.as_com_ref()))?;
     menus.attach_bar(window.as_com_ref(), &bar)?;
     #[cfg(not(target_arch = "wasm32"))]
     let path = std::env::args_os().nth(1).map(std::path::PathBuf::from);

@@ -1046,7 +1046,7 @@ impl Slider {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         options: SliderOptions,
-        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+        queue: Option<ComPtr<neocogi_ui::events::IEventReceiverAbi>>,
     ) -> Result<neocogi_com::ComBox<SliderAbi>, NcStatus> {
         let mut value = Self::build(host, options, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.

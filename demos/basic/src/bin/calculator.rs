@@ -340,7 +340,7 @@ struct State {
 }
 impl AppState for State {
     /// All keypad controls post to one concrete queue and are resolved by identity.
-    type Message = neocogi_com::events::EventMessage;
+    type Message = neocogi_ui::events::EventMessage;
     /// Consumes one command using exclusive access to the ordinary arithmetic model.
     fn update(&mut self, message: Self::Message) -> Result<(), NcStatus> {
         let Some(origin) = message.origin.widget::<ButtonAbi>()? else {
@@ -399,7 +399,7 @@ fn run() -> Result<(), HostError> {
         calculator: Calculator::new(),
         keys: Vec::new(),
     };
-    let (queue, events) = neocogi_com::events::channel();
+    let (queue, events) = neocogi_ui::events::channel();
     for (index, (label, action)) in [
         ("AC", Action::ClearAll),
         ("CE", Action::ClearEntry),

@@ -1,7 +1,7 @@
 //! Immutable COM event construction. Every result is the sole owner of its captured snapshot.
 use crate::*;
 use neocogi_com::{ComBox, ComPtr, NcStatus, NcString, INcStringAbi, NC_E_INVALID_ARG};
-use neocogi_com::events::{IEvent, IEventAbi};
+use crate::{IEvent, IEventAbi};
 
 #[neocogi_com::com_object(interfaces(crate::IActivatedEvent), ownership = exclusive)]
 /// Activation occurrence; the envelope independently retains weak source identity.

@@ -21,7 +21,7 @@ struct Request {
     phase: RequestPhase,
     /// Explicit cancel/close can complete outside runtime dispatch. This one producer
     /// therefore retains a weak completion identity; it grants no origin-stack control.
-    completed: Option<(ComPtr<neocogi_com::events::IEventReceiverAbi>, neocogi_com::events::EventOrigin)>,
+    completed: Option<(ComPtr<neocogi_ui::events::IEventReceiverAbi>, neocogi_ui::events::EventOrigin)>,
 }
 
 /// Mutually exclusive picker-request lifecycle; no two booleans can disagree.
@@ -52,7 +52,7 @@ impl Request {
     /// Transfers an already captured completion, or drops it when no receiver was supplied.
     /// Request completion is committed separately; delivery failure cannot reactivate it.
     /// A refused owner is dropped here after preserving the receiver's exact status.
-    fn post(&mut self, event: ComBox<neocogi_com::events::IEventAbi>) -> Result<(), NcStatus> {
+    fn post(&mut self, event: ComBox<neocogi_ui::events::IEventAbi>) -> Result<(), NcStatus> {
         match &mut self.completed {
             Some((queue, origin)) => queue.post(neocogi_com::NcValueRef::new(origin)?, event).map_err(|(status, _event)| status),
             None => Ok(()),
@@ -63,7 +63,7 @@ impl Request {
 /// Node construction data retained by the picker without retaining the core runtime identity.
 struct DialogNodes {
     /// One concrete receiver shared by all private children and directory rows.
-    queue: ComPtr<neocogi_com::events::IEventReceiverAbi>,
+    queue: ComPtr<neocogi_ui::events::IEventReceiverAbi>,
     /// Non-owning host authority reports logical closure after the owning UI is released.
     host: ComPtr<IWidgetHostAbi>,
     /// Provider-shared imported resources used by dynamically rebuilt directory rows.
@@ -309,10 +309,10 @@ impl FileDialog {
     fn new(
         services: Rc<NodeServices>,
         parent: ComRef<'_, IWindowAbi>,
-        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+        queue: Option<ComPtr<neocogi_ui::events::IEventReceiverAbi>>,
     ) -> Result<WeakLocalBox<Self>, NcStatus> {
         services.host.check_mutation()?;
-        let (children, events) = neocogi_com::events::channel();
+        let (children, events) = neocogi_ui::events::channel();
         let nodes = Rc::new(DialogNodes {
             queue: children,
             host: services.host.clone(),
@@ -514,10 +514,10 @@ impl FileDialog {
         // the fully initialized dialog before its root reaches the runtime;
         // the weak identity never retains the dialog or needs an absent value.
         let origin = dialog.query::<IFileDialogAbi>()?;
-        dialog.try_borrow_mut()?.model.request.completed = queue.map(|queue| (queue, neocogi_com::events::EventOrigin::Widget(origin.into_unknown())));
+        dialog.try_borrow_mut()?.model.request.completed = queue.map(|queue| (queue, neocogi_ui::events::EventOrigin::Widget(origin.into_unknown())));
         let windows = services.windows.clone();
         let window_sink = dialog.try_borrow()?.model.nodes.queue.clone();
-        let window_binding = neocogi_com::events::EventBinding::from_queue(Some(window_sink.as_com_ref()))?;
+        let window_binding = neocogi_ui::events::EventBinding::from_queue(Some(window_sink.as_com_ref()))?;
         let mut observer = dialog.downgrade();
         let root = dialog.into_interface::<IWidgetAbi>().map_err(|(status, _unpublished)| status)?;
         let window = windows
@@ -636,7 +636,7 @@ impl Model {
     }
 
     /// Handles one child message and completes any navigation before the next message.
-    fn update(&mut self, event: neocogi_com::events::EventMessage) -> Result<(), NcStatus> {
+    fn update(&mut self, event: neocogi_ui::events::EventMessage) -> Result<(), NcStatus> {
         // Lifecycle observations remain useful after destruction. Authenticate the
         // modal identity before inspecting the fact; an old hide cannot cancel a
         // newer visible request.
@@ -744,7 +744,7 @@ struct FileDialog {
     /// Authoritative picker state, including typed child handles and completion mapping.
     model: Model,
     /// Sole receiving endpoint, destroyed with this exclusively owned value.
-    messages: Receiver<neocogi_com::events::EventMessage>,
+    messages: Receiver<neocogi_ui::events::EventMessage>,
 }
 
 /// Optional dispatch delegates directly to the same object, with no COM reentry.
@@ -874,7 +874,7 @@ impl IFileDialog for FileDialog {
 pub(crate) fn create(
     services: Rc<NodeServices>,
     parent: ComRef<'_, IWindowAbi>,
-    queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+    queue: Option<ComPtr<neocogi_ui::events::IEventReceiverAbi>>,
 ) -> Result<WeakComBox<IFileDialogAbi>, NcStatus> {
     FileDialog::new(services, parent, queue)?.query()
 }

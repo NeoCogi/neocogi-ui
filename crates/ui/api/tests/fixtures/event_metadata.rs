@@ -1,0 +1,62 @@
+//! The compiler permits ordinary calls; UI alone assigns snapshot semantics.
+#![allow(dead_code, unused_imports)]
+mod contract;
+use contract::*;
+use neocogi_com::design::{IdlMethodType as M, IdlValueType as V};
+use neocogi_ui_core_contracts::{EventSourceMetadata, UiEventSource};
+neocogi_ui_core_contracts::ui_event_sources! { SourceAbi => [GoodAbi]; }
+
+#[test]
+fn publication_is_separate_from_abi_and_merges_event_only_values() {
+    assert!(SourceAbi::IDL_INTERFACE.values.is_empty());
+    let manifest = neocogi_ui_design::DesignWidgetManifest::from_source("proof.source", vec![], &SourceAbi::EVENT_SOURCE).unwrap();
+    assert_eq!(manifest.interface.events[0].fields[0].name, "value");
+    assert_eq!(manifest.interface.values.len(), 2);
+    assert!(manifest.interface.values.iter().any(|value| value.qualified_name == "proof.admission.Detail"));
+    assert_eq!(neocogi_ui_design::DesignWidgetManifest::decode(&manifest.encode().unwrap()).unwrap(), manifest);
+    let silent = EventSourceMetadata { interface: &SourceAbi::IDL_INTERFACE, events: &[] };
+    let silent = neocogi_ui_design::DesignWidgetManifest::from_source("proof.source", vec![], &silent).unwrap();
+    assert_eq!(silent.interface.iid, manifest.interface.iid);
+    assert_eq!(silent.interface.signature, manifest.interface.signature);
+    assert!(silent.interface.events.is_empty());
+}
+
+#[test]
+fn ui_rejects_non_snapshots_and_ambiguous_getters() {
+    // Same root IID with incompatible bytes cannot qualify by spelling or nominal identity alone.
+    static WRONG_ROOT: neocogi_com::NcInterfaceDescriptor = neocogi_com::NcInterfaceDescriptor {
+        abi_signature: GoodAbi::INTERFACE_DESCRIPTOR.abi_signature,
+        ..neocogi_ui_core_contracts::IEventAbi::INTERFACE_DESCRIPTOR
+    };
+    static WRONG_CHAIN: [&neocogi_com::NcInterfaceDescriptor; 2] = [&GoodAbi::INTERFACE_DESCRIPTOR, &WRONG_ROOT];
+    let wrong_root = neocogi_com::design::IdlInterface {
+        chain: &WRONG_CHAIN,
+        ..GoodAbi::IDL_INTERFACE
+    };
+    assert!(neocogi_ui_design::DesignEvent::from_idl(&wrong_root).unwrap_err().contains("derive"));
+    for (interface, expected) in [
+        (&UnrelatedAbi::IDL_INTERFACE, "derive"),
+        (&MutableAbi::IDL_INTERFACE, "immutable"),
+        (&ParameterAbi::IDL_INTERFACE, "parameterless"),
+        (&TransferAbi::IDL_INTERFACE, "repeatable"),
+        (&AmbiguousAbi::IDL_INTERFACE, "ambiguous"),
+        (&GenericAmbiguousAbi::IDL_INTERFACE, "ambiguous"),
+    ] {
+        let error = neocogi_ui_design::DesignEvent::from_idl(interface).unwrap_err();
+        assert!(error.contains(expected), "{error}");
+    }
+    let repeated = EventSourceMetadata { interface: &SourceAbi::IDL_INTERFACE, events: &[&GoodAbi::IDL_INTERFACE, &GoodAbi::IDL_INTERFACE] };
+    assert!(neocogi_ui_design::DesignWidgetManifest::from_source("proof.source", vec![], &repeated).unwrap_err().contains("duplicate"));
+}
+
+#[test]
+fn ordinary_introspection_preserves_call_only_ownership() {
+    let method = &CallsAbi::IDL_INTERFACE.methods[0];
+    assert_eq!(method.receiver, neocogi_com::NcAbiReceiver::Mutable);
+    assert_eq!(method.parameters.iter().map(|parameter| parameter.name).collect::<Vec<_>>(), ["text", "data", "output", "object"]);
+    assert_eq!(method.parameters[0].ty, M::Borrowed(V::Text));
+    assert_eq!(method.parameters[1].ty, M::InputBuffer(V::Scalar("bool")));
+    assert_eq!(method.parameters[2].ty, M::OutputBuffer(V::Scalar("u32")));
+    assert_eq!(method.parameters[3].ty, M::ExclusiveObject("neocogi.ui.core.IEvent"));
+    assert_eq!(method.returns, M::Value(V::Unit));
+}

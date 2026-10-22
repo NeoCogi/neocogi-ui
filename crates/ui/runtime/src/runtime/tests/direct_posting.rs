@@ -1,6 +1,6 @@
 //! Direct native update errors cross the generated COM boundary without shadow context state.
 use super::*;
-use neocogi_com::events::{EventMessage, EventOrigin, IEventAbi, IEventReceiver, IEventReceiverAbi};
+use neocogi_ui::events::{EventMessage, EventOrigin, IEventAbi, IEventReceiver, IEventReceiverAbi};
 use neocogi_ui_core_contracts::{IClipboardCompletionAbi, ITextClipboard, ITextClipboardAbi};
 
 #[com_object(interfaces(neocogi_ui_core_contracts::ITextClipboard))]
@@ -18,7 +18,7 @@ impl ITextClipboard for DeferredRead {
     }
 }
 
-#[com_object(interfaces(neocogi_com::events::IEventReceiver))]
+#[com_object(interfaces(neocogi_ui::events::IEventReceiver))]
 /// Observes the first failed snapshot without retaining its owner or source.
 struct RejectSnapshots {
     /// Records every attempted post, including an erroneous second emission.
@@ -61,7 +61,7 @@ fn native_textbox_commits_before_post_and_stops_emitting_after_rejection() {
         let clipboard: ComPtr<ITextClipboardAbi> = DeferredRead::from_value(DeferredRead { requests: send }).query().unwrap();
         runtime.set_clipboard(clipboard.as_com_ref()).unwrap();
         let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
-        let (accepted, messages) = neocogi_com::events::channel();
+        let (accepted, messages) = neocogi_ui::events::channel();
         let (attempts, rejected) = std::sync::mpsc::channel();
         let rejecting: ComPtr<IEventReceiverAbi> = RejectSnapshots::from_value(RejectSnapshots { attempts }).query().unwrap();
         let receiver = if reject { &rejecting } else { &accepted };
@@ -157,7 +157,7 @@ fn error_reports_capture_scoped_sources_and_survive_source_destruction() {
     let outer_origin = EventOrigin::Widget(outer_id.clone().into_unknown());
     let inner_origin = EventOrigin::Widget(inner_id.clone().into_unknown());
     let host = ui.widgets().host().unwrap();
-    let (queue, messages) = neocogi_com::events::channel();
+    let (queue, messages) = neocogi_ui::events::channel();
     let mut state = neocogi_ui::com::widget::WidgetState::new(host.clone(), WidgetOptions::NONE).with_events(Some(queue.clone()));
 
     // Raw rejection returns the original sole owner when no dispatcher scope exists.

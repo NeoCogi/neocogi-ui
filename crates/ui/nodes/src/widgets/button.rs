@@ -322,7 +322,7 @@ impl Button {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         label: NcCopyFromBufferOffset<'_, u8>,
-        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+        queue: Option<ComPtr<neocogi_ui::events::IEventReceiverAbi>>,
     ) -> Result<neocogi_com::ComBox<ButtonAbi>, NcStatus> {
         // The concrete provider chooses initial presentation. Facades and loaders
         // must not repeat this policy; explicit overrides use IWidget setters.

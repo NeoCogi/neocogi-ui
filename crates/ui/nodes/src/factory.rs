@@ -63,7 +63,7 @@ impl IFileDialogs for UiFactory {
     fn create(
         &self,
         parent: ComRef<'_, IWindowAbi>,
-        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventBinding>,
     ) -> Result<neocogi_com::WeakComBox<IFileDialogAbi>, NcStatus> {
         crate::dialogs::create(self.services.clone(), parent, events.to_owned()?.into_queue())
     }
@@ -76,7 +76,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
         input: NcCopyFromBufferOffset<'_, u8>,
         wrapping: TextWrapping,
         scrolling: bool,
-        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventBinding>,
     ) -> Result<neocogi_com::ComBox<TextAreaAbi>, NcStatus> {
         crate::TextArea::create_com(
             self.services.host.clone(),
@@ -117,7 +117,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     fn create_split_view(
         &self,
         settings: SplitOptions,
-        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventBinding>,
     ) -> Result<neocogi_com::ComBox<SplitViewAbi>, NcStatus> {
         self.services.host.check_mutation()?;
         crate::SplitView::create_com(
@@ -150,7 +150,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
         &self,
         checked: bool,
         label: NcCopyFromBufferOffset<'_, u8>,
-        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventBinding>,
     ) -> Result<neocogi_com::ComBox<CheckboxAbi>, NcStatus> {
         self.services.host.check_mutation()?;
         crate::Checkbox::create_com(
@@ -166,7 +166,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     fn create_textbox(
         &self,
         input: NcCopyFromBufferOffset<'_, u8>,
-        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventBinding>,
     ) -> Result<neocogi_com::ComBox<TextboxAbi>, NcStatus> {
         self.services.host.check_mutation()?;
         crate::Textbox::create_com(
@@ -187,7 +187,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     fn create_slider(
         &self,
         options: SliderOptions,
-        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventBinding>,
     ) -> Result<neocogi_com::ComBox<SliderAbi>, NcStatus> {
         self.services.host.check_mutation()?;
         crate::Slider::create_com(
@@ -202,7 +202,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     fn create_number(
         &self,
         options: NumberOptions,
-        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventBinding>,
     ) -> Result<neocogi_com::ComBox<NumberAbi>, NcStatus> {
         self.services.host.check_mutation()?;
         crate::Number::create_com(
@@ -223,7 +223,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     fn create_list_item(
         &self,
         label: NcCopyFromBufferOffset<'_, u8>,
-        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventBinding>,
     ) -> Result<neocogi_com::ComBox<ListItemAbi>, NcStatus> {
         self.services.host.check_mutation()?;
         crate::ListItem::create_com(
@@ -238,7 +238,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     fn create_list_box(
         &self,
         label: NcCopyFromBufferOffset<'_, u8>,
-        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventBinding>,
     ) -> Result<neocogi_com::ComBox<ListBoxAbi>, NcStatus> {
         self.services.host.check_mutation()?;
         crate::ListBox::create_com(
@@ -253,7 +253,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     fn create_scrollbar(
         &self,
         range: ScrollRange,
-        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventBinding>,
     ) -> Result<neocogi_com::ComBox<ScrollbarAbi>, NcStatus> {
         self.services.host.check_mutation()?;
         crate::Scrollbar::create_com(
@@ -268,7 +268,7 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
     fn create_button(
         &self,
         label: NcCopyFromBufferOffset<'_, u8>,
-        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventBinding>,
     ) -> Result<neocogi_com::ComBox<ButtonAbi>, NcStatus> {
         self.services.host.check_mutation()?;
         crate::Button::create_com(
@@ -286,12 +286,12 @@ impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
         menu_text: NcCopyFromBufferOffset<'_, u8>,
         entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntry>,
         selection: ChoiceSelection,
-        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventBinding>,
     ) -> Result<neocogi_com::ComBox<ComboAbi>, NcStatus> {
         self.services.host.check_mutation()?;
         let queue = events.to_owned()?.into_queue();
         let (inbox, receiver) = crate::widget_object::CompositeEvents::new(queue.is_some());
-        let binding = neocogi_com::events::EventBinding::from_queue(receiver.as_ref().map(ComPtr::as_com_ref))?;
+        let binding = neocogi_ui::events::EventBinding::from_queue(receiver.as_ref().map(ComPtr::as_com_ref))?;
         let menu = self
             .services
             .choices

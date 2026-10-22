@@ -3,7 +3,7 @@
 Every observed producer retains one `IEventReceiver` selected before publication.
 All producers use that same receiver interface. Each post transfers an immutable
 `ComBox<IEvent>` and captures a weak source identity. The complete wire and
-ownership contract is [COM event objects](COM_EVENT_INTERFACES.md). Ordinary UI
+ownership contract is [COM event objects](UI_EVENT_INTERFACES.md). Ordinary UI
 widgets use [owner-scoped origins](WIDGET_EVENT_ORIGINS.md): their existing host
 supplies the current weak source, without a stored self-reference.
 
@@ -27,14 +27,14 @@ enum EventBinding {
 ```
 
 `EventBinding` has no type parameters. It chooses the delivery policy only.
-The producer advertises its event interfaces with `#[events(...)]`; constructors
+The producer advertises its event interfaces with `ui_event_sources!`; constructors
 do not infer metadata or generate product-specific helpers. See
-[advertised event interfaces](IDL_EVENT_METADATA.md).
+[advertised event interfaces](UI_EVENT_METADATA.md).
 
 ## One common application inbox
 
 ```rust,ignore
-let (queue, messages) = neocogi_com::events::channel();
+let (queue, messages) = neocogi_ui::events::channel();
 let button = ui.widgets().button_with_queue("Save", Some(queue.as_com_ref()))?;
 let textbox = ui.widgets().textbox_with_queue("", Some(queue.as_com_ref()))?;
 // Dispatcher receives EventMessage; each message owns its ComBox<IEventAbi>.

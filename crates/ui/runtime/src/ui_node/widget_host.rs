@@ -51,9 +51,9 @@ impl IWidgetHost for WidgetHost {
     /// Reads the active scoped origin without exposing stack control over COM.
     fn post_event(
         &self,
-        receiver: neocogi_com::ComRef<'_, neocogi_com::events::IEventReceiverAbi>,
-        event: neocogi_com::ComBox<neocogi_com::events::IEventAbi>,
-    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
+        receiver: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IEventReceiverAbi>,
+        event: neocogi_com::ComBox<neocogi_ui_core_contracts::IEventAbi>,
+    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IEventAbi>)> {
         if let Err(status) = self.check_mutation() {
             return Err((status, event));
         }

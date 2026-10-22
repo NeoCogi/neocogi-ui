@@ -11,7 +11,7 @@ struct Model {
     counter: neocogi_com::WeakComBox<CounterAbi>,
 }
 impl events::MessageProcessor for Model {
-    type Message = neocogi_com::events::EventMessage;
+    type Message = neocogi_ui::events::EventMessage;
     /// Handles the independent plugin's concrete public event protocol.
     fn handle(&mut self, message: Self::Message) -> Result<(), NcStatus> {
         let Some(origin) = message.origin.widget::<CounterAbi>()? else {
@@ -58,8 +58,8 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     assert_eq!(a_view.children().unwrap_err(), neocogi_com::NC_E_DROPPED);
     assert_eq!(b_view.children().unwrap_err(), neocogi_com::NC_E_DROPPED);
 
-    let (queue, events) = neocogi_com::events::channel();
-    let binding = neocogi_com::events::EventBinding::from_queue(Some(queue.as_com_ref()))?;
+    let (queue, events) = neocogi_ui::events::channel();
+    let binding = neocogi_ui::events::EventBinding::from_queue(Some(queue.as_com_ref()))?;
     let counter_owner = provider.counter(host.as_com_ref(), neocogi_com::NcValueRef::new(&binding)?)?;
     let mut counter = counter_owner.downgrade();
     let probe: neocogi_com::WeakComBox<IWidgetProbeAbi> = counter.query()?;
@@ -135,7 +135,7 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     assert_eq!(inset.children()?.child_count()?, 0);
     ui.update_with_events(size, owner.as_com_ref())?;
     ui.render(size, renderer)?;
-    let replacement = provider.counter(host.as_com_ref(), neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved)?)?;
+    let replacement = provider.counter(host.as_com_ref(), neocogi_com::NcValueRef::new(&neocogi_ui::events::EventBinding::Unobserved)?)?;
     let replacement_view = replacement.downgrade();
     let replacement_probe = replacement_view.query::<IWidgetProbeAbi>()?;
     let replacement = replacement.query::<IWidgetAbi>().map_err(|(status, _candidate)| status)?;

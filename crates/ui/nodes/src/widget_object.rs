@@ -518,13 +518,13 @@ pub(crate) trait ImageState {
 /// widget host exposes scope control. Runtime dispatch selects the composite origin.
 pub(crate) struct CompositeEvents {
     /// Absent observation needs neither an extra receiver nor a private channel.
-    messages: Option<std::sync::mpsc::Receiver<neocogi_com::events::EventMessage>>,
+    messages: Option<std::sync::mpsc::Receiver<neocogi_ui::events::EventMessage>>,
 }
 impl CompositeEvents {
     /// Prepares a private channel only when the public composite is observed.
-    pub(crate) fn new(observed: bool) -> (Self, Option<neocogi_com::ComPtr<neocogi_com::events::IEventReceiverAbi>>) {
+    pub(crate) fn new(observed: bool) -> (Self, Option<neocogi_com::ComPtr<neocogi_ui::events::IEventReceiverAbi>>) {
         let (queue, messages) = if observed {
-            let (queue, messages) = neocogi_com::events::channel();
+            let (queue, messages) = neocogi_ui::events::channel();
             (Some(queue), Some(messages))
         } else {
             (None, None)

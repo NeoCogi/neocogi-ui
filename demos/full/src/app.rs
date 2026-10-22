@@ -277,7 +277,7 @@ impl State {
 }
 impl AppState for State {
     /// Every source maps into this application's one owned protocol.
-    type Message = neocogi_com::events::EventMessage;
+    type Message = neocogi_ui::events::EventMessage;
     /// Interprets one message using ordinary exclusive application state.
     fn update(&mut self, event: Self::Message) -> Result<(), NcStatus> {
         self.handle_event(&event)
@@ -415,7 +415,7 @@ impl State {
     }
 
     /// Preserves manager-owned minimize/maximize/restore rectangles and clamps only ordinary geometry.
-    fn window_changed(&mut self, message: &neocogi_com::events::EventMessage) -> Result<(), NcStatus> {
+    fn window_changed(&mut self, message: &neocogi_ui::events::EventMessage) -> Result<(), NcStatus> {
         let (mut area, clamp) = if let Some(event) = message.query::<IWindowGeometryChangedEventAbi>()? {
             (event.rect()?, !self.minimized)
         } else if message.query::<IWindowMinimizedEventAbi>()?.is_some() {
@@ -493,11 +493,11 @@ fn menu_item(menu: &MenuBuilder, send: &mut Inputs, text: &str, action: Action) 
 }
 
 /// Creates the complete demo with the same structural desktop and floating examples on every backend.
-fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<neocogi_com::events::EventMessage>), HostError> {
+fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<neocogi_ui::events::EventMessage>), HostError> {
     neocogi_demo_host::initialize()?;
     let host = Host::new("neocogi-ui COM Demo", Size { width: 1200, height: 800 }, neocogi_demo_assets::load_bundle()?)?;
     let ui = &host.ui;
-    let (receiver, events) = neocogi_com::events::channel();
+    let (receiver, events) = neocogi_ui::events::channel();
     let mut events_tx = Inputs::new(receiver);
     let grid = Rc::new(RefCell::new(GridState::default()));
     let grid_widget = ui.widgets().leaf(GridViewWidget::new(grid.clone()), WidgetOptions::NONE)?;
@@ -827,8 +827,8 @@ mod tests;
 
 impl State {
     /// Authenticate installed controls before reading their immutable COM snapshots.
-    fn handle_event(&mut self, message: &neocogi_com::events::EventMessage) -> Result<(), NcStatus> {
-        use neocogi_com::events::EventOrigin;
+    fn handle_event(&mut self, message: &neocogi_ui::events::EventMessage) -> Result<(), NcStatus> {
+        use neocogi_ui::events::EventOrigin;
         match &message.origin {
             EventOrigin::Widget(origin) if origin.is_alive() => {
                 if let Some(action) = self

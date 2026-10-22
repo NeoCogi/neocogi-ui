@@ -228,12 +228,12 @@ Linear, Grid, Split, Scroll, and Disclosure remain ordinary nested containers.
 
 A host installs custom widgets through `CustomWidgetRegistry`. A local
 `CustomWidgetFactory` returns an owned `DesignWidgetManifest`, normally made by
-`DesignWidgetManifest::from_idl(kind, defaults, &CounterAbi::IDL_INTERFACE)`,
+`DesignWidgetManifest::from_source(kind, defaults, &CounterAbi::EVENT_SOURCE)`,
 and a constructor accepting its optional COM receiver and returning `OwnedWidget<IWidgetAbi>`. Static conversion checks the
 product identity and complete reachable event graph. The constructor receiver
 is separate from the product's interface chain. A custom widget
 uses one common receiver and advertises its concrete event interfaces, for
-example `#[events(IActivatedEvent, ICounterChangedEvent)]`.
+example `ui_event_sources! { CounterAbi => [IActivatedEventAbi, ICounterChangedEventAbi]; }`.
 
 An independently built plugin exposes `IDesignWidgetCatalog` on its root factory.
 The registry reads bounded version-12 `DesignWidgetManifest` records: event

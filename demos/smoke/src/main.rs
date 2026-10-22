@@ -15,7 +15,7 @@ struct ClickModel {
     button: ButtonWidget,
 }
 impl events::MessageProcessor for ClickModel {
-    type Message = neocogi_com::events::EventMessage;
+    type Message = neocogi_ui::events::EventMessage;
     /// Uses exact source identity and commits presentation before later input.
     fn handle(&mut self, message: Self::Message) -> Result<(), NcStatus> {
         let Some(origin) = message.origin.widget::<ButtonAbi>()? else {
@@ -134,7 +134,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if options.smoke {
         assert_eq!(ui.widgets().host()?.as_raw().object, host.as_raw().object);
     }
-    let (queue, session) = neocogi_com::events::channel();
+    let (queue, session) = neocogi_ui::events::channel();
     let button = ui.widgets().button_with_queue("Hello across COM", Some(queue.as_com_ref()))?;
     let button_handle = button.handle();
     let window = ui
@@ -317,7 +317,7 @@ struct ComponentModel {
     expected_path: std::path::PathBuf,
 }
 impl events::MessageProcessor for ComponentModel {
-    type Message = neocogi_com::events::EventMessage;
+    type Message = neocogi_ui::events::EventMessage;
     /// Checks the captured fact and mutates ordinary host state after traversal.
     fn handle(&mut self, event: Self::Message) -> Result<(), NcStatus> {
         if let Some(origin) = event.origin.service::<IMenuItemAbi>()? {
@@ -359,10 +359,10 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let combo = combo_handle;
     let menus = ui.menus()?;
     let bar = menus.create("")?;
-    let (queue, events) = neocogi_com::events::channel();
+    let (queue, events) = neocogi_ui::events::channel();
     let item = bar
         .submenu("File")?
-        .item_with_queue("Menu command", Some(queue.query::<neocogi_com::events::IEventReceiverAbi>()?.as_com_ref()))?;
+        .item_with_queue("Menu command", Some(queue.query::<neocogi_ui::events::IEventReceiverAbi>()?.as_com_ref()))?;
     menus.attach_bar(window.as_com_ref(), &bar)?;
     let app = events::Dispatcher::into_local(events::Dispatcher::new(
         ComponentModel {
@@ -379,7 +379,7 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     }
     ui.update_with_events(size, owner.as_com_ref())?;
     assert_eq!(app.try_borrow()?.processor.count, 1);
-    let mut picker = ui.file_dialog_with_queue(window.as_com_ref(), Some(queue.query::<neocogi_com::events::IEventReceiverAbi>()?.as_com_ref()))?;
+    let mut picker = ui.file_dialog_with_queue(window.as_com_ref(), Some(queue.query::<neocogi_ui::events::IEventReceiverAbi>()?.as_com_ref()))?;
     let mut request = FileDialogRequest::new(&directory.0);
     request.rect = Rect { x: 10, y: 10, width: 620, height: 370 };
     picker.open(&request)?;

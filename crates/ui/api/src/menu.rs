@@ -27,9 +27,9 @@ impl Menus {
         &self,
         window: ComRef<'_, IWindowAbi>,
         menu: &MenuBuilder,
-        queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>,
+        queue: Option<ComRef<'_, crate::events::IEventReceiverAbi>>,
     ) -> Result<ComPtr<IPopupAbi>, NcStatus> {
-        let events = neocogi_com::events::EventBinding::from_queue(queue)?;
+        let events = crate::events::EventBinding::from_queue(queue)?;
         self.interface
             .create_popup(window, menu.interface.as_com_ref(), neocogi_com::NcValueRef::new(&events)?)
     }
@@ -51,11 +51,11 @@ impl MenuBuilder {
         self.item_with_queue(label, None)
     }
     /// Constructs an item with its sole receiver before exposing its handle.
-    pub fn item_with_queue(&self, label: &str, queue: Option<ComRef<'_, neocogi_com::events::IEventReceiverAbi>>) -> Result<MenuItem, NcStatus> {
+    pub fn item_with_queue(&self, label: &str, queue: Option<ComRef<'_, crate::events::IEventReceiverAbi>>) -> Result<MenuItem, NcStatus> {
         Ok(MenuItem {
             interface: self.interface.item(
                 NcCopyFromBufferOffset::new(0, label.as_bytes()),
-                neocogi_com::NcValueRef::new(&neocogi_com::events::EventBinding::from_queue(queue)?)?,
+                neocogi_com::NcValueRef::new(&crate::events::EventBinding::from_queue(queue)?)?,
             )?,
         })
     }

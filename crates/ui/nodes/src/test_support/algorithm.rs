@@ -30,7 +30,7 @@ impl<W> Algorithm<W> {
         }
     }
     /// Runs a direct call under the identity selected by this test's owning dispatcher.
-    pub(crate) fn with_origin<R>(&mut self, origin: neocogi_com::events::EventOrigin, call: impl FnOnce(&mut W) -> R) -> R {
+    pub(crate) fn with_origin<R>(&mut self, origin: neocogi_ui::events::EventOrigin, call: impl FnOnce(&mut W) -> R) -> R {
         self.driver.with_origin(origin, || call(&mut self.value)).unwrap()
     }
     /// Supplies the actual host and resource imports to the normal concrete constructor.
@@ -71,7 +71,7 @@ impl<W: neocogi_com::ComObject> Algorithm<neocogi_com::LocalBox<W>> {
             .unwrap()
             .into_unknown()
             .into_thread_local();
-        self.with_origin(neocogi_com::events::EventOrigin::Widget(origin), |value| {
+        self.with_origin(neocogi_ui::events::EventOrigin::Widget(origin), |value| {
             call(&mut value.try_borrow_mut().unwrap())
         })
     }

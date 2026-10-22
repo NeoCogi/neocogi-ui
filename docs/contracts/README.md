@@ -13,7 +13,7 @@ These guides define current behavior. For component responsibilities see
   [lifetime errors](COM_LIFETIME_ERRORS.md).
 - [IDL language and generation](IDL_MODULES.md),
   [generic values](IDL_GENERIC_VALUES.md),
-  [event metadata](IDL_EVENT_METADATA.md), and
+  [event metadata](UI_EVENT_METADATA.md), and
   [generated identifier hygiene](COM_GENERATED_IDENTIFIER_HYGIENE.md).
 - [Recursive wire values](RECURSIVE_VALUE_CONTRACT.md),
   [directional output buffers](COM_OUTPUT_BUFFERS.md), and
@@ -23,7 +23,7 @@ These guides define current behavior. For component responsibilities see
 
 ## Events and UI ownership
 
-- [Exclusive COM event objects and the common receiver](COM_EVENT_INTERFACES.md).
+- [Exclusive COM event objects and the common receiver](UI_EVENT_INTERFACES.md).
 - [Typed event queues and weak origins](CLASS_EVENT_STREAMS.md).
 - [Owner-scoped widget origins](WIDGET_EVENT_ORIGINS.md).
 - [Widget/application dispatch](WIDGET_EVENT_DISPATCH.md).

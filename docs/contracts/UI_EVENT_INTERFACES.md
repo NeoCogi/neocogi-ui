@@ -1,7 +1,7 @@
-# COM event objects
+# UI event objects
 
-The common event protocol lives in the ordinary
-[COM event IDL](../../crates/com/api/idl/neocogi/com/events/events.ncidl).
+UI owns the common event protocol, declared in ordinary IDL in
+[UI event IDL](../../crates/ui/core-contracts/idl/neocogi/ui/core/events.ncidl).
 `IEvent` is its root interface. Concrete events derive from this interface and
 expose immutable snapshots through ordinary typed COM getters. Event data is
 independent of the producer's subsequent edits and lifetime.
@@ -136,8 +136,8 @@ one immutable string capability; repeated getters add references without copying
 its contents. Foreign getter results remain subject to the consumer's domain checks.
 There are no native widget output enums or conversion traits.
 
-A custom widget adds an `IEvent`-derived interface and lists it in `#[events(...)]`.
-The compiler derives getter metadata directly; see [event metadata](IDL_EVENT_METADATA.md).
+A custom widget adds an `IEvent`-derived interface and lists it in `ui_event_sources!`.
+UI derives getter fields from ordinary IDL method metadata; see [event metadata](UI_EVENT_METADATA.md).
 
 ## Construction and native form conveniences
 
@@ -169,14 +169,14 @@ the status without rolling back committed widget changes.
 
 ## Validation
 
-[Common error regressions](../../crates/com/api/src/events/error.rs) call actual
+[Common error regressions](../../crates/ui/core-contracts/src/event_transport/error.rs) call actual
 generated getters, preserve unknown negative codes and immutable string identity,
 reject success codes and verify independent event/string lifetimes.
 [Native update and error-origin regressions](../../crates/ui/runtime/src/runtime/tests/direct_posting.rs)
 exercise rejection, first-failure stopping, sticky committed geometry, nested host
 scope restoration, missing-scope owner return and reports after source destruction.
 
-[Generated ABI regressions](../../crates/com/idl/tests/event_interfaces.rs) exercise
+[Generated ABI regressions](../../crates/ui/api/tests/event_interfaces.rs) exercise
 both origin kinds, live/expired weak fields, missing event interfaces, ABI revision
 mismatches, exclusive destruction and return of the owner after rejected posts.
 The generated receiver and event getters are invoked through actual COM tables.

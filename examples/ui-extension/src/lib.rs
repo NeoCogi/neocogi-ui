@@ -3,6 +3,7 @@
 //! The two concrete objects share only lifecycle plumbing. The counter owns its scalar value and
 //! event producer; the inset owns its padding and the host's sole authoritative child editor.
 #![deny(missing_docs)]
+use neocogi_ui::UiEventSource;
 // Native link metadata propagates to this DLL without embedding runtime state.
 #[cfg(all(feature = "dynamic-plugin", not(target_arch = "wasm32")))]
 use neocogi_native_runtime_link as _;
@@ -114,7 +115,7 @@ impl CounterObject {
     /// Validates runtime authority and publishes one fully initialized counter identity.
     fn create(
         host: ComRef<'_, IWidgetHostAbi>,
-        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+        queue: Option<ComPtr<neocogi_ui::events::IEventReceiverAbi>>,
         settings: settings::Settings,
     ) -> Result<ComBox<CounterAbi>, NcStatus> {
         host.check_mutation()?;
@@ -328,7 +329,7 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
         if index != 0 || output.offset() != 0 {
             return Err(NC_E_INVALID_ARG);
         }
-        let manifest = DesignWidgetManifest::from_idl("example.counter", settings::Settings::default().encode()?, &CounterAbi::IDL_INTERFACE)
+        let manifest = DesignWidgetManifest::from_source("example.counter", settings::Settings::default().encode()?, &CounterAbi::EVENT_SOURCE)
             .map_err(|_| NC_E_INVALID_ARG)?;
         let bytes = manifest.encode().map_err(|_| NC_E_INVALID_ARG)?;
         let required = u32::try_from(bytes.len()).map_err(|_| NC_E_INVALID_ARG)?;
@@ -344,7 +345,7 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
         index: u32,
         host: ComRef<'_, IWidgetHostAbi>,
         settings: NcCopyFromBufferOffset<'_, u8>,
-        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventBinding>,
     ) -> Result<ComBox<IWidgetAbi>, NcStatus> {
         if index != 0 || settings.offset() != 0 {
             return Err(NC_E_INVALID_ARG);
@@ -355,8 +356,8 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
         CounterObject::create(
             host,
             match events.to_owned()? {
-                neocogi_com::events::EventBinding::Unobserved => None,
-                neocogi_com::events::EventBinding::Observed(queue) => Some(queue),
+                neocogi_ui::events::EventBinding::Unobserved => None,
+                neocogi_ui::events::EventBinding::Observed(queue) => Some(queue),
             },
             settings,
         )?
@@ -382,7 +383,7 @@ impl ExtensionProvider for ExtensionProviderObject {
     fn counter(
         &self,
         host: ComRef<'_, IWidgetHostAbi>,
-        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventBinding>,
     ) -> Result<ComBox<CounterAbi>, NcStatus> {
         CounterObject::create(host, events.to_owned()?.into_queue(), settings::Settings::default())
     }

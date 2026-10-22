@@ -58,7 +58,6 @@ enum ChoiceSelection: u8 {
 /// The menu owns hierarchy, navigation, placement and committed selection. A header control such
 /// as Combo owns only its presentation and delegates these menu responsibilities through this
 /// interface. Mutations are silent; only user submission publishes `ChoiceSelection`.
-#[events(IChoiceChangedEvent)]
 interface IChoiceMenu {
     /// Returns the exact committed stable identity, including explicit absence.
     fn selection(&self) -> Result<ChoiceSelection>;
@@ -97,7 +96,6 @@ interface IChoiceMenus {
 
 #[version(2)]
 /// Live compact row capability, editable before mounting and while its owning surface exists.
-#[events(IActivatedEvent)]
 interface IMenuItem {
     /// Returns the same label used by measurement, paint and captured submissions.
     fn label(&self) -> Result<ComPtr<INcString>>;

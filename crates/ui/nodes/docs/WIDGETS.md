@@ -21,7 +21,7 @@ selection-menu popup after receiving the popup's owning window.
 use neocogi_ui::{CrossSize, FlowDirection, IWindowAbi,
     LayoutTrack, LinearEdge, Rect, Ui};
 use neocogi_com::{ComPtr, ComRef, NcStatus};
-fn install(ui: &Ui, queue: ComRef<'_, neocogi_com::events::IEventReceiverAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
+fn install(ui: &Ui, queue: ComRef<'_, neocogi_ui::events::IEventReceiverAbi>) -> Result<ComPtr<IWindowAbi>, NcStatus> {
     let checkbox = ui.widgets().checkbox_with_queue("Enable preview", false, Some(queue))?;
     let mut column = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     column.insert(0, checkbox, LinearEdge::new(LayoutTrack::Content)).map_err(|(status, _candidate)| status)?;
@@ -56,7 +56,7 @@ cannot preserve live resources. Generic widget close no longer exists.
 Each emitting class owns one event port initialized from its factory's
 `EventBinding` argument. The receiver is fixed before publication;
 there is no later attachment operation.
-`#[events(...)]` lists the immutable interfaces a class emits.
+`ui_event_sources!` lists the immutable interfaces a class emits.
 Use `*_unobserved` constructors when no events are needed.
 Events own the value captured at the interaction. Ordinary programmatic setters
 remain silent. The [events guide](../../runtime/docs/EVENTS.md) describes delivery; exact interfaces and
@@ -173,7 +173,7 @@ Custom drawing uses the painter's solid geometry/image methods or an owned
 `IRenderItem` implemented by the renderer assembly.
 
 External controls use the same constructor contract: one
-`EventBinding`, with emitted interfaces advertised through `#[events(...)]`.
+`EventBinding`, with emitted interfaces advertised through `ui_event_sources!`.
 The application creates the common receiver before calling the custom factory;
 producers retain that receiver and a weak public origin. No inherited interface adds another port.
 Dispatch consumes local messages and never consults a class registry.

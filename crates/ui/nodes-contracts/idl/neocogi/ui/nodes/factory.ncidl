@@ -1,6 +1,5 @@
 #[version(3)]
 /// Constructible button interface with only its shared widget and leaf-layout protocols separated.
-#[events(IActivatedEvent)]
 interface Button: IWidget + ILeafLayout {
 
     /// Replaces the complete UTF-8 label; the logical input offset must be zero.

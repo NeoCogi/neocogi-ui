@@ -7,6 +7,10 @@
 #![no_std]
 #![deny(missing_docs)]
 
+extern crate alloc;
+#[cfg(test)]
+extern crate std;
+
 include!(concat!(env!("OUT_DIR"), "/neocogi_ui_core.include.rs"));
 
 // Preserve the facade's established Rust import surface while declaration
@@ -19,3 +23,18 @@ mod helpers;
 pub use helpers::*;
 
 pub mod events;
+
+// Event publication is UI authoring policy, separate from callable IDL ABI.
+crate::ui_event_sources! {
+    IFileDialogAbi => [IFileAcceptedEventAbi, IFileCancelledEventAbi];
+    IChoiceMenuAbi => [IChoiceChangedEventAbi];
+    IMenuItemAbi => [IActivatedEventAbi];
+    IWindowAbi => [IWindowGeometryChangedEventAbi, IWindowCloseRequestedEventAbi, IWindowHiddenEventAbi, IWindowDestroyedEventAbi, IWindowMinimizedEventAbi, IWindowMaximizedEventAbi, IWindowRestoredEventAbi];
+    IPopupAbi => [IPopupDismissedEventAbi];
+}
+
+mod event_transport;
+pub use event_transport::{EventMessage, EventPort, error};
+
+mod event_sources;
+pub use event_sources::{EventSourceMetadata, UiEventSource};

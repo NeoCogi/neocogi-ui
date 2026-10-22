@@ -98,7 +98,7 @@ impl ComNode {
     pub(crate) fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Result<Change, NcStatus> {
         let state = super::input_contract::snapshot(ctx, input, self.policy().1);
         let (event, text) = super::input_contract::event(input);
-        let origin = neocogi_com::events::EventOrigin::Widget(self.widget.downgrade().into_unknown());
+        let origin = neocogi_ui_core_contracts::EventOrigin::Widget(self.widget.downgrade().into_unknown());
         let result = self
             .services
             .state

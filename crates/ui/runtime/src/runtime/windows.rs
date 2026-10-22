@@ -73,9 +73,9 @@ enum WindowPlacement {
 /// Construction distinguishes window and popup contracts without erasing their queues.
 enum Placement {
     /// Ordinary placement and the one constructor-selected window receiver.
-    Window(WindowPlacement, Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>),
+    Window(WindowPlacement, Option<ComPtr<neocogi_ui_core_contracts::IEventReceiverAbi>>),
     /// Hidden auto-sized popup owned by a live ordinary window or dialog.
-    Popup(WindowHandle, Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>),
+    Popup(WindowHandle, Option<ComPtr<neocogi_ui_core_contracts::IEventReceiverAbi>>),
 }
 
 impl RuntimeStorage {
@@ -157,7 +157,7 @@ impl IWindowManager for Runtime {
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
         root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
-        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui_core_contracts::EventBinding>,
     ) -> Result<ComPtr<IWindowAbi>, (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
         let prepared = (|| {
             let queue = events.to_owned()?.into_queue();
@@ -178,7 +178,7 @@ impl IWindowManager for Runtime {
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
         root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
-        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui_core_contracts::EventBinding>,
     ) -> Result<ComPtr<IWindowAbi>, (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
         let prepared = (|| {
             let queue = events.to_owned()?.into_queue();
@@ -199,7 +199,7 @@ impl IWindowManager for Runtime {
         title: NcCopyFromBufferOffset<'_, u8>,
         rect: Rect,
         root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
-        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui_core_contracts::EventBinding>,
     ) -> Result<ComPtr<IWindowAbi>, (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
         let prepared = (|| {
             let queue = events.to_owned()?.into_queue();
@@ -219,7 +219,7 @@ impl IWindowManager for Runtime {
         parent: ComRef<'_, IWindowAbi>,
         title: NcCopyFromBufferOffset<'_, u8>,
         root: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
-        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui_core_contracts::EventBinding>,
     ) -> Result<ComPtr<IPopupAbi>, (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
         let prepared = (|| {
             let queue = events.to_owned()?.into_queue();
@@ -272,7 +272,7 @@ impl LogicalWindow {
         manager: &mut WindowManager,
         placement: WindowPlacement,
         window: Window,
-        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+        queue: Option<ComPtr<neocogi_ui_core_contracts::IEventReceiverAbi>>,
     ) -> (ComPtr<IUnknown>, NativeSurface) {
         let window = match placement {
             WindowPlacement::Root => manager.create_window(window, None),
@@ -295,7 +295,7 @@ impl LogicalWindow {
             .expect("LogicalWindow has shared ownership");
         // Registration emits no events. The exclusive manager transaction keeps
         // this record private until its initialized COM identity is connected.
-        manager.connect_window_events(&window, neocogi_com::events::EventPort::with_queue(queue, origin));
+        manager.connect_window_events(&window, neocogi_ui_core_contracts::EventPort::with_queue(queue, origin));
         (local.query().expect("every generated object declares IUnknown"), NativeSurface::Window(window))
     }
 
@@ -447,7 +447,7 @@ impl LogicalPopup {
         runtime: Weak<RuntimeStorage>,
         manager: &mut WindowManager,
         popup: PopupHandle,
-        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+        queue: Option<ComPtr<neocogi_ui_core_contracts::IEventReceiverAbi>>,
     ) -> (ComPtr<IUnknown>, NativeSurface) {
         let local = Self::into_local(Self {
             runtime,
@@ -459,7 +459,7 @@ impl LogicalPopup {
             .expect("LogicalPopup declares IPopup")
             .downgrade()
             .expect("LogicalPopup has shared ownership");
-        manager.connect_popup_events(&popup, neocogi_com::events::EventPort::with_queue(queue, origin));
+        manager.connect_popup_events(&popup, neocogi_ui_core_contracts::EventPort::with_queue(queue, origin));
         (local.query().expect("every generated object declares IUnknown"), NativeSurface::Popup(popup))
     }
 
@@ -620,7 +620,7 @@ mod placement_tests {
     fn window_placements_share_one_queue_without_sharing_origins() {
         let runtime = crate::test_support::create_runtime(crate::test_support::test_atlas());
         let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
-        let (queue, events) = neocogi_com::events::channel();
+        let (queue, events) = neocogi_ui::events::channel();
         let weak_queue = queue.downgrade().unwrap();
         let rect = Rect { x: 20, y: 20, width: 320, height: 240 };
         let root = ui

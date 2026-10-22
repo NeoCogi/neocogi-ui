@@ -11,7 +11,7 @@ pub(crate) fn create_choice_menu(
     menu_text: NcCopyFromBufferOffset<'_, u8>,
     entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntry>,
     selection: ChoiceSelection,
-    queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+    queue: Option<ComPtr<neocogi_ui_core_contracts::IEventReceiverAbi>>,
 ) -> Result<ComPtr<IChoiceMenuAbi>, NcStatus> {
     storage.open()?;
     storage.factory.host.check_mutation()?;

@@ -106,7 +106,6 @@ enum FileDialogMode: u8 {
 /// The provider mounts the same object through IWidget/IContainerLayout; this
 /// capability controls its modal request and does not grant a second attachment.
 /// Retaining the picker does not keep its allocating runtime open.
-#[events(IFileAcceptedEvent, IFileCancelledEvent)]
 interface IFileDialog {
     /// Returns the actual stable modal window capability for ordinary lifecycle and geometry operations.
     fn window(&self) -> Result<ComPtr<IWindow>>;

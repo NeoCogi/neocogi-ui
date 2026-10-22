@@ -48,7 +48,7 @@ impl IMenuBuilder for Builder {
     fn item(
         &self,
         input: NcCopyFromBufferOffset<'_, u8>,
-        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui_core_contracts::EventBinding>,
     ) -> Result<ComPtr<IMenuItemAbi>, NcStatus> {
         let runtime = self.owner()?;
         let label = text(input)?;
@@ -67,7 +67,7 @@ impl IMenuBuilder for Builder {
             handle,
         });
         let interface = object.query::<IMenuItemAbi>()?;
-        item.record.submitted_event = neocogi_com::events::EventPort::with_queue(queue, interface.downgrade()?);
+        item.record.submitted_event = neocogi_ui_core_contracts::EventPort::with_queue(queue, interface.downgrade()?);
         item.record.origin = Some(interface.clone());
         // Only the complete record enters the declaration. No native input or
         // application capability can observe an item with an unconnected port.
@@ -318,7 +318,7 @@ impl IMenus for Runtime {
         &self,
         window: ComRef<'_, IWindowAbi>,
         menu: ComRef<'_, IMenuBuilderAbi>,
-        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui_core_contracts::EventBinding>,
     ) -> Result<ComPtr<IPopupAbi>, NcStatus> {
         self.storage.factory.host.check_mutation()?;
         let queue = events.to_owned()?.into_queue();

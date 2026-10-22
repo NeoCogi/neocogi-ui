@@ -36,7 +36,7 @@ fn activations() -> [WidgetEvent; 3] {
 
 /// Calls the generated widget ABI; eventless input represents an eligible pointer click.
 fn activate(driver: &crate::runtime::testing::OriginDriver, widget: &mut WeakComBox<IWidgetAbi>, input: WidgetEvent) -> Result<GeometryChange, NcStatus> {
-    let origin = neocogi_com::events::EventOrigin::Widget(widget.clone().into_unknown());
+    let origin = neocogi_ui::events::EventOrigin::Widget(widget.clone().into_unknown());
     driver.with_origin(origin, || {
         widget.update(state(matches!(input, WidgetEvent::None)), input, NcCopyFromBufferOffset::new(0, b""))
     })?
@@ -74,7 +74,7 @@ fn observed_list_item_keeps_activation_identity_after_label_edits_and_source_dro
     let gfx = neocogi_ui_support::test_support::gfx_factory();
     let (runtime, driver) = crate::runtime::testing::create_runtime(source.as_com_ref(), gfx.as_com_ref()).unwrap();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
-    let (queue, messages) = neocogi_com::events::channel();
+    let (queue, messages) = neocogi_ui::events::channel();
     let item = ui.widgets().list_item_with_queue("initial", Some(queue.as_com_ref())).unwrap();
     let mut row = item.handle();
     let mut widget = row.as_interface().query::<IWidgetAbi>().unwrap();
@@ -107,7 +107,7 @@ fn disconnected_list_item_receiver_does_not_change_the_label() {
     let gfx = neocogi_ui_support::test_support::gfx_factory();
     let (runtime, driver) = crate::runtime::testing::create_runtime(source.as_com_ref(), gfx.as_com_ref()).unwrap();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
-    let (queue, messages) = neocogi_com::events::channel();
+    let (queue, messages) = neocogi_ui::events::channel();
     let item = ui.widgets().list_item_with_queue("retained", Some(queue.as_com_ref())).unwrap();
     let row = item.handle();
     let mut widget = row.as_interface().query::<IWidgetAbi>().unwrap();

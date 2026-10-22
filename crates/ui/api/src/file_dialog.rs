@@ -3,7 +3,7 @@
 //! ```no_run
 //! use neocogi_ui::{Ui, IWindowAbi, FileDialogRequest};
 //! use neocogi_com::{ComRef, NcStatus};
-//! fn example(ui: &Ui, owner: ComRef<'_, IWindowAbi>, queue: ComRef<'_, neocogi_com::events::IEventReceiverAbi>) -> Result<(), NcStatus> {
+//! fn example(ui: &Ui, owner: ComRef<'_, IWindowAbi>, queue: ComRef<'_, neocogi_ui::events::IEventReceiverAbi>) -> Result<(), NcStatus> {
 //!     let mut picker = ui.file_dialog_with_queue(owner, Some(queue))?;
 //!     picker.open(&FileDialogRequest::new(std::path::Path::new(".")))?;
 //!     // Keep the picker and consume messages through the application's normal inbox.

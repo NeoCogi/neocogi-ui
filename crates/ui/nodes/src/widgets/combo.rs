@@ -262,7 +262,7 @@ impl Combo {
         menu: ComPtr<IChoiceMenuAbi>,
         placeholder: String,
         events: crate::widget_object::CompositeEvents,
-        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+        queue: Option<ComPtr<neocogi_ui::events::IEventReceiverAbi>>,
     ) -> Result<neocogi_com::ComBox<ComboAbi>, NcStatus> {
         let parameters = crate::ComboParameters::new();
         let mut runtime = crate::widget_object::WidgetRuntime::for_resources(host, parameters.opt, Some(&resources))?;

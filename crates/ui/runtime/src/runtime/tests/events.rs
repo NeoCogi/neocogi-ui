@@ -558,7 +558,7 @@ fn failed_consumer_recovers_on_next_update_and_preserves_remaining_native_input(
 fn real_lifecycle_cascade_is_deferred_until_each_consumer_returns() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let button = ui.widgets().button_unobserved("cascade").unwrap();
-    let (queue, events) = neocogi_com::events::channel();
+    let (queue, events) = neocogi_ui::events::channel();
     let window = ui.window_with_queue("cascade", RECT, button, Some(queue.as_com_ref())).unwrap();
     window.set_visibility(Visibility::Hidden).unwrap();
     let app = TestApp::new((0, window.clone()), events, |(observed, window), event| {
@@ -686,16 +686,16 @@ fn failed_post_preserves_committed_widget_state_and_requires_a_new_frame() {
 /// Window mutations report posting errors after committing their complete lifecycle transition.
 #[test]
 fn failed_lifecycle_post_preserves_visibility_and_returns_its_receiver_error() {
-    #[neocogi_com::com_object(interfaces(neocogi_com::events::IEventReceiver))]
+    #[neocogi_com::com_object(interfaces(neocogi_ui::events::IEventReceiver))]
     /// Concrete foreign queue rejects each fully decoded lifecycle event.
     struct Reject;
-    impl neocogi_com::events::IEventReceiver for Reject {
+    impl neocogi_ui::events::IEventReceiver for Reject {
         /// Valid decoding does not oblige an application receiver to accept a post.
         fn post(
             &mut self,
-            _: neocogi_com::NcValueRef<'_, neocogi_com::events::EventOrigin>,
-            event_owner: neocogi_com::ComBox<neocogi_com::events::IEventAbi>,
-        ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
+            _: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventOrigin>,
+            event_owner: neocogi_com::ComBox<neocogi_ui::events::IEventAbi>,
+        ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui::events::IEventAbi>)> {
             let result = (|| -> Result<(), NcStatus> {
                 event_owner.query_weak::<IWindowEventAbi>()?;
                 Err(NC_E_INVALID_ARG)
@@ -705,7 +705,7 @@ fn failed_lifecycle_post_preserves_visibility_and_returns_its_receiver_error() {
     }
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let button = ui.widgets().button_unobserved("lifecycle").unwrap();
-    let queue = Reject::from_value(Reject).query::<neocogi_com::events::IEventReceiverAbi>().unwrap();
+    let queue = Reject::from_value(Reject).query::<neocogi_ui::events::IEventReceiverAbi>().unwrap();
     let window = ui.window_with_queue("post failure", RECT, button, Some(queue.as_com_ref())).unwrap();
     assert_eq!(window.set_visibility(Visibility::Hidden), Err(NC_E_INVALID_ARG));
     assert_eq!(window.snapshot().unwrap().visibility, Visibility::Hidden);

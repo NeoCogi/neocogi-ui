@@ -702,7 +702,7 @@ impl WindowManager {
             RootCaptionButton::Minimize => {
                 let node = self.root_node_mut(root).expect("caption target must remain registered");
                 let restore_height = node.root_mut().expect("caption target must be a root").unminimized_height.take();
-                let event: fn(neocogi_ui_core_contracts::Rect) -> Result<neocogi_com::ComBox<neocogi_com::events::IEventAbi>, neocogi_com::NcStatus> =
+                let event: fn(neocogi_ui_core_contracts::Rect) -> Result<neocogi_com::ComBox<neocogi_ui_core_contracts::IEventAbi>, neocogi_com::NcStatus> =
                     if let Some(height) = restore_height {
                         // Maximized windows restore against their live viewport; ordinary windows use
                         // the exact height saved by the preceding minimize action.
@@ -734,7 +734,7 @@ impl WindowManager {
                     // Maximizing a compact window starts from its expanded normal geometry.
                     node.surface.rect.height = height;
                 }
-                let event: fn(neocogi_ui_core_contracts::Rect) -> Result<neocogi_com::ComBox<neocogi_com::events::IEventAbi>, neocogi_com::NcStatus> =
+                let event: fn(neocogi_ui_core_contracts::Rect) -> Result<neocogi_com::ComBox<neocogi_ui_core_contracts::IEventAbi>, neocogi_com::NcStatus> =
                     if let Some(rect) = restore {
                         // Restore exactly the normal placement captured by the preceding maximize.
                         node.surface.rect = rect;

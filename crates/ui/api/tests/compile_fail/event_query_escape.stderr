@@ -1,0 +1,11 @@
+error[E0505]: cannot move out of `message` because it is borrowed
+ --> tests/compile_fail/event_query_escape.rs:6:10
+  |
+4 | fn inspect(message: EventMessage) {
+  |            ------- binding `message` declared here
+5 |     let projection = message.query::<IUnknown>().unwrap().unwrap();
+  |                      ------- borrow of `message` occurs here
+6 |     drop(message);
+  |          ^^^^^^^ move out of `message` occurs here
+7 |     let _raw = projection.as_raw();
+  |                ---------- borrow later used here

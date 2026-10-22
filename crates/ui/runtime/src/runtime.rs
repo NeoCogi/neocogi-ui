@@ -232,7 +232,7 @@ impl IChoiceMenus for Runtime {
         menu_text: NcCopyFromBufferOffset<'_, u8>,
         entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntry>,
         selection: ChoiceSelection,
-        events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui_core_contracts::EventBinding>,
     ) -> Result<ComPtr<IChoiceMenuAbi>, NcStatus> {
         choices::create_choice_menu(&self.storage, parent, menu_text, entries, selection, events.to_owned()?.into_queue())
     }
@@ -542,7 +542,7 @@ impl Runtime {
             for mut widget in widgets.iter() {
                 // Selection checks the actual receiver's liveness. Every error
                 // from its behavior propagates, including errors from dependencies.
-                let origin = neocogi_com::events::EventOrigin::Widget(widget.clone().into_unknown());
+                let origin = neocogi_ui_core_contracts::EventOrigin::Widget(widget.clone().into_unknown());
                 let handled = self.storage.factory.state.event_origins.with_origin(origin, || widget.dispatch_next())??;
                 self.storage.open()?;
                 if self.storage.context()?.window_manager.take_dispatch_order_changed() {
@@ -636,7 +636,7 @@ pub mod testing {
     }
     impl OriginDriver {
         /// Enters the synchronous owner boundary omitted by a direct algorithm call.
-        pub fn with_origin<R>(&self, origin: neocogi_com::events::EventOrigin, call: impl FnOnce() -> R) -> Result<R, NcStatus> {
+        pub fn with_origin<R>(&self, origin: neocogi_ui_core_contracts::EventOrigin, call: impl FnOnce() -> R) -> Result<R, NcStatus> {
             self.state.event_origins.with_origin(origin, call)
         }
     }

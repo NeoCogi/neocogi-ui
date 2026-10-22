@@ -226,7 +226,6 @@ struct WindowSnapshot {
 
 #[version(2)]
 /// Logical UI window retained independently of its runtime's tree membership.
-#[events(IWindowGeometryChangedEvent, IWindowCloseRequestedEvent, IWindowHiddenEvent, IWindowDestroyedEvent, IWindowMinimizedEvent, IWindowMaximizedEvent, IWindowRestoredEvent)]
 interface IWindow {
     /// Copies current authoritative geometry, visibility and policy without caching app-side state.
     fn snapshot(&self) -> Result<WindowSnapshot>;
@@ -355,7 +354,6 @@ interface IWidgetHost {
 
 #[version(3)]
 /// A popup has transient placement and cannot be passed to ordinary window operations.
-#[events(IPopupDismissedEvent)]
 interface IPopup {
     /// Reports whether this popup belongs to the manager's active visible branch.
     fn visibility(&self) -> Result<Visibility>;

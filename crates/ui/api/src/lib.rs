@@ -48,3 +48,6 @@ pub use leaf::{LeafContent, DispatchingLeafContent, LeafDispatchContext};
 /// Owned immutable renderer images with cached measurement dimensions.
 pub mod image;
 pub use image::Image;
+
+/// UI-owned producer publication, independent of callable COM ABI.
+pub use neocogi_ui_core_contracts::{EventSourceMetadata, UiEventSource, ui_event_sources};

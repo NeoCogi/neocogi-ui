@@ -28,7 +28,7 @@ pub trait CustomWidgetFactory {
         &self,
         ui: &Ui,
         settings: &[u8],
-        sink: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+        sink: Option<ComPtr<neocogi_ui::events::IEventReceiverAbi>>,
     ) -> Result<neocogi_ui::OwnedWidget<IWidgetAbi>, NcStatus>;
 }
 
@@ -124,7 +124,7 @@ impl CustomWidgetRegistry {
         kind: &str,
         ui: &Ui,
         settings: &[u8],
-        sink: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+        sink: Option<ComPtr<neocogi_ui::events::IEventReceiverAbi>>,
     ) -> Result<neocogi_ui::OwnedWidget<IWidgetAbi>, NcStatus> {
         let entry = self.entries.get(kind).ok_or(NC_E_INVALID_ARG)?;
         let widget = entry.factory.create(ui, settings, sink)?;

@@ -561,7 +561,7 @@ impl Scrollbar {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         range: ScrollRange,
-        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+        queue: Option<ComPtr<neocogi_ui::events::IEventReceiverAbi>>,
     ) -> Result<neocogi_com::ComBox<ScrollbarAbi>, NcStatus> {
         let mut value = Self::build(host, range, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.

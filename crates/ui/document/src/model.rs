@@ -504,20 +504,20 @@ impl WidgetSpec {
     /// reachable value graph. Custom kinds obtain equivalent owned metadata through
     /// their COM catalog. Keep class selection here so stream and inspector lookups
     /// cannot drift apart. Widgets without an event stream return `None`.
-    pub fn event_source_metadata(&self) -> Option<&'static neocogi_com::design::IdlInterface> {
+    pub fn event_source_metadata(&self) -> Option<&'static neocogi_ui::EventSourceMetadata> {
         use neocogi_ui::*;
         match self {
-            Self::Button { .. } => Some(&ButtonAbi::IDL_INTERFACE),
-            Self::Checkbox { .. } => Some(&CheckboxAbi::IDL_INTERFACE),
-            Self::Slider { .. } => Some(&SliderAbi::IDL_INTERFACE),
-            Self::Number { .. } => Some(&NumberAbi::IDL_INTERFACE),
-            Self::ListItem { .. } => Some(&ListItemAbi::IDL_INTERFACE),
-            Self::ListBox { .. } => Some(&ListBoxAbi::IDL_INTERFACE),
-            Self::Textbox { .. } => Some(&TextboxAbi::IDL_INTERFACE),
-            Self::TextArea { .. } => Some(&TextAreaAbi::IDL_INTERFACE),
-            Self::Scrollbar { .. } => Some(&ScrollbarAbi::IDL_INTERFACE),
-            Self::Split { .. } => Some(&SplitViewAbi::IDL_INTERFACE),
-            Self::Combo { .. } => Some(&ComboAbi::IDL_INTERFACE),
+            Self::Button { .. } => Some(&ButtonAbi::EVENT_SOURCE),
+            Self::Checkbox { .. } => Some(&CheckboxAbi::EVENT_SOURCE),
+            Self::Slider { .. } => Some(&SliderAbi::EVENT_SOURCE),
+            Self::Number { .. } => Some(&NumberAbi::EVENT_SOURCE),
+            Self::ListItem { .. } => Some(&ListItemAbi::EVENT_SOURCE),
+            Self::ListBox { .. } => Some(&ListBoxAbi::EVENT_SOURCE),
+            Self::Textbox { .. } => Some(&TextboxAbi::EVENT_SOURCE),
+            Self::TextArea { .. } => Some(&TextAreaAbi::EVENT_SOURCE),
+            Self::Scrollbar { .. } => Some(&ScrollbarAbi::EVENT_SOURCE),
+            Self::Split { .. } => Some(&SplitViewAbi::EVENT_SOURCE),
+            Self::Combo { .. } => Some(&ComboAbi::EVENT_SOURCE),
             Self::TextBlock { .. }
             | Self::ColorSwatch { .. }
             | Self::Linear { .. }
@@ -530,7 +530,7 @@ impl WidgetSpec {
     }
     /// The built-in class's advertised event interfaces and inherited getter metadata.
     /// Custom kinds obtain the equivalent owned description through their COM catalog.
-    pub fn event_interfaces(&self) -> &'static [neocogi_com::design::IdlEvent] {
+    pub fn event_interfaces(&self) -> &'static [&'static neocogi_com::design::IdlInterface] {
         self.event_source_metadata().map_or(&[], |metadata| metadata.events)
     }
     /// Whether authored font selection has a concrete setter, including a disclosure's header.

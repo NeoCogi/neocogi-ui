@@ -141,7 +141,7 @@ impl Number {
 
     /// Test construction binds delivery before allocating the ordinary exclusive object.
     #[cfg(test)]
-    pub(crate) fn into_observed(mut self, queue: ComPtr<neocogi_com::events::IEventReceiverAbi>) -> neocogi_com::LocalBox<Self> {
+    pub(crate) fn into_observed(mut self, queue: ComPtr<neocogi_ui::events::IEventReceiverAbi>) -> neocogi_com::LocalBox<Self> {
         self.runtime.state = self.runtime.state.with_events(Some(queue));
         Self::into_local_box(self)
     }
@@ -285,7 +285,7 @@ impl Number {
         host: ComPtr<IWidgetHostAbi>,
         resources: crate::widget_object::SharedAssets,
         options: NumberOptions,
-        queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+        queue: Option<ComPtr<neocogi_ui::events::IEventReceiverAbi>>,
     ) -> Result<neocogi_com::ComBox<NumberAbi>, NcStatus> {
         let mut value = Self::build(host, options, Some(&resources))?;
         // Fix the sole destination before publishing the completed widget.

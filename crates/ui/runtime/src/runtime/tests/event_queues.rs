@@ -3,7 +3,7 @@ use super::*;
 use neocogi_com::INcStringComPtrExt;
 use neocogi_ui::events as snapshot;
 use neocogi_com::NC_E_INVALID_ARG;
-use neocogi_com::events::EventPort;
+use neocogi_ui::events::EventPort;
 use std::{cell::Cell, rc::Rc};
 
 /// Counts queue destruction without relying on channel implementation details.
@@ -14,26 +14,26 @@ impl Drop for Lifetime {
     }
 }
 
-#[com_object(interfaces(neocogi_com::events::IEventReceiver), ownership = exclusive)]
+#[com_object(interfaces(neocogi_ui::events::IEventReceiver), ownership = exclusive)]
 /// Valid exclusive receiver used to test rejection before UI ownership transfer.
 struct ExclusiveReceiver;
-impl neocogi_com::events::IEventReceiver for ExclusiveReceiver {
+impl neocogi_ui::events::IEventReceiver for ExclusiveReceiver {
     fn post(
         &mut self,
-        _origin: neocogi_com::NcValueRef<'_, neocogi_com::events::EventOrigin>,
-        event: ComBox<neocogi_com::events::IEventAbi>,
-    ) -> Result<(), (NcStatus, ComBox<neocogi_com::events::IEventAbi>)> {
+        _origin: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventOrigin>,
+        event: ComBox<neocogi_ui::events::IEventAbi>,
+    ) -> Result<(), (NcStatus, ComBox<neocogi_ui::events::IEventAbi>)> {
         Err((neocogi_com::NC_E_CLOSED, event))
     }
 }
 
-#[com_object(interfaces(neocogi_com::events::IEvent), ownership = exclusive)]
+#[com_object(interfaces(neocogi_ui::events::IEvent), ownership = exclusive)]
 /// Sole-owner instrumentation for direct posting through the real host and receiver.
 struct DirectFact {
     /// Counts value destruction independently of retained weak allocation storage.
     drops: Rc<Cell<u32>>,
 }
-impl neocogi_com::events::IEvent for DirectFact {}
+impl neocogi_ui::events::IEvent for DirectFact {}
 impl Drop for DirectFact {
     /// Rejected, unhandled and unrouted owners all destroy the fact exactly once.
     fn drop(&mut self) {
@@ -49,11 +49,11 @@ fn direct_post_owns_cleanup_for_absence_unhandled_delivery_and_rejection() {
     let (runtime, driver) = crate::runtime::testing::create_runtime(source.as_com_ref(), gfx.as_com_ref()).unwrap();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
     let sender = ui.widgets().button_unobserved("source").unwrap();
-    let origin = neocogi_com::events::EventOrigin::Widget(sender.as_interface().downgrade().into_unknown());
+    let origin = neocogi_ui::events::EventOrigin::Widget(sender.as_interface().downgrade().into_unknown());
     let drops = Rc::new(Cell::new(0));
     let fact = || {
         DirectFact::into_box(DirectFact { drops: drops.clone() })
-            .query::<neocogi_com::events::IEventAbi>()
+            .query::<neocogi_ui::events::IEventAbi>()
             .unwrap()
     };
     let mut state = neocogi_ui::com::widget::WidgetState::new(ui.widgets().host().unwrap(), WidgetOptions::NONE);
@@ -63,7 +63,7 @@ fn direct_post_owns_cleanup_for_absence_unhandled_delivery_and_rejection() {
     assert_eq!(drops.get(), 1);
     assert!(!observer.is_alive());
 
-    let (queue, inbox) = neocogi_com::events::channel();
+    let (queue, inbox) = neocogi_ui::events::channel();
     let mut state = state.with_events(Some(queue));
     driver.with_origin(origin.clone(), || state.post(fact())).unwrap().unwrap();
     assert_eq!(drops.get(), 1, "queued owner remains live");
@@ -88,7 +88,7 @@ fn direct_post_owns_cleanup_for_absence_unhandled_delivery_and_rejection() {
 fn exclusive_receiver_rejection_preserves_unmounted_roots() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let receiver = ExclusiveReceiver::into_box(ExclusiveReceiver)
-        .query::<neocogi_com::events::IEventReceiverAbi>()
+        .query::<neocogi_ui::events::IEventReceiverAbi>()
         .unwrap();
     let queue = Some(receiver.as_com_ref());
     assert!(matches!(ui.widgets().button_with_queue("rejected", queue), Err(NC_E_INVALID_ARG)));
@@ -215,8 +215,8 @@ fn unobserved_port_has_no_delivery_and_cannot_emit_after_close() {
 fn constructor_queues_reject_invalid_payloads_before_recording() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let origin = ui.widgets().textbox_unobserved("").unwrap();
-    let (mut sink, receiver) = neocogi_com::events::channel();
-    use neocogi_com::events::EventOrigin;
+    let (mut sink, receiver) = neocogi_ui::events::channel();
+    use neocogi_ui::events::EventOrigin;
     assert_eq!(snapshot::text_changed("é", 1).unwrap_err(), NC_E_INVALID_ARG);
     assert!(receiver.try_recv().is_err());
     let origin = EventOrigin::Widget(origin.as_interface().downgrade().into_unknown());
@@ -249,20 +249,20 @@ fn constructor_queues_reject_invalid_payloads_before_recording() {
     assert_eq!(snapshot::numeric_changed(f32::INFINITY).unwrap_err(), NC_E_INVALID_ARG);
 }
 
-#[neocogi_com::com_object(interfaces(neocogi_com::events::IEventReceiver))]
+#[neocogi_com::com_object(interfaces(neocogi_ui::events::IEventReceiver))]
 /// Queue owns immutable event boxes and never enters the emitting widget.
 struct AppQueue {
     /// Posting access holds no application model or strong widget reference.
-    sender: std::sync::mpsc::Sender<neocogi_com::events::EventMessage>,
+    sender: std::sync::mpsc::Sender<neocogi_ui::events::EventMessage>,
 }
-impl neocogi_com::events::IEventReceiver for AppQueue {
+impl neocogi_ui::events::IEventReceiver for AppQueue {
     /// Confirms the source gate stays closed while acquiring a non-owning identity.
     fn post(
         &mut self,
-        origin: neocogi_com::NcValueRef<'_, neocogi_com::events::EventOrigin>,
-        event: neocogi_com::ComBox<neocogi_com::events::IEventAbi>,
-    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
-        let message = neocogi_com::events::EventMessage::capture(origin, event)?;
+        origin: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventOrigin>,
+        event: neocogi_com::ComBox<neocogi_ui::events::IEventAbi>,
+    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui::events::IEventAbi>)> {
+        let message = neocogi_ui::events::EventMessage::capture(origin, event)?;
         if let Some(origin) = message.origin.widget::<ButtonAbi>().unwrap() {
             assert_eq!(origin.label().err(), Some(neocogi_com::NC_E_BUSY));
         }
@@ -277,8 +277,8 @@ fn one_application_queue_handles_two_widget_types_without_retaining_origins() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
     let (sender, messages) = std::sync::mpsc::channel();
     let queue = AppQueue::from_value(AppQueue { sender });
-    let buttons = queue.query::<neocogi_com::events::IEventReceiverAbi>().unwrap();
-    let texts = queue.query::<neocogi_com::events::IEventReceiverAbi>().unwrap();
+    let buttons = queue.query::<neocogi_ui::events::IEventReceiverAbi>().unwrap();
+    let texts = queue.query::<neocogi_ui::events::IEventReceiverAbi>().unwrap();
     assert_eq!(buttons.as_raw().object, texts.as_raw().object);
     let button = ui.widgets().button_with_queue("captured", Some(buttons.as_com_ref())).unwrap();
     let textbox = ui.widgets().textbox_with_queue("", Some(texts.as_com_ref())).unwrap();
@@ -329,7 +329,7 @@ fn one_application_queue_handles_two_widget_types_without_retaining_origins() {
 #[test]
 fn composite_queues_report_outer_origins_without_retaining_their_children() {
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
-    let (queue, messages) = neocogi_com::events::channel();
+    let (queue, messages) = neocogi_ui::events::channel();
     let area = ui
         .widgets()
         .text_area_with_queue("", TextWrapping::Word, true, Some(queue.as_com_ref()))
@@ -361,7 +361,7 @@ fn composite_queues_report_outer_origins_without_retaining_their_children() {
     let root_owner = root;
     let mut root = root_owner.handle();
     let window = ui.window("combo origin", RECT, root_owner).unwrap();
-    let (queue, messages) = neocogi_com::events::channel();
+    let (queue, messages) = neocogi_ui::events::channel();
     let combo = ui
         .combo_box_with_queue(
             window.as_com_ref(),

@@ -54,7 +54,7 @@ fact; no widget label, extra source argument or alternate error channel is
 needed. The queued `IErrorEvent` remains readable after that source expires.
 Infrastructure failures still propagate a status, including failure to deliver
 the report itself; there is no recursive report attempt. See
-[reported failures](COM_EVENT_INTERFACES.md#reported-failures).
+[reported failures](UI_EVENT_INTERFACES.md#reported-failures).
 
 Directly calling an observed widget's update outside an owning dispatch scope
 cannot manufacture an origin. Applications deliver input through `Ui::update`

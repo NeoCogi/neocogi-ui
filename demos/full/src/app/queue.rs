@@ -7,7 +7,7 @@ use neocogi_ui::*;
 /// Only &mut Inputs registers controls; no second COM borrow gate protects this data.
 pub(crate) struct Inputs {
     /// Common receiver projection shared directly with every observed factory.
-    pub(super) queue: neocogi_com::ComPtr<neocogi_com::events::IEventReceiverAbi>,
+    pub(super) queue: neocogi_com::ComPtr<neocogi_ui::events::IEventReceiverAbi>,
     /// Weak identities keep action lookup independent of labels and address reuse.
     pub(super) buttons: Vec<(neocogi_com::WeakComBox<ButtonAbi>, Action)>,
     /// Menu entries retain only their explicit application command.
@@ -17,7 +17,7 @@ pub(crate) struct Inputs {
 }
 impl Inputs {
     /// Constructs the sole queue before creating any eventful widgets.
-    pub(super) fn new(queue: neocogi_com::ComPtr<neocogi_com::events::IEventReceiverAbi>) -> Self {
+    pub(super) fn new(queue: neocogi_com::ComPtr<neocogi_ui::events::IEventReceiverAbi>) -> Self {
         Self {
             queue,
             buttons: Vec::new(),

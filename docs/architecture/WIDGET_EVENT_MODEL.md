@@ -13,7 +13,7 @@ errors directly, preserving any already committed geometry before fallible work.
 Recoverable operation failures can use the ordinary `IErrorEvent` status/message
 snapshot through the same destination and origin. Delivery failures remain
 statuses; the system does not recursively enqueue diagnostics. See the
-[event contract](../contracts/COM_EVENT_INTERFACES.md).
+[event contract](../contracts/UI_EVENT_INTERFACES.md).
 
 The behavioral part resembles an actor's mailbox: one owner receives a message
 and changes its state through exclusive mutable access. Delivery runs
@@ -141,8 +141,8 @@ policy.
 
 ## Declaring and handling outputs
 
-Each producer lists its event interfaces with `#[events(...)]`. The compiler
-validates their immutable getters and exposes the same shape as authoring metadata.
+Each producer lists its event interfaces with `ui_event_sources!`. UI catalog publication
+validates immutable getters against ordinary generated method metadata.
 The designer displays event interface names and getter fields. It does not rebuild
 their meaning from constructor arguments or native enum variants.
 

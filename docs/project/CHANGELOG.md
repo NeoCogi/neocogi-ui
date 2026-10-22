@@ -2,6 +2,11 @@
 
 ## 0.0.0 (unreleased)
 
+- Move event interfaces and transport from COM into UI. Replace IDL `#[events]`
+  with Rust `ui_event_sources!`, backed by generic method metadata and UI-owned
+  catalog validation. Advance module encoding to v13; preserve the single global
+  shared COM runtime registry. Keep standalone COM examples independent of UI.
+
 - Reconcile open work through the direct-event implementation and consolidate
   the COM/event adversarial assessments. Remove resolved COM9 and documentation
   cleanup O1/O4 from the active backlog; retain original reviews in Git and keep

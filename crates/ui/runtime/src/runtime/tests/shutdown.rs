@@ -4,7 +4,7 @@ use super::composite_fixture::Composite;
 use neocogi_ui::events::MessageProcessor;
 use std::sync::mpsc::{self, Sender};
 
-#[neocogi_com::com_object(interfaces(neocogi_com::events::IEventReceiver))]
+#[neocogi_com::com_object(interfaces(neocogi_ui::events::IEventReceiver))]
 /// Records every attempted notification, including ones deliberately rejected.
 struct WindowQueue {
     /// Application-owned facts must survive destruction of their producer.
@@ -14,13 +14,13 @@ struct WindowQueue {
     /// Reports final receiver release independently of retained window capabilities.
     dropped: Sender<&'static str>,
 }
-impl neocogi_com::events::IEventReceiver for WindowQueue {
+impl neocogi_ui::events::IEventReceiver for WindowQueue {
     /// Accepts ordinary lifecycle facts and optionally rejects terminal delivery.
     fn post(
         &mut self,
-        _: neocogi_com::NcValueRef<'_, neocogi_com::events::EventOrigin>,
-        event_owner: neocogi_com::ComBox<neocogi_com::events::IEventAbi>,
-    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
+        _: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventOrigin>,
+        event_owner: neocogi_com::ComBox<neocogi_ui::events::IEventAbi>,
+    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui::events::IEventAbi>)> {
         let result = (|| -> Result<(), NcStatus> {
             let event = if event_owner.query_weak::<neocogi_ui::IWindowDestroyedEventAbi>().is_ok() {
                 "destroyed"
@@ -82,7 +82,7 @@ fn runtime_shutdown_is_silent_and_preserves_already_queued_facts() {
             reject_destroyed,
             dropped: dropped.clone(),
         })
-        .query::<neocogi_com::events::IEventReceiverAbi>()
+        .query::<neocogi_ui::events::IEventReceiverAbi>()
         .unwrap();
         let (pending, inbox) = mpsc::channel();
         let (root, mut children) = Composite::build(&ui, Lifetime { name: "model", dropped: dropped.clone() }, inbox);
@@ -166,7 +166,7 @@ fn busy_shutdown_preserves_tree_and_queue_until_retry() {
         reject_destroyed: true,
         dropped: dropped.clone(),
     })
-    .query::<neocogi_com::events::IEventReceiverAbi>()
+    .query::<neocogi_ui::events::IEventReceiverAbi>()
     .unwrap();
     let (_pending, inbox) = mpsc::channel();
     let (root, _) = Composite::build(&ui, Lifetime { name: "model", dropped }, inbox);
@@ -202,7 +202,7 @@ fn individual_removal_keeps_terminal_notifications_and_error_reporting() {
         reject_destroyed: true,
         dropped,
     })
-    .query::<neocogi_com::events::IEventReceiverAbi>()
+    .query::<neocogi_ui::events::IEventReceiverAbi>()
     .unwrap();
     let root = ui.widgets().button_unobserved("removed").unwrap();
     let observed = root.node_interface().unwrap();
@@ -258,7 +258,7 @@ fn final_runtime_drop_does_not_publish_window_destruction() {
         reject_destroyed: true,
         dropped,
     })
-    .query::<neocogi_com::events::IEventReceiverAbi>()
+    .query::<neocogi_ui::events::IEventReceiverAbi>()
     .unwrap();
     let owner = ui.widgets().button_unobserved("final drop").unwrap();
     let observed = owner.node_interface().unwrap();

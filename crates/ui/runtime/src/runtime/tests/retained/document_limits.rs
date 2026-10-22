@@ -1,4 +1,5 @@
 //! Admission tests use the real loader, generated catalog calls and allocation counters.
+use neocogi_ui::UiEventSource;
 use super::*;
 use neocogi_ui_document::{*, design::DesignWidgetManifest};
 use std::sync::{
@@ -50,7 +51,7 @@ impl neocogi_ui_document::contracts::IDesignWidgetCatalog for BudgetCatalog {
         index: u32,
         _host: neocogi_com::ComRef<'_, IWidgetHostAbi>,
         settings: neocogi_com::NcCopyFromBufferOffset<'_, u8>,
-        _events: neocogi_com::NcValueRef<'_, neocogi_com::events::EventBinding>,
+        _events: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventBinding>,
     ) -> Result<neocogi_com::ComBox<IWidgetAbi>, NcStatus> {
         self.calls.fetch_add(1, Ordering::Relaxed);
         if index != 0 || settings.offset() != 0 {
@@ -69,7 +70,7 @@ impl neocogi_ui_document::contracts::IDesignWidgetCatalog for BudgetCatalog {
 /// Registers through COM discovery, retaining only the observer used for assertions.
 fn catalog_loader(ui: &Ui) -> (Loader, Document, Arc<AtomicUsize>) {
     let settings = design::encode_settings("").unwrap();
-    let manifest = DesignWidgetManifest::from_idl("test.text", settings.clone(), &TextBlockAbi::IDL_INTERFACE).unwrap();
+    let manifest = DesignWidgetManifest::from_source("test.text", settings.clone(), &TextBlockAbi::EVENT_SOURCE).unwrap();
     let calls = Arc::new(AtomicUsize::new(0));
     let catalog = BudgetCatalog::from_value(BudgetCatalog {
         ui: ui.clone(),

@@ -8,7 +8,8 @@
 
 pub mod bounded_json;
 
-use neocogi_com::design::{IdlInterface, IdlShape};
+use neocogi_com::design::{IdlInterface, IdlMethodType, IdlShape};
+use neocogi_ui_core_contracts::{EventSourceMetadata, IEventAbi};
 use serde::{Deserialize, Serialize};
 use neocogi_com::{ComSerialize, ComDeserialize};
 
@@ -217,21 +218,38 @@ pub struct DesignEvent {
     pub fields: Vec<DesignField>,
 }
 impl DesignEvent {
-    /// Copies generated event metadata without retaining producer pointers.
-    pub fn from_idl(source: &neocogi_com::design::IdlEvent) -> Result<Self, String> {
+    /// Admits an ordinary interface as a UI snapshot and derives its inherited getter fields.
+    pub fn from_idl(source: &IdlInterface) -> Result<Self, String> {
+        // The generated chain supplies exact identity and signature, independent of Rust paths.
+        if !source.chain.iter().any(|base| {
+            base.interface_id == IEventAbi::INTERFACE_DESCRIPTOR.interface_id && base.abi_signature == IEventAbi::INTERFACE_DESCRIPTOR.abi_signature
+        }) {
+            return Err("UI snapshot must derive from neocogi.ui.core.IEvent".into());
+        }
+        let mut fields = Vec::new();
+        let mut names = std::collections::BTreeSet::new();
+        for method in source.methods {
+            let IdlMethodType::Value(ty) = method.returns else {
+                return Err(format!("Event getter {} must return a repeatable value", method.name));
+            };
+            if method.receiver != neocogi_com::NcAbiReceiver::Shared || !method.parameters.is_empty() {
+                return Err(format!("Event getter {} must be immutable and parameterless", method.name));
+            }
+            if !names.insert(method.name) {
+                return Err(format!("Event getter {} is ambiguous across inherited interfaces", method.name));
+            }
+            fields.push(DesignField {
+                name: method.name.into(),
+                ty: (&ty).into(),
+            });
+        }
         Ok(Self {
-            qualified_name: source.qualified_name.into(),
+            // SAFETY: generated descriptors contain immutable static UTF-8.
+            qualified_name: unsafe { source.abi.qualified_name.as_str() }.map_err(|_| "Event has no name")?.into(),
             iid: source.abi.interface_id.to_uuid_bytes(),
             // SAFETY: generated descriptors point to immutable static bytes.
             signature: *unsafe { source.abi.abi_signature.as_digest() }.ok_or("Event has no ABI signature")?,
-            fields: source
-                .fields
-                .iter()
-                .map(|field| DesignField {
-                    name: field.name.into(),
-                    ty: (&field.ty).into(),
-                })
-                .collect(),
+            fields,
         })
     }
 }
@@ -266,15 +284,37 @@ pub struct DesignWidgetManifest {
 }
 
 impl DesignWidgetManifest {
-    /// Copies generated static IDL metadata into an owned COM transport record.
-    pub fn from_idl(kind: impl Into<String>, defaults: Vec<u8>, source: &IdlInterface) -> Result<Self, String> {
+    /// Validates UI event publication against ordinary IDL methods and copies an owned catalog.
+    /// Invalid snapshot contracts fail before publication; no producer pointers escape.
+    pub fn from_source(kind: impl Into<String>, defaults: Vec<u8>, publication: &EventSourceMetadata) -> Result<Self, String> {
+        let source = publication.interface;
         let primary = source.chain.first().ok_or("IDL interface has no COM chain")?;
         if primary.interface_id != source.abi.interface_id || primary.abi_signature != source.abi.abi_signature {
             return Err("IDL interface has an inconsistent COM chain".into());
         }
         // SAFETY: the generated ABI signature points to immutable static bytes.
         let digest = *unsafe { source.abi.abi_signature.as_digest() }.ok_or("IDL interface has no signature")?;
-        let events = source.events.iter().map(DesignEvent::from_idl).collect::<Result<Vec<_>, _>>()?;
+        let events = publication
+            .events
+            .iter()
+            .map(|event| DesignEvent::from_idl(event))
+            .collect::<Result<Vec<_>, _>>()?;
+        // Prefer producer-local Rust projections, then each event's supplying projection.
+        // Canonical shapes must agree even when equivalent generic paths differ.
+        let mut values: Vec<DesignType> = Vec::new();
+        for definition in core::iter::once(source)
+            .chain(publication.events.iter().copied())
+            .flat_map(|interface| interface.values)
+        {
+            let value = DesignType::from(definition);
+            if let Some(existing) = values.iter().find(|existing| existing.qualified_name == value.qualified_name) {
+                if existing.shape != value.shape {
+                    return Err(format!("Conflicting value definition {}", value.qualified_name));
+                }
+            } else {
+                values.push(value);
+            }
+        }
         let manifest = Self {
             version: DESIGN_DESCRIPTOR_VERSION,
             kind: kind.into(),
@@ -284,7 +324,7 @@ impl DesignWidgetManifest {
                 signature: digest,
                 rust_abi: source.rust_abi.to_owned(),
                 events,
-                values: source.values.iter().map(DesignType::from).collect(),
+                values,
             },
         };
         manifest.validate()?;

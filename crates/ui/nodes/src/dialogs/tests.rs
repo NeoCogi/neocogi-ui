@@ -1,12 +1,12 @@
 //! Standard picker acceptance exercises public methods, routed input, and exact native filesystem values.
 use super::*;
 use neocogi_com::NcValueRef;
-use neocogi_com::events::EventOrigin;
+use neocogi_ui::events::EventOrigin;
 use neocogi_ui_support::test_support::events::TestApp;
 
 mod allocations;
 /// Terminal recorder extracts the native path while it owns the event.
-fn completion(event: &ComBox<neocogi_com::events::IEventAbi>) -> Result<Option<PathBuf>, NcStatus> {
+fn completion(event: &ComBox<neocogi_ui::events::IEventAbi>) -> Result<Option<PathBuf>, NcStatus> {
     match event.query_weak::<IFileAcceptedEventAbi>() {
         Ok(event) => neocogi_ui::path::decode(event.path()?.as_com_ref()).map(Some),
         Err(neocogi_com::NC_E_NOINTERFACE) => {
@@ -47,11 +47,11 @@ impl Fixture {
         fixture
     }
     /// Supplies specialized test mappings before the widget and its window exist.
-    fn with_queue(queue: ComPtr<neocogi_com::events::IEventReceiverAbi>) -> Self {
+    fn with_queue(queue: ComPtr<neocogi_ui::events::IEventReceiverAbi>) -> Self {
         Self::with_completion(Some(queue))
     }
     /// Exercises the same factory with either an upstream receiver or no observation.
-    fn with_completion(queue: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>) -> Self {
+    fn with_completion(queue: Option<ComPtr<neocogi_ui::events::IEventReceiverAbi>>) -> Self {
         let bundle = crate::SkinBundle::from_atlas(crate::test_support::test_atlas());
         let source = crate::test_support::assets::export_bundle(&bundle).unwrap();
         let gfx = neocogi_ui_support::test_support::gfx_factory();
@@ -110,15 +110,15 @@ fn session(fixture: &mut Fixture) -> std::sync::mpsc::Receiver<Option<PathBuf>> 
 }
 
 /// Accepts the real completion ABI without allocating an application message.
-#[com_object(interfaces(neocogi_com::events::IEventReceiver))]
+#[com_object(interfaces(neocogi_ui::events::IEventReceiver))]
 struct DiscardingCompletion;
-impl neocogi_com::events::IEventReceiver for DiscardingCompletion {
+impl neocogi_ui::events::IEventReceiver for DiscardingCompletion {
     /// An unhandled fact is consumed and destroyed synchronously by this receiver.
     fn post(
         &mut self,
         _origin: NcValueRef<'_, EventOrigin>,
-        _event: ComBox<neocogi_com::events::IEventAbi>,
-    ) -> Result<(), (NcStatus, ComBox<neocogi_com::events::IEventAbi>)> {
+        _event: ComBox<neocogi_ui::events::IEventAbi>,
+    ) -> Result<(), (NcStatus, ComBox<neocogi_ui::events::IEventAbi>)> {
         Ok(())
     }
 }
@@ -188,7 +188,7 @@ struct CountedCancellation {
     /// Shared test observation requires Cell because Drop has no exclusive counter owner.
     drops: Rc<std::cell::Cell<usize>>,
 }
-impl neocogi_com::events::IEvent for CountedCancellation {}
+impl neocogi_ui::events::IEvent for CountedCancellation {}
 impl IFileCancelledEvent for CountedCancellation {}
 impl Drop for CountedCancellation {
     fn drop(&mut self) {
@@ -202,7 +202,7 @@ impl Drop for CountedCancellation {
 fn direct_completion_post_preserves_or_destroys_the_supplied_owner_once() {
     let fixture = Fixture::with_completion(None);
     let origin = EventOrigin::Widget(fixture.handle.as_interface().clone().into_unknown());
-    let (queue, messages) = neocogi_com::events::channel();
+    let (queue, messages) = neocogi_ui::events::channel();
     let refusing = RefusingCompletion::from_value(RefusingCompletion).query().unwrap();
     for (destination, expected, queued) in [
         (None, Ok(()), false),
@@ -211,7 +211,7 @@ fn direct_completion_post_preserves_or_destroys_the_supplied_owner_once() {
     ] {
         let drops = Rc::new(std::cell::Cell::new(0));
         let event = CountedCancellation::into_box(CountedCancellation { drops: drops.clone() })
-            .query::<neocogi_com::events::IEventAbi>()
+            .query::<neocogi_ui::events::IEventAbi>()
             .unwrap();
         let observer = event.downgrade();
         let mut request = Request {
@@ -244,7 +244,7 @@ fn direct_completion_post_preserves_or_destroys_the_supplied_owner_once() {
 /// snapshot that remains readable after the reusable picker is removed.
 #[test]
 fn queued_completion_keeps_its_snapshot_after_dialog_destruction() {
-    let (queue, messages) = neocogi_com::events::channel();
+    let (queue, messages) = neocogi_ui::events::channel();
     let mut fixture = Fixture::with_queue(queue);
     let directory = tempfile::tempdir().unwrap();
     fixture.open(directory.path());
@@ -684,9 +684,9 @@ fn shared_child_queue_discards_events_from_replaced_directory_rows() {
     let (mut queue, old) = fixture
         .widget
         .with(|dialog| {
-            let queue = dialog.model.nodes.queue.query::<neocogi_com::events::IEventReceiverAbi>().unwrap();
-            let buttons = dialog.model.nodes.queue.query::<neocogi_com::events::IEventReceiverAbi>().unwrap();
-            let text = dialog.model.nodes.queue.query::<neocogi_com::events::IEventReceiverAbi>().unwrap();
+            let queue = dialog.model.nodes.queue.query::<neocogi_ui::events::IEventReceiverAbi>().unwrap();
+            let buttons = dialog.model.nodes.queue.query::<neocogi_ui::events::IEventReceiverAbi>().unwrap();
+            let text = dialog.model.nodes.queue.query::<neocogi_ui::events::IEventReceiverAbi>().unwrap();
             assert!(queue.as_com_ref().same_object(buttons.as_com_ref()));
             assert!(queue.as_com_ref().same_object(text.as_com_ref()));
             let old = dialog
@@ -720,15 +720,15 @@ fn shared_child_queue_discards_events_from_replaced_directory_rows() {
 }
 
 /// Refuses cancellation delivery through a real generated COM entry.
-#[com_object(interfaces(neocogi_com::events::IEventReceiver))]
+#[com_object(interfaces(neocogi_ui::events::IEventReceiver))]
 struct RefusingCompletion;
-impl neocogi_com::events::IEventReceiver for RefusingCompletion {
+impl neocogi_ui::events::IEventReceiver for RefusingCompletion {
     /// Distinguishes delivery refusal from the window's temporary busy status.
     fn post(
         &mut self,
         _origin: NcValueRef<'_, EventOrigin>,
-        event: neocogi_com::ComBox<neocogi_com::events::IEventAbi>,
-    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_com::events::IEventAbi>)> {
+        event: neocogi_com::ComBox<neocogi_ui::events::IEventAbi>,
+    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui::events::IEventAbi>)> {
         Err((NC_E_INVALID_ARG, event))
     }
 }
@@ -945,7 +945,7 @@ fn caption_intent_cancels_current_request_without_destroying_or_crossing_reopen(
     let window = fixture.handle.window().unwrap();
     let mut queue = fixture
         .widget
-        .with(|dialog| dialog.model.nodes.queue.query::<neocogi_com::events::IEventReceiverAbi>())
+        .with(|dialog| dialog.model.nodes.queue.query::<neocogi_ui::events::IEventReceiverAbi>())
         .unwrap()
         .unwrap();
     queue

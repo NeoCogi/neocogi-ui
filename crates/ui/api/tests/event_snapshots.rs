@@ -3,7 +3,7 @@
 extern crate nc_com as _;
 
 use neocogi_com::{ComBox, INcStringComPtrExt, NcStatus, NC_E_DROPPED, NC_E_INVALID_ARG, NC_E_NOINTERFACE};
-use neocogi_com::events::{IEvent, IEventAbi};
+use neocogi_ui::events::{IEvent, IEventAbi};
 use neocogi_ui_core_contracts::*;
 use neocogi_ui_nodes_contracts::*;
 use neocogi_ui::events as snapshot;
@@ -156,7 +156,7 @@ fn file_dialog_events_preserve_native_paths_and_cancellation() {
 #[test]
 fn common_channel_retains_exclusive_owner_and_returns_it_when_disconnected() {
     use neocogi_com::{NcValueRef, NC_E_CLOSED};
-    use neocogi_com::events::{channel, EventOrigin, IEventReceiverAbi};
+    use neocogi_ui::events::{channel, EventOrigin, IEventReceiverAbi};
     let (source, _source_inbox) = channel();
     let origin = EventOrigin::Service(source.downgrade().unwrap().into_unknown());
     let (mut queue, inbox) = channel();

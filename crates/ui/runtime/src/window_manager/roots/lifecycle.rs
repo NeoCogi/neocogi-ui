@@ -6,7 +6,7 @@ impl WindowManager {
     /// creating transaction returns. Registration invokes no producer code;
     /// the caller holds exclusive manager access and has not exposed the handle.
     /// This is private factory wiring, not a runtime receiver replacement API.
-    pub(crate) fn connect_window_events(&mut self, window: &WindowHandle, events: neocogi_com::events::EventPort) {
+    pub(crate) fn connect_window_events(&mut self, window: &WindowHandle, events: neocogi_ui_core_contracts::EventPort) {
         self.surfaces
             .root_node_mut(window.id())
             .expect("new window remains registered")
@@ -18,7 +18,7 @@ impl WindowManager {
     /// Completes an application popup's delivery in its creating transaction,
     /// after ordinary COM allocation supplies its weak identity. No popup input
     /// or application call can occur before the factory exposes its capability.
-    pub(crate) fn connect_popup_events(&mut self, popup: &PopupHandle, events: neocogi_com::events::EventPort) {
+    pub(crate) fn connect_popup_events(&mut self, popup: &PopupHandle, events: neocogi_ui_core_contracts::EventPort) {
         let node = self.surfaces.popup_node_mut(popup.id()).expect("new popup remains registered");
         match &mut node.kind {
             SurfaceKind::Popup(PopupState::Application { events: destination, .. }) => *destination = events,
@@ -141,7 +141,7 @@ impl WindowManager {
         window: Window,
         options: WindowOption,
         visible: bool,
-        queue: Option<neocogi_com::events::EventPort>,
+        queue: Option<neocogi_ui_core_contracts::EventPort>,
     ) -> WindowHandle {
         // Public child/dialog entry points authenticate and classify the owner before moving the
         // Window here. Keep registration infallible after that transfer: this is the boundary that
@@ -184,7 +184,7 @@ impl WindowManager {
     }
 
     /// Creates an open independent window from one complete retained definition.
-    pub fn create_window(&mut self, window: Window, queue: Option<neocogi_com::events::EventPort>) -> WindowHandle {
+    pub fn create_window(&mut self, window: Window, queue: Option<neocogi_ui_core_contracts::EventPort>) -> WindowHandle {
         // Independent construction has no fallible owner edge.
         self.register_window(RootMode::Normal { layer: DEFAULT_LAYER }, None, window, WindowOption::FRAME, true, queue)
     }
@@ -198,7 +198,7 @@ impl WindowManager {
         &mut self,
         parent: &WindowHandle,
         window: Window,
-        queue: Option<neocogi_com::events::EventPort>,
+        queue: Option<neocogi_ui_core_contracts::EventPort>,
     ) -> Result<WindowHandle, SurfaceCreationError<Window>> {
         // Authenticate and classify the parent while `window` remains local. On either validation
         // failure, move that exact value into the concrete error instead of dropping its unique
@@ -219,7 +219,7 @@ impl WindowManager {
         &mut self,
         owner: &WindowHandle,
         window: Window,
-        queue: Option<neocogi_com::events::EventPort>,
+        queue: Option<neocogi_ui_core_contracts::EventPort>,
     ) -> Result<WindowHandle, SurfaceCreationError<Window>> {
         // A dialog accepts the same ordinary owner roles as a structural child but reports its own
         // policy reason. Keep the Window untouched until both capability and role checks pass.
@@ -240,7 +240,7 @@ impl WindowManager {
         owner: &WindowHandle,
         name: &str,
         content: Node,
-        queue: Option<neocogi_com::events::EventPort>,
+        queue: Option<neocogi_ui_core_contracts::EventPort>,
     ) -> Result<PopupHandle, SurfaceCreationError<Node>> {
         // Resolve the authenticated window capability while the Node is still owned locally. Once
         // validation succeeds, application-popup registration is an infallible ownership transfer.
@@ -257,7 +257,7 @@ impl WindowManager {
         &mut self,
         owner: &WindowHandle,
         menu: crate::Menu,
-        queue: Option<neocogi_com::events::EventPort>,
+        queue: Option<neocogi_ui_core_contracts::EventPort>,
     ) -> Result<PopupHandle, SurfaceCreationError<crate::Menu>> {
         // Authenticate while the complete recursive declaration remains recoverable by the caller.
         let owner = match self.window_id(owner) {
@@ -417,7 +417,12 @@ impl WindowManager {
     }
 
     /// Registers one application-addressable popup below an already validated root.
-    pub(super) fn register_application_popup(&mut self, parent: SurfaceKey, surface: Surface, queue: Option<neocogi_com::events::EventPort>) -> PopupHandle {
+    pub(super) fn register_application_popup(
+        &mut self,
+        parent: SurfaceKey,
+        surface: Surface,
+        queue: Option<neocogi_ui_core_contracts::EventPort>,
+    ) -> PopupHandle {
         let id = PopupId::allocate();
         // The forest record owns delivery; the handle needs only its existing lookup identity.
         let events = queue.unwrap_or_default();

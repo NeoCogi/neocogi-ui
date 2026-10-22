@@ -1,7 +1,7 @@
 //! Real host posting supplies sender identity without a producer retaining itself.
 use super::*;
 use neocogi_ui::{DispatchingLeafContent, LeafContent, LeafDispatchContext, Painter};
-use neocogi_com::events::{channel, EventMessage, IEventReceiverAbi};
+use neocogi_ui::events::{channel, EventMessage, IEventReceiverAbi};
 
 /// Checks idle authority over the real COM host and preserves the rejected allocation.
 fn assert_idle(host: ComRef<'_, IWidgetHostAbi>, queue: ComRef<'_, IEventReceiverAbi>) {

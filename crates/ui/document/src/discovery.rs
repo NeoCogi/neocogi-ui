@@ -48,7 +48,7 @@ impl CustomWidgetFactory for CatalogWidgetFactory {
         &self,
         ui: &Ui,
         settings: &[u8],
-        sink: Option<ComPtr<neocogi_com::events::IEventReceiverAbi>>,
+        sink: Option<ComPtr<neocogi_ui::events::IEventReceiverAbi>>,
     ) -> Result<neocogi_ui::OwnedWidget<IWidgetAbi>, NcStatus> {
         // The registry preflights the complete document before construction. Keep
         // this boundary bounded too, so direct adapter calls cannot allocate an
@@ -56,8 +56,8 @@ impl CustomWidgetFactory for CatalogWidgetFactory {
         neocogi_ui_design::validate_settings_size(settings).map_err(|_| NC_E_INVALID_ARG)?;
         let host = ui.widgets().host()?;
         let binding = match sink {
-            None => neocogi_com::events::EventBinding::Unobserved,
-            Some(receiver) => neocogi_com::events::EventBinding::Observed(receiver),
+            None => neocogi_ui::events::EventBinding::Unobserved,
+            Some(receiver) => neocogi_ui::events::EventBinding::Observed(receiver),
         };
         let widget = self.catalog.create_widget(
             self.index,

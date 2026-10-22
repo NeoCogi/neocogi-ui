@@ -107,7 +107,7 @@ mod tests {
                 NcCopyFromBufferOffset::new(0, b"window"),
                 Rect { x: 0, y: 0, width: 300, height: 200 },
                 button.into_interface().query().unwrap(),
-                NcValueRef::new(&neocogi_com::events::EventBinding::Unobserved).unwrap(),
+                NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
             )
             .unwrap();
         let (send, messages) = std::sync::mpsc::channel();

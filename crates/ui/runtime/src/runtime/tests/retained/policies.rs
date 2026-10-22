@@ -297,7 +297,7 @@ fn title_drag_and_close_deliver_window_events_through_the_production_session() {
     let mut fixture = Headless::standard();
     let body_owner = fixture.ui.widgets().button_unobserved("body").unwrap();
     let body = body_owner.handle();
-    let (queue, events) = neocogi_com::events::channel();
+    let (queue, events) = neocogi_ui::events::channel();
     let observations = Vec::new();
     let owner = fixture
         .ui
@@ -506,7 +506,7 @@ fn caption_close_obeys_the_parents_explicit_decision() {
         let mut fixture = Headless::standard();
         let body_owner = fixture.ui.widgets().button_unobserved("live").unwrap();
         let body = body_owner.handle();
-        let (queue, messages) = neocogi_com::events::channel();
+        let (queue, messages) = neocogi_ui::events::channel();
         let window = fixture
             .ui
             .window_with_queue(
