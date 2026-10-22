@@ -1,9 +1,9 @@
 //! Real UI source graph shared by generated-code event regressions.
 use std::path::Path;
-use neocogi_idl::{Module, ResolvedModules, ResolutionError};
+use neocogi_idl::{Module, ResolvedModules, ModuleGraphError};
 
 /// Loads each contract owner, preserving its complete authored ABI fingerprint.
-pub fn resolve(mut consumers: Vec<Module>) -> Result<ResolvedModules, ResolutionError> {
+pub fn resolve(mut consumers: Vec<Module>) -> Result<ResolvedModules, ModuleGraphError> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     for (owner, path) in [
         ("crates/render/contracts", "neocogi/renderer"),

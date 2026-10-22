@@ -14,7 +14,7 @@ fn root() -> PathBuf {
 }
 
 /// Resolves one independent consumer against the exact shipped library templates.
-fn resolve(source: &str) -> Result<neocogi_idl::ResolvedModules, neocogi_idl::ResolutionError> {
+fn resolve(source: &str) -> Result<neocogi_idl::ResolvedModules, neocogi_idl::ModuleGraphError> {
     event_support::resolve(vec![parse_module(Path::new("proof/construction.ncidl"), source).unwrap()])
 }
 
