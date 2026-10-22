@@ -78,6 +78,7 @@ fn pixel(pixels: &[u8], x: usize, y: usize) -> &[u8] {
 #[test]
 #[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
 fn independent_surface_snapshots_keep_orientation_and_device_lifetime() {
+    let _session = native_session();
     let platform = PlatformObject::default();
     let assets = neocogi_demo_assets::load_bundle().unwrap();
     let atlas = assets.image().unwrap();
