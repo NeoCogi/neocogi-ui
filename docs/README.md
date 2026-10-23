@@ -27,7 +27,7 @@ purpose; this directory contains only the main index.
   ownership, message flow and how an update reaches a renderable state.
 - [COM author contracts](contracts/COM_AUTHORS.md),
   [IDL language](contracts/IDL_MODULES.md), and
-  [current COM ABI](../crates/com/docs/README.md).
+  [current COM ABI](../crates/com/docs/abi-v1.md).
 - [Application and widget dispatch](contracts/WIDGET_EVENT_DISPATCH.md),
   [typed event queues](contracts/CLASS_EVENT_STREAMS.md), and
   [exclusive widget ownership](contracts/EXCLUSIVE_WIDGET_OWNERSHIP.md).

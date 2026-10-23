@@ -5,7 +5,7 @@ widget as the current event origin for the synchronous `IWidget::update` call,
 and selects each composite for its `IWidgetDispatcher::dispatch_next` call.
 Ordinary widgets keep their constructor-selected receiver, not a weak pointer to
 themselves. This changes the pre-release UI contract without changing COM runtime
-ABI v1, core ABI 17 or domain descriptor ABI 10.
+ABI v1, core ABI v1 or the separately versioned UI catalog schema.
 
 ## Posting and ownership
 

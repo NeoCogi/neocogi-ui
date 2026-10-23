@@ -47,13 +47,13 @@ it. There is no compatibility or long-term-support commitment. Pin the checkout 
 your application and every plugin together, and review the [changelog](CHANGELOG.md) before upgrading. The manifest version
 is not a promise that the unreleased checkout matches a published package.
 
-The neocogi-com sources in `crates/com` are part of this checkout. Plugin
-descriptor and runtime table ABIs both remain at version 1 during pre-alpha.
-The [current COM contract index](../../crates/com/docs/README.md) selects the core
-ABI specification and IDL module-fingerprint grammar. Their authoritative sources
-are the [core generation constant](../../crates/com/core/src/metadata/contract.rs)
-and [module fingerprint encoder](../../crates/com/idl/src/resolve.rs); these are
-separate discriminators from runtime/descriptor discovery. None promises
+The neocogi-com sources in `crates/com` are part of this checkout. Core, plugin
+descriptor and runtime table ABIs remain at version 1 during pre-alpha.
+The [COM ABI-v1 specification](../../crates/com/docs/abi-v1.md) describes that
+baseline; the [core version constant](../../crates/com/core/src/metadata/contract.rs)
+is its numeric authority. The compiler owns the separate
+[module fingerprint grammar](../contracts/IDL_MODULES.md#canonical-signatures)
+and [encoder](../../crates/com/idl/src/resolve.rs). None promises
 compatibility across pre-alpha checkout revisions.
 Use the workspace sources for both producer and consumer; a crates.io dependency
 with the same pre-alpha package version is not a substitute for this fork. Native

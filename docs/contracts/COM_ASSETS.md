@@ -373,7 +373,7 @@ index or counter to roll back. Existing combined font/icon admission runs before
 allocation; decoding, naming and packing commit together. Malformed images and
 capacity/packing failures leave a reusable draft and do not claim a name.
 `IAssetBuilder` declaration revision 3 adds this operation; runtime/descriptor
-discovery v1, core ABI17 and bulk asset schema3 are unchanged. Rebuild GFX, Skin
+discovery v1, core ABI v1 and bulk asset schema3 are unchanged. Rebuild GFX, Skin
 and their consumers together through the ordinary generated contract graph.
 
 `derive_builder(size, base, options)` copies a validated base catalog into a new

@@ -67,7 +67,7 @@ use one atomic header word for owner presence and reader/writer access, followed
 by the weak count and class descriptor pointer. Their generated allocation is one
 common header plus `UnsafeCell<MaybeUninit<T>>`; there is no separate call gate or
 execution pin. Both kinds of provider-local lease occupy two words. Only C-shaped
-records cross plugin boundaries; see [the current core ABI](../../crates/com/docs/README.md).
+records cross plugin boundaries; see [the current core ABI](../../crates/com/docs/abi-v1.md).
 
 ## Cached weak calls and threading
 
@@ -167,7 +167,7 @@ caller can retry or drop it after the descendant returns. `ComBoxInput` is remov
 Facade insert/replace/window calls return the original typed widget in their error.
 `Mountable::with_mount` restores the concrete projection on failure; compiled forms
 also restore their unmounted root. No widget is detached after successful mounting.
-Bottom-up construction remains supported. See [ABI v16](../../crates/com/docs/abi-v16.md)
+Bottom-up construction remains supported. See [ABI v1](../../crates/com/docs/abi-v1.md)
 for multi-input calls and the invalid-success-output contract.
 
 Construction helpers that intentionally abandon rejected candidates need not
@@ -288,10 +288,10 @@ the window, calls `cancel`, and only after that provider call returns calls
 removal is still attempted when completion delivery fails. Foreign applications
 use the same sequence of ordinary interface calls.
 
-The preceding ABI v14 synchronous Drop implementation recorded a 7,616-byte deployment reduction and
+The synchronous Drop implementation recorded a 7,616-byte deployment reduction and
 the removal of one word of exclusive allocation overhead.
 
-The ABI v15 implementation removed `ComBoxInput` and automatic close approval.
+The returned-owner implementation removed `ComBoxInput` and automatic close approval.
 Its historical results were a **3,992-byte deployment increase**,
 887 passing workspace tests, and fresh independent/mixed-compiler plugin checks.
 It supersedes the earlier reports' current-API descriptions while preserving their

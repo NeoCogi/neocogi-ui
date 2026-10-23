@@ -2,6 +2,11 @@
 
 ## 0.0.0 (unreleased)
 
+- Consolidate the COM object/runtime/compatibility specifications into one
+  [ABI-v1 guide](../../crates/com/docs/abi-v1.md). Core, runtime and plugin
+  discovery share the pre-release v1 baseline; IDL fingerprints and UI schemas
+  retain separate version authorities. Rebuild every peer from the same checkout.
+
 - Move event interfaces and transport from COM into UI. Replace IDL `#[events]`
   with Rust `ui_event_sources!`, backed by generic method metadata and UI-owned
   catalog validation. Advance module encoding to v13; preserve the single global
@@ -73,8 +78,9 @@
 - Share COM lifetime operations through one allocation control header. Remove
   per-class weak operation tables and generated counting forwarders. Weak handles
   are one pointer, strong handles remain two; typed destruction and deallocation
-  stay in the allocating provider. Core ABI 12 specifies publication, promotion,
-  final destruction and constructor rollback without exposing private Arc layout.
+  stay in the allocating provider. The migration introduced provisional
+  construction publication and rollback without exposing private Arc layout;
+  ordinary initialized construction subsequently removed that protocol.
 
 - Complete the concrete `IEventQueue<Object, Event>` migration across applications,
   composites, designer previews and test fixtures. Remove generated callback

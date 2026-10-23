@@ -7,7 +7,7 @@ These guides define current behavior. For component responsibilities see
 ## COM and IDL
 
 - [COM author responsibilities](COM_AUTHORS.md).
-- [Current COM ABI](../../crates/com/docs/README.md) and
+- [Current COM ABI](../../crates/com/docs/abi-v1.md) and
   [local typed ownership](../../crates/com/api/README.md), including `WeakLocalCom`.
 - [Object/interface storage](COM_INTERFACE_STORAGE.md) and
   [lifetime errors](COM_LIFETIME_ERRORS.md).
@@ -19,7 +19,7 @@ These guides define current behavior. For component responsibilities see
   [directional output buffers](COM_OUTPUT_BUFFERS.md), and
   [consuming-call output completion](COM_OUTPUT_COMPLETION.md).
 - [NCB persistence](../../crates/com/core/README.md#why-persistence-is-ncb-only) and
-  [independent-build compatibility](../../crates/com/docs/compatibility.md).
+  [independent-build compatibility](../../crates/com/docs/abi-v1.md#independent-build-compatibility).
 
 ## Events and UI ownership
 
