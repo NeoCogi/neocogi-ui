@@ -65,8 +65,8 @@ immutable getters. `EventBinding` selects delivery policy; its Observed case
 contains the common receiver. `ui_event_sources!` supplies authoring metadata. A published widget has no receiver-installation method.
 
 ```rust,no_run
-use neocogi_ui::Ui;
-use neocogi_com::{ComRef, NcStatus, events::IEventReceiverAbi};
+use neocogi_ui::{Ui, events::IEventReceiverAbi};
+use neocogi_com::{ComRef, NcStatus};
 fn example(ui: &Ui, queue: ComRef<'_, IEventReceiverAbi>) -> Result<(), NcStatus> {
     let name = ui.widgets().textbox_with_queue("", Some(queue))?;
     Ok(())
