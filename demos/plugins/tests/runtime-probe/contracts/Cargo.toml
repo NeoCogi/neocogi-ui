@@ -11,7 +11,7 @@ module = "nc.tests.registry_probe"
 source = "idl/nc/tests/registry_probe"
 
 [dependencies]
-neocogi-com = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "a8cb86ca918acf836167404b8d3e7bb0dfcdb5ba", default-features = false }
+neocogi-com = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "f0481bf3194864596476e7c0ecc81e17c1ddb462", default-features = false }
 
 [build-dependencies]
-neocogi-idl = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "a8cb86ca918acf836167404b8d3e7bb0dfcdb5ba" }
+neocogi-idl = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "f0481bf3194864596476e7c0ecc81e17c1ddb462" }

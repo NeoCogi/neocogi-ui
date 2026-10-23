@@ -8,13 +8,13 @@ retained UI imports resources and submits composed frames. Applications opt into
 
 | Crate | Feature | Effect |
 | --- | --- | --- |
-| Native demos | `dynamic` (default) | Build and load Cargo cdylib artifacts against one shared runtime. |
+| Native demos | `dynamic` (default) | Build and load Cargo cdylib providers with access supplied by the host runtime. |
 | Native demos | `monolith` | Link the runtime plus only the UI, renderer, GFX, and Skin implementations selected by that assembly. |
 | `neocogi-com` | defaults: `std`, `macros` | Typed object/data helpers and procedural macros without linking a runtime. |
 | `neocogi-com` | `macros` | Rust object/plugin and persistence procedural macros; callable contracts come from the IDL build dependency. |
 | `neocogi-com` | `std` | Standard-library data/error support; implies `alloc`. No event transport or runtime implementation is selected. |
-| `neocogi-com` | `runtime` | Stateless runtime/persistence clients; implies `std`. Final assembly supplies linkage. |
-| `neocogi-ui` | `runtime` | Expose stateless COM runtime clients; final assembly owns linkage. |
+| `neocogi-com` | `runtime` | Runtime/persistence clients using supplied access; implies `std` and selects no implementation. |
+| `neocogi-ui` | `runtime` | Expose COM runtime clients; the host supplies access. |
 | `neocogi-gfx-support` | `compiled-assets` | Expand bounded zlib pixels from generated asset tables. |
 | `neocogi-ui` | `skin` | Re-export the optional Skin plugin's typed authoring contracts. |
 | `neocogi-ui-support` | none | Non-plugin resource and presentation helpers; owns no runtime or concrete nodes. |
@@ -39,11 +39,13 @@ authored themes into embedded tables does not replace the live appearance compil
 style editor. The browser links/registers that provider without its filesystem-based JSON loader;
 the simple demo does not need it.
 
-Cargo may freely unify the stateless `runtime` capability. Native final owners
-import one shared `nc_com` through the native bridge; final monolith/browser/test
-owners directly retain one implementation. Neither COM nor UI facade has a
-feature that selects an implementation image. Test-helper selection therefore
-cannot silently change a plugin from shared imports to a private catalog.
+Cargo may freely unify the `runtime` client capability. The executable selects
+`nc_com` as an ordinary Rust dependency, initializes it through `#[com_main]` and
+passes `Runtime` to providers and reusable libraries. The same ownership applies
+to native dynamic, monolithic and browser applications; final test executables
+select their owner explicitly. Neither COM nor UI facade has a feature that
+selects an implementation. Providers have no implicit initializer or discovery
+fallback. `Runtime` itself is available without the optional rich client feature.
 
 The UI implementation has no optional asset features. Applications, plugins and
 native event tests install concrete receivers directly and use the same

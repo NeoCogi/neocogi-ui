@@ -76,6 +76,7 @@ def inspect(executable):
         for path in private:
             assert path.encode() not in data, f"private build path {path!r} in {binary}"
         dynamic = subprocess.check_output(["readelf", "-d", binary], text=True)
+        assert "libnc_com" not in dynamic, f"COM services must be supplied by the host: {binary}"
         search = [line for line in dynamic.splitlines() if "RPATH" in line or "RUNPATH" in line]
         for line in search:
             paths = line.split("[", 1)[1].split("]", 1)[0].split(":")

@@ -2,7 +2,7 @@
 
 IDL describes ordinary callable interfaces and source value graphs. UI owns
 `IEvent`, `IErrorEvent`, `EventOrigin`, `IEventReceiver`, and `EventBinding` in
-`neocogi.ui.core`. The COM compiler and shared runtime have no event semantics.
+`neocogi.ui.core`. The COM compiler and host-owned runtime have no event semantics.
 
 ```ncidl
 extern neocogi.ui.core;

@@ -1,12 +1,12 @@
 # Native demo composition
 
 This crate declares the native DLL artifacts used by the existing demo host.
-Cargo owns resolution, compilation, caching and exact paths. The shared native
-linkage crate declares the runtime as a normal target artifact and propagates
-relative native loader metadata; compiler-only staging copies DLLs into `lib/`
-beside the executable. `register()` loads those filenames in provider
-order. No build subprocess or assembly planner is
-present. The full ownership contract is in the [native guide](../../docs/guides/COM_NATIVE.md).
+Cargo owns resolution, compilation, caching and exact provider paths.
+Compiler-only staging copies provider DLLs into `lib/` beside the executable;
+`register(runtime)` loads those filenames in provider order through access
+supplied by the host. The executable initializes its ordinary runtime rlib through
+`#[com_main]`; there is no COM runtime DLL or native-link bridge. The full ownership
+contract is in the [native guide](../../docs/guides/COM_NATIVE.md).
 
 Keep artifact dependencies here and normal Rust provider dependencies in the
 host's static/browser path. Cargo rejects separate artifact/library aliases for
@@ -33,8 +33,7 @@ variables removed before making those ABI calls. The probe uses a fixed test-onl
 IDL-generated closed contracts and generic roots are tested by the compiler suite.
 
 Absolute Cargo paths are compiler inputs only. Runtime code holds filenames and
-uses the executable's adjacent `lib/`; Windows also gets `nc_com.dll` beside the
-executable for initial imports. `register()` returns executable-location I/O
+uses the executable's adjacent `lib/`. `register(runtime)` returns executable-location I/O
 errors; mandatory plugin loading retains the runtime's fatal validation policy.
 Staging tracks both input and copied files, so deleting a DLL or switching to a
 cached renderer restores the selected bytes. Unused old files can remain in a
