@@ -368,9 +368,14 @@ impl AppState for State {
     }
 }
 /// Builds one COM grid of buttons; no separate CalcButton, event port or shadow node list is needed.
-fn run() -> Result<(), HostError> {
-    neocogi_demo_host::initialize()?;
-    let host = Host::new("Calculator", Size { width: 320, height: 420 }, neocogi_demo_assets::load_bundle()?)?;
+fn run(runtime: neocogi_com::Runtime) -> Result<(), HostError> {
+    neocogi_demo_host::initialize(runtime)?;
+    let host = Host::new(
+        runtime,
+        "Calculator",
+        Size { width: 320, height: 420 },
+        neocogi_demo_assets::load_bundle(runtime)?,
+    )?;
     let mut display = host.ui.widgets().textbox_unobserved("0")?;
     display.set_named_font(DISPLAY_FONT)?;
     display.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_RIGHT | WidgetOptions::NO_INTERACT)?;
@@ -435,6 +440,7 @@ fn run() -> Result<(), HostError> {
 }
 
 /// Reports startup and frame failures through formatting retained by the min-size profile.
-fn main() -> std::process::ExitCode {
-    report_exit(run())
+#[neocogi_com::com_main]
+fn main(runtime: neocogi_com::Runtime) -> std::process::ExitCode {
+    report_exit(run(runtime))
 }

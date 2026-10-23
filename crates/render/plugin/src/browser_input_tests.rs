@@ -145,7 +145,7 @@ pub fn run_browser_input_tests() {
 /// inherited editing, committed IME placement and WebGL submission through their COM interfaces.
 fn static_com_editing_and_webgl() {
     use neocogi_com::{ComPtr, Runtime};
-    let runtime = Runtime::global();
+    let runtime = crate::host_runtime();
     // SAFETY: All descriptions and referenced code/data live in this statically linked wasm.
     unsafe {
         runtime.register_plugin_descriptor(nc_ui::plugin_descriptor()).unwrap();
@@ -156,7 +156,7 @@ fn static_com_editing_and_webgl() {
     let platform = runtime
         .acquire_plugin_root::<PlatformAbi>(neocogi_com::guid_from_qualified_name("neocogi.render.webgl"))
         .unwrap();
-    let assets = neocogi_demo_assets::load_bundle().unwrap();
+    let assets = neocogi_demo_assets::load_bundle(crate::host_runtime()).unwrap();
     let atlas = assets.image().unwrap();
     let native = platform
         .create_window(

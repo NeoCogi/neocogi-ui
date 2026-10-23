@@ -190,8 +190,8 @@ impl Component {
         Ok(Widget::from_interface(base.query()?))
     }
     /// Saves authored defaults; preview interaction and widget setters never rewrite them.
-    pub fn save(&self) -> Result<Vec<u8>, NcStatus> {
-        neocogi_com::persistence::snapshot_with_limits(self.object.as_com_ref(), limits())
+    pub fn save(&self, runtime: &neocogi_com::Runtime) -> Result<Vec<u8>, NcStatus> {
+        neocogi_com::persistence::snapshot_with_limits(runtime, self.object.as_com_ref(), limits())
     }
 }
 

@@ -46,7 +46,7 @@ fn activate(driver: &crate::runtime::testing::OriginDriver, widget: &mut WeakCom
 #[test]
 fn unobserved_list_item_activations_allocate_only_their_marker() {
     let source = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
-    let gfx = neocogi_ui_support::test_support::gfx_factory();
+    let gfx = neocogi_ui_support::test_support::gfx_factory(crate::test_support::host_runtime());
     let (runtime, driver) = crate::runtime::testing::create_runtime(source.as_com_ref(), gfx.as_com_ref()).unwrap();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
     for label in ["", "a", "Unicode row: αβγ 🦀"] {
@@ -71,7 +71,7 @@ fn unobserved_list_item_activations_allocate_only_their_marker() {
 #[test]
 fn observed_list_item_keeps_activation_identity_after_label_edits_and_source_drop() {
     let source = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
-    let gfx = neocogi_ui_support::test_support::gfx_factory();
+    let gfx = neocogi_ui_support::test_support::gfx_factory(crate::test_support::host_runtime());
     let (runtime, driver) = crate::runtime::testing::create_runtime(source.as_com_ref(), gfx.as_com_ref()).unwrap();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
     let (queue, messages) = neocogi_ui::events::channel();
@@ -104,7 +104,7 @@ fn observed_list_item_keeps_activation_identity_after_label_edits_and_source_dro
 #[test]
 fn disconnected_list_item_receiver_does_not_change_the_label() {
     let source = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
-    let gfx = neocogi_ui_support::test_support::gfx_factory();
+    let gfx = neocogi_ui_support::test_support::gfx_factory(crate::test_support::host_runtime());
     let (runtime, driver) = crate::runtime::testing::create_runtime(source.as_com_ref(), gfx.as_com_ref()).unwrap();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
     let (queue, messages) = neocogi_ui::events::channel();

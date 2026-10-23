@@ -23,7 +23,7 @@ fn key(ui: &Ui, key: KeyCode) {
 /// Core and nodes factories are acquired separately, authenticate binding, and preserve typed event delivery.
 #[test]
 fn independently_activated_nodes_bind_only_to_their_core_host_and_deliver_events() {
-    let registry = Runtime::global();
+    let registry = host_runtime();
     let core_description = nc_ui::plugin_descriptor();
     let nodes_description = nc_ui_nodes::plugin_descriptor();
     assert_eq!(core_description.root_factory, UiPluginFactoryAbi::INTERFACE_ID);
@@ -43,7 +43,7 @@ fn independently_activated_nodes_bind_only_to_their_core_host_and_deliver_events
     let source =
         neocogi_ui_support::test_support::assets::export_bundle(&neocogi_ui_support::SkinBundle::from_atlas(neocogi_ui_support::test_support::test_atlas()))
             .unwrap();
-    let gfx = neocogi_ui_support::test_support::gfx_factory();
+    let gfx = neocogi_ui_support::test_support::gfx_factory(host_runtime());
     let runtime = core.create_runtime(source.as_com_ref(), gfx.as_com_ref()).unwrap();
     // The core object never grows concrete node factory capabilities as a side effect of binding.
     assert_eq!(runtime.query::<UiFactoryAbi>().unwrap_err(), NC_E_NOINTERFACE);
@@ -80,3 +80,10 @@ fn independently_activated_nodes_bind_only_to_their_core_host_and_deliver_events
 
 // This final integration-test executable owns one embedded runtime.
 extern crate nc_com as _;
+
+/// Initializes the selected implementation owned by this test executable.
+#[cfg(test)]
+fn host_runtime() -> neocogi_com::Runtime {
+    // SAFETY: this explicit host owns the complete immutable process-lived graph.
+    unsafe { neocogi_com::Runtime::__from_host_api(nc_com::initialize_process()) }.expect("compatible test host")
+}

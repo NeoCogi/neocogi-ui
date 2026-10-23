@@ -44,8 +44,8 @@ cargo run -p neocogi-demo-basic --bin neocogi-demo-calculator
 cargo run -p neocogi-demo-smoke -- --smoke
 ```
 
-Cargo builds the shared runtime and selected plugins, copies them into `lib/`
-beside the executable, and records relative Unix loader paths. The complete
+Cargo links the host runtime into the executable and builds selected provider
+libraries, copying them into the adjacent `lib/` directory. The complete
 min-size profile includes a size-optimized standard library and immediate abort.
 Native defaults are `dynamic,glow`;
 features are additive, so another renderer or `monolith` requires disabling
@@ -58,7 +58,7 @@ cargo run -p neocogi-demo-full --no-default-features --features monolith,glow,em
 File-backed resources are copied into adjacent `assets/` and `themes/` directories;
 `embed-assets` compiles them into the executable instead. Copy the executable,
 `lib/` and those resource directories together to relocate the application
-(also the adjacent `nc_com.dll` on Windows). Build paths remain compiler inputs;
+The host owns COM services; `lib/` contains providers. Build paths remain compiler inputs;
 debug unremapping sidecars must stay on the build machine. Distribution
 installation remains separate. The [native guide](docs/guides/COM_NATIVE.md) explains ownership,
 linkage, resources, browser builds and remaining Cargo costs. The optional

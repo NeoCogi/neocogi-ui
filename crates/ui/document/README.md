@@ -187,7 +187,7 @@ allocator lifetime, reservation ordering, exhaustion, examples and regression co
 Mount a `Component`, its `take_root()` result, or a `ReloadSlot::take_widget()`
 result. Removing those trees destroys their widget queues. Already posted facts
 remain application-owned; generation and origin checks reject stale delivery.
-Application edits belong outside layout and paint. `Component::save()` preserves
+Application edits belong outside layout and paint. `Component::save(&runtime)` preserves
 authored defaults, not live focus, scrolling or application state.
 
 `Style.options = None` leaves the concrete constructor's requested flags intact;

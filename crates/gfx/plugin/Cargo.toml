@@ -16,7 +16,7 @@ crate-type = ["rlib", "cdylib"]
 [features]
 default = []
 builder = ["neocogi-gfx-impl/builder"]
-dynamic-plugin = ["dep:neocogi-native-runtime-link"]
+dynamic-plugin = []
 
 [dependencies]
 neocogi-gfx-impl = { workspace = true, features = ["gfx", "publisher"] }
@@ -25,4 +25,3 @@ neocogi-com = { workspace = true, default-features = false, features = ["macros"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Native target code and its shared runtime use the same Cargo profile.
-neocogi-native-runtime-link = { workspace = true, optional = true }

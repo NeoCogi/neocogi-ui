@@ -5,10 +5,6 @@
 
 #![deny(missing_docs)]
 
-// Native link metadata propagates to this DLL without embedding runtime state.
-#[cfg(all(feature = "dynamic-plugin", not(target_arch = "wasm32")))]
-use neocogi_native_runtime_link as _;
-
 use neocogi_skin_impl::StyleCompilerObject;
 #[cfg(feature = "theme-json")]
 use neocogi_skin_impl::ThemeLoaderObject;
@@ -47,7 +43,7 @@ impl SkinPluginFactory for SkinPluginFactoryObject {
 #[neocogi_com::plugin(name = "neocogi.skin.runtime",
     dependencies = [GFX_PLUGIN_ID],
     )]
-fn acquire_root() -> Result<neocogi_com::ComPtr<neocogi_skin_contracts::SkinPluginFactoryAbi>, neocogi_com::NcStatus> {
+fn acquire_root(_runtime: ::neocogi_com::Runtime) -> Result<neocogi_com::ComPtr<neocogi_skin_contracts::SkinPluginFactoryAbi>, neocogi_com::NcStatus> {
     SkinPluginFactoryObject::from_value(SkinPluginFactoryObject).query()
 }
 

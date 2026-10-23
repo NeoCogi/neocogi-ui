@@ -9,8 +9,7 @@ use neocogi_ui_core_contracts::{AssetFont, AssetGlyph, AssetIcon, AssetRange, In
 /// this same static description is idempotent, so each test can own an ordinary typed factory
 /// reference without an extra singleton, mock compositor, or mutable fixture registry.
 #[cfg(feature = "test-support")]
-pub fn gfx_factory() -> neocogi_com::ComPtr<neocogi_ui::GfxPluginFactoryAbi> {
-    let registry = neocogi_com::Runtime::global();
+pub fn gfx_factory(registry: neocogi_com::Runtime) -> neocogi_com::ComPtr<neocogi_ui::GfxPluginFactoryAbi> {
     // SAFETY: The description and all referenced code/data remain in the test executable.
     unsafe { registry.register_plugin_descriptor(nc_gfx::plugin_descriptor()) }.expect("linked GFX plugin must register");
     registry

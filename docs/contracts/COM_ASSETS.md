@@ -122,7 +122,7 @@ let native = platform.create_window(
     atlas.as_com_ref(),
 )?;
 let renderer = native.query::<IRendererAbi>()?;
-let runtime = neocogi_com::Runtime::global();
+// runtime is passed from the application entry or acquiring host.
 let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(
     neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"),
 )?;

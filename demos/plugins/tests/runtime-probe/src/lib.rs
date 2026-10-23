@@ -1,29 +1,31 @@
 //! Independently compiled DLL proving Cargo compositions share one runtime authority.
 #[path = "../interface.rs"]
 mod interface;
-use neocogi_native_runtime_link as _;
 use interface::{IRegistryProbe, IRegistryProbeAbi};
 use neocogi_com::{ComPtr, NcStatus, Runtime, com_object};
 
 #[com_object(interface::IRegistryProbe)]
-/// State-free probe; all observed registration belongs to the shared runtime.
-struct Probe;
+/// Probe retains access supplied by its acquiring host, never an implementation.
+struct Probe {
+    /// Every observation and nested registration dispatches into that host.
+    runtime: Runtime,
+}
 
 impl IRegistryProbe for Probe {
     fn catalog_len(&self) -> Result<u32, NcStatus> {
-        Ok(Runtime::global().plugins()?.len() as u32)
+        Ok(self.runtime.plugins()?.len() as u32)
     }
     fn publish_marker(&self) -> Result<(), NcStatus> {
         // SAFETY: marker metadata is static in this DLL, which the runtime pinned
         // when it registered the probe before the host could acquire this object.
-        unsafe { Runtime::global().register_plugin_descriptor(marker::plugin_descriptor()) }
+        unsafe { self.runtime.register_plugin_descriptor(marker::plugin_descriptor()) }
     }
 }
 
 #[neocogi_com::plugin(name = "nc.tests.cargo.runtime-probe")]
 /// Acquires an ordinary service, without an IDL factory construction role.
-fn acquire() -> Result<ComPtr<IRegistryProbeAbi>, NcStatus> {
-    Probe::from_value(Probe).query()
+fn acquire(runtime: ::neocogi_com::Runtime) -> Result<ComPtr<IRegistryProbeAbi>, NcStatus> {
+    Probe::from_value(Probe { runtime }).query()
 }
 
 /// Process-lived marker metadata using the probe's exact acquisition contract.

@@ -15,6 +15,13 @@ mod view3d;
 mod viewport_test_support;
 
 /// Runs the complete demo through the same facade on native and browser deployments.
-pub fn run() -> Result<(), neocogi_demo_host::HostError> {
-    app::run()
+pub fn run(runtime: neocogi_com::Runtime) -> Result<(), neocogi_demo_host::HostError> {
+    app::run(runtime)
+}
+
+/// Initializes the selected implementation owned by this test executable.
+#[cfg(test)]
+pub(crate) fn host_runtime() -> neocogi_com::Runtime {
+    // SAFETY: this explicit host owns the complete immutable process-lived graph.
+    unsafe { neocogi_com::Runtime::__from_host_api(nc_com::initialize_process()) }.expect("compatible test host")
 }

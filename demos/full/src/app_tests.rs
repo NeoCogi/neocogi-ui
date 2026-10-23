@@ -7,11 +7,11 @@ use neocogi_ui::events::testing::TestApp;
 #[test]
 #[ignore = "requires the packaged native plugin graph and adjacent theme assets"]
 fn packaged_full_theme_loaders() {
-    neocogi_demo_host::initialize().unwrap();
-    let base = neocogi_demo_assets::load_bundle().unwrap();
+    neocogi_demo_host::initialize(crate::host_runtime()).unwrap();
+    let base = neocogi_demo_assets::load_bundle(crate::host_runtime()).unwrap();
     for theme in Theme::ALL {
         let loaded = theme
-            .load(base.as_com_ref())
+            .load(crate::host_runtime(), base.as_com_ref())
             .unwrap_or_else(|status| panic!("{} theme load failed: {status}", theme.label()));
         loaded.metrics().unwrap();
     }
@@ -89,7 +89,7 @@ fn packaged_full_host_selects_win311() {
             self.state.frame(host, size, seconds)
         }
     }
-    let (host, state, events) = create().unwrap();
+    let (host, state, events) = create(crate::host_runtime()).unwrap();
     let steps = [
         Step::Raise,
         Step::Focus,
@@ -175,7 +175,7 @@ fn packaged_full_host_preserves_rejecting_operation() {
         }
     }
     for failure in [Failure::Preparation, Failure::Dispatch, Failure::AfterUpdate, Failure::TextArea] {
-        let (host, state, events) = create().unwrap();
+        let (host, state, events) = create(crate::host_runtime()).unwrap();
         let error = host
             .run(Reject { state, failure }, events)
             .expect_err("the selected hook must reject this frame");
@@ -246,7 +246,10 @@ fn select_win311_from_menu(host: &Host, app: &TestApp<State, neocogi_ui::events:
     drop(state);
     app.update(&host.ui, size)?;
     state = app.state();
-    assert_eq!(state.ui.assets()?.metrics()?, Theme::ALL[1].load(base.as_com_ref())?.metrics()?);
+    assert_eq!(
+        state.ui.assets()?.metrics()?,
+        Theme::ALL[1].load(crate::host_runtime(), base.as_com_ref())?.metrics()?
+    );
     host.ui.render(size, host.renderer.as_com_ref())?;
     Ok(())
 }
@@ -297,7 +300,7 @@ fn construction_rejection_checks(ui: &Ui) -> Result<(), NcStatus> {
 
 /// Exercises application-level composition against real runtime, platform and decoder objects.
 fn exercise() -> Result<(Host, TestApp<State, neocogi_ui::events::EventMessage>), HostError> {
-    let (host, state, events) = create()?;
+    let (host, state, events) = create(crate::host_runtime())?;
     construction_rejection_checks(&host.ui)?;
     let app = TestApp::new(state, events, State::update);
     let size = host.window.size()?;
@@ -315,7 +318,7 @@ fn exercise() -> Result<(Host, TestApp<State, neocogi_ui::events::EventMessage>)
         app.update(&host.ui, size)?;
         state = app.state();
         host.ui.render(size, host.renderer.as_com_ref())?;
-        assert_eq!(state.ui.assets()?.metrics()?, theme.load(base.as_com_ref())?.metrics()?);
+        assert_eq!(state.ui.assets()?.metrics()?, theme.load(crate::host_runtime(), base.as_com_ref())?.metrics()?);
         for (choice, item) in &state.themes {
             assert_eq!(item.mark()?, MenuMark::Radio { selected: *choice == theme });
         }
@@ -427,9 +430,10 @@ mod browser {
         )
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
         let host = Host::new(
+            crate::host_runtime(),
             "Error teardown",
             Size { width: 160, height: 120 },
-            neocogi_demo_assets::load_bundle().map_err(|error| JsValue::from_str(&error.to_string()))?,
+            neocogi_demo_assets::load_bundle(crate::host_runtime()).map_err(|error| JsValue::from_str(&error.to_string()))?,
         )
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
         host.run(

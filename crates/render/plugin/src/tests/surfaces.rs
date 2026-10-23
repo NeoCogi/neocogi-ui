@@ -80,7 +80,7 @@ fn pixel(pixels: &[u8], x: usize, y: usize) -> &[u8] {
 fn independent_surface_snapshots_keep_orientation_and_device_lifetime() {
     let _session = native_session();
     let platform = PlatformObject::default();
-    let assets = neocogi_demo_assets::load_bundle().unwrap();
+    let assets = neocogi_demo_assets::load_bundle(crate::host_runtime()).unwrap();
     let atlas = assets.image().unwrap();
     let native = platform.window("surface acceptance", SIZE, atlas.as_com_ref()).unwrap();
     let weak = Rc::downgrade(&native.device);
@@ -168,7 +168,11 @@ fn independent_surface_snapshots_keep_orientation_and_device_lifetime() {
     {
         let owner = weak.upgrade().unwrap();
         let mut access = owner.access().unwrap();
-        assert_eq!(access.state().atlas.as_raw().object, atlas.as_raw().object, "surface upload must preserve the window atlas");
+        assert_eq!(
+            access.state().atlas.as_raw().object,
+            atlas.as_raw().object,
+            "surface upload must preserve the window atlas"
+        );
         let pixels = access.state().gpu.last_pixels();
         assert_eq!(pixel(pixels, 4, 4), [255, 0, 0, 255]);
         assert_eq!(pixel(pixels, 24, 4), [0, 255, 0, 255]);

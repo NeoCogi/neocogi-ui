@@ -98,7 +98,7 @@ fn oversized_typed_recipes_and_settings_never_enter_catalog_constructors() {
     let (loader, mut document, calls) = catalog_loader(&fixture.ui);
     let valid = loader.compile(&document).unwrap();
     assert_eq!(calls.load(Ordering::Relaxed), 1);
-    let bytes = valid.save().unwrap();
+    let bytes = valid.save(&crate::test_support::host_runtime()).unwrap();
     assert_eq!(Document::from_binary(&bytes).unwrap(), document);
     loader.load(&bytes).unwrap();
     assert_eq!(calls.load(Ordering::Relaxed), 2);
@@ -153,7 +153,10 @@ fn exact_binary_recipe_constructs_and_saves_but_next_byte_is_rejected() {
     let base = neocogi_com::binary::encoded_len_with_limits(&document, neocogi_com::binary::Limits::default()).unwrap();
     document.name = "x".repeat(1_000_000 - 21 - base);
     let accepted = loader.compile(&document).unwrap();
-    assert_eq!(Document::from_binary(&accepted.save().unwrap()).unwrap(), document);
+    assert_eq!(
+        Document::from_binary(&accepted.save(&crate::test_support::host_runtime()).unwrap()).unwrap(),
+        document
+    );
     document.name.push('x');
     assert!(loader.compile(&document).is_err());
 }
@@ -170,7 +173,7 @@ fn unsaveable_reload_preserves_published_form_and_queued_identity() {
     let mut document = Document::new("accepted");
     let first = slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     let mut title = slot.component().unwrap().widget::<TextBlockAbi>("title").unwrap();
-    let saved = slot.component().unwrap().save().unwrap();
+    let saved = slot.component().unwrap().save(&crate::test_support::host_runtime()).unwrap();
     document.name = "x".repeat(2 * 1024 * 1024);
     assert!(
         slot.reload(
@@ -182,6 +185,6 @@ fn unsaveable_reload_preserves_published_form_and_queued_identity() {
         .is_err()
     );
     assert!(slot.accepts(first.generation));
-    assert_eq!(slot.component().unwrap().save().unwrap(), saved);
+    assert_eq!(slot.component().unwrap().save(&crate::test_support::host_runtime()).unwrap(), saved);
     title.set_text("still live").unwrap();
 }

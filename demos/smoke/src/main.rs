@@ -1,7 +1,7 @@
 //! Small native host using the static facade/contracts and runtime binding.
 //! Implementations may be loaded from an assembly or linked into one monolith.
 use neocogi_ui::*;
-use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, INcStringComPtrExt};
+use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
 use std::{error::Error, time::Duration};
 #[cfg(feature = "extension")]
 mod extension;
@@ -70,12 +70,12 @@ impl Options {
 }
 
 /// Initializes the Cargo composition and runs interactively or exercises its smoke gate.
-fn main() -> Result<(), Box<dyn Error>> {
+#[neocogi_com::com_main]
+fn main(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
     let options = Options::read()?;
-    let runtime = neocogi_com::Runtime::global();
-    neocogi_demo_host::initialize()?;
+    neocogi_demo_host::initialize(runtime)?;
     let platform = runtime.acquire_plugin_root::<PlatformAbi>(neocogi_com::guid_from_qualified_name(renderer_plugin_name()))?;
-    let assets = neocogi_demo_assets::load_bundle()?;
+    let assets = neocogi_demo_assets::load_bundle(runtime)?;
     let atlas = assets.image()?;
     let native = platform.create_window(
         NcCopyFromBufferOffset::new(0, b"NeoCogi UI"),
@@ -171,7 +171,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         smoke_components(&ui, size, renderer.as_com_ref())?;
         gpu::smoke(&ui, size, renderer.as_com_ref())?;
         #[cfg(feature = "extension")]
-        extension::smoke(&ui, size, renderer.as_com_ref())?;
+        extension::smoke(runtime, &ui, size, renderer.as_com_ref())?;
         ui.close()?;
         println!(
             "COM smoke passed: dynamic activation, native GPU frame and 3D mesh, texture ownership, inherited widgets, composed containers, menus, native-path dialog, input, invalidation, resize, closure"

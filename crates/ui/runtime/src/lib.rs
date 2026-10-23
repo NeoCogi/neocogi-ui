@@ -85,10 +85,6 @@
 
 // Compile the Rust examples in standalone guides as part of `cargo test --doc` without publishing
 // duplicate guide modules in the normal API reference.
-// Native link metadata propagates to this DLL without embedding runtime state.
-#[cfg(all(feature = "dynamic-plugin", not(target_arch = "wasm32")))]
-use neocogi_native_runtime_link as _;
-
 #[cfg(doctest)]
 mod guide_doctests {
     #[doc = include_str!("../docs/ARCHITECTURE.md")]
@@ -172,7 +168,7 @@ impl neocogi_ui_core_contracts::UiPluginFactory for UiPluginFactoryObject {
 
 /// Acquires one owned root; object construction remains on its typed methods.
 #[neocogi_com::plugin(name = "neocogi.ui.runtime")]
-fn acquire_root() -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::UiPluginFactoryAbi>, neocogi_com::NcStatus> {
+fn acquire_root(_runtime: ::neocogi_com::Runtime) -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::UiPluginFactoryAbi>, neocogi_com::NcStatus> {
     UiPluginFactoryObject::from_value(UiPluginFactoryObject).query()
 }
 

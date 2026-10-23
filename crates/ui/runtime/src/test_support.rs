@@ -143,7 +143,7 @@ pub(crate) use neocogi_ui_support::test_support::*;
 pub(crate) fn runtime_from_assets(
     source: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IAssetBundleAbi>,
 ) -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::UiRuntimeAbi>, neocogi_com::NcStatus> {
-    let gfx = neocogi_ui_support::test_support::gfx_factory();
+    let gfx = neocogi_ui_support::test_support::gfx_factory(crate::test_support::host_runtime());
     crate::create_runtime_from_assets(source, gfx.as_com_ref())
 }
 
@@ -157,3 +157,10 @@ pub(crate) mod headless;
 
 /// Explicit test asset construction stays outside the deployed importer.
 pub(crate) use neocogi_ui_support::test_support::assets;
+
+/// Initializes the selected implementation owned by this test executable.
+#[cfg(test)]
+pub(crate) fn host_runtime() -> neocogi_com::Runtime {
+    // SAFETY: this explicit host owns the complete immutable process-lived graph.
+    unsafe { neocogi_com::Runtime::__from_host_api(nc_com::initialize_process()) }.expect("compatible test host")
+}

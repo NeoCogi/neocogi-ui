@@ -27,10 +27,6 @@
 )]
 
 // Compile the nodes-owned authoring guide without publishing a second API module.
-// Native link metadata propagates to this DLL without embedding runtime state.
-#[cfg(all(feature = "dynamic-plugin", not(target_arch = "wasm32")))]
-use neocogi_native_runtime_link as _;
-
 #[cfg(doctest)]
 mod guide_doctests {
     #[doc = include_str!("../docs/WIDGETS.md")]
@@ -102,7 +98,7 @@ impl NodesPluginFactory for NodesPluginFactoryObject {
 #[neocogi_com::plugin(name = "neocogi.ui.nodes.runtime",
     dependencies = [UI_RUNTIME_PLUGIN_ID],
     )]
-fn acquire_root() -> Result<neocogi_com::ComPtr<neocogi_ui_nodes_contracts::NodesPluginFactoryAbi>, neocogi_com::NcStatus> {
+fn acquire_root(_runtime: ::neocogi_com::Runtime) -> Result<neocogi_com::ComPtr<neocogi_ui_nodes_contracts::NodesPluginFactoryAbi>, neocogi_com::NcStatus> {
     NodesPluginFactoryObject::from_value(NodesPluginFactoryObject).query()
 }
 

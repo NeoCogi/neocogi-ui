@@ -11,7 +11,7 @@ import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-PROVIDERS = {"nc_com", "nc_ui", "nc_ui_nodes", "nc_render", "nc_gfx", "nc_skin"}
+PROVIDERS = {"nc_ui", "nc_ui_nodes", "nc_render", "nc_gfx", "nc_skin"}
 
 
 class NativeBuildProfiles(unittest.TestCase):
@@ -38,7 +38,7 @@ class NativeBuildProfiles(unittest.TestCase):
         self.assertEqual(expected["trim_paths"], "all")
         artifacts = [u for u in units if u["target"]["name"] in PROVIDERS]
         self.assertEqual({u["target"]["name"] for u in artifacts}, PROVIDERS)
-        self.assertEqual(len(artifacts), len(PROVIDERS), "one runtime/provider artifact per target graph")
+        self.assertEqual(len(artifacts), len(PROVIDERS), "one provider artifact per target graph")
         for unit in artifacts:
             with self.subTest(provider=unit["target"]["name"]):
                 self.assertEqual(unit["target"]["kind"], ["cdylib"], "implementation rlibs must not enter the host")

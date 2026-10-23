@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-LIBRARIES = tuple(f"libnc_{name}.so" for name in ("com", "ui", "ui_nodes", "render", "gfx", "skin"))
+LIBRARIES = tuple(f"libnc_{name}.so" for name in ("ui", "ui_nodes", "render", "gfx", "skin"))
 
 
 def build(profile, renderer="vulkan"):
@@ -77,8 +77,6 @@ def inspect(executable):
             assert path.encode() not in data, f"private build path {path!r} in {binary}"
         dynamic = subprocess.check_output(["readelf", "-d", binary], text=True)
         search = [line for line in dynamic.splitlines() if "RPATH" in line or "RUNPATH" in line]
-        if binary != executable.parent / "lib/libnc_com.so":
-            assert search, f"no relative runtime search path: {binary}"
         for line in search:
             paths = line.split("[", 1)[1].split("]", 1)[0].split(":")
             assert all(path in ("$ORIGIN/lib", "$ORIGIN") for path in paths), line

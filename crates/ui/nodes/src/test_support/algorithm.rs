@@ -36,7 +36,7 @@ impl<W> Algorithm<W> {
     /// Supplies the actual host and resource imports to the normal concrete constructor.
     pub(crate) fn new(options: WidgetOption, construct: impl FnOnce(WidgetRuntime) -> W) -> Self {
         let source = super::assets::export_bundle(&crate::SkinBundle::from_atlas(super::test_atlas())).unwrap();
-        let gfx = neocogi_ui_support::test_support::gfx_factory();
+        let gfx = neocogi_ui_support::test_support::gfx_factory(crate::test_support::host_runtime());
         let (owner, driver) = nc_ui::testing::create_runtime(source.as_com_ref(), gfx.as_com_ref()).unwrap();
         let host = owner.construction_host().unwrap().host().unwrap();
         let runtime = WidgetRuntime::new(host, options).unwrap();

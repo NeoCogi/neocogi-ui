@@ -234,7 +234,7 @@ fn individual_removal_keeps_terminal_notifications_and_error_reporting() {
 #[test]
 fn shutdown_releases_private_context_and_compositor_before_final_runtime_drop() {
     let source = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
-    let gfx = crate::test_support::gfx_factory();
+    let gfx = crate::test_support::gfx_factory(crate::test_support::host_runtime());
     let compositor = gfx.create_compositor(source.as_com_ref()).unwrap();
     let observed = compositor.downgrade().unwrap();
     let assets = crate::assets::ImportedAssets::read(source.as_com_ref(), None).unwrap();

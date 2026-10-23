@@ -4,10 +4,6 @@
 //! event producer; the inset owns its padding and the host's sole authoritative child editor.
 #![deny(missing_docs)]
 use neocogi_ui::UiEventSource;
-// Native link metadata propagates to this DLL without embedding runtime state.
-#[cfg(all(feature = "dynamic-plugin", not(target_arch = "wasm32")))]
-use neocogi_native_runtime_link as _;
-
 mod settings;
 use neocogi_ui::com::widget::WidgetState;
 use neocogi_ui_core_contracts::*;
@@ -403,6 +399,6 @@ impl ExtensionProvider for ExtensionProviderObject {
 }
 /// Acquires one owned root; object construction remains on its typed methods.
 #[neocogi_com::plugin(name = "neocogi.example.ui-extension")]
-fn acquire_root() -> Result<neocogi_com::ComPtr<neocogi_demo_contracts::ExtensionProviderAbi>, neocogi_com::NcStatus> {
+fn acquire_root(_runtime: ::neocogi_com::Runtime) -> Result<neocogi_com::ComPtr<neocogi_demo_contracts::ExtensionProviderAbi>, neocogi_com::NcStatus> {
     ExtensionProviderObject::from_value(ExtensionProviderObject).query()
 }

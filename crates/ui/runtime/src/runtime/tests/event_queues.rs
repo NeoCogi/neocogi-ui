@@ -45,7 +45,7 @@ impl Drop for DirectFact {
 #[test]
 fn direct_post_owns_cleanup_for_absence_unhandled_delivery_and_rejection() {
     let source = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
-    let gfx = neocogi_ui_support::test_support::gfx_factory();
+    let gfx = neocogi_ui_support::test_support::gfx_factory(crate::test_support::host_runtime());
     let (runtime, driver) = crate::runtime::testing::create_runtime(source.as_com_ref(), gfx.as_com_ref()).unwrap();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
     let sender = ui.widgets().button_unobserved("source").unwrap();

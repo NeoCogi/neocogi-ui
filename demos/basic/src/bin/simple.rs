@@ -74,9 +74,9 @@ impl AppState for State {
 }
 
 /// Builds the same small tree on native SDL and browser WebGL through the typed facade.
-fn run() -> Result<(), HostError> {
-    neocogi_demo_host::initialize()?;
-    let host = Host::new("Hello", Size { width: 640, height: 480 }, neocogi_demo_assets::load_bundle()?)?;
+fn run(runtime: neocogi_com::Runtime) -> Result<(), HostError> {
+    neocogi_demo_host::initialize(runtime)?;
+    let host = Host::new(runtime, "Hello", Size { width: 640, height: 480 }, neocogi_demo_assets::load_bundle(runtime)?)?;
     let mut hello = host.ui.widgets().button_unobserved("Hello World!")?;
     hello.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
     let mut tree = host.ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Stretch)?;
@@ -90,6 +90,7 @@ fn run() -> Result<(), HostError> {
 }
 
 /// Reports startup and frame failures through formatting retained by the min-size profile.
-fn main() -> std::process::ExitCode {
-    report_exit(run())
+#[neocogi_com::com_main]
+fn main(runtime: neocogi_com::Runtime) -> std::process::ExitCode {
+    report_exit(run(runtime))
 }

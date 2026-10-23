@@ -7,6 +7,13 @@ pub(crate) mod algorithm;
 /// The fixture adds no alternate routing, traversal, layout, or compositor implementation.
 pub(crate) fn create_runtime(atlas: crate::AtlasHandle) -> neocogi_com::ComPtr<neocogi_ui_core_contracts::UiRuntimeAbi> {
     let source = assets::export_bundle(&crate::SkinBundle::from_atlas(atlas)).expect("valid fixture resources");
-    let gfx = neocogi_ui_support::test_support::gfx_factory();
+    let gfx = neocogi_ui_support::test_support::gfx_factory(crate::test_support::host_runtime());
     nc_ui::create_runtime_from_assets(source.as_com_ref(), gfx.as_com_ref()).expect("production core runtime")
+}
+
+/// Initializes the selected implementation owned by this test executable.
+#[cfg(test)]
+pub(crate) fn host_runtime() -> neocogi_com::Runtime {
+    // SAFETY: this explicit host owns the complete immutable process-lived graph.
+    unsafe { neocogi_com::Runtime::__from_host_api(nc_com::initialize_process()) }.expect("compatible test host")
 }

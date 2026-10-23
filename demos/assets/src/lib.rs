@@ -74,7 +74,13 @@ mod prebuilt {
     include!(concat!(env!("OUT_DIR"), "/prebuilt_bundle.rs"));
 }
 #[cfg(feature = "embed-assets")]
-pub use prebuilt::{load_bundle, bundle_data};
+pub use prebuilt::bundle_data;
+
+/// Loads compiled assets without using services; native file loading uses the supplied host.
+#[cfg(feature = "embed-assets")]
+pub fn load_bundle(_runtime: neocogi_com::Runtime) -> Result<neocogi_com::ComPtr<neocogi_ui::IAssetBundleAbi>, neocogi_com::NcStatus> {
+    prebuilt::load_bundle()
+}
 
 /// Native construction forwards file paths to the separately loaded GFX provider.
 #[cfg(not(feature = "embed-assets"))]

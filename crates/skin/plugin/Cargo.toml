@@ -16,7 +16,7 @@ crate-type = ["rlib", "cdylib"]
 [features]
 default = []
 theme-json = ["neocogi-skin-impl/theme-json"]
-dynamic-plugin = ["dep:neocogi-native-runtime-link"]
+dynamic-plugin = []
 
 [dependencies]
 neocogi-skin-impl.workspace = true
@@ -26,4 +26,3 @@ neocogi-com = { workspace = true, default-features = false, features = ["macros"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Native target code and its shared runtime use the same Cargo profile.
-neocogi-native-runtime-link = { workspace = true, optional = true }

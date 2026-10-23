@@ -29,7 +29,7 @@ mod tests {
         let source = neocogi_ui_support::test_support::assets::export_bundle(&neocogi_ui_support::SkinBundle::from_atlas(
             neocogi_ui_support::test_support::test_atlas(),
         ))?;
-        let gfx = neocogi_ui_support::test_support::gfx_factory();
+        let gfx = neocogi_ui_support::test_support::gfx_factory(crate::host_runtime());
         let ui = nc_ui_nodes::bind_builtin_nodes(nc_ui::create_runtime_from_assets(source.as_com_ref(), gfx.as_com_ref())?)?;
         let size = Size { width: 640, height: 400 };
         let root_owner = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
@@ -57,7 +57,11 @@ mod tests {
 
         /* checked-example: document-dispatch */
 
-        assert_eq!(form.widget_title_1.text()?, "Saved", "dispatch applies the source command independently of display edits");
+        assert_eq!(
+            form.widget_title_1.text()?,
+            "Saved",
+            "dispatch applies the source command independently of display edits"
+        );
         form.widget_save_2.set_label("stale")?;
         press(&ui, KeyCode::Space)?;
         ui.update(size)?;
@@ -86,3 +90,10 @@ mod tests {
 
 // The fixture final executable explicitly owns its process runtime.
 extern crate nc_com as _;
+
+/// This generated walkthrough executable explicitly selects its host owner.
+#[cfg(test)]
+fn host_runtime() -> neocogi_com::Runtime {
+    // SAFETY: its linked implementation owns the complete immutable process-lived graph.
+    unsafe { neocogi_com::Runtime::__from_host_api(nc_com::initialize_process()) }.unwrap()
+}

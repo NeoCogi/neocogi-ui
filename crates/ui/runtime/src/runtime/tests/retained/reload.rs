@@ -37,7 +37,10 @@ fn failed_reload_preserves_live_widget_handles_and_authored_save() {
     let mut title = slot.component().unwrap().widget::<TextBlockAbi>("title").unwrap();
     title.set_text("Application value").unwrap();
     assert_eq!(title.text().unwrap(), "Application value");
-    assert_eq!(Document::from_binary(&slot.component().unwrap().save().unwrap()).unwrap(), document);
+    assert_eq!(
+        Document::from_binary(&slot.component().unwrap().save(&crate::test_support::host_runtime()).unwrap()).unwrap(),
+        document
+    );
     assert!(slot.component().unwrap().widget::<CheckboxAbi>("title").is_err());
     let mut invalid = document.clone();
     invalid.root.children[0].node.style.font = Some("not-a-real-font".into());
@@ -246,7 +249,10 @@ fn all_builtin_document_controls_construct_and_reload() {
         )
         .unwrap_or_else(|error| panic!("{name}: {error}"));
         fixture.frame(VIEW).unwrap();
-        assert_eq!(Document::from_binary(&slot.component().unwrap().save().unwrap()).unwrap(), document);
+        assert_eq!(
+            Document::from_binary(&slot.component().unwrap().save(&crate::test_support::host_runtime()).unwrap()).unwrap(),
+            document
+        );
     }
 }
 
@@ -351,7 +357,10 @@ fn widget_setters_validate_values_and_remain_separate_from_event_delivery() {
             _ => unreachable!("setter fixture"),
         }
         assert_eq!(events.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty));
-        assert_eq!(Document::from_binary(&component.save().unwrap()).unwrap(), document);
+        assert_eq!(
+            Document::from_binary(&component.save(&crate::test_support::host_runtime()).unwrap()).unwrap(),
+            document
+        );
     }
 }
 
@@ -487,7 +496,7 @@ fn authored_form_rectangles_survive_binary_reload_and_route_real_clicks() {
     // Bad arithmetic must be rejected before it can replace the live component.
     document.root.children[0].edge = Edge::Position { x: i32::MAX, y: 0, width: 2, height: 20 };
     assert!(slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).is_err());
-    assert_eq!(slot.component().unwrap().save().unwrap(), bytes);
+    assert_eq!(slot.component().unwrap().save(&crate::test_support::host_runtime()).unwrap(), bytes);
 }
 
 /// Typed preparation and persistence decoding must construct the same authored component contract.
@@ -512,7 +521,10 @@ fn typed_and_binary_preparation_have_equivalent_authored_state() {
         let mut title = component.widget::<TextBlockAbi>("title").unwrap();
         title.set_text("runtime override").unwrap();
         assert_eq!(title.text().unwrap(), "runtime override");
-        assert_eq!(Document::from_binary(&component.save().unwrap()).unwrap(), document);
+        assert_eq!(
+            Document::from_binary(&component.save(&crate::test_support::host_runtime()).unwrap()).unwrap(),
+            document
+        );
     }
 }
 
@@ -626,7 +638,10 @@ fn selection_offset_and_position_setters_preserve_configuration_and_retire() {
     assert!(split.set_position(-1).is_err());
     assert_eq!(split.settings().unwrap().position, 150);
     assert!(events.try_recv().is_err());
-    assert_eq!(Document::from_binary(&component.save().unwrap()).unwrap(), document);
+    assert_eq!(
+        Document::from_binary(&component.save(&crate::test_support::host_runtime()).unwrap()).unwrap(),
+        document
+    );
     slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     assert!(split.set_position(100).is_err());
 }
@@ -667,7 +682,7 @@ fn application_handles_real_click_and_closed_form_retires() {
     messages.try_recv().unwrap();
     button.set_label("After").unwrap();
     assert_eq!(button.label().unwrap(), "After");
-    assert_eq!(slot.component().unwrap().save().unwrap(), bytes);
+    assert_eq!(slot.component().unwrap().save(&crate::test_support::host_runtime()).unwrap(), bytes);
     assert_eq!(root.properties().is_ok(), true);
     slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     // Container closure queues retirement until the next safe runtime boundary.
@@ -872,7 +887,7 @@ fn typed_and_binary_candidates_own_constructor_mappings_and_preserve_recipe_byte
             false => loader.compile_with_events(&document, events).unwrap(),
         };
         let retained = candidate.widget::<ButtonAbi>("save").unwrap();
-        assert_eq!(candidate.save().unwrap(), bytes);
+        assert_eq!(candidate.save(&crate::test_support::host_runtime()).unwrap(), bytes);
         assert!(matches!(messages.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
         drop(candidate);
         assert_eq!(retained.label(), Err(neocogi_com::NC_E_DROPPED));
@@ -1053,7 +1068,10 @@ fn loaded_grid_uses_host_limits_on_both_construction_paths() {
     let binary = loader.load(&exact.to_binary().unwrap()).unwrap();
     for component in [typed, binary] {
         assert_eq!(component.widget::<GridAbi>("grid").unwrap().limits().unwrap(), limits);
-        assert_eq!(Document::from_binary(&component.save().unwrap()).unwrap(), exact);
+        assert_eq!(
+            Document::from_binary(&component.save(&crate::test_support::host_runtime()).unwrap()).unwrap(),
+            exact
+        );
     }
     let mut excessive_columns = exact.clone();
     if let WidgetSpec::Grid { columns, .. } = &mut excessive_columns.root.widget {
@@ -1089,13 +1107,13 @@ fn rejected_grid_reload_preserves_published_component() {
     let document = grid_document(&[(1, 2)]);
     let committed = slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     let mut old = slot.component().unwrap().widget::<TextBlockAbi>("child0").unwrap();
-    let saved = slot.component().unwrap().save().unwrap();
+    let saved = slot.component().unwrap().save(&crate::test_support::host_runtime()).unwrap();
     assert!(
         slot.reload(&grid_document(&[(1, 2), (1, 1)]), Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(()))
             .is_err()
     );
     assert!(slot.accepts(committed.generation));
-    assert_eq!(slot.component().unwrap().save().unwrap(), saved);
+    assert_eq!(slot.component().unwrap().save(&crate::test_support::host_runtime()).unwrap(), saved);
     old.set_text("Still owned by the committed Grid").unwrap();
     fixture.frame(VIEW).unwrap();
 }
@@ -1120,7 +1138,7 @@ fn authored_flag_absence_and_explicit_masks_round_trip_without_live_state() {
         assert_eq!(widget.requested_flags().unwrap(), expected);
         // Live application edits cannot convert authored absence into a saved mask.
         widget.replace_flags(WidgetOptions::ALIGN_CENTER).unwrap();
-        let bytes = component.save().unwrap();
+        let bytes = component.save(&crate::test_support::host_runtime()).unwrap();
         assert_eq!(Document::from_binary(&bytes).unwrap(), document);
         let loaded = loader.load(&bytes).unwrap();
         assert_eq!(loaded.root().unwrap().requested_flags().unwrap(), expected);

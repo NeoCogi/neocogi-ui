@@ -2,6 +2,11 @@
 
 ## 0.0.0 (unreleased)
 
+- Initialize the single COM registry in the host through `#[com_main]`; supply
+  immutable service access to plugin acquisition and application libraries.
+  Remove the COM runtime DSO/native-link bridge and global/default discovery,
+  retaining the runtime as a host rlib. Core/runtime/plugin remain ABI v1.
+
 - Consolidate the COM object/runtime/compatibility specifications into one
   [ABI-v1 guide](../../crates/com/docs/abi-v1.md). Core, runtime and plugin
   discovery share the pre-release v1 baseline; IDL fingerprints and UI schemas

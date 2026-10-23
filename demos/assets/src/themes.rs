@@ -46,12 +46,13 @@ impl Theme {
     /// Native callers must register the skin plugin first; its JSON loader owns all theme compilation.
     /// Failed native theme compilation prints the loader's owned diagnostic to stderr before
     /// releasing that service, while returning the exact original COM status to the caller.
-    pub fn load(self, base: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
+    pub fn load(self, runtime: neocogi_com::Runtime, base: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         if self == Self::Default {
             return base.try_add_ref();
         }
         #[cfg(feature = "embed-assets")]
         {
+            let _ = runtime;
             let data = match self {
                 Self::Windows311 => windows_311::bundle_data()?,
                 Self::Windows95 => windows_95::bundle_data()?,
@@ -70,7 +71,6 @@ impl Theme {
                 Self::Default => unreachable!(),
             };
             let path = super::files::asset_path(path).map_err(|_| neocogi_com::NC_E_LOAD_FAILED)?;
-            let runtime = neocogi_com::Runtime::global();
             let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
             let assets = gfx.asset_loader()?;
             let publisher = gfx.asset_publisher()?;

@@ -55,7 +55,7 @@ fn focused() -> WidgetUpdate {
 fn native_textbox_commits_before_post_and_stops_emitting_after_rejection() {
     for reject in [false, true] {
         let source = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
-        let gfx = neocogi_ui_support::test_support::gfx_factory();
+        let gfx = neocogi_ui_support::test_support::gfx_factory(crate::test_support::host_runtime());
         let (mut runtime, driver) = crate::runtime::testing::create_runtime(source.as_com_ref(), gfx.as_com_ref()).unwrap();
         let (send, requests) = std::sync::mpsc::channel();
         let clipboard: ComPtr<ITextClipboardAbi> = DeferredRead::from_value(DeferredRead { requests: send }).query().unwrap();
@@ -147,7 +147,7 @@ fn native_textbox_commits_before_post_and_stops_emitting_after_rejection() {
 fn error_reports_capture_scoped_sources_and_survive_source_destruction() {
     use neocogi_ui::events::{error, IErrorEventAbi};
     let source = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
-    let gfx = neocogi_ui_support::test_support::gfx_factory();
+    let gfx = neocogi_ui_support::test_support::gfx_factory(crate::test_support::host_runtime());
     let (runtime, driver) = crate::runtime::testing::create_runtime(source.as_com_ref(), gfx.as_com_ref()).unwrap();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
     let outer = ui.widgets().button_unobserved("outer").unwrap();
@@ -206,7 +206,7 @@ fn error_reports_capture_scoped_sources_and_survive_source_destruction() {
 #[test]
 fn rejected_error_report_propagates_status_and_destroys_its_owner_once() {
     let source = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
-    let gfx = neocogi_ui_support::test_support::gfx_factory();
+    let gfx = neocogi_ui_support::test_support::gfx_factory(crate::test_support::host_runtime());
     let (runtime, driver) = crate::runtime::testing::create_runtime(source.as_com_ref(), gfx.as_com_ref()).unwrap();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
     let source = ui.widgets().button_unobserved("reporter").unwrap();

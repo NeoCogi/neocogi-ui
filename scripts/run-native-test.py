@@ -26,8 +26,6 @@ def main():
         for name in ("lib", "assets", "themes"):
             if (root / name).is_dir():
                 shutil.copytree(root / name, application / name)
-        if (root / "nc_com.dll").is_file():
-            shutil.copy2(root / "nc_com.dll", application / "nc_com.dll")
         environment = {key: value for key, value in os.environ.items()
                        if key not in ("LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH")}
         result = subprocess.run([application / executable.name, *sys.argv[2:]], env=environment, check=False)

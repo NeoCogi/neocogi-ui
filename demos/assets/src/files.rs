@@ -12,9 +12,9 @@ pub(super) fn asset_path(relative: &str) -> std::io::Result<std::path::PathBuf> 
 
 /// Constructs the default bundle after the host registers its adjacent plugins.
 /// The provider owns every decoder, font rasterizer and packing operation; no UI implementation is linked here.
-pub fn load_bundle() -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
+pub fn load_bundle(runtime: neocogi_com::Runtime) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
     let directory = asset_path("").map_err(|_| neocogi_com::NC_E_LOAD_FAILED)?;
-    let factory = neocogi_com::Runtime::global().acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+    let factory = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
     let loader = factory.asset_loader()?;
     let builder = loader.create_builder(
         Size {

@@ -34,9 +34,8 @@ impl events::MessageProcessor for Model {
 }
 
 /// Runs real routing, layout, GPU recording and lifecycle through three independently built assemblies.
-pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
-    let provider =
-        neocogi_com::Runtime::global().acquire_plugin_root::<ExtensionProviderAbi>(neocogi_com::guid_from_qualified_name("neocogi.example.ui-extension"))?;
+pub(super) fn smoke(runtime: neocogi_com::Runtime, ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
+    let provider = runtime.acquire_plugin_root::<ExtensionProviderAbi>(neocogi_com::guid_from_qualified_name("neocogi.example.ui-extension"))?;
     let host = ui.widgets().host()?;
     // Exercise rejection through the independent extension and runtime DLLs.
     // B belongs to A, so accepting A under B would form an owning cycle. Every

@@ -140,9 +140,14 @@ impl AppState for State {
 }
 
 /// Creates one concrete COM leaf; standard host ownership handles all input/update/render phases.
-fn run() -> Result<(), HostError> {
-    neocogi_demo_host::initialize()?;
-    let host = Host::new("COM solid cube", Size { width: 640, height: 480 }, neocogi_demo_assets::load_bundle()?)?;
+fn run(runtime: neocogi_com::Runtime) -> Result<(), HostError> {
+    neocogi_demo_host::initialize(runtime)?;
+    let host = Host::new(
+        runtime,
+        "COM solid cube",
+        Size { width: 640, height: 480 },
+        neocogi_demo_assets::load_bundle(runtime)?,
+    )?;
     let angle = Rc::new(Cell::new(0.0));
     let cube = host.ui.widgets().leaf(Cube { angle: angle.clone() }, WidgetOptions::NO_INTERACT)?;
     host.ui
@@ -152,6 +157,7 @@ fn run() -> Result<(), HostError> {
 }
 
 /// Reports startup and frame failures through formatting retained by the min-size profile.
-fn main() -> std::process::ExitCode {
-    report_exit(run())
+#[neocogi_com::com_main]
+fn main(runtime: neocogi_com::Runtime) -> std::process::ExitCode {
+    report_exit(run(runtime))
 }

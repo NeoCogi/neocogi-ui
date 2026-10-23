@@ -32,10 +32,6 @@ fn cargo_host_and_plugin_share_one_runtime_catalog() {
                 std::fs::copy(&source, before.join("lib").join(source.file_name().unwrap())).unwrap();
             }
         }
-        // Windows resolves the shared runtime's initial import before main.
-        if root.join("nc_com.dll").is_file() {
-            std::fs::copy(root.join("nc_com.dll"), before.join("nc_com.dll")).unwrap();
-        }
         std::fs::rename(before, &after).unwrap();
         let output = std::process::Command::new(after.join(filename))
             .args(["--exact", "cargo_host_and_plugin_share_one_runtime_catalog", "--nocapture"])
@@ -54,8 +50,8 @@ fn cargo_host_and_plugin_share_one_runtime_catalog() {
         );
         return;
     }
-    neocogi_demo_plugins::register().unwrap();
-    let runtime = Runtime::global();
+    neocogi_demo_plugins::register(host_runtime()).unwrap();
+    let runtime = host_runtime();
     let renderer = if cfg!(feature = "vulkan") {
         "neocogi.render.vulkan"
     } else if cfg!(feature = "wgpu") {
@@ -68,7 +64,7 @@ fn cargo_host_and_plugin_share_one_runtime_catalog() {
     assert_eq!(catalog.iter().filter(|plugin| plugin.qualified_name.starts_with("neocogi.render.")).count(), 1);
     let count = catalog.len();
     // Re-loading the exact Cargo artifacts must reuse the first registrations.
-    neocogi_demo_plugins::register().unwrap();
+    neocogi_demo_plugins::register(host_runtime()).unwrap();
     assert_eq!(runtime.plugins().unwrap().len(), count);
     assert!(count >= 4, "production composition must register its actual providers");
     // SAFETY: Cargo supplies this trusted, independently compiled test DLL.
@@ -84,4 +80,11 @@ fn cargo_host_and_plugin_share_one_runtime_catalog() {
     // Dropping the acquired root does not unmap its code or static registration.
     let retained = runtime.acquire_plugin_root::<IRegistryProbeAbi>(marker).unwrap();
     assert_eq!(retained.catalog_len().unwrap() as usize, count + 2);
+}
+
+/// Initializes the selected implementation owned by this test executable.
+#[cfg(test)]
+fn host_runtime() -> neocogi_com::Runtime {
+    // SAFETY: this explicit host owns the complete immutable process-lived graph.
+    unsafe { neocogi_com::Runtime::__from_host_api(nc_com::initialize_process()) }.expect("compatible test host")
 }

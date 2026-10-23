@@ -195,7 +195,7 @@ fn persisted_component_builds_real_ui_and_binds_without_child_handles() {
         children: vec![],
     };
     let (sender, messages) = std::sync::mpsc::channel();
-    let mut registry = FactoryRegistry::new().unwrap();
+    let mut registry = FactoryRegistry::new(&crate::test_support::host_runtime()).unwrap();
     registry
         .register(
             VIEW_KIND,
@@ -208,7 +208,10 @@ fn persisted_component_builds_real_ui_and_binds_without_child_handles() {
         )
         .unwrap();
     let component = registry.restore(&binary::to_vec(&record).unwrap()).unwrap();
-    assert_eq!(snapshot(component.as_com_ref()).unwrap(), binary::to_vec(&record).unwrap());
+    assert_eq!(
+        snapshot(&crate::test_support::host_runtime(), component.as_com_ref()).unwrap(),
+        binary::to_vec(&record).unwrap()
+    );
     let outputs = component.query::<ICompositionRootAbi>().unwrap();
     assert!(
         outputs
@@ -238,7 +241,7 @@ fn persisted_component_builds_real_ui_and_binds_without_child_handles() {
     }
     assert_eq!(messages.try_recv().unwrap(), AppEvent::Save);
     assert_eq!(messages.try_recv().unwrap(), AppEvent::Enabled(true));
-    let saved = snapshot(component.as_com_ref()).unwrap();
+    let saved = snapshot(&crate::test_support::host_runtime(), component.as_com_ref()).unwrap();
     let saved_record: ObjectRecord = binary::from_slice(&saved).unwrap();
     let saved_state: Settings = binary::from_slice(&saved_record.state).unwrap();
     assert!(saved_state.checked, "snapshot must capture the committed user edit");
@@ -246,7 +249,7 @@ fn persisted_component_builds_real_ui_and_binds_without_child_handles() {
     drop(outputs);
     drop(component);
     let restored = registry.restore(&saved).unwrap();
-    assert_eq!(snapshot(restored.as_com_ref()).unwrap(), saved);
+    assert_eq!(snapshot(&crate::test_support::host_runtime(), restored.as_com_ref()).unwrap(), saved);
     let mountable = restored
         .query::<ICompositionRootAbi>()
         .unwrap()

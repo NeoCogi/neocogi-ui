@@ -493,9 +493,14 @@ fn menu_item(menu: &MenuBuilder, send: &mut Inputs, text: &str, action: Action) 
 }
 
 /// Creates the complete demo with the same structural desktop and floating examples on every backend.
-fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<neocogi_ui::events::EventMessage>), HostError> {
-    neocogi_demo_host::initialize()?;
-    let host = Host::new("neocogi-ui COM Demo", Size { width: 1200, height: 800 }, neocogi_demo_assets::load_bundle()?)?;
+fn create(runtime: neocogi_com::Runtime) -> Result<(Host, State, std::sync::mpsc::Receiver<neocogi_ui::events::EventMessage>), HostError> {
+    neocogi_demo_host::initialize(runtime)?;
+    let host = Host::new(
+        runtime,
+        "neocogi-ui COM Demo",
+        Size { width: 1200, height: 800 },
+        neocogi_demo_assets::load_bundle(runtime)?,
+    )?;
     let ui = &host.ui;
     let (receiver, events) = neocogi_ui::events::channel();
     let mut events_tx = Inputs::new(receiver);
@@ -572,7 +577,7 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<neocogi_ui::events
     let entry_sink = events_tx.queue.clone();
     let mut entry = ui.widgets().textbox_with_queue("", Some(entry_sink.as_com_ref()))?;
     entry.set_font_role(FontRole::Mono)?;
-    let (style, style_root) = StyleEditor::new(ui, &mut events_tx)?;
+    let (style, style_root) = StyleEditor::new(runtime, ui, &mut events_tx)?;
     floating(
         ui,
         desktop.as_com_ref(),
@@ -619,8 +624,8 @@ fn create() -> Result<(Host, State, std::sync::mpsc::Receiver<neocogi_ui::events
 }
 
 /// The normal entry point owns the completed tree and receiver through the concrete demo host.
-pub(super) fn run() -> Result<(), HostError> {
-    let (host, state, events) = create()?;
+pub(super) fn run(runtime: neocogi_com::Runtime) -> Result<(), HostError> {
+    let (host, state, events) = create(runtime)?;
     host.run(state, events)
 }
 

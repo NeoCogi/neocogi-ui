@@ -169,6 +169,8 @@ struct ColorRow {
 
 /// Complete authoring state for the demo; immutable revisions are published transactionally by Ui.
 pub(super) struct StyleEditor {
+    /// Supplied services used by later theme selections.
+    runtime: neocogi_com::Runtime,
     /// Original catalog makes all theme selections valid revisions of the same application assets.
     base: ComPtr<IAssetBundleAbi>,
     /// Asset-owned compiler remains independent of the currently selected UI tree.
@@ -188,10 +190,9 @@ pub(super) struct StyleEditor {
 }
 impl StyleEditor {
     /// Builds the same 72 color sliders and five metrics inside one ordinary scrolling tree.
-    pub(super) fn new(ui: &Ui, events_tx: &mut super::app::Inputs) -> Result<(Self, OwnedWidget<ScrollAreaAbi>), NcStatus> {
+    pub(super) fn new(runtime: neocogi_com::Runtime, ui: &Ui, events_tx: &mut super::app::Inputs) -> Result<(Self, OwnedWidget<ScrollAreaAbi>), NcStatus> {
         let base = ui.assets()?;
         // Activation belongs to this application; the UI runtime has no asset-provider dependency.
-        let runtime = neocogi_com::Runtime::global();
         let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
         let publisher = gfx.asset_publisher()?;
         let factory = runtime.acquire_plugin_root::<SkinPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.skin.runtime"))?;
@@ -241,6 +242,7 @@ impl StyleEditor {
             Self {
                 base,
                 compiler,
+                runtime,
                 selected: Theme::Default,
                 palette,
                 metrics,
@@ -265,7 +267,7 @@ impl StyleEditor {
     }
     /// Prepares a pristine theme in the original catalog and resets the editor's controls.
     pub(super) fn select(&mut self, selected: Theme) -> Result<(), NcStatus> {
-        let candidate = selected.load(self.base.as_com_ref())?;
+        let candidate = selected.load(self.runtime, self.base.as_com_ref())?;
         let metrics = candidate.metrics()?;
         self.selected = selected;
         self.palette = FlatPalette::default();

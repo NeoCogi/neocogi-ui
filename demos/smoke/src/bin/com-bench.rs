@@ -231,7 +231,8 @@ fn memory() -> Result<(), Box<dyn Error>> {
 }
 
 /// Loads one trusted UI plugin and emits machine-readable timing samples for one selected shape.
-fn main() -> Result<(), Box<dyn Error>> {
+#[neocogi_com::com_main]
+fn main(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
     let mut arguments = std::env::args_os().skip(1);
     let library = arguments.next().ok_or("usage: neocogi-com-bench <UI-library> <single|deep|wide> [--counts]")?;
     if library == "--buffers" {
@@ -258,7 +259,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("extra argument".into());
     }
     let start = Instant::now();
-    let runtime = neocogi_com::Runtime::global();
     // SAFETY: This development benchmark accepts a trusted workspace-built matching UI plugin.
     unsafe {
         runtime.load_plugin_library(std::path::PathBuf::from(library));
@@ -271,7 +271,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let loaded = start.elapsed();
     let start = Instant::now();
-    let assets = neocogi_demo_assets::load_bundle()?;
+    let assets = neocogi_demo_assets::load_bundle(runtime)?;
     let decoded = start.elapsed();
     let start = Instant::now();
     let runtime_factory = runtime.acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;

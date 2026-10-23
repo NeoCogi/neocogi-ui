@@ -147,6 +147,8 @@ pub trait AppState: 'static {
 
 /// One demo UI and platform window; these fields are concrete capabilities, with no native handles.
 pub struct Host {
+    /// Supplied access to the executable-owned COM services; copying it owns no registry.
+    pub runtime: neocogi_com::Runtime,
     /// Bound core runtime and nodes factory share canonical host identity, not one COM allocation.
     pub ui: Ui,
     /// Selected backend owns all images and custom render items used by this host.
@@ -180,9 +182,8 @@ impl Host {
     }
 
     /// Loads/registers trusted assemblies once and creates one complete demo host from immutable assets.
-    pub fn new(title: &str, size: Size, assets: ComPtr<IAssetBundleAbi>) -> Result<Self, HostError> {
-        initialize()?;
-        let runtime = neocogi_com::Runtime::global();
+    pub fn new(runtime: neocogi_com::Runtime, title: &str, size: Size, assets: ComPtr<IAssetBundleAbi>) -> Result<Self, HostError> {
+        initialize(runtime)?;
         let platform = runtime.acquire_plugin_root::<PlatformAbi>(neocogi_com::guid_from_qualified_name(renderer_plugin_name()))?;
         let atlas = assets.image()?;
         let window = platform.create_window(NcCopyFromBufferOffset::new(0, title.as_bytes()), size, atlas.as_com_ref())?;
@@ -197,6 +198,7 @@ impl Host {
         let (send, observations) = std::sync::mpsc::channel();
         let input = PollInput::from_value(PollInput { send }).query()?;
         Ok(Self {
+            runtime,
             ui,
             renderer,
             window,
@@ -258,7 +260,7 @@ impl Host {
     /// Uploads within the caller's remaining aggregate image budget, checked before pixel allocation.
     #[cfg(feature = "png-assets")]
     pub fn png_texture_bounded(&self, png: &[u8], rgba_limit: usize) -> Result<ComPtr<ITextureAbi>, HostError> {
-        let runtime = neocogi_com::Runtime::global();
+        let runtime = self.runtime;
         let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
         let decoder = gfx.png_decoder()?;
         let target = self.renderer.query::<ITextureFactoryAbi>()?;
@@ -470,16 +472,16 @@ compile_error!("select one native linkage: dynamic or monolith; disable defaults
 
 #[cfg(all(not(target_arch = "wasm32"), not(any(feature = "dynamic", feature = "monolith"))))]
 /// Reports missing linkage selection without entering the runtime.
-fn register() -> Result<(), HostError> {
+fn register(_runtime: neocogi_com::Runtime) -> Result<(), HostError> {
     Err(HostError::Message("select dynamic or monolith for native execution".to_owned()))
 }
 
 /// Registers the process plugin catalog before loading assets or constructing windows.
 /// Repeated calls reuse the first result; Host::new also calls this for callers supplying their own bundle.
-pub fn initialize() -> Result<(), HostError> {
+pub fn initialize(runtime: neocogi_com::Runtime) -> Result<(), HostError> {
     static STARTUP: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
     STARTUP
-        .get_or_init(|| register().map_err(|error| error.to_string()))
+        .get_or_init(|| register(runtime).map_err(|error| error.to_string()))
         .as_ref()
         .map(|_| ())
         .map_err(|error| HostError::Message(error.clone()))
@@ -488,14 +490,14 @@ pub fn initialize() -> Result<(), HostError> {
 /// Loads the exact native artifacts Cargo built for this composition.
 /// Registration order is explicit because Nodes and Skin declare hard provider requirements.
 #[cfg(all(not(target_arch = "wasm32"), feature = "dynamic", not(feature = "monolith")))]
-fn register() -> Result<(), HostError> {
-    neocogi_demo_plugins::register()?;
+fn register(runtime: neocogi_com::Runtime) -> Result<(), HostError> {
+    neocogi_demo_plugins::register(runtime)?;
     Ok(())
 }
 
 /// Registers the implementation descriptors selected by static Cargo features.
 #[cfg(any(target_arch = "wasm32", feature = "monolith"))]
-fn register() -> Result<(), HostError> {
+fn register(runtime: neocogi_com::Runtime) -> Result<(), HostError> {
     let descriptors = [
         nc_ui::plugin_descriptor(),
         nc_ui_nodes::plugin_descriptor(),
@@ -507,7 +509,6 @@ fn register() -> Result<(), HostError> {
         #[cfg(feature = "skin")]
         nc_skin::plugin_descriptor(),
     ];
-    let runtime = neocogi_com::Runtime::global();
     for descriptor in descriptors {
         // SAFETY: descriptors and provider code remain linked for process lifetime.
         unsafe {
@@ -568,7 +569,3 @@ pub fn monotonic_seconds() -> f64 {
     static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
     START.get_or_init(std::time::Instant::now).elapsed().as_secs_f64()
 }
-
-// This application assembly owns the sole implementation in embedded deployments.
-#[cfg(any(target_arch = "wasm32", feature = "monolith"))]
-extern crate nc_com as _;

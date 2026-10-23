@@ -185,7 +185,7 @@ The [snapshot and channel regressions](../../crates/ui/api/tests/event_snapshots
 also verify that the standard inbox preserves allocation identity, keeps facts
 readable after source destruction, and restores the same owner on disconnection.
 Each observed scalar event now requires an exclusive allocation. The existing
-[allocation probe](../../examples/com-plugin/examples/event_allocations.rs), run
+[allocation probe](../../examples/com-host/examples/event_allocations.rs), run
 on October 4 with `--features monolith`, recorded 2 setup allocations and 10,323
 allocations for 10,000 scalar events including channel storage. That historical
 unobserved path skipped construction and performed 10,000 updates with zero

@@ -93,7 +93,7 @@ mod tests {
         use neocogi_ui_core_contracts::{IWindowManagerAbi, Rect, Size, UiRuntimeAbi, UI_E_CLOSED};
         let bundle = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
         let assets = crate::assets::ImportedAssets::read(bundle.as_com_ref(), None).unwrap();
-        let gfx = neocogi_ui_support::test_support::gfx_factory();
+        let gfx = neocogi_ui_support::test_support::gfx_factory(crate::test_support::host_runtime());
         let compositor = gfx.create_compositor(bundle.as_com_ref()).unwrap();
         let storage = crate::runtime::create_storage(assets, compositor);
         let runtime = crate::runtime::Runtime { storage: storage.clone() };

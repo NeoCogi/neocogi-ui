@@ -113,7 +113,7 @@ jobs:
       - name: Driver rejects missing tests, artifacts and stale success evidence
         run: python3 -m unittest discover -s crates/com/scripts -p test_compatibility.py
       - name: Relocated monolith without native NeoCogi libraries
-        run: cargo test -p neocogi-example-com-plugin --test build_modes
+        run: cargo test -p neocogi-example-com-host --test build_modes
 
   # Independent role builds are distinct from ordinary same-compiler unit tests.
   com-compatibility:

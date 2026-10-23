@@ -4,11 +4,9 @@
 //! loads selected filenames from the lib directory beside the executable.
 #![deny(missing_docs)]
 
-use neocogi_native_runtime_link as _;
-
 /// Loads trusted Cargo artifacts in their explicit provider order.
-/// The shared runtime validates metadata, dependencies and process ownership.
-pub fn register() -> std::io::Result<()> {
+/// The supplied host validates metadata, dependencies and process ownership.
+pub fn register(runtime: neocogi_com::Runtime) -> std::io::Result<()> {
     let executable = std::env::current_exe()?;
     let directory = executable
         .parent()
@@ -24,7 +22,6 @@ pub fn register() -> std::io::Result<()> {
         #[cfg(feature = "skin")]
         neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_SKIN_LIBRARY_nc_skin"),
     ];
-    let runtime = neocogi_com::Runtime::global();
     for filename in filenames {
         // SAFETY: the application ships trusted Cargo-built providers in its lib directory.
         // Runtime registration validates descriptors and retains code for process lifetime.

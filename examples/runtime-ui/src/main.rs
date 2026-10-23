@@ -83,10 +83,15 @@ impl AppState for State {
     }
 }
 /// Uses the same host and loader in shared, monolithic, and browser assemblies.
-fn run() -> Result<(), HostError> {
+fn run(runtime: neocogi_com::Runtime) -> Result<(), HostError> {
     // Asset loading activates a registered GFX provider before Host::new runs.
-    neocogi_demo_host::initialize()?;
-    let host = Host::new("Runtime UI", Size { width: 800, height: 600 }, neocogi_demo_assets::load_bundle()?)?;
+    neocogi_demo_host::initialize(runtime)?;
+    let host = Host::new(
+        runtime,
+        "Runtime UI",
+        Size { width: 800, height: 600 },
+        neocogi_demo_assets::load_bundle(runtime)?,
+    )?;
     // One allocator belongs to this application's dispatch domain. Reuse it for
     // any additional/recreated slots that post into the same channel.
     let mut reload_ids = ReloadIds::new();
@@ -123,6 +128,7 @@ fn run() -> Result<(), HostError> {
     host.run(state, receiver)
 }
 /// Preserves operational diagnostics under the min-size profile.
-fn main() -> std::process::ExitCode {
-    neocogi_demo_host::report_exit(run())
+#[neocogi_com::com_main]
+fn main(runtime: neocogi_com::Runtime) -> std::process::ExitCode {
+    neocogi_demo_host::report_exit(run(runtime))
 }

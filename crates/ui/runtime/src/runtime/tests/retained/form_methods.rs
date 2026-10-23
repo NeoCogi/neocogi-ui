@@ -97,7 +97,10 @@ fn generated_form_fields_preserve_widget_validation_silence_and_reload_lifetime(
     }
     fixture.frame(VIEW).unwrap();
     assert!(matches!(events.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
-    assert_eq!(Document::from_binary(&slot.component().unwrap().save().unwrap()).unwrap(), document);
+    assert_eq!(
+        Document::from_binary(&slot.component().unwrap().save(&crate::test_support::host_runtime()).unwrap()).unwrap(),
+        document
+    );
 
     // The application's old Form cannot mutate a replacement generation even
     // though its concrete COM references keep the old allocations alive.
