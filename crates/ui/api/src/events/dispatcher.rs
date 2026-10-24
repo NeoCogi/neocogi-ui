@@ -2,7 +2,7 @@
 
 use std::sync::mpsc::{Receiver, TryRecvError};
 use neocogi_com::{NcStatus, com_object};
-use neocogi_ui_core_contracts::{ApplicationDispatch, InputBoundary, IApplicationDispatcher, IApplicationDispatcherAbi, IApplicationDispatcherVtblFor};
+use neocogi_ui::abi::core::{ApplicationDispatch, InputBoundary, IApplicationDispatcher, IApplicationDispatcherAbi, IApplicationDispatcherVtblFor};
 
 /// Result of applying application-owned pending changes at an empty-inbox boundary.
 /// This local processor result is mapped to the generated application dispatcher outcome.

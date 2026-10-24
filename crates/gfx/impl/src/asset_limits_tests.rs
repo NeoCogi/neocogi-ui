@@ -3,7 +3,7 @@ use super::*;
 use neocogi_com::{NcOutputWriter, ComInlineValue, com_object};
 use neocogi_gfx_support::AssetTables;
 use neocogi_ui::{NativePath, PathEncoding};
-use neocogi_platform_contracts::*;
+use neocogi_render_core::platform::*;
 use std::{cell::Cell, rc::Rc};
 
 /// Independent encoder creates a valid one-pixel icon without file or atlas dependencies.
@@ -329,7 +329,7 @@ impl IAssetBundle for RawBundle {
         Ok(self.header)
     }
     /// Delegates to real validated image ownership.
-    fn image(&self) -> Result<ComPtr<neocogi_renderer_contracts::IRgbaImageAbi>, NcStatus> {
+    fn image(&self) -> Result<ComPtr<neocogi_render_core::abi::IRgbaImageAbi>, NcStatus> {
         self.accessed();
         self.base.image()
     }

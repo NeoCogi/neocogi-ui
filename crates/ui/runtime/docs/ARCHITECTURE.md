@@ -13,8 +13,8 @@ protocols at the retained-node boundary.
 | Owner | Responsibility |
 | --- | --- |
 | `neocogi-ui` | Application facade, concrete handles and application message dispatchers. |
-| `neocogi-ui-core-contracts` | Shared widget, layout, surface, menu and window protocols. |
-| `neocogi-ui-nodes-contracts` | Built-in classes, their event values and constructor factory. |
+| `neocogi-ui` | Shared widget, layout, surface, menu and window protocols. |
+| `neocogi-ui` | Built-in classes, their event values and constructor factory. |
 | `neocogi-ui-runtime` | Retained topology, authoritative child stores, traversal, scopes and surfaces. |
 | `neocogi-ui-nodes` | Widget algorithms, semantic state, containers and file dialog. |
 | `neocogi-ui-support` | Resource imports and pure geometry/text/presentation helpers. |

@@ -46,7 +46,7 @@ pub use crate::render::{Color, color};
 pub use icons::{IconRef, IconRole};
 pub use palette::FlatPalette;
 pub use resources::ResourceCatalog;
-pub use neocogi_ui_core_contracts::{AssetChrome, AssetMetrics, CaptionSide, ChromeRole, ControlRole, MenuRole, SurfaceRole, TitleAlignment};
+pub use neocogi_ui::abi::core::{AssetChrome, AssetMetrics, CaptionSide, ChromeRole, ControlRole, MenuRole, SurfaceRole, TitleAlignment};
 pub use skin::Skin;
 pub use skin::SkinRevision;
 pub use typography::{FontRef, FontRole};

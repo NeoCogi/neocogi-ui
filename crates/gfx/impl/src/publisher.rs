@@ -2,11 +2,11 @@
 
 use super::Diagnostic;
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, NC_E_INVALID_ARG, NC_E_OUT_OF_MEMORY, NcCopyFromBufferOffset, NcStatus, com_object};
-use neocogi_gfx_contracts::*;
+use neocogi_gfx_support::abi::*;
 use neocogi_gfx_support::AssetTables;
 
 /// GFX publication root with diagnostic state owned independently of returned revisions.
-#[com_object(neocogi_gfx_contracts::AssetPublisher)]
+#[com_object(neocogi_gfx_support::abi::AssetPublisher)]
 #[derive(Default)]
 pub struct AssetPublisherObject {
     /// Last transfer, validation, or publication failure observed by this service instance.

@@ -32,7 +32,7 @@ use crate::math::RectExt;
 use crate::{Constraints, Dimensioni, Recti, Skin, UiInputEvent, Vec2i, Widget};
 use crate::ChildParticipation;
 use crate::layout_client::ScopedLayout;
-use neocogi_ui_core_contracts::ContainerGeometry;
+use neocogi_ui::abi::core::ContainerGeometry;
 use neocogi_com::NcStatus;
 
 /// Private statically dispatched algorithms for built-in COM containers.
@@ -140,7 +140,7 @@ impl<'a> ContainerLayoutCtx<'a> {
     }
     /// Replaces derived extent without modifying the descendant viewport.
     pub fn set_content_size(&mut self, size: Dimensioni) {
-        self.geometry.content = neocogi_ui_core_contracts::Size { width: size.width, height: size.height };
+        self.geometry.content = neocogi_ui::abi::core::Size { width: size.width, height: size.height };
     }
     /// Narrows descendant clipping to the assigned content and copies its translation.
     pub fn set_children_viewport(&mut self, viewport: Recti, offset: Vec2i) {

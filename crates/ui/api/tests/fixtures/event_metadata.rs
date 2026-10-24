@@ -3,8 +3,8 @@
 mod contract;
 use contract::*;
 use neocogi_com::idl_metadata::{MethodType as M, ValueType as V};
-use neocogi_ui_core_contracts::{EventSourceMetadata, UiEventSource};
-neocogi_ui_core_contracts::ui_event_sources! { SourceAbi => [GoodAbi]; }
+use neocogi_ui::abi::core::{EventSourceMetadata, UiEventSource};
+neocogi_ui::abi::core::ui_event_sources! { SourceAbi => [GoodAbi]; }
 
 #[test]
 fn publication_is_separate_from_abi_and_merges_event_only_values() {
@@ -25,13 +25,13 @@ fn publication_is_separate_from_abi_and_merges_event_only_values() {
 fn ui_rejects_non_snapshots_and_ambiguous_getters() {
     // Same root IID with incompatible bytes cannot qualify by spelling or nominal identity alone.
     const WRONG_DIGEST: [u8; 32] = {
-        let mut bytes = *neocogi_ui_core_contracts::IEventAbi::IDL_INTERFACE.identity.abi_signature;
+        let mut bytes = *neocogi_ui::abi::core::IEventAbi::IDL_INTERFACE.identity.abi_signature;
         bytes[31] ^= 1;
         bytes
     };
     const WRONG_ROOT: neocogi_com::idl_metadata::InterfaceIdentity = neocogi_com::idl_metadata::InterfaceIdentity {
         abi_signature: &WRONG_DIGEST,
-        ..neocogi_ui_core_contracts::IEventAbi::IDL_INTERFACE.identity
+        ..neocogi_ui::abi::core::IEventAbi::IDL_INTERFACE.identity
     };
     static WRONG_CHAIN: [neocogi_com::idl_metadata::InterfaceIdentity; 2] = [GoodAbi::IDL_INTERFACE.identity, WRONG_ROOT];
     let wrong_root = neocogi_com::idl_metadata::InterfaceMetadata {

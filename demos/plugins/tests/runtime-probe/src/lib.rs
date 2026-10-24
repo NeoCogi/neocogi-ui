@@ -1,4 +1,5 @@
 //! Independently compiled DLL proving Cargo compositions share one runtime authority.
+extern crate self as nc_cargo_runtime_probe;
 #[path = "../interface.rs"]
 mod interface;
 use interface::{IRegistryProbe, IRegistryProbeAbi};

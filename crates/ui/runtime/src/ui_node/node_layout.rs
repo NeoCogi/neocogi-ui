@@ -36,7 +36,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::{Dimensioni, Recti, Vec2i, math::RectExt};
 
 /// Uses the canonical NCIDL participation vocabulary rather than maintaining a parallel enum.
-pub use neocogi_ui_core_contracts::LayoutParticipation as ChildParticipation;
+pub use neocogi_ui::abi::core::LayoutParticipation as ChildParticipation;
 
 /// Process-wide source of runtime-only node identity.
 ///

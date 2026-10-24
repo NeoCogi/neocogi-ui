@@ -57,13 +57,11 @@ cargo run -p neocogi-demo-full --no-default-features --features monolith,glow,em
 
 File-backed resources are copied into adjacent `assets/` and `themes/` directories;
 `embed-assets` compiles them into the executable instead. Copy the executable,
-`lib/` and those resource directories together to relocate the application
+`lib/` and those resource directories together to relocate the application.
 The host owns COM services; `lib/` contains providers. Build paths remain compiler inputs;
 debug unremapping sidecars must stay on the build machine. Distribution
 installation remains separate. The [native guide](docs/guides/COM_NATIVE.md) explains ownership,
-linkage, resources, browser builds and remaining Cargo costs. The optional
-[cargo-neocogi tool](tools/cargo-neocogi/README.md) manages NCIDL module authoring;
-it no longer builds assemblies.
+linkage, resources, browser builds and remaining Cargo costs.
 
 For VS Code, install the recommended CodeLLDB extension and select **Full demo:
 Vulkan (shared, debug)** or **Full demo: Glow (shared, debug)** in Run and Debug.
@@ -72,17 +70,20 @@ and generated COM code. See [native debugging](docs/guides/COM_NATIVE.md#debuggi
 
 ## Workspace layout
 
-COM infrastructure lives under `crates/com`: `core` defines the
-ABI vocabulary, `macros` generates typed projections, `api` is the safe client
-surface, and `runtime` owns process-wide loading; the facade selects shared or static linkage.
-Build-time IDL tooling lives in `neocogi-idl` under `crates/com/idl`, which owns
-parsing, resolution, fingerprints, Rust generation, and reusable contract-crate
-`build.rs` integration. Contract examples live under `tools/idl`. The reusable tooling remains
-separate from `tools/cargo-neocogi` so ordinary Cargo builds can regenerate
-contracts without invoking an external compiler command.
-UI code follows the same role-based layout under `crates/ui`: `core-contracts` contains
-shared node, layout, popup, menu, and window protocols; `nodes-contracts` owns the concrete
-built-in widget/container classes and their typed factory; and `api` is the application facade.
+COM infrastructure lives under `crates/com`: `core` defines the ABI vocabulary,
+`macros` supplies Rust implementation helpers, `api` is the safe client surface,
+and `runtime` owns the host's process-wide registry. The final executable selects
+and initializes that implementation; plugins receive runtime access.
+The `neocogi-idl` compiler owns parsing, resolution, fingerprints, Rust generation
+and Cargo integration. Shared sources stay under their subsystem: UI in
+[`crates/ui/schemas/`](crates/ui/schemas), renderer in [`crates/render/schemas/`](crates/render/schemas),
+COM fixtures in [`crates/com/schemas/`](crates/com/schemas), and likewise for
+platform, GFX, skin, demos and examples. Consumers generate bindings into their own `OUT_DIR`. Standalone contract packages
+are unnecessary. Existing Rust helper libraries expose their own bindings where
+ordinary Rust calls need those exact types.
+
+UI code lives under `crates/ui`: `api` owns application clients and generated
+`abi::core`, `abi::nodes` and `abi::document` namespaces from the shared IDL.
 `runtime` implements and deploys the retained forest, surfaces, generic menus, and window manager.
 `nodes` deploys built-in leaves, containers, Combo headers, and standard file-dialog
 compositions as a separate provider. Their concrete `.rs` implementations live under
@@ -98,7 +99,7 @@ interface bound to one runtime from being paired with another. External leaves a
 the same typed protocols and cached hot-path capabilities as built-ins.
 
 Platform-normalized input, polling, native text-input placement, and window
-construction live in `crates/platform/contracts`; immutable native paths live
+construction live in `crates/render/core`; immutable native paths live
 there as well because both file dialogs and resource loaders consume them. The `neocogi.platform` ABI
 depends only on `neocogi.renderer`; it accepts a narrow `IRgbaImage` and contains
 no widget, skin, font, icon, or asset-catalog declaration. The current backend
@@ -111,7 +112,7 @@ also owns the native window/device integration it needs, so graphics handles sta
 private. UI sends coarse painter-order operations to GFX, which submits one bulk
 frame to the selected renderer. The backend-specific
 Rust crates and shared helpers remain separate source concerns within that artifact.
-`crates/render/contracts` owns the independent `neocogi.renderer` ABI: geometry,
+`crates/render/core` owns the independent `neocogi.renderer` ABI: geometry,
 raw RGBA images, GPU texture capabilities, and one bounded bulk frame stream. It
 contains no UI asset or skin declarations; `IAssetBundle` merely exposes an
 `IRgbaImage` capability returned by `IAssetBundle::image()` to the renderer.

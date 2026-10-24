@@ -188,84 +188,75 @@ fn checked_add(left: i32, right: i32) -> Option<i32> {
 }
 
 /// One mapping serves both COM policy decoding and concrete built-in reporting.
-pub(crate) const FRAME_ROLES: &[(neocogi_ui_core_contracts::WidgetFrame, crate::FrameRole)] = &[
+pub(crate) const FRAME_ROLES: &[(neocogi_ui::abi::core::WidgetFrame, crate::FrameRole)] = &[
     (
-        neocogi_ui_core_contracts::WidgetFrame::Generic,
+        neocogi_ui::abi::core::WidgetFrame::Generic,
         crate::FrameRole::Surface(crate::SurfaceRole::GenericFrame),
     ),
     (
-        neocogi_ui_core_contracts::WidgetFrame::Button,
+        neocogi_ui::abi::core::WidgetFrame::Button,
         crate::FrameRole::Control(crate::ControlRole::Button),
     ),
     (
-        neocogi_ui_core_contracts::WidgetFrame::Checkbox,
+        neocogi_ui::abi::core::WidgetFrame::Checkbox,
         crate::FrameRole::Control(crate::ControlRole::Checkbox),
     ),
     (
-        neocogi_ui_core_contracts::WidgetFrame::TextInput,
+        neocogi_ui::abi::core::WidgetFrame::TextInput,
         crate::FrameRole::Control(crate::ControlRole::TextInput),
     ),
+    (neocogi_ui::abi::core::WidgetFrame::Item, crate::FrameRole::Control(crate::ControlRole::Item)),
+    (neocogi_ui::abi::core::WidgetFrame::Combo, crate::FrameRole::Control(crate::ControlRole::Combo)),
     (
-        neocogi_ui_core_contracts::WidgetFrame::Item,
-        crate::FrameRole::Control(crate::ControlRole::Item),
-    ),
-    (
-        neocogi_ui_core_contracts::WidgetFrame::Combo,
-        crate::FrameRole::Control(crate::ControlRole::Combo),
-    ),
-    (
-        neocogi_ui_core_contracts::WidgetFrame::SliderTrack,
+        neocogi_ui::abi::core::WidgetFrame::SliderTrack,
         crate::FrameRole::Control(crate::ControlRole::SliderTrack),
     ),
     (
-        neocogi_ui_core_contracts::WidgetFrame::SliderThumb,
+        neocogi_ui::abi::core::WidgetFrame::SliderThumb,
         crate::FrameRole::Control(crate::ControlRole::SliderThumb),
     ),
     (
-        neocogi_ui_core_contracts::WidgetFrame::ScrollbarTrack,
+        neocogi_ui::abi::core::WidgetFrame::ScrollbarTrack,
         crate::FrameRole::Control(crate::ControlRole::ScrollbarTrack),
     ),
     (
-        neocogi_ui_core_contracts::WidgetFrame::ScrollbarThumb,
+        neocogi_ui::abi::core::WidgetFrame::ScrollbarThumb,
         crate::FrameRole::Control(crate::ControlRole::ScrollbarThumb),
     ),
     (
-        neocogi_ui_core_contracts::WidgetFrame::CloseButton,
+        neocogi_ui::abi::core::WidgetFrame::CloseButton,
         crate::FrameRole::Control(crate::ControlRole::CloseButton),
     ),
     (
-        neocogi_ui_core_contracts::WidgetFrame::MinimizeButton,
+        neocogi_ui::abi::core::WidgetFrame::MinimizeButton,
         crate::FrameRole::Control(crate::ControlRole::MinimizeButton),
     ),
     (
-        neocogi_ui_core_contracts::WidgetFrame::MaximizeButton,
+        neocogi_ui::abi::core::WidgetFrame::MaximizeButton,
         crate::FrameRole::Control(crate::ControlRole::MaximizeButton),
     ),
     (
-        neocogi_ui_core_contracts::WidgetFrame::RestoreButton,
+        neocogi_ui::abi::core::WidgetFrame::RestoreButton,
         crate::FrameRole::Control(crate::ControlRole::RestoreButton),
     ),
     (
-        neocogi_ui_core_contracts::WidgetFrame::ResizeGrip,
+        neocogi_ui::abi::core::WidgetFrame::ResizeGrip,
         crate::FrameRole::Control(crate::ControlRole::ResizeGrip),
     ),
     (
-        neocogi_ui_core_contracts::WidgetFrame::Window,
+        neocogi_ui::abi::core::WidgetFrame::Window,
         crate::FrameRole::Surface(crate::SurfaceRole::Window),
     ),
-    (
-        neocogi_ui_core_contracts::WidgetFrame::Panel,
-        crate::FrameRole::Surface(crate::SurfaceRole::Panel),
-    ),
+    (neocogi_ui::abi::core::WidgetFrame::Panel, crate::FrameRole::Surface(crate::SurfaceRole::Panel)),
 ];
 
 /// Encodes the exact built-in frame family without collapsing input or item roles.
-pub fn frame_contract(role: crate::FrameRole) -> neocogi_ui_core_contracts::WidgetFrame {
+pub fn frame_contract(role: crate::FrameRole) -> neocogi_ui::abi::core::WidgetFrame {
     FRAME_ROLES.iter().find(|(_, value)| *value == role).expect("all frame roles are represented").0
 }
 
 /// Decodes a validated semantic frame role for runtime-owned paint resolution.
-pub fn local_frame(role: neocogi_ui_core_contracts::WidgetFrame) -> Result<crate::FrameRole, neocogi_com::NcStatus> {
+pub fn local_frame(role: neocogi_ui::abi::core::WidgetFrame) -> Result<crate::FrameRole, neocogi_com::NcStatus> {
     FRAME_ROLES
         .iter()
         .find(|(contract, _)| *contract == role)

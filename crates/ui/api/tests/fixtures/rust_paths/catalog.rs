@@ -1,7 +1,7 @@
 //! Generates forms from real COM catalog calls using IDL-published raw identifiers.
 use neocogi_com::*;
 use neocogi_ui::UiEventSource;
-use neocogi_ui_core_contracts::{IWidgetAbi, IWidgetHostAbi};
+use neocogi_ui::abi::core::{IWidgetAbi, IWidgetHostAbi};
 use neocogi_ui_document::{CustomWidgetRegistry, Document, Node, design::DesignWidgetManifest};
 use neocogi_ui_document::contracts::{IDesignWidgetCatalog, IDesignWidgetCatalogAbi};
 use path_contracts::r#type::CounterAbi;

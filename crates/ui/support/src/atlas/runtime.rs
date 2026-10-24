@@ -9,7 +9,7 @@
 
 use super::*;
 use neocogi_com::{NcStatus, NC_E_OUT_OF_MEMORY};
-use neocogi_ui_core_contracts::{AssetRange, Rect as AssetRect};
+use neocogi_ui::abi::core::{AssetRange, Rect as AssetRect};
 
 /// Clamps one mathematically accumulated text coordinate into the renderer rectangle domain.
 fn clamp_text_coordinate(value: i128) -> i32 {
@@ -305,7 +305,7 @@ impl AtlasHandle {
     }
 
     /// Resolves a stable icon identity to the canonical generated record.
-    fn icon(&self, icon: IconId) -> &neocogi_ui_core_contracts::AssetIcon {
+    fn icon(&self, icon: IconId) -> &neocogi_ui::abi::core::AssetIcon {
         &self.0.tables.icons[self.icon_slot(icon)]
     }
 

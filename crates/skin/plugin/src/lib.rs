@@ -9,14 +9,14 @@ use neocogi_skin_impl::StyleCompilerObject;
 #[cfg(feature = "theme-json")]
 use neocogi_skin_impl::ThemeLoaderObject;
 use neocogi_com::{ComPtr, ComRef, NcGuid, NcStatus, guid_from_qualified_name};
-use neocogi_gfx_contracts::{AssetLoaderAbi, AssetPublisherAbi};
-use neocogi_skin_contracts::*;
+use neocogi_gfx_support::abi::{AssetLoaderAbi, AssetPublisherAbi};
+use neocogi_appearance::skin::*;
 
 /// Hard provider dependency retained by the assembly planner before Skin activation.
 const GFX_PLUGIN_ID: NcGuid = guid_from_qualified_name("neocogi.gfx.runtime");
 
 /// Stateless activation root for cohesive skin compilation services.
-#[neocogi_com::com_object(neocogi_skin_contracts::SkinPluginFactory)]
+#[neocogi_com::com_object(neocogi_appearance::skin::SkinPluginFactory)]
 struct SkinPluginFactoryObject;
 
 impl SkinPluginFactory for SkinPluginFactoryObject {
@@ -43,7 +43,7 @@ impl SkinPluginFactory for SkinPluginFactoryObject {
 #[neocogi_com::plugin(name = "neocogi.skin.runtime",
     dependencies = [GFX_PLUGIN_ID],
     )]
-fn acquire_root(_runtime: ::neocogi_com::Runtime) -> Result<neocogi_com::ComPtr<neocogi_skin_contracts::SkinPluginFactoryAbi>, neocogi_com::NcStatus> {
+fn acquire_root(_runtime: ::neocogi_com::Runtime) -> Result<neocogi_com::ComPtr<neocogi_appearance::skin::SkinPluginFactoryAbi>, neocogi_com::NcStatus> {
     SkinPluginFactoryObject::from_value(SkinPluginFactoryObject).query()
 }
 

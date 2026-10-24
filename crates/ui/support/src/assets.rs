@@ -3,7 +3,7 @@
 //! Public values here are implementation-library helpers, never application ABI payloads.
 //! Each importing binary creates local resource IDs in an authenticated catalog namespace.
 use crate::{AtlasHandle, ResourceCatalog, Skin, SkinBundle};
-use neocogi_ui_core_contracts::*;
+use neocogi_ui::abi::core::*;
 use neocogi_ui::assets::AssetTables;
 use neocogi_com::{ComPtr, ComRef, IUnknown, NcStatus, NC_E_INVALID_ARG};
 use std::rc::Rc;

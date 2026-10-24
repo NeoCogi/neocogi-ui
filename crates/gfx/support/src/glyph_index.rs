@@ -1,7 +1,7 @@
 //! Bounded immutable ASCII acceleration; canonical tables own all Unicode glyph semantics.
 use crate::AssetTables;
 use neocogi_com::{NcStatus, NC_E_INVALID_ARG, NC_E_OUT_OF_MEMORY};
-use neocogi_gfx_contracts::MAX_ASSETS;
+use neocogi_gfx_support::abi::MAX_ASSETS;
 
 /// One 512-byte index per font revision, with no global cache or mutable lookup state.
 /// Non-ASCII scalars retain canonical binary search; absence remains distinct from fallback.

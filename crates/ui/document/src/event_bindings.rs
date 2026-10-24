@@ -153,7 +153,7 @@ mod tests {
         }
     }
 
-    neocogi_com_test_contracts::capability_retainer!();
+    use crate::receiver_fixture::*;
     #[com_object(IRetainer)]
     /// The adapter owns the actual public document bindings implementation.
     struct Retainer {

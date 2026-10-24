@@ -1,7 +1,7 @@
 //! Weak dispatch selection is separate from handler execution and its errors.
 use crate::window_manager::WindowManager;
 use neocogi_com::{NcStatus, WeakComBox};
-use neocogi_ui_core_contracts::IWidgetDispatcherAbi;
+use neocogi_ui::abi::core::IWidgetDispatcherAbi;
 
 /// Reusable descendant-first snapshot checked out for one exclusive UI update.
 /// Entries own only weak tokens; no snapshot can prolong a removed widget's value.
@@ -90,7 +90,7 @@ mod tests {
     #[test]
     fn review_callback_shutdown_does_not_restore_expired_cache_entries() {
         use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcValueRef};
-        use neocogi_ui_core_contracts::{IWindowManagerAbi, Rect, Size, UiRuntimeAbi, UI_E_CLOSED};
+        use neocogi_ui::abi::core::{IWindowManagerAbi, Rect, Size, UiRuntimeAbi, UI_E_CLOSED};
         let bundle = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(crate::test_support::test_atlas())).unwrap();
         let assets = crate::assets::ImportedAssets::read(bundle.as_com_ref(), None).unwrap();
         let gfx = neocogi_ui_support::test_support::gfx_factory(crate::test_support::host_runtime());
@@ -107,7 +107,7 @@ mod tests {
                 NcCopyFromBufferOffset::new(0, b"window"),
                 Rect { x: 0, y: 0, width: 300, height: 200 },
                 button.into_interface().query().unwrap(),
-                NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
+                NcValueRef::new(&neocogi_ui::abi::core::EventBinding::Unobserved).unwrap(),
             )
             .unwrap();
         let (send, messages) = std::sync::mpsc::channel();

@@ -48,8 +48,8 @@ use neocogi_com::{ComPtr, ComRef, INcStringComPtrExt, NcCopyFromBufferOffset, Nc
 #[cfg(feature = "builder")]
 use neocogi_gfx_impl::{AssetLoaderObject, AssetPublisherObject};
 use neocogi_appearance::{AppearanceTables, rgba};
-use neocogi_gfx_contracts::*;
-use neocogi_gfx_contracts::Insets as SliceInsets;
+use neocogi_gfx_support::abi::*;
+use neocogi_gfx_support::abi::Insets as SliceInsets;
 #[cfg(feature = "builder")]
 use neocogi_gfx_support::AssetData;
 use neocogi_gfx_support::{ChromeState, ControlState, MenuState, PointerState, SurfaceState};

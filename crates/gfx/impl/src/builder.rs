@@ -2,13 +2,13 @@
 use super::Diagnostic;
 use crate::atlas::{Builder, Config};
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, INcStringAbi, NC_E_INVALID_ARG, com_object};
-use neocogi_gfx_contracts::*;
+use neocogi_gfx_support::abi::*;
 use neocogi_gfx_support::AssetData;
-use neocogi_platform_contracts::INativePathAbi;
+use neocogi_render_core::platform::INativePathAbi;
 use std::cell::RefCell;
 use std::path::Path;
 
-#[com_object(neocogi_gfx_contracts::AssetLoader)]
+#[com_object(neocogi_gfx_support::abi::AssetLoader)]
 #[derive(Default)]
 /// Stateless construction root with owned diagnostics; drafts contain the actual mutable builder.
 pub struct AssetLoaderObject {

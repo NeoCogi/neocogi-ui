@@ -9,7 +9,7 @@
 pub mod bounded_json;
 
 use neocogi_com::idl_metadata::{InterfaceMetadata, MethodType, TypeShape};
-use neocogi_ui_core_contracts::{EventSourceMetadata, IEventAbi};
+use neocogi_ui::abi::core::{EventSourceMetadata, IEventAbi};
 use serde::{Deserialize, Serialize};
 use neocogi_com::{ComSerialize, ComDeserialize};
 

@@ -64,7 +64,7 @@ impl ListBoxParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::ListBox, ownership = exclusive)]
+#[neocogi_com::com_object(neocogi_ui::abi::nodes::ListBox, ownership = exclusive)]
 /// Concrete retained list box and dynamically constructible COM object.
 pub struct ListBox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -131,7 +131,7 @@ impl Widget for ListBox {
             return Ok(crate::Change::NoChange);
         }
         // Pointer and keyboard activation publish the same application-facing submission.
-        let event = neocogi_ui_core_contracts::events::activated()?;
+        let event = neocogi_ui::abi::core::events::activated()?;
         self.runtime.state.post(event)?;
 
         // The submitted event does not change this header's intrinsic inputs.
@@ -197,8 +197,8 @@ impl crate::widget_object::ImageState for ListBox {
 }
 
 use crate::widget_object::{HostedWidget, ImageState, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_core_contracts::{GeometryChange, ITextureAbi, IWidgetHostAbi, FontRole};
-use neocogi_ui_nodes_contracts::{ListBoxAbi};
+use neocogi_ui::abi::core::{GeometryChange, ITextureAbi, IWidgetHostAbi, FontRole};
+use neocogi_ui::abi::nodes::{ListBoxAbi};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(ListBox);
@@ -230,7 +230,7 @@ impl ListBox {
     }
 }
 
-impl neocogi_ui_nodes_contracts::ListBox for ListBox {
+impl neocogi_ui::abi::nodes::ListBox for ListBox {
     /// Returns an immutable label snapshot from the concrete list box.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;

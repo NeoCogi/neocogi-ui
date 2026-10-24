@@ -128,7 +128,7 @@ fn assert_data_equivalent(left: &AssetData, right: &AssetData) {
         assert_eq!(left.patch, right.patch);
     }
 }
-use neocogi_gfx_contracts::{ChromeRole, ControlRole, MenuRole};
+use neocogi_gfx_support::abi::{ChromeRole, ControlRole, MenuRole};
 use std::fs;
 
 /// Installs one repository-bundled theme through the same filesystem and PNG path as Context.

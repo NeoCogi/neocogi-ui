@@ -1,6 +1,6 @@
 //! Runtime authority shared by mounted widget objects and retained node services.
 
-use neocogi_ui_core_contracts::*;
+use neocogi_ui::abi::core::*;
 use neocogi_com::{ComPtr, NcStatus, com_object};
 use std::{
     cell::{Cell, RefCell},
@@ -13,7 +13,7 @@ pub(crate) struct HostState {
     /// Dispatch-owner capability; widget-facing host projections can only post.
     pub(crate) event_origins: neocogi_ui_support::EventOriginOwner,
     /// Replaceable host service shared by independent COM widgets; no borrow spans a request.
-    pub(crate) clipboard: RefCell<Option<ComPtr<neocogi_ui_core_contracts::ITextClipboardAbi>>>,
+    pub(crate) clipboard: RefCell<Option<ComPtr<neocogi_ui::abi::core::ITextClipboardAbi>>>,
     /// Topology edits invalidate the runtime's reusable descendant-first widget snapshot.
     pub(crate) dispatch_order_changed: Cell<bool>,
     /// Conservative count of live dispatcher-bearing nodes, including unmounted roots.
@@ -51,9 +51,9 @@ impl IWidgetHost for WidgetHost {
     /// Reads the active scoped origin without exposing stack control over COM.
     fn post_event(
         &self,
-        receiver: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IEventReceiverAbi>,
-        event: neocogi_com::ComBox<neocogi_ui_core_contracts::IEventAbi>,
-    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IEventAbi>)> {
+        receiver: neocogi_com::ComRef<'_, neocogi_ui::abi::core::IEventReceiverAbi>,
+        event: neocogi_com::ComBox<neocogi_ui::abi::core::IEventAbi>,
+    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui::abi::core::IEventAbi>)> {
         if let Err(status) = self.check_mutation() {
             return Err((status, event));
         }
@@ -66,7 +66,7 @@ impl IWidgetHost for WidgetHost {
         Ok(())
     }
     /// Clones only the installed platform capability, without exposing retained runtime state.
-    fn clipboard(&self) -> Result<ComPtr<neocogi_ui_core_contracts::ITextClipboardAbi>, NcStatus> {
+    fn clipboard(&self) -> Result<ComPtr<neocogi_ui::abi::core::ITextClipboardAbi>, NcStatus> {
         self.check_mutation()?;
         self.state.clipboard.borrow().clone().ok_or(neocogi_com::NC_E_NOT_FOUND)
     }

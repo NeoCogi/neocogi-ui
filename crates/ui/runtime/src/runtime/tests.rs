@@ -1,6 +1,6 @@
 //! Runtime boundary regressions use deliberately retaining and reentrant components.
 use super::*;
-use neocogi_ui_nodes_contracts::*;
+use neocogi_ui::abi::nodes::*;
 use neocogi_com::{ComBox, WeakComBox, INcStringComPtrExt, NC_E_BUSY, NcOutputWriter};
 mod composite_fixture;
 mod containers;
@@ -34,7 +34,7 @@ fn button(runtime: &ComPtr<UiRuntimeAbi>) -> ComBox<ButtonAbi> {
         .unwrap()
         .create_button(
             NcCopyFromBufferOffset::new(0, b""),
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_ui::abi::core::EventBinding::Unobserved).unwrap(),
         )
         .unwrap()
 }
@@ -51,7 +51,7 @@ fn oversized_window_title_returns_the_unmounted_root_for_retry() {
         NcCopyFromBufferOffset::new(0, &oversized),
         RECT,
         root.query().unwrap(),
-        neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
+        neocogi_com::NcValueRef::new(&neocogi_ui::abi::core::EventBinding::Unobserved).unwrap(),
     );
     let (status, root) = result.unwrap_err();
     assert_eq!(status, neocogi_com::NC_E_OUT_OF_RANGE);
@@ -168,23 +168,17 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
     calls.set(0);
     let label = NcCopyFromBufferOffset::new(0, b"shared");
     let button = factory
-        .create_button(
-            label,
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
-        )
+        .create_button(label, neocogi_com::NcValueRef::new(&neocogi_ui::abi::core::EventBinding::Unobserved).unwrap())
         .unwrap();
     let _checkbox = factory
         .create_checkbox(
             false,
             label,
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_ui::abi::core::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     let _textbox = factory
-        .create_textbox(
-            label,
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
-        )
+        .create_textbox(label, neocogi_com::NcValueRef::new(&neocogi_ui::abi::core::EventBinding::Unobserved).unwrap())
         .unwrap();
     let _text_block = factory.create_text_block(label, TextWrapping::Word).unwrap();
     let _slider = factory
@@ -196,27 +190,21 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
                 step: 0.1,
                 precision: 1,
             },
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_ui::abi::core::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     let _number = factory
         .create_number(
             NumberOptions { value: 0.0, step: 1.0, precision: 0 },
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_ui::abi::core::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     let _swatch = factory.create_color_swatch(u32::MAX, label).unwrap();
     let _list_item = factory
-        .create_list_item(
-            label,
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
-        )
+        .create_list_item(label, neocogi_com::NcValueRef::new(&neocogi_ui::abi::core::EventBinding::Unobserved).unwrap())
         .unwrap();
     let _list_box = factory
-        .create_list_box(
-            label,
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
-        )
+        .create_list_box(label, neocogi_com::NcValueRef::new(&neocogi_ui::abi::core::EventBinding::Unobserved).unwrap())
         .unwrap();
     let _scrollbar = factory
         .create_scrollbar(
@@ -226,7 +214,7 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
                 content: 2,
                 offset: 0,
             },
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_ui::abi::core::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     let _linear = factory.create_linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
@@ -246,7 +234,7 @@ fn factory_construction_and_widget_phases_do_not_reimport_assets() {
             label,
             TextWrapping::Word,
             true,
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_ui::abi::core::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     let root = area.query::<IWidgetAbi>().unwrap();
@@ -263,7 +251,7 @@ fn mount(runtime: &ComPtr<UiRuntimeAbi>, root: ComBox<IWidgetAbi>) -> Result<Com
             NcCopyFromBufferOffset::new(0, b"test"),
             RECT,
             root,
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_ui::abi::core::EventBinding::Unobserved).unwrap(),
         )
         .map_err(|(status, _rejected)| status)
 }
@@ -648,7 +636,7 @@ fn window_com_capabilities_preserve_hierarchy_layers_visibility_and_subtree_clos
             NcCopyFromBufferOffset::new(0, b"child"),
             RECT,
             child_button_owner.query::<IWidgetAbi>().unwrap(),
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_ui::abi::core::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     let dialog_button_owner = button(&runtime);
@@ -659,7 +647,7 @@ fn window_com_capabilities_preserve_hierarchy_layers_visibility_and_subtree_clos
             NcCopyFromBufferOffset::new(0, b"dialog"),
             RECT,
             dialog_button_owner.query::<IWidgetAbi>().unwrap(),
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_ui::abi::core::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     root.set_layer(2).unwrap();
@@ -720,7 +708,7 @@ fn child_creation_rejects_foreign_and_modal_parents_before_mounting() {
                 NcCopyFromBufferOffset::new(0, b"foreign"),
                 RECT,
                 node,
-                neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
+                neocogi_com::NcValueRef::new(&neocogi_ui::abi::core::EventBinding::Unobserved).unwrap(),
             )
             .unwrap_err()
             .0,
@@ -733,7 +721,7 @@ fn child_creation_rejects_foreign_and_modal_parents_before_mounting() {
             NcCopyFromBufferOffset::new(0, b"modal"),
             RECT,
             button(&first).query::<IWidgetAbi>().unwrap(),
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_ui::abi::core::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     assert_eq!(
@@ -743,7 +731,7 @@ fn child_creation_rejects_foreign_and_modal_parents_before_mounting() {
                 NcCopyFromBufferOffset::new(0, b"invalid"),
                 RECT,
                 button(&first).query().unwrap(),
-                neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
+                neocogi_com::NcValueRef::new(&neocogi_ui::abi::core::EventBinding::Unobserved).unwrap(),
             )
             .unwrap_err()
             .0,
@@ -755,7 +743,7 @@ fn child_creation_rejects_foreign_and_modal_parents_before_mounting() {
             NcCopyFromBufferOffset::new(0, b"valid"),
             RECT,
             button(&first).query().unwrap(),
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_ui::abi::core::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     assert_eq!(valid.snapshot().unwrap().visibility, Visibility::Visible);
@@ -776,7 +764,7 @@ fn popup_com_capability_enforces_active_owner_policy_and_permanent_removal() {
             root.as_com_ref(),
             NcCopyFromBufferOffset::new(0, b"popup"),
             popup_button_owner.query::<IWidgetAbi>().unwrap(),
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_ui::abi::core::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     assert_eq!(popup.query::<IWindowAbi>().unwrap_err(), neocogi_com::NC_E_NOINTERFACE);
@@ -792,7 +780,7 @@ fn popup_com_capability_enforces_active_owner_policy_and_permanent_removal() {
             NcCopyFromBufferOffset::new(0, b"modal"),
             RECT,
             button(&runtime).query::<IWidgetAbi>().unwrap(),
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_ui::abi::core::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     dialog.set_visibility(Visibility::Visible).unwrap();
@@ -1698,7 +1686,7 @@ fn review_dispatch_child_surface_precedes_raised_parent() {
             NcCopyFromBufferOffset::new(0, b"child"),
             RECT,
             child.into_interface(),
-            neocogi_com::NcValueRef::new(&neocogi_ui_core_contracts::EventBinding::Unobserved).unwrap(),
+            neocogi_com::NcValueRef::new(&neocogi_ui::abi::core::EventBinding::Unobserved).unwrap(),
         )
         .unwrap();
     parent.raise().unwrap();

@@ -18,10 +18,8 @@ default = []
 dynamic-plugin = []
 
 [dependencies]
-neocogi-ui-core-contracts.workspace = true
-neocogi-demo-contracts.workspace = true
+neocogi-ui-samples.workspace = true
 neocogi-ui-design.workspace = true
-neocogi-ui-document-contracts.workspace = true
 neocogi-ui.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
 

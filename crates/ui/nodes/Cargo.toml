@@ -22,8 +22,6 @@ neocogi-ui-support.workspace = true
 neocogi-ui.workspace = true
 rs-math3d.workspace = true
 bitflags.workspace = true
-neocogi-ui-core-contracts.workspace = true
-neocogi-ui-nodes-contracts.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
 
 [dev-dependencies]

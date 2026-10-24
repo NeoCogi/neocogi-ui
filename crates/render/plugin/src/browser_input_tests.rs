@@ -5,11 +5,11 @@
 
 use super::*;
 // Provider activation imports the generated contracts directly, not implementation re-exports.
-use neocogi_gfx_contracts::GfxPluginFactoryAbi;
-use neocogi_renderer_contracts::IRendererAbi;
+use neocogi_gfx_support::abi::GfxPluginFactoryAbi;
+use neocogi_render_core::abi::IRendererAbi;
 use neocogi_ui::UI_E_UPDATE_REQUIRED;
-use neocogi_ui_core_contracts::UiPluginFactoryAbi;
-use neocogi_ui_nodes_contracts::NodesPluginFactoryAbi;
+use neocogi_ui::abi::core::UiPluginFactoryAbi;
+use neocogi_ui::abi::nodes::NodesPluginFactoryAbi;
 use wasm_bindgen::prelude::*;
 
 // Synthetic DOM events exercise translation deterministically. Pointer capture itself requires

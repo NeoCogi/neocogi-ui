@@ -5,14 +5,14 @@ use neocogi_idl::{Module, ResolvedModules, ModuleGraphError};
 /// Loads each contract owner, preserving its complete authored ABI fingerprint.
 pub fn resolve(mut consumers: Vec<Module>) -> Result<ResolvedModules, ModuleGraphError> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    for (owner, path) in [
-        ("crates/render/contracts", "neocogi/renderer"),
-        ("crates/platform/contracts", "neocogi/platform"),
-        ("crates/gfx/contracts", "neocogi/gfx"),
-        ("crates/ui/core-contracts", "neocogi/ui/core"),
+    for (source_root, path) in [
+        ("crates/render/schemas", "neocogi/renderer"),
+        ("crates/platform/schemas", "neocogi/platform"),
+        ("crates/gfx/schemas", "neocogi/gfx"),
+        ("crates/ui/schemas", "neocogi/ui/core"),
     ] {
         consumers.push(
-            neocogi_idl::cargo::ModuleSources::load(&root.join(owner).join("idl"), Path::new(path))
+            neocogi_idl::cargo::ModuleSources::load(&root.join(source_root), Path::new(path))
                 .unwrap()
                 .parse()
                 .unwrap(),
@@ -25,10 +25,10 @@ pub fn resolve(mut consumers: Vec<Module>) -> Result<ResolvedModules, ModuleGrap
 pub fn paths() -> neocogi_idl::generate::RustModulePaths {
     let mut paths = neocogi_idl::generate::RustModulePaths::default();
     for (logical, rust) in [
-        ("neocogi.renderer", "neocogi_renderer_contracts"),
-        ("neocogi.platform", "neocogi_platform_contracts"),
-        ("neocogi.gfx", "neocogi_gfx_contracts"),
-        ("neocogi.ui.core", "neocogi_ui_core_contracts"),
+        ("neocogi.renderer", "neocogi_render_core::abi"),
+        ("neocogi.platform", "neocogi_render_core::platform"),
+        ("neocogi.gfx", "neocogi_gfx_support::abi"),
+        ("neocogi.ui.core", "neocogi_ui::abi::core"),
     ] {
         paths.insert(logical, rust).unwrap();
     }

@@ -14,14 +14,14 @@ frame. Applications retain `IPlatformWindow`, `IRenderer`, `ITexture`, and `IRen
 interfaces through the facade; native GPU objects never leave the plugin.
 
 Renderer-neutral ABI declarations live in the independent `neocogi.renderer`
-contract module under `crates/render/contracts`. The module owns `Size`, `Rect`,
+contract module under `crates/render/core`. The module owns `Size`, `Rect`,
 `Color`, `IRgbaImage`, texture/resource capabilities, and the bulk renderer stream.
 It has no widget, font, icon, skin, chrome, palette, or platform-window declarations.
 `neocogi.ui.core` imports the small set of renderer types needed by its public UI
 methods instead of owning duplicate declarations.
 
 Normalized input, native-window polling, and IME placement live in the separate
-`neocogi.platform` contract module under `crates/platform/contracts`. Its factory
+`neocogi.platform` contract module under `crates/render/core`. Its factory
 accepts `IRgbaImage`, so a platform/renderer implementation does not link the UI
 core contract merely to create a window. The current backend artifacts implement
 the platform and renderer projections on one object; this keeps native handles

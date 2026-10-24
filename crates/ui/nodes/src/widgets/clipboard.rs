@@ -5,7 +5,7 @@ use super::{
 };
 use crate::{Key, KeyEvent, Modifiers};
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, com_object};
-use neocogi_ui_core_contracts::{IClipboardCompletion, IClipboardCompletionAbi, IWidgetHostAbi, MAX_CLIPBOARD_BYTES};
+use neocogi_ui::abi::core::{IClipboardCompletion, IClipboardCompletionAbi, IWidgetHostAbi, MAX_CLIPBOARD_BYTES};
 use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError};
 
 /// Meaning of one in-flight system clipboard request.
@@ -27,7 +27,7 @@ pub(super) struct Pending {
     receive: Receiver<Result<String, NcStatus>>,
 }
 
-#[com_object(interfaces(neocogi_ui_core_contracts::IClipboardCompletion))]
+#[com_object(interfaces(neocogi_ui::abi::core::IClipboardCompletion))]
 /// Platform-retainable endpoint with no widget, runtime, or renderer ownership.
 struct Completion {
     /// Bounded queue rejects duplicate delivery without blocking a browser callback.
@@ -43,7 +43,7 @@ impl IClipboardCompletion for Completion {
             0 => Ok(std::str::from_utf8(text.as_slice()).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?.to_owned()),
             _ => Err(NcStatus::from_code(status)),
         };
-        self.send.try_send(result).map_err(|_| neocogi_ui_core_contracts::UI_E_CLOSED)
+        self.send.try_send(result).map_err(|_| neocogi_ui::abi::core::UI_E_CLOSED)
     }
 }
 
@@ -124,7 +124,7 @@ fn receive(editing: &mut Editing, text: &mut String, cursor: &mut usize, behavio
             editing.pending = Some(pending);
             return Ok(false);
         }
-        Err(TryRecvError::Disconnected) => return Err(neocogi_ui_core_contracts::UI_E_CLOSED),
+        Err(TryRecvError::Disconnected) => return Err(neocogi_ui::abi::core::UI_E_CLOSED),
     };
     match pending.operation {
         Operation::Copy => Ok(false),
@@ -147,7 +147,7 @@ fn receive(editing: &mut Editing, text: &mut String, cursor: &mut usize, behavio
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neocogi_ui_core_contracts::{ITextClipboard, ITextClipboardAbi, UiRuntimeAbi};
+    use neocogi_ui::abi::core::{ITextClipboard, ITextClipboardAbi, UiRuntimeAbi};
 
     /// Deferred platform operations are observable without borrowing or mutating a fake widget.
     enum Request {
@@ -156,7 +156,7 @@ mod tests {
         /// A requested write owns the exact selected text and its completion.
         Write(String, ComPtr<IClipboardCompletionAbi>),
     }
-    #[com_object(interfaces(neocogi_ui_core_contracts::ITextClipboard))]
+    #[com_object(interfaces(neocogi_ui::abi::core::ITextClipboard))]
     /// Asynchronous provider lets each test decide when and whether a platform request succeeds.
     struct DeferredClipboard {
         /// Ordinary channel separates fake platform observations from the production editor.
@@ -167,17 +167,17 @@ mod tests {
         fn read(&self, completion: ComRef<'_, IClipboardCompletionAbi>) -> Result<(), NcStatus> {
             self.requests
                 .send(Request::Read(completion.try_add_ref()?))
-                .map_err(|_| neocogi_ui_core_contracts::UI_E_CLOSED)
+                .map_err(|_| neocogi_ui::abi::core::UI_E_CLOSED)
         }
         /// Captures text before returning and deliberately delays its acknowledgement.
         fn write(&self, text: NcCopyFromBufferOffset<'_, u8>, completion: ComRef<'_, IClipboardCompletionAbi>) -> Result<(), NcStatus> {
             let text = crate::boundary::text(text)?.to_owned();
             self.requests
                 .send(Request::Write(text, completion.try_add_ref()?))
-                .map_err(|_| neocogi_ui_core_contracts::UI_E_CLOSED)
+                .map_err(|_| neocogi_ui::abi::core::UI_E_CLOSED)
         }
     }
-    #[com_object(interfaces(neocogi_ui_core_contracts::ITextClipboard))]
+    #[com_object(interfaces(neocogi_ui::abi::core::ITextClipboard))]
     /// A provider that rejects a new request after an older receipt has completed.
     struct RejectClipboard;
     impl ITextClipboard for RejectClipboard {

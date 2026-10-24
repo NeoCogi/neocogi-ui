@@ -32,7 +32,7 @@ purpose; this directory contains only the main index.
   [typed event queues](contracts/CLASS_EVENT_STREAMS.md), and
   [exclusive widget ownership](contracts/EXCLUSIVE_WIDGET_OWNERSHIP.md).
 - [Native deployment](guides/COM_NATIVE.md), [examples](guides/EXAMPLES.md),
-  [WebGL](guides/WEB.md), and [cargo neocogi](../tools/cargo-neocogi/README.md).
+  [WebGL](guides/WEB.md), and [IDL generation](../crates/com/idl/README.md).
 - [Theme editor](../tools/theme-editor/README.md) and
   [UI designer](../tools/ui-designer/README.md).
 

@@ -1,6 +1,6 @@
 //! Build-time exporter for the ordinary immutable COM bundle implementation.
 //! Generated runtime code depends only on neocogi-ui and neocogi-com, with no UI/parser dependency.
-use neocogi_gfx_contracts::*;
+use neocogi_gfx_support::abi::*;
 use neocogi_gfx_support::AssetData;
 use std::{
     io::{self, Write as _},
@@ -19,7 +19,7 @@ pub fn write_rust(data: &AssetData, destination: &Path) -> io::Result<()> {
         .filter(|path| !path.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
     let mut rust = io::BufWriter::new(tempfile::NamedTempFile::new_in(parent)?);
-    rust.write_all(b"// Generated immutable GFX bundle; regenerate from the owning asset recipe.\nuse neocogi_gfx_contracts::*;\nuse neocogi_gfx_support::{AssetData, AssetTables};\nuse std::borrow::Cow;\n\n/// Publishes one compiled resource catalog without parsing fonts, PNG or JSON at runtime.\npub fn load_bundle() -> Result<neocogi_com::ComPtr<IAssetBundleAbi>, neocogi_com::NcStatus> {\n    bundle_data()?.into_bundle()\n}\n\n/// Returns compiled tables for a fresh bundle or a revision of an existing catalog.\npub fn bundle_data() -> Result<AssetData, neocogi_com::NcStatus> {\n    Ok(AssetData {\n")?;
+    rust.write_all(b"// Generated immutable GFX bundle; regenerate from the owning asset recipe.\nuse neocogi_gfx_support::abi::*;\nuse neocogi_gfx_support::{AssetData, AssetTables};\nuse std::borrow::Cow;\n\n/// Publishes one compiled resource catalog without parsing fonts, PNG or JSON at runtime.\npub fn load_bundle() -> Result<neocogi_com::ComPtr<IAssetBundleAbi>, neocogi_com::NcStatus> {\n    bundle_data()?.into_bundle()\n}\n\n/// Returns compiled tables for a fresh bundle or a revision of an existing catalog.\npub fn bundle_data() -> Result<AssetData, neocogi_com::NcStatus> {\n    Ok(AssetData {\n")?;
     // Debug formatting is Rust source for these plain named scalar records. Tagged union
     // storage is never dumped; resolved artwork is reconstructed through its checked enum.
     let compressed = miniz_oxide::deflate::compress_to_vec_zlib(&data.pixels, 9);

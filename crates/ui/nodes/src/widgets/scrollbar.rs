@@ -258,7 +258,7 @@ impl ScrollbarParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Scrollbar, ownership = exclusive)]
+#[neocogi_com::com_object(neocogi_ui::abi::nodes::Scrollbar, ownership = exclusive)]
 /// Standalone one-axis scrollbar and dynamically constructible COM object.
 pub struct Scrollbar {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -426,8 +426,8 @@ impl Widget for Scrollbar {
             // Publish only user-originated movement. Programmatic setters intentionally remain
             // silent so owners can synchronize range and offset without recursive notifications.
             // Preserve committed measurement/placement changes even if posting fails.
-            self.runtime.state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
-            let event = neocogi_ui_nodes_contracts::events::scrollbar_changed(self.offset())?;
+            self.runtime.state.record_change(neocogi_ui::abi::core::GeometryChange::Changed);
+            let event = neocogi_ui::abi::nodes::events::scrollbar_changed(self.offset())?;
             self.runtime.state.post(event)?;
         }
 
@@ -543,8 +543,8 @@ mod tests {
 }
 
 use crate::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl};
-use neocogi_ui_core_contracts::{IWidgetHostAbi};
-use neocogi_ui_nodes_contracts::{ScrollAxis, ScrollRange, ScrollbarAbi};
+use neocogi_ui::abi::core::{IWidgetHostAbi};
+use neocogi_ui::abi::nodes::{ScrollAxis, ScrollRange, ScrollbarAbi};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Scrollbar);
@@ -585,7 +585,7 @@ impl Scrollbar {
     }
 }
 
-impl neocogi_ui_nodes_contracts::Scrollbar for Scrollbar {
+impl neocogi_ui::abi::nodes::Scrollbar for Scrollbar {
     /// Reads all range fields from one consistent semantic snapshot.
     fn range(&self) -> Result<ScrollRange, NcStatus> {
         self.runtime().state.readable()?;
@@ -610,7 +610,7 @@ impl neocogi_ui_nodes_contracts::Scrollbar for Scrollbar {
         let previous = self.axis_state.values.get();
         self.set_lengths(viewport, content);
         if self.axis_state.values.get() != previous {
-            self.runtime_mut().state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
+            self.runtime_mut().state.record_change(neocogi_ui::abi::core::GeometryChange::Changed);
         }
         Ok(())
     }

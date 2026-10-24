@@ -3,7 +3,7 @@
 use crate::widget_object::WidgetRuntime;
 use crate::WidgetOption;
 use neocogi_com::ComPtr;
-use neocogi_ui_core_contracts::UiRuntimeAbi;
+use neocogi_ui::abi::core::UiRuntimeAbi;
 use std::ops::{Deref, DerefMut};
 
 /// Keeps a real host alive beside the production widget value under direct algorithm test.
@@ -67,7 +67,7 @@ impl<W: neocogi_com::ComObject> Algorithm<neocogi_com::LocalBox<W>> {
     pub(crate) fn dispatch<R>(&mut self, call: impl FnOnce(&mut W) -> R) -> R {
         let origin = self
             .value
-            .query::<neocogi_ui_core_contracts::IWidgetAbi>()
+            .query::<neocogi_ui::abi::core::IWidgetAbi>()
             .unwrap()
             .into_unknown()
             .into_thread_local();

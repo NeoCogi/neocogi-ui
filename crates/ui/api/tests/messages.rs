@@ -74,8 +74,8 @@ fn concrete_messages_cross_com_and_acquire_consumer_ownership() {
     fs::write(
         project.path().join("Cargo.toml"),
         format!(
-            "[package]\nname='message-proof'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\nneocogi-com={{path={0:?}}}\nneocogi-ui-core-contracts={{path={2:?}}}\n[dev-dependencies]\nneocogi-ui={{path={1:?}}}\n",
-            root.join("crates/com/api"), root.join("crates/ui/api"), root.join("crates/ui/core-contracts"),
+            "[package]\nname='message-proof'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\nneocogi-com={{path={0:?}}}\nneocogi-ui={{path={1:?}}}\n",
+            root.join("crates/com/api"), root.join("crates/ui/api"),
         ),
     )
     .unwrap();
@@ -86,7 +86,7 @@ fn concrete_messages_cross_com_and_acquire_consumer_ownership() {
     // Compile the same imported output through a nested Rust location. This
     // checks concrete receiver ABI paths as well as ordinary authored imports.
     let mut paths = event_support::paths();
-    paths.insert("neocogi.ui.core", "neocogi_ui_core_contracts").unwrap();
+    paths.insert("neocogi.ui.core", "neocogi_ui::abi::core").unwrap();
     paths.insert("example.messages", "example_messages_contracts::relocated").unwrap();
     let relocated = neocogi_idl::generate::generate_rust_with_paths(&graph, "example.consumer", &paths).unwrap();
     fs::write(project.path().join("src/relocated_consumer.rs"), relocated).unwrap();
@@ -197,7 +197,7 @@ fn optional_cycles_and_removed_message_annotation_are_rejected() {
 fn generate_rust(graph: &neocogi_idl::ResolvedModules, module: &str) -> Result<String, neocogi_idl::GenerateError> {
     let mut paths = event_support::paths();
     if graph.module("neocogi.ui.core").is_some() {
-        paths.insert("neocogi.ui.core", "neocogi_ui_core_contracts").unwrap();
+        paths.insert("neocogi.ui.core", "neocogi_ui::abi::core").unwrap();
     }
     neocogi_idl::generate::generate_rust_with_paths(graph, module, &paths)
 }

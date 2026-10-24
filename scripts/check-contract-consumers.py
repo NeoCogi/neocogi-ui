@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Execute independent UI event consumers and generated-only COM SDK controls.
 
-Each temporary Cargo workspace has one normal contract dependency and no COM or
-dev dependency. Direct owner declarations are checked separately: a mandatory
+Event consumers use ordinary library APIs. Generated-only controls compile
+shared IDL in their own workspace without a contract package or COM macros. Direct owner declarations are checked separately: a mandatory
 transitive package can otherwise supply a missing macro feature. Python 3.11+
 and the workspace-selected Rust toolchain are required. Commands run sequentially.
 """
@@ -27,12 +27,16 @@ class Consumer:
     """Repository-relative directory; no package source is copied or replaced."""
     body: str
     """Rust main body that exercises the public contract without importing COM."""
+    namespace: str = ""
+    """Public namespace exposed by the ordinary library dependency."""
+    generated_module: str | None = None
+    """Generate this shared IDL locally instead of importing library bindings."""
     implements_objects: bool = True
     """Concrete event owners must declare macros; pure definitions must not need it."""
 
 
 CONSUMERS = (
-    Consumer("neocogi-ui-core-contracts", "crates/ui/core-contracts", '''
+    Consumer("neocogi-ui", "crates/ui/api", '''
         let owner = contract::events::text_changed("éx", 2).unwrap();
         {
             let fact = owner.query_ref::<contract::ITextChangedEventAbi>().unwrap();
@@ -40,8 +44,8 @@ CONSUMERS = (
         }
         drop(owner);
         assert!(contract::events::text_changed("éx", 1).is_err());
-    '''),
-    Consumer("neocogi-ui-nodes-contracts", "crates/ui/nodes-contracts", '''
+    ''', namespace="abi::core"),
+    Consumer("neocogi-ui", "crates/ui/api", '''
         let owner = contract::events::numeric_changed(1.5).unwrap();
         {
             let fact = owner.query_ref::<contract::INumericChangedEventAbi>().unwrap();
@@ -49,23 +53,23 @@ CONSUMERS = (
         }
         drop(owner);
         assert!(contract::events::numeric_changed(f32::NAN).is_err());
-    '''),
-    Consumer("neocogi-idl-example-contracts", "tools/idl/example-contracts", '''
-        let mut delivery = contract::notifications::ExtentDelivery::Unobserved;
-        delivery.changed(contract::Extent { width: 640, height: 480 }).unwrap();
+    ''', namespace="abi::nodes"),
+    Consumer("neocogi-com", "crates/com/api", '''
+        let extent = contract::Extent { width: 640, height: 480 };
+        assert_eq!(extent.width, 640);
         let _ = contract::ExtentBinding::Unobserved;
-    ''', implements_objects=False),
-    Consumer("neocogi-demo-contracts", "demos/contracts", '''
+    ''', generated_module="neocogi.idl_example", implements_objects=False),
+    Consumer("neocogi-ui-samples", "demos/ui-samples", '''
         let owner = contract::events::counter_changed(73).unwrap();
         {
             let fact = owner.query_ref::<contract::ICounterChangedEventAbi>().unwrap();
             assert_eq!(fact.value().unwrap(), 73);
         }
         drop(owner);
-    '''),
-    Consumer("neocogi-renderer-contracts", "crates/render/contracts", '''
+    ''', namespace="abi"),
+    Consumer("neocogi-com", "crates/com/api", '''
         let _: Option<contract::IRendererAbi> = None;
-    ''', implements_objects=False),
+    ''', generated_module="neocogi.renderer", implements_objects=False),
 )
 
 
@@ -87,12 +91,21 @@ def check_owner_requests(repository):
 def write_consumer(consumer, repository, directory):
     """Create one independent normal-dependency consumer of the original package."""
     (directory / "src").mkdir(parents=True)
-    (directory / "src/main.rs").write_text("fn main() {\n" + consumer.body + "\n}\n", encoding="utf-8")
-    (directory / "Cargo.toml").write_text(
-        '[package]\nname="contract-consumer-check"\nversion="0.0.0"\nedition="2024"\n'
-        '[workspace]\n[dependencies]\ncontract={package=' + json.dumps(consumer.package) +
-        ',path=' + json.dumps(str(repository / consumer.path)) + '}\n', encoding="utf-8",
-    )
+    manifest = ('[package]\nname="contract-consumer-check"\nversion="0.0.0"\nedition="2024"\n'
+                '[workspace]\n[dependencies]\n')
+    if consumer.generated_module:
+        manifest += 'neocogi-com={path=' + json.dumps(str(repository / "crates/com/api")) + ',default-features=false,features=["alloc"]}\n'
+        manifest += '[build-dependencies]\nneocogi-idl={path=' + json.dumps(str(repository / "crates/com/idl")) + '}\n'
+        (directory / "build.rs").write_text(
+            'fn main() { for module in neocogi_idl::cargo::SharedSources::new(' + json.dumps(str(repository / ("examples/schemas" if consumer.generated_module == "neocogi.idl_example" else "crates/render/schemas"))) + ')'
+            '.module(' + json.dumps(consumer.generated_module) + ', "contract_consumer_check::contract").build().unwrap() {'
+            'println!("cargo::rustc-env=CONSUMER_BINDINGS={}", module.include.display()); } }\n')
+        prefix = 'extern crate self as contract_consumer_check;\nmod contract { include!(env!("CONSUMER_BINDINGS")); }\n'
+    else:
+        manifest += 'library={package=' + json.dumps(consumer.package) + ',path=' + json.dumps(str(repository / consumer.path)) + '}\n'
+        prefix = 'use library::' + consumer.namespace + ' as contract;\n'
+    (directory / "src/main.rs").write_text(prefix + "fn main() {\n" + consumer.body + "\n}\n", encoding="utf-8")
+    (directory / "Cargo.toml").write_text(manifest, encoding="utf-8")
 
 
 def check_consumer(consumer, repository, directory, environment):

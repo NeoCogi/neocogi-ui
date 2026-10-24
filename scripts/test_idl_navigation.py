@@ -42,14 +42,14 @@ class NavigationProbe(unittest.TestCase):
         with self.assertRaises(ValueError):
             navigation.scalar_position("x", {"line": 0, "character": 3})
 
-    def test_consumer_has_only_the_nodes_dependency(self):
+    def test_consumer_has_only_the_ui_dependency(self):
         """A compensating direct COM dependency cannot hide COM24 in this gate."""
         import tomllib
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             source = navigation.prepare_probe(directory, REPOSITORY)
             data = tomllib.loads((directory / "Cargo.toml").read_text())
-            self.assertEqual(set(data["dependencies"]), {"neocogi-ui-nodes-contracts"})
+            self.assertEqual(set(data["dependencies"]), {"neocogi-ui"})
             self.assertEqual(source.read_text(), navigation.PROBE_SOURCE)
 
     def test_compile_command_preserves_caller_cargo_network_policy(self):
@@ -72,7 +72,7 @@ class NavigationProbe(unittest.TestCase):
         field = next(probe for probe in navigation.PROBES if probe.marker == "field")
         with tempfile.TemporaryDirectory() as temporary:
             repository = Path(temporary)
-            file = repository / "crates/ui/nodes-contracts/idl/neocogi/ui/nodes/layout.ncidl"
+            file = repository / "crates/ui/schemas/neocogi/ui/nodes/layout.ncidl"
             file.parent.mkdir(parents=True)
             file.write_text("enum Earlier: u8 {\n    Fixed {\n        extent: i32,\n    },\n}\n"
                             "enum LayoutTrack: u8 {\n    Fixed {\n        extent: i32,\n    },\n}\n")

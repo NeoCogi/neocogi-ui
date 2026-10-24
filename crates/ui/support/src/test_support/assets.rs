@@ -1,7 +1,7 @@
 //! Input construction for asset-boundary and algorithm tests; this code never imports a runtime frame.
 use crate::{ResourceCatalog, SkinBundle};
 use crate::assets::ImportedAssets;
-use neocogi_ui_core_contracts::IAssetBundleAbi;
+use neocogi_ui::abi::core::IAssetBundleAbi;
 use neocogi_com::{ComPtr, NcStatus, NC_E_INVALID_ARG};
 
 /// Copies pixels explicitly for a fixture revision instead of adding transfers to runtime import.

@@ -36,8 +36,8 @@ fn ui_admits_snapshot_contracts_and_merges_their_value_graphs() {
     let project = tempfile::tempdir().unwrap();
     fs::create_dir(project.path().join("src")).unwrap();
     fs::write(project.path().join("Cargo.toml"), format!(
-        "[package]\nname='ui-admission-proof'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\nneocogi-com={{path={:?}}}\nneocogi-ui-core-contracts={{path={:?}}}\nneocogi-ui-design={{path={:?}}}\n",
-        root.join("crates/com/api"), root.join("crates/ui/core-contracts"), root.join("crates/ui/design"),
+        "[package]\nname='ui-admission-proof'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\nneocogi-com={{path={:?}}}\nneocogi-ui={{path={:?}}}\nneocogi-ui-design={{path={:?}}}\n",
+        root.join("crates/com/api"), root.join("crates/ui/api"), root.join("crates/ui/design"),
     )).unwrap();
     fs::write(
         project.path().join("src/contract.rs"),

@@ -6,7 +6,7 @@ pub mod model;
 pub use model::*;
 
 /// Generated component lookup and custom-widget discovery contracts.
-pub use neocogi_ui_document_contracts as contracts;
+pub use neocogi_ui::abi::document as contracts;
 mod event_bindings;
 pub use event_bindings::{EventBindings, DocumentEvent, document_receiver};
 /// Owned COM-transportable authoring metadata for custom widgets.
@@ -25,3 +25,9 @@ pub use reload::{Generation, ReloadIds, ReloadSlot, Reloaded};
 // This unit-test executable owns one runtime; normal library builds never embed it.
 #[cfg(test)]
 extern crate nc_com as _;
+
+/// Local receiver regression bindings; no separate contract package.
+#[cfg(test)]
+pub mod receiver_fixture {
+    include!(env!("IDL_RETAINER_BINDINGS"));
+}

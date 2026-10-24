@@ -154,12 +154,12 @@ impl GridItems {
 ///
 /// Grid always has an effective track on each axis, but an implicit empty Content track contributes
 /// zero. An empty generic Grid remains zero-sized unless an explicit Fixed track contributes extent.
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Grid, ownership = exclusive)]
+#[neocogi_com::com_object(neocogi_ui::abi::nodes::Grid, ownership = exclusive)]
 pub struct Grid {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::widget_object::WidgetRuntime,
     /// Sole writer for children mounted through this container's COM contract.
-    pub(crate) editor: neocogi_com::ComBox<neocogi_ui_core_contracts::IChildrenEditorAbi>,
+    pub(crate) editor: neocogi_com::ComBox<neocogi_ui::abi::core::IChildrenEditorAbi>,
     /// Application-selected immutable ceilings; documents cannot override these.
     limits: GridLimits,
     /// Grid-owned spans and their derived row-major placements.
@@ -176,7 +176,7 @@ impl Grid {
     /// Combines tracks/limits already validated by construction with the authoritative child writer.
     pub(crate) fn from_runtime(
         runtime: crate::widget_object::WidgetRuntime,
-        editor: neocogi_com::ComBox<neocogi_ui_core_contracts::IChildrenEditorAbi>,
+        editor: neocogi_com::ComBox<neocogi_ui::abi::core::IChildrenEditorAbi>,
         column_tracks: Vec<TrackSize>,
         row_tracks: Vec<TrackSize>,
         limits: GridLimits,
@@ -238,8 +238,8 @@ impl super::ContainerAlgorithm for Grid {
 }
 
 use crate::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
-use neocogi_ui_core_contracts::{IWidgetHostAbi};
-use neocogi_ui_nodes_contracts::{GridAbi, GridExtent, GridLimits, LayoutTrack};
+use neocogi_ui::abi::core::{IWidgetHostAbi};
+use neocogi_ui::abi::nodes::{GridAbi, GridExtent, GridLimits, LayoutTrack};
 use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcOutputWriter, NcStatus};
 
 direct_widget_phase_impl!(Grid);
@@ -275,7 +275,7 @@ impl Grid {
     }
 }
 
-impl neocogi_ui_nodes_contracts::Grid for Grid {
+impl neocogi_ui::abi::nodes::Grid for Grid {
     container_methods!();
 
     /// Resource policy is immutable for the lifetime of this Grid.
@@ -298,7 +298,7 @@ impl neocogi_ui_nodes_contracts::Grid for Grid {
             let prepared = self.items.prepare(None, tracks.len().max(1), self.limits)?;
             self.column_tracks = tracks;
             self.items = prepared;
-            self.runtime_mut().state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
+            self.runtime_mut().state.record_change(neocogi_ui::abi::core::GeometryChange::Changed);
         }
         Ok(())
     }
@@ -317,7 +317,7 @@ impl neocogi_ui_nodes_contracts::Grid for Grid {
             // Row policy does not change placement. Existing implicit rows have
             // already passed the same immutable ceiling during plan preparation.
             self.row_tracks = tracks;
-            self.runtime_mut().state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
+            self.runtime_mut().state.record_change(neocogi_ui::abi::core::GeometryChange::Changed);
         }
         Ok(())
     }

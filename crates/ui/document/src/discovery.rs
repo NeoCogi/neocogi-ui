@@ -5,7 +5,7 @@ use crate::{
 };
 use neocogi_com::{NcValueRef, ComPtr, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
 use neocogi_ui::{IWidgetAbi, Ui};
-use neocogi_ui_document_contracts::IDesignWidgetCatalogAbi;
+use neocogi_ui::abi::document::IDesignWidgetCatalogAbi;
 use std::rc::Rc;
 
 /// Maximum number of widget kinds accepted from one plugin catalog.
@@ -28,11 +28,7 @@ impl CustomWidgetFactory for CatalogWidgetFactory {
     }
 
     /// Absence of the optional editor is distinct from failure to open a supported editor.
-    fn create_editor(
-        &self,
-        ui: &Ui,
-        settings: &[u8],
-    ) -> Result<Option<neocogi_com::ComBox<neocogi_ui_document_contracts::IDesignSettingsEditorAbi>>, NcStatus> {
+    fn create_editor(&self, ui: &Ui, settings: &[u8]) -> Result<Option<neocogi_com::ComBox<neocogi_ui::abi::document::IDesignSettingsEditorAbi>>, NcStatus> {
         match self
             .catalog
             .create_editor(self.index, ui.widgets().as_com_ref(), NcCopyFromBufferOffset::new(0, settings))
@@ -108,7 +104,7 @@ impl CustomWidgetRegistry {
 
 /// Copies a validated draft without allocating from an unchecked provider length.
 /// No UI input is dispatched between these calls; a changed size is a protocol error.
-pub fn editor_settings(editor: &neocogi_com::WeakComBox<neocogi_ui_document_contracts::IDesignSettingsEditorAbi>) -> Result<Vec<u8>, String> {
+pub fn editor_settings(editor: &neocogi_com::WeakComBox<neocogi_ui::abi::document::IDesignSettingsEditorAbi>) -> Result<Vec<u8>, String> {
     let mut bytes = neocogi_com::NcOutputBuffer::<u8>::new();
     let required = editor
         .settings(bytes.output(0, 0))
@@ -130,7 +126,7 @@ mod tests {
     use neocogi_com::NcOutputWriter;
     use super::*;
     use neocogi_com::{ComBox, NC_E_OUT_OF_MEMORY};
-    use neocogi_ui_document_contracts::{IDesignSettingsEditor, IDesignSettingsEditorAbi};
+    use neocogi_ui::abi::document::{IDesignSettingsEditor, IDesignSettingsEditorAbi};
 
     /// Deliberately varied provider responses exercise real generated COM output calls.
     enum Reply {
@@ -143,7 +139,7 @@ mod tests {
         /// A provider failure must remain a failure, never editor absence.
         Failure,
     }
-    #[neocogi_com::com_object(interfaces(neocogi_ui_document_contracts::IDesignSettingsEditor), ownership = exclusive)]
+    #[neocogi_com::com_object(interfaces(neocogi_ui::abi::document::IDesignSettingsEditor), ownership = exclusive)]
     /// This controller fixture needs no UI tree to exercise bounded snapshot acquisition.
     struct Editor {
         /// Selected protocol behavior; the object never changes it between calls.

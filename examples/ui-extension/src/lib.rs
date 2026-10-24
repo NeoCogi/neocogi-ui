@@ -6,12 +6,12 @@
 use neocogi_ui::UiEventSource;
 mod settings;
 use neocogi_ui::com::widget::WidgetState;
-use neocogi_ui_core_contracts::*;
-use neocogi_demo_contracts::*;
+use neocogi_ui::abi::core::*;
+use neocogi_ui_samples::abi::*;
 use neocogi_ui::Painter;
 use neocogi_com::{ComBox, ComPtr, ComRef, NcCopyFromBufferOffset, NcOutputWriter, NcStatus, NC_E_INVALID_ARG, com_object};
 use neocogi_ui_design::DesignWidgetManifest;
-use neocogi_ui_document_contracts::IDesignWidgetCatalog;
+use neocogi_ui::abi::document::IDesignWidgetCatalog;
 
 /// Common state is inline; the example adds no second widget allocation or type-erased data.
 struct Common {
@@ -97,7 +97,7 @@ macro_rules! widget {
     };
 }
 
-#[neocogi_com::com_object(neocogi_demo_contracts::Counter, ownership = exclusive)]
+#[neocogi_com::com_object(neocogi_ui_samples::abi::Counter, ownership = exclusive)]
 /// Private implementation of the externally declared counter class.
 struct CounterObject {
     /// Common options are authoritative here, without a duplicate presentation copy.
@@ -132,8 +132,8 @@ impl CounterObject {
             self.count = self.settings.next(self.count);
             // A rejected foreign post cannot erase this already committed change.
             self.common.state.record_change(GeometryChange::Changed);
-            self.common.state.post(neocogi_ui_core_contracts::events::activated()?)?;
-            self.common.state.post(neocogi_demo_contracts::events::counter_changed(self.count)?)?;
+            self.common.state.post(neocogi_ui::abi::core::events::activated()?)?;
+            self.common.state.post(neocogi_ui_samples::abi::events::counter_changed(self.count)?)?;
             Ok(GeometryChange::Changed)
         } else {
             Ok(GeometryChange::NoChange)
@@ -310,7 +310,7 @@ fn shrink(mut limit: AxisLimit, inset: i32) -> AxisLimit {
     limit
 }
 
-#[com_object(neocogi_demo_contracts::ExtensionProvider)]
+#[com_object(neocogi_ui_samples::abi::ExtensionProvider)]
 /// Stateless shorthand factory creates the interface-based inset container.
 pub struct ExtensionProviderObject;
 impl IDesignWidgetCatalog for ExtensionProviderObject {
@@ -366,7 +366,7 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
         index: u32,
         widgets: ComRef<'_, neocogi_ui::UiFactoryAbi>,
         settings: NcCopyFromBufferOffset<'_, u8>,
-    ) -> Result<ComBox<neocogi_ui_document_contracts::IDesignSettingsEditorAbi>, NcStatus> {
+    ) -> Result<ComBox<neocogi_ui::abi::document::IDesignSettingsEditorAbi>, NcStatus> {
         if index != 0 || settings.offset() != 0 {
             return Err(NC_E_INVALID_ARG);
         }
@@ -399,6 +399,6 @@ impl ExtensionProvider for ExtensionProviderObject {
 }
 /// Acquires one owned root; object construction remains on its typed methods.
 #[neocogi_com::plugin(name = "neocogi.example.ui-extension")]
-fn acquire_root(_runtime: ::neocogi_com::Runtime) -> Result<neocogi_com::ComPtr<neocogi_demo_contracts::ExtensionProviderAbi>, neocogi_com::NcStatus> {
+fn acquire_root(_runtime: ::neocogi_com::Runtime) -> Result<neocogi_com::ComPtr<neocogi_ui_samples::abi::ExtensionProviderAbi>, neocogi_com::NcStatus> {
     ExtensionProviderObject::from_value(ExtensionProviderObject).query()
 }

@@ -9,8 +9,8 @@ use crate::{
     window_manager::{PopupHandle, WindowManager},
 };
 use neocogi_com::{ComPtr, ComRef, NcStatus};
-use neocogi_gfx_contracts::GfxCompositorAbi;
-use neocogi_renderer_contracts::{IRendererAbi, Size};
+use neocogi_gfx_support::abi::GfxCompositorAbi;
+use neocogi_render_core::abi::{IRendererAbi, Size};
 
 /// Production UI state with no renderer executor or render-stream implementation.
 /// Shutdown drops this owner directly after idle preflight. Field destruction releases
@@ -66,7 +66,7 @@ impl RuntimeContext {
     pub(crate) fn paint(&mut self, size: Size) -> Result<(), NcStatus> {
         let dimensions = Dimensioni::new(size.width, size.height);
         if !self.window_manager.can_render(dimensions) {
-            return Err(neocogi_ui_core_contracts::UI_E_UPDATE_REQUIRED);
+            return Err(neocogi_ui::abi::core::UI_E_UPDATE_REQUIRED);
         }
         self.window_manager.paint(dimensions)
     }
@@ -84,7 +84,7 @@ impl RuntimeContext {
     }
 
     /// Installs the copied resource revision in the GFX owner before UI publishes its projection.
-    pub(crate) fn install_compositor_assets(&mut self, source: ComRef<'_, neocogi_gfx_contracts::IAssetBundleAbi>) -> Result<(), NcStatus> {
+    pub(crate) fn install_compositor_assets(&mut self, source: ComRef<'_, neocogi_gfx_support::abi::IAssetBundleAbi>) -> Result<(), NcStatus> {
         self.compositor.install_assets(source)
     }
 }

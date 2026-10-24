@@ -9,7 +9,7 @@ pub struct Form {
     /// Authored widget "save"; the concrete COM interface is checked when binding.
     pub widget_save_2: neocogi_ui::Widget<neocogi_ui::ButtonAbi>,
     /// Authored widget "extension"; the concrete COM interface is checked when binding.
-    pub widget_extension_3: neocogi_ui::Widget<neocogi_demo_contracts::CounterAbi>,
+    pub widget_extension_3: neocogi_ui::Widget<neocogi_ui_samples::abi::CounterAbi>,
 }
 /// Resolves concrete fields after construction has installed every receiver.
 pub fn bind(
@@ -19,7 +19,7 @@ pub fn bind(
         widget_root_0: component.widget::<neocogi_ui::LinearAbi>("root")?,
         widget_title_1: component.widget::<neocogi_ui::TextBlockAbi>("title")?,
         widget_save_2: component.widget::<neocogi_ui::ButtonAbi>("save")?,
-        widget_extension_3: component.widget::<neocogi_demo_contracts::CounterAbi>("extension")?,
+        widget_extension_3: component.widget::<neocogi_ui_samples::abi::CounterAbi>("extension")?,
     };
     Ok(form)
 }

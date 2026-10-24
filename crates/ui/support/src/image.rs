@@ -34,7 +34,7 @@ use std::fmt;
 pub use neocogi_render_core::ImageSource;
 
 /// Shared upper bound on one raw RGBA image allocation.
-pub const MAX_DECODED_RGBA_BYTES: usize = neocogi_ui_core_contracts::MAX_ASSET_PIXELS_BYTES;
+pub const MAX_DECODED_RGBA_BYTES: usize = neocogi_ui::abi::core::MAX_ASSET_PIXELS_BYTES;
 
 /// Concrete failure returned before a raw image is copied or uploaded.
 /// Atlas and texture consumers share these checks so their storage bounds cannot diverge.

@@ -36,7 +36,7 @@
 use crate::{Color, IconId};
 
 /// Shared concrete inset record used by asset compilation, layout and painting.
-pub use neocogi_ui_core_contracts::Insets as SliceInsets;
+pub use neocogi_ui::abi::core::Insets as SliceInsets;
 
 /// Concrete flat content drawn in one cell of a [`NinePatch`].
 ///

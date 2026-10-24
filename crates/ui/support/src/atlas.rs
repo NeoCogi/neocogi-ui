@@ -39,7 +39,7 @@
 use super::*;
 use crate::identity::ProcessUniqueId;
 use neocogi_ui::assets::AssetTables;
-use neocogi_ui_core_contracts::{AssetFont, AssetGlyph, FontRole, IconRole};
+use neocogi_ui::abi::core::{AssetFont, AssetGlyph, FontRole, IconRole};
 
 /// Opaque identity of one logical font resource.
 ///

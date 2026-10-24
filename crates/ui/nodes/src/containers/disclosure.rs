@@ -84,16 +84,16 @@ impl DisclosureState {
 ///
 /// Expansion gates descendant traversal while retaining every owned runtime and its state. It does
 /// not expose or mutate generic node visibility.
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Disclosure, ownership = exclusive)]
+#[neocogi_com::com_object(neocogi_ui::abi::nodes::Disclosure, ownership = exclusive)]
 pub struct Disclosure {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::widget_object::WidgetRuntime,
     /// Authoritative fixed header/body ownership used by COM traversal.
-    editor: neocogi_com::ComBox<neocogi_ui_core_contracts::IChildrenEditorAbi>,
+    editor: neocogi_com::ComBox<neocogi_ui::abi::core::IChildrenEditorAbi>,
     /// Text capability of the actual header child.
-    header: neocogi_com::WeakComBox<neocogi_ui_core_contracts::ITextContentAbi>,
+    header: neocogi_com::WeakComBox<neocogi_ui::abi::core::ITextContentAbi>,
     /// Typed editing capability of the actual vertical body child.
-    body: neocogi_com::WeakComBox<neocogi_ui_nodes_contracts::LinearAbi>,
+    body: neocogi_com::WeakComBox<neocogi_ui::abi::nodes::LinearAbi>,
     /// Same expansion scalar read by the actual header object and parent layout.
     model: Rc<DisclosureState>,
     variant: DisclosureVariant,
@@ -103,9 +103,9 @@ impl Disclosure {
     /// Combines one fixed child composition with the semantic expansion and layout policy.
     fn from_runtime(
         runtime: crate::widget_object::WidgetRuntime,
-        editor: neocogi_com::ComBox<neocogi_ui_core_contracts::IChildrenEditorAbi>,
-        header: neocogi_com::WeakComBox<neocogi_ui_core_contracts::ITextContentAbi>,
-        body: neocogi_com::WeakComBox<neocogi_ui_nodes_contracts::LinearAbi>,
+        editor: neocogi_com::ComBox<neocogi_ui::abi::core::IChildrenEditorAbi>,
+        header: neocogi_com::WeakComBox<neocogi_ui::abi::core::ITextContentAbi>,
+        body: neocogi_com::WeakComBox<neocogi_ui::abi::nodes::LinearAbi>,
         model: Rc<DisclosureState>,
         variant: DisclosureVariant,
     ) -> Self {
@@ -151,7 +151,7 @@ impl Disclosure {
 /// Dispatcher-addressable disclosure header.
 ///
 /// The header owns no descendants and shares only expansion data with its layout parent.
-#[neocogi_com::com_object(interfaces(neocogi_ui_core_contracts::ITextContent, neocogi_ui_core_contracts::ILeafLayout), ownership = exclusive)]
+#[neocogi_com::com_object(interfaces(neocogi_ui::abi::core::ITextContent, neocogi_ui::abi::core::ILeafLayout), ownership = exclusive)]
 struct DisclosureHeader {
     /// Non-semantic COM lifecycle and host-backed phase resources.
     runtime: crate::widget_object::WidgetRuntime,
@@ -207,7 +207,7 @@ impl Widget for DisclosureHeader {
 
         // The header's size is fixed, but its parent must observe the shared expansion change.
         if self.model.dirty.get() {
-            self.runtime.state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
+            self.runtime.state.record_change(neocogi_ui::abi::core::GeometryChange::Changed);
         }
         Ok(crate::Change::NoChange)
     }
@@ -377,8 +377,8 @@ impl crate::widget_object::HostedWidget for DisclosureHeader {
 }
 
 use crate::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_leaf_layout_impl, direct_widget_phase_impl};
-use neocogi_ui_core_contracts::{IChildrenEditorAbi, ITextContent, ITextContentAbi, IWidgetAbi, IWidgetHostAbi};
-use neocogi_ui_nodes_contracts::{CrossSize, DisclosureAbi, DisclosureStyle, FlowDirection, LinearAbi};
+use neocogi_ui::abi::core::{IChildrenEditorAbi, ITextContent, ITextContentAbi, IWidgetAbi, IWidgetHostAbi};
+use neocogi_ui::abi::nodes::{CrossSize, DisclosureAbi, DisclosureStyle, FlowDirection, LinearAbi};
 use neocogi_com::{ComPtr, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString};
 
 direct_widget_phase_impl!(DisclosureHeader);
@@ -414,7 +414,7 @@ impl ITextContent for DisclosureHeader {
         let label = crate::boundary::text(input)?;
         if self.com_label() != label {
             self.com_set_label(label);
-            self.runtime_mut().state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
+            self.runtime_mut().state.record_change(neocogi_ui::abi::core::GeometryChange::Changed);
         }
         Ok(())
     }
@@ -458,7 +458,7 @@ impl Disclosure {
     }
 }
 
-impl neocogi_ui_nodes_contracts::Disclosure for Disclosure {
+impl neocogi_ui::abi::nodes::Disclosure for Disclosure {
     /// Observes the same expansion bit used by header input and container layout.
     fn expanded(&self) -> Result<bool, NcStatus> {
         self.runtime().state.readable()?;
@@ -473,7 +473,7 @@ impl neocogi_ui_nodes_contracts::Disclosure for Disclosure {
         } else {
             self.collapse();
         }
-        self.runtime_mut().state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
+        self.runtime_mut().state.record_change(neocogi_ui::abi::core::GeometryChange::Changed);
         Ok(())
     }
 

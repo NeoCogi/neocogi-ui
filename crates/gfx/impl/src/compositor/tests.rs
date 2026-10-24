@@ -2,7 +2,7 @@
 use super::*;
 use crate::test_support::{test_bundle, data};
 use neocogi_com::{com_object};
-use neocogi_renderer_contracts::{IRenderer, IRendererVtblFor};
+use neocogi_render_core::abi::{IRenderer, IRendererVtblFor};
 
 /// Renderer observations shared with the concrete COM mock after object publication.
 #[derive(Default)]
@@ -568,7 +568,7 @@ fn extreme_finite_crossings_have_finite_interpolated_attributes() {
 /// Fully clipped and empty input still consumes the command budget; cancelling begins a fresh frame.
 #[test]
 fn compositor_intake_limits_apply_before_expansion_and_reset_with_frames() {
-    use neocogi_renderer_contracts::{MAX_DRAW_COMMANDS, MAX_DRAW_WORK};
+    use neocogi_render_core::abi::{MAX_DRAW_COMMANDS, MAX_DRAW_WORK};
     let bundle = test_bundle();
     let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
     let size = Size { width: 32, height: 32 };

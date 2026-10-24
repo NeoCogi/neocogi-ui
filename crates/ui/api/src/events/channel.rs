@@ -3,7 +3,7 @@ use super::{EventMessage, EventOrigin, IEventAbi, IEventReceiver, IEventReceiver
 use neocogi_com::{ComBox, ComPtr, NcStatus, NcValueRef, NC_E_CLOSED};
 use std::sync::mpsc::{Receiver, Sender};
 
-#[neocogi_com::com_object(interfaces(neocogi_ui_core_contracts::IEventReceiver))]
+#[neocogi_com::com_object(interfaces(neocogi_ui::abi::core::IEventReceiver))]
 /// Owns posting access only; the receiver and application state belong to the host.
 struct EventChannel {
     /// Messages keep their exclusive event owner until the consumer handles them.

@@ -1,7 +1,7 @@
 //! Provider-owned NCB settings and editor. No application layout reflection is involved.
 use neocogi_com::{ComBox, ComRef, ComSerialize, ComDeserialize, NcOutputWriter, NcStatus, NC_E_INVALID_ARG};
 use neocogi_ui::*;
-use neocogi_ui_document_contracts::{IDesignSettingsEditor, IDesignSettingsEditorAbi};
+use neocogi_ui::abi::document::{IDesignSettingsEditor, IDesignSettingsEditorAbi};
 
 /// Private persistent schema, interpreted only by this plugin.
 #[derive(Clone, ComSerialize, ComDeserialize)]
@@ -80,7 +80,7 @@ impl Settings {
     }
 }
 
-#[neocogi_com::com_object(interfaces(neocogi_ui_document_contracts::IDesignSettingsEditor), ownership = exclusive)]
+#[neocogi_com::com_object(interfaces(neocogi_ui::abi::document::IDesignSettingsEditor), ownership = exclusive)]
 /// Draft controller: the inspector owns the view after transfer; these controls are weak.
 struct Editor {
     /// Unmounted controls held only until take_view transfers their sole ownership.

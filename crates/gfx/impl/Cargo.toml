@@ -22,11 +22,9 @@ save-to-rust = ["dep:tempfile", "dep:miniz_oxide"]
 [dependencies]
 tempfile = { workspace = true, optional = true }
 miniz_oxide = { workspace = true, optional = true, features = ["with-alloc"] }
-neocogi-gfx-contracts.workspace = true
 neocogi-gfx-support.workspace = true
 neocogi-appearance.workspace = true
-neocogi-renderer-contracts.workspace = true
-neocogi-platform-contracts.workspace = true
+neocogi-render-core.workspace = true
 png = { workspace = true, optional = true }
 fontdue = { workspace = true, optional = true }
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }

@@ -1,7 +1,7 @@
-//! Compile the private runtime contract using the public core dependency graph.
+//! Compiles private and local test protocols from the shared source tree.
+#[path = "../../../scripts/idl_build.rs"]
+mod shared_idl;
 fn main() {
-    neocogi_idl::cargo::Module::directory("idl", "neocogi/ui/runtime/internal")
-        .rust_path("nc_ui::choice_menu::bindings")
-        .build()
-        .expect("failed to compile the runtime-private choice menu contract");
+    let request = shared_idl::sources("../../..", &["neocogi.ui.runtime.internal"]).module("neocogi.idl_example", "nc_ui::test_example");
+    shared_idl::build(request);
 }

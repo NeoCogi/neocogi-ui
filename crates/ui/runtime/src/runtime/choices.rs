@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::choice_menu::{ChoiceMenuState, choice_menu, copied_menu, decoded_selection};
-use neocogi_ui_core_contracts::{ChoiceMenuEntry, ChoiceSelection, IChoiceMenuAbi};
+use neocogi_ui::abi::core::{ChoiceMenuEntry, ChoiceSelection, IChoiceMenuAbi};
 
 /// Creates the core-owned choice model and popup without constructing any presentation widget.
 pub(crate) fn create_choice_menu(
@@ -11,7 +11,7 @@ pub(crate) fn create_choice_menu(
     menu_text: NcCopyFromBufferOffset<'_, u8>,
     entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntry>,
     selection: ChoiceSelection,
-    queue: Option<ComPtr<neocogi_ui_core_contracts::IEventReceiverAbi>>,
+    queue: Option<ComPtr<neocogi_ui::abi::core::IEventReceiverAbi>>,
 ) -> Result<ComPtr<IChoiceMenuAbi>, NcStatus> {
     storage.open()?;
     storage.factory.host.check_mutation()?;

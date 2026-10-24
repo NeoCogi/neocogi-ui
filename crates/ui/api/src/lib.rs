@@ -11,6 +11,8 @@
 
 #![deny(missing_docs)]
 
+extern crate self as neocogi_ui;
+extern crate alloc;
 // Unit-test executables own one runtime just like this package's integration tests.
 #[cfg(test)]
 extern crate nc_com as _;
@@ -50,4 +52,7 @@ pub mod image;
 pub use image::Image;
 
 /// UI-owned producer publication, independent of callable COM ABI.
-pub use neocogi_ui_core_contracts::{EventSourceMetadata, UiEventSource, ui_event_sources};
+pub use neocogi_ui::abi::core::{EventSourceMetadata, UiEventSource};
+
+/// Shared IDL bindings and their Rust conveniences.
+pub mod abi;

@@ -5,8 +5,8 @@ use crate::{
 };
 use crate::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
 use neocogi_com::{ComPtr, NcStatus, NC_E_INVALID_ARG};
-use neocogi_ui_core_contracts::{GeometryChange, IChildrenEditorAbi, IWidgetHostAbi, Rect, Size};
-use neocogi_ui_nodes_contracts::FormAbi;
+use neocogi_ui::abi::core::{GeometryChange, IChildrenEditorAbi, IWidgetHostAbi, Rect, Size};
+use neocogi_ui::abi::nodes::FormAbi;
 
 /// Validates coordinates and their sums before any topology or metadata mutation.
 fn rectangle(edge: Rect) -> Result<Rect, NcStatus> {
@@ -28,7 +28,7 @@ fn dimensions(size: Size) -> Result<Size, NcStatus> {
     Ok(size)
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Form, ownership = exclusive)]
+#[neocogi_com::com_object(neocogi_ui::abi::nodes::Form, ownership = exclusive)]
 /// Owns fixed child rectangles; core still owns clipping, traversal, capture and focus.
 pub struct Form {
     /// Common lifecycle, resource access and layout invalidation.
@@ -92,7 +92,7 @@ impl super::ContainerAlgorithm for Form {
 }
 direct_widget_phase_impl!(Form);
 direct_container_layout_impl!(Form);
-impl neocogi_ui_nodes_contracts::Form for Form {
+impl neocogi_ui::abi::nodes::Form for Form {
     container_methods!();
     container_edges!(Rect, rectangle, encoded);
     /// Returns preferred dimensions rather than allocation-dependent bounds.

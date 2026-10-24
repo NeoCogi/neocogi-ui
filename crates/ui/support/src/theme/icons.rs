@@ -35,7 +35,7 @@ use crate::atlas::{AtlasHandle, IconId};
 use super::Skin;
 
 /// Shared semantic role; concrete atlas capabilities remain local to the UI.
-pub use neocogi_ui_core_contracts::IconRole;
+pub use neocogi_ui::abi::core::IconRole;
 
 /// Stable reference to an icon used by retained UI state.
 ///

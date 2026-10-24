@@ -20,7 +20,7 @@ dynamic-plugin = []
 
 [dependencies]
 neocogi-gfx-impl = { workspace = true, features = ["gfx", "publisher"] }
-neocogi-gfx-contracts.workspace = true
+neocogi-gfx-support.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

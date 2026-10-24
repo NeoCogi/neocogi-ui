@@ -9,9 +9,9 @@ use neocogi_com::{
     ComPtr, ComRef, INcStringAbi, NC_E_BUSY, NC_E_INVALID_ARG, NC_E_OUT_OF_MEMORY, NC_E_OUT_OF_RANGE, NcCopyFromBufferOffset, NcOutputWriter, NcStatus,
     com_object,
 };
-use neocogi_gfx_contracts::*;
+use neocogi_gfx_support::abi::*;
 use neocogi_gfx_support::{AssetTables, AsciiGlyphIndex};
-use neocogi_renderer_contracts::{
+use neocogi_render_core::abi::{
     IRenderItemAbi, IRenderStream, IRenderStreamAbi, IRenderStreamVtblFor, IRgbaImageAbi, IRendererAbi, ITextureAbi, MAX_RENDER_BATCHES, MAX_RENDER_VERTICES,
     RenderBatch, RenderInfo, RenderVertex,
 };
@@ -71,7 +71,7 @@ struct FrameState {
     /// Packed clear color forwarded unchanged to the renderer.
     clear: u32,
     /// Submitted work is bounded before scanning, converting, or clipping caller buffers.
-    budget: neocogi_renderer_contracts::FrameBudget,
+    budget: neocogi_render_core::abi::FrameBudget,
 }
 
 /// Nine image/flat cells plus at most nine source-shrink diagnostic overlays, six vertices each.
@@ -281,7 +281,7 @@ impl Edge {
     }
 }
 
-#[com_object(neocogi_gfx_contracts::GfxCompositor)]
+#[com_object(neocogi_gfx_support::abi::GfxCompositor)]
 /// Concrete GFX-owned compositor with reusable geometry and no backend-native state.
 pub struct GfxCompositorObject {
     /// Current validated resource namespace and revision.
@@ -559,7 +559,7 @@ impl GfxCompositor for GfxCompositorObject {
         self.frame = Some(FrameState {
             size,
             clear,
-            budget: neocogi_renderer_contracts::FrameBudget::new(),
+            budget: neocogi_render_core::abi::FrameBudget::new(),
         });
         Ok(())
     }

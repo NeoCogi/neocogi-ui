@@ -222,7 +222,7 @@ fn valid_weight(weight: f32) -> f64 {
     if weight.is_finite() && weight > 0.0 { f64::from(weight) } else { 0.0 }
 }
 
-use neocogi_ui_core_contracts::{AxisLimit, LimitKind, LayoutLimits};
+use neocogi_ui::abi::core::{AxisLimit, LimitKind, LayoutLimits};
 use neocogi_com::NcStatus;
 
 /// Converts one checked contract axis without treating finite zero as unbounded.

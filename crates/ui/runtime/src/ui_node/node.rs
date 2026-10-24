@@ -180,7 +180,7 @@ impl Node {
     /// is an error, never a silently skipped subtree.
     pub(crate) fn collect_dispatch_widgets(
         &self,
-        drivers: &mut Vec<neocogi_com::WeakComBox<neocogi_ui_core_contracts::IWidgetDispatcherAbi>>,
+        drivers: &mut Vec<neocogi_com::WeakComBox<neocogi_ui::abi::core::IWidgetDispatcherAbi>>,
     ) -> Result<(), NcStatus> {
         match &self.data.layout {
             NodeLayoutKind::Leaf(_) => {}

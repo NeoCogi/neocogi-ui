@@ -55,7 +55,7 @@ pub(crate) use neocogi_ui_support::{assets, boundary, frame, input_contract, lay
 pub(crate) use neocogi_ui_support::{
     AvailableSpace, Change, Constraints, KeyboardAction, KeyboardBehavior, TextWrap, TrackSize, UiInputEvent, WidgetOption, WidgetPaintCtx, WidgetUpdateCtx,
 };
-pub(crate) use neocogi_ui_core_contracts::LayoutParticipation as ChildParticipation;
+pub(crate) use neocogi_ui::abi::core::LayoutParticipation as ChildParticipation;
 pub(crate) use container::{ContainerLayoutCtx, ContainerWidget, MeasureCtx};
 pub(crate) use containers::{ScrollComposition, ScrollModel, ScrollParts};
 pub(crate) use frame::frame_contract;
@@ -71,19 +71,19 @@ pub(crate) use neocogi_ui_support::widget_context;
 /// Dynamic deployments acquire the factory of `neocogi.ui.nodes.runtime` and call its generated `NodesPluginFactory`
 /// instead. This helper performs the same typed binding without a loader and does not make the
 /// core runtime object expose or construct `UiFactory`.
-pub fn bind_builtin_nodes(runtime: neocogi_com::ComPtr<neocogi_ui_core_contracts::UiRuntimeAbi>) -> Result<neocogi_ui::Ui, neocogi_com::NcStatus> {
+pub fn bind_builtin_nodes(runtime: neocogi_com::ComPtr<neocogi_ui::abi::core::UiRuntimeAbi>) -> Result<neocogi_ui::Ui, neocogi_com::NcStatus> {
     let factory = UiFactory::bind(runtime.as_com_ref())?;
     neocogi_ui::Ui::from_interfaces(runtime, factory)
 }
 
 use neocogi_com::{ComPtr, ComRef, NcGuid, NcStatus, guid_from_qualified_name};
-use neocogi_ui_core_contracts::UiRuntimeAbi;
-use neocogi_ui_nodes_contracts::{NodesPluginFactory, UiFactoryAbi};
+use neocogi_ui::abi::core::UiRuntimeAbi;
+use neocogi_ui::abi::nodes::{NodesPluginFactory, UiFactoryAbi};
 
 /// Hard provider dependency retained by the assembly planner before node-provider activation.
 const UI_RUNTIME_PLUGIN_ID: NcGuid = guid_from_qualified_name("neocogi.ui.runtime");
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::NodesPluginFactory)]
+#[neocogi_com::com_object(neocogi_ui::abi::nodes::NodesPluginFactory)]
 /// Stateless activation root that binds concrete nodes to one independently created core runtime.
 struct NodesPluginFactoryObject;
 
@@ -98,7 +98,7 @@ impl NodesPluginFactory for NodesPluginFactoryObject {
 #[neocogi_com::plugin(name = "neocogi.ui.nodes.runtime",
     dependencies = [UI_RUNTIME_PLUGIN_ID],
     )]
-fn acquire_root(_runtime: ::neocogi_com::Runtime) -> Result<neocogi_com::ComPtr<neocogi_ui_nodes_contracts::NodesPluginFactoryAbi>, neocogi_com::NcStatus> {
+fn acquire_root(_runtime: ::neocogi_com::Runtime) -> Result<neocogi_com::ComPtr<neocogi_ui::abi::nodes::NodesPluginFactoryAbi>, neocogi_com::NcStatus> {
     NodesPluginFactoryObject::from_value(NodesPluginFactoryObject).query()
 }
 

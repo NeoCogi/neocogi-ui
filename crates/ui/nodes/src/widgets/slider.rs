@@ -119,7 +119,7 @@ impl SliderParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Slider, ownership = exclusive)]
+#[neocogi_com::com_object(neocogi_ui::abi::nodes::Slider, ownership = exclusive)]
 /// Concrete retained slider and dynamically constructible COM object.
 pub struct Slider {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -258,8 +258,8 @@ impl Slider {
         self.value = value;
         if last != value {
             // Preserve committed measurement/placement changes even if posting fails.
-            self.runtime.state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
-            let event = neocogi_ui_nodes_contracts::events::numeric_changed(value)?;
+            self.runtime.state.record_change(neocogi_ui::abi::core::GeometryChange::Changed);
+            let event = neocogi_ui::abi::nodes::events::numeric_changed(value)?;
             self.runtime.state.post(event)?;
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
@@ -1033,8 +1033,8 @@ mod tests {
 }
 
 use crate::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_core_contracts::{GeometryChange, IWidgetHostAbi, FontRole};
-use neocogi_ui_nodes_contracts::{SliderAbi, SliderOptions};
+use neocogi_ui::abi::core::{GeometryChange, IWidgetHostAbi, FontRole};
+use neocogi_ui::abi::nodes::{SliderAbi, SliderOptions};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Slider);
@@ -1070,7 +1070,7 @@ impl Slider {
     }
 }
 
-impl neocogi_ui_nodes_contracts::Slider for Slider {
+impl neocogi_ui::abi::nodes::Slider for Slider {
     /// Reads the finite value owned by the slider's concrete semantic algorithm.
     fn value(&self) -> Result<f32, NcStatus> {
         self.runtime().state.readable()?;

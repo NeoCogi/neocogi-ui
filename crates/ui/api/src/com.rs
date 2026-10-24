@@ -5,32 +5,32 @@
 //! lives in the UI plugin; this facade depends only on the contracts and COM
 //! object support.
 
-pub use neocogi_renderer_contracts::{
+pub use neocogi_render_core::abi::{
     Color, IRenderDiagnostics, IRenderDiagnosticsAbi, IRenderItem, IRenderItemAbi, IRenderStream, IRenderStreamAbi, IRenderer, IRendererAbi, IRgbaImage,
     IRgbaImageAbi, ITexture, ITextureAbi, ITextureFactory, ITextureFactoryAbi, MAX_IMAGE_BYTES, MAX_RENDER_BATCHES, MAX_RENDER_VERTICES, Rect, RenderBatch,
     RenderInfo, RenderVertex, Size, TextureRegion, color, rgba_bytes,
 };
-pub use neocogi_platform_contracts::{
+pub use neocogi_render_core::platform::{
     IInputSink, IInputSinkAbi, IPlatformWindow, IPlatformWindowAbi, KeyCode, KeyStroke, Platform, PlatformAbi, Point, PollStatus, TextInputArea, UiInput,
 };
-pub use neocogi_ui_core_contracts::*;
+pub use neocogi_ui::abi::core::*;
 /// Complete generated built-in node contract namespace, including its distinct module metadata.
 pub mod nodes {
-    pub use neocogi_ui_nodes_contracts::*;
+    pub use neocogi_ui::abi::nodes::*;
 }
-pub use neocogi_ui_nodes_contracts::{
+pub use neocogi_ui::abi::nodes::{
     Button, ButtonAbi, Checkbox, CheckboxAbi, ChildCrossSize, ColorSwatch, ColorSwatchAbi, Combo, ComboAbi, ContentIcon, CrossSize, Disclosure, DisclosureAbi,
     DisclosureStyle, FillStates, FlowDirection, Grid, GridAbi, GridExtent, GridLimits, LayoutTrack, Linear, LinearAbi, LinearEdge, ListBox, ListBoxAbi,
     ListItem, ListItemAbi, Number, NumberAbi, NumberOptions, ScrollArea, ScrollAreaAbi, ScrollAxis, ScrollRange, Scrollbar, ScrollbarAbi, Slider, FormAbi,
     SliderAbi, SliderOptions, SplitAxis, SplitOptions, SplitView, SplitViewAbi, TextArea, TextAreaAbi, TextBlock, TextBlockAbi, Textbox, TextboxAbi, UiFactory,
     UiFactoryAbi,
 };
-pub use neocogi_gfx_contracts::{
+pub use neocogi_gfx_support::abi::{
     AssetLoader, AssetLoaderAbi, DrawPoint, GfxPluginFactory, GfxPluginFactoryAbi, IAssetBuilder, IAssetBuilderAbi, IGfxDiagnostics, IGfxDiagnosticsAbi,
     GfxCompositor, GfxCompositorAbi, PngDecoder, PngDecoderAbi, SolidVertex,
 };
 #[cfg(feature = "skin")]
-pub use neocogi_skin_contracts::{
+pub use neocogi_appearance::skin::{
     ISkinDiagnostics, ISkinDiagnosticsAbi, PaletteEdit, SkinPluginFactory, SkinPluginFactoryAbi, StyleCompiler, StyleCompilerAbi, ThemeLoader, ThemeLoaderAbi,
 };
 use neocogi_com::{ComBox, WeakComBox, ComInterface, ComPtr, ComRef, INcStringComPtrExt, IUnknown, NcCopyFromBufferOffset, NcStatus};
@@ -1087,7 +1087,7 @@ impl Ui {
 }
 
 /// Concrete immutable control events queried on the common owned IEvent value.
-pub use neocogi_ui_nodes_contracts::{
+pub use neocogi_ui::abi::nodes::{
     ICheckboxChangedEvent, ICheckboxChangedEventAbi, INumericChangedEvent, INumericChangedEventAbi, IScrollbarChangedEvent, IScrollbarChangedEventAbi,
     ISplitChangedEvent, ISplitChangedEventAbi,
 };

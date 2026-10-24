@@ -8,13 +8,9 @@ repository.workspace = true
 description = "Typed Rust client API for NeoCogi UI components"
 
 [dependencies]
-neocogi-ui-core-contracts.workspace = true
-neocogi-ui-nodes-contracts.workspace = true
-neocogi-renderer-contracts.workspace = true
-neocogi-platform-contracts.workspace = true
-neocogi-gfx-contracts.workspace = true
+neocogi-render-core.workspace = true
 neocogi-gfx-support.workspace = true
-neocogi-skin-contracts = { workspace = true, optional = true }
+neocogi-appearance = { workspace = true, optional = true }
 neocogi-com = { workspace = true, features = ["macros", "std"] }
 
 [features]
@@ -22,7 +18,7 @@ default = []
 # Owned application fixtures; no implementation or process-runtime linkage is added.
 test-support = []
 # Optional authoring clients keep unrelated plugin contracts out of UI/runtime binaries.
-skin = ["dep:neocogi-skin-contracts"]
+skin = ["dep:neocogi-appearance"]
 # Deployment policy belongs to the final application, not implementation plugins.
 runtime = ["neocogi-com/runtime"]
 
@@ -35,3 +31,7 @@ trybuild.workspace = true
 # Every integration-test executable owns its linked runtime, independently of
 # production feature unification or a deployed native shared library.
 neocogi-com-runtime.workspace = true
+
+[build-dependencies]
+neocogi-render-core.workspace = true
+neocogi-idl.workspace = true

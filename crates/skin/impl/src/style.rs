@@ -2,8 +2,8 @@
 
 use crate::Diagnostic;
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, com_object};
-use neocogi_gfx_contracts::*;
-use neocogi_skin_contracts::{ISkinDiagnostics, PaletteEdit, StyleCompiler};
+use neocogi_gfx_support::abi::*;
+use neocogi_appearance::skin::{ISkinDiagnostics, PaletteEdit, StyleCompiler};
 use neocogi_appearance::{AppearanceTables, rgba};
 
 /// Copies the current fixed appearance tables without importing fonts, icons, or pixels.
@@ -44,7 +44,7 @@ pub(crate) fn publish_appearance(
     )
 }
 
-#[com_object(neocogi_skin_contracts::StyleCompiler)]
+#[com_object(neocogi_appearance::skin::StyleCompiler)]
 /// Compiles resource revisions without borrowing a UI or retaining a renderer.
 pub struct StyleCompilerObject {
     /// GFX owns base validation, bundle copying, and immutable revision publication.

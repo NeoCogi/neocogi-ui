@@ -6,7 +6,7 @@
 use crate::menu::{Menu, MenuEntry};
 use crate::window_manager::{PopupHandle, SurfaceMutationError, WindowManager};
 use neocogi_com::{ComPtr, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcOutputWriter, NcStatus, NcString, NC_E_INVALID_ARG, com_object};
-use neocogi_ui_core_contracts::{ChoiceMenuEntry, ChoiceSelection, IChoiceMenu, IChoiceMenuAbi, IChoiceMenuVtblFor, MenuTextRange, Rect};
+use neocogi_ui::abi::core::{ChoiceMenuEntry, ChoiceSelection, IChoiceMenu, IChoiceMenuAbi, IChoiceMenuVtblFor, MenuTextRange, Rect};
 
 /// Maximum accepted branch nesting, keeping foreign preorder input bounded on the native stack.
 const MAX_CHOICE_MENU_DEPTH: usize = 32;
@@ -31,7 +31,7 @@ enum ChoicePopupLifecycle {
 /// Complete runtime-private bindings compiled from the local IDL contract.
 #[allow(dead_code, unused_imports)]
 mod bindings {
-    include!(concat!(env!("OUT_DIR"), "/neocogi_ui_runtime_internal.rs"));
+    include!(env!("IDL_NEOCOGI_UI_RUNTIME_INTERNAL"));
 }
 pub(crate) use bindings::{ChoicePopupAction, ChoicePopupIntent, IChoiceMenuState, IChoiceMenuStateAbi, IChoiceMenuStateVtblFor};
 
@@ -51,7 +51,7 @@ pub(crate) struct ChoiceMenuState {
     /// Explicit popup lifecycle reconciled by the runtime composition owner.
     popup: ChoicePopupLifecycle,
     /// Runtime-owned source for actual user commits only.
-    changed_event: neocogi_ui_core_contracts::EventPort,
+    changed_event: neocogi_ui::abi::core::EventPort,
 }
 
 impl ChoiceMenuState {
@@ -60,7 +60,7 @@ impl ChoiceMenuState {
         menu_text: String,
         entries: Vec<ChoiceMenuEntry>,
         selection: Option<u64>,
-        queue: Option<ComPtr<neocogi_ui_core_contracts::IEventReceiverAbi>>,
+        queue: Option<ComPtr<neocogi_ui::abi::core::IEventReceiverAbi>>,
     ) -> Result<ComPtr<IChoiceMenuStateAbi>, NcStatus> {
         validate_menu(&menu_text, &entries, selection)?;
         let local = Self::into_local(Self {
@@ -70,12 +70,12 @@ impl ChoiceMenuState {
             revision: 0,
             popup_anchor: Rect::default(),
             popup: ChoicePopupLifecycle::Closed,
-            changed_event: neocogi_ui_core_contracts::EventPort::new(),
+            changed_event: neocogi_ui::abi::core::EventPort::new(),
         });
         // No caller can submit a choice until this factory returns. Connect its
         // weak public identity through checked local access before that boundary.
         let origin = local.query::<IChoiceMenuAbi>()?.downgrade()?;
-        local.try_borrow_mut()?.changed_event = neocogi_ui_core_contracts::EventPort::with_queue(queue, origin);
+        local.try_borrow_mut()?.changed_event = neocogi_ui::abi::core::EventPort::with_queue(queue, origin);
         local.query()
     }
 
@@ -245,7 +245,7 @@ impl IChoiceMenuState for ChoiceMenuState {
         // Commit the complete popup transition before entering even a pure mapper.
         if changed {
             self.changed_event
-                .post(neocogi_ui_core_contracts::events::choice_changed(ChoiceSelection::Selected(id))?)?;
+                .post(neocogi_ui::abi::core::events::choice_changed(ChoiceSelection::Selected(id))?)?;
         }
         Ok(self.revision)
     }
@@ -452,13 +452,13 @@ impl ChoiceMenuManager {
 /// Converts generic surface policy failures at this private composition boundary.
 fn surface_status(error: SurfaceMutationError) -> NcStatus {
     match error {
-        SurfaceMutationError::Busy => neocogi_ui_core_contracts::UI_E_BUSY,
-        SurfaceMutationError::UnknownWindow | SurfaceMutationError::UnknownPopup => neocogi_ui_core_contracts::UI_E_CLOSED,
+        SurfaceMutationError::Busy => neocogi_ui::abi::core::UI_E_BUSY,
+        SurfaceMutationError::UnknownWindow | SurfaceMutationError::UnknownPopup => neocogi_ui::abi::core::UI_E_CLOSED,
         SurfaceMutationError::InvalidLayer(_) => NC_E_INVALID_ARG,
         SurfaceMutationError::InvalidDialogOwner
         | SurfaceMutationError::InvalidChildWindowParent
         | SurfaceMutationError::ManagedLayer
-        | SurfaceMutationError::InvalidPopupParent => neocogi_ui_core_contracts::UI_E_POLICY,
+        | SurfaceMutationError::InvalidPopupParent => neocogi_ui::abi::core::UI_E_POLICY,
     }
 }
 

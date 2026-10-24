@@ -26,7 +26,7 @@ neocogi-com-runtime.workspace = true
 neocogi-ui-samples.workspace = true
 neocogi-ui = { workspace = true, features = ["skin"] }
 neocogi-com = { workspace = true, default-features = false, features = ["std", "macros"] }
-neocogi-render-mesh-contracts.workspace = true
+neocogi-render-mesh.workspace = true
 neocogi-demo-assets = { workspace = true, features = ["full-demo"] }
 neocogi-demo-host = { workspace = true, features = ["png-assets"] }
 rs-math3d.workspace = true

@@ -5,8 +5,10 @@
 
 #![deny(missing_docs)]
 
-use neocogi_gfx_contracts::*;
-use neocogi_renderer_contracts::{IRgbaImageAbi, IRgbaImageVtblFor};
+extern crate self as neocogi_gfx_support;
+extern crate alloc;
+use neocogi_gfx_support::abi::*;
+use neocogi_render_core::abi::{IRgbaImageAbi, IRgbaImageVtblFor};
 use neocogi_com::{ComPtr, ComRef, NcOutputWriter, NcStatus, NC_E_INVALID_ARG, com_object};
 use std::borrow::Cow;
 
@@ -299,3 +301,6 @@ mod compiled_tests {
         assert_eq!(decode_pixels(&[0; 16], 4), Err(NC_E_INVALID_ARG));
     }
 }
+
+/// Shared IDL bindings and their Rust conveniences.
+pub mod abi;

@@ -71,7 +71,7 @@ impl Default for ComboParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Combo, ownership = exclusive)]
+#[neocogi_com::com_object(neocogi_ui::abi::nodes::Combo, ownership = exclusive)]
 /// Concrete retained combo and dynamically constructible COM object.
 pub struct Combo {
     /// Core-owned hierarchy, popup lifecycle, committed selection, and user event source.
@@ -115,7 +115,7 @@ impl Combo {
     }
 
     /// Reconstructs the header border box used as the popup's exact outer-width anchor.
-    fn popup_anchor(&self, ctx: &WidgetUpdateCtx<'_>) -> neocogi_ui_core_contracts::Rect {
+    fn popup_anchor(&self, ctx: &WidgetUpdateCtx<'_>) -> neocogi_ui::abi::core::Rect {
         // Traversal intentionally gives widgets their content rectangle. Recover this control's
         // border box with the same normal-state insets used by measurement and layout, including
         // the valid unframed case without introducing theme-dependent pixel constants.
@@ -130,7 +130,7 @@ impl Combo {
             crate::SliceInsets::ZERO
         };
         let header = crate::frame::outer_from_content(ctx.screen_content_rect(), insets);
-        neocogi_ui_core_contracts::Rect {
+        neocogi_ui::abi::core::Rect {
             x: header.x,
             y: header.y.saturating_add(header.height),
             width: header.width,
@@ -247,8 +247,8 @@ impl crate::widget_object::FontState for Combo {
     }
 }
 use crate::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_core_contracts::{ChoiceMenuEntry, ChoiceSelection, FontRole, GeometryChange, IChoiceMenuAbi, IWidgetHostAbi};
-use neocogi_ui_nodes_contracts::ComboAbi;
+use neocogi_ui::abi::core::{ChoiceMenuEntry, ChoiceSelection, FontRole, GeometryChange, IChoiceMenuAbi, IWidgetHostAbi};
+use neocogi_ui::abi::nodes::ComboAbi;
 use neocogi_com::{ComPtr, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus, NcString};
 
 direct_widget_phase_impl!(Combo);
@@ -273,7 +273,7 @@ impl Combo {
     }
 }
 
-impl neocogi_ui_nodes_contracts::Combo for Combo {
+impl neocogi_ui::abi::nodes::Combo for Combo {
     /// Returns an explicit tagged optional position from the authoritative model.
     fn selection(&self) -> Result<ChoiceSelection, NcStatus> {
         self.runtime().state.readable()?;
@@ -353,7 +353,7 @@ impl neocogi_ui_nodes_contracts::Combo for Combo {
 }
 
 /// Menu input is private; applications observe the public combo identity.
-impl neocogi_ui_core_contracts::IWidgetDispatcher for Combo {
+impl neocogi_ui::abi::core::IWidgetDispatcher for Combo {
     /// Relays one immutable menu snapshot without copying its payload.
     fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
         self.events.dispatch_next(&mut self.runtime.state)

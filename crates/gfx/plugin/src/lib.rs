@@ -10,10 +10,10 @@
 use neocogi_gfx_impl::AssetLoaderObject;
 use neocogi_gfx_impl::{AssetPublisherObject, GfxCompositorObject, PngDecoderObject};
 use neocogi_com::{ComPtr, NcStatus};
-use neocogi_gfx_contracts::*;
+use neocogi_gfx_support::abi::*;
 
 /// Stateless activation root for cohesive CPU graphics construction services.
-#[neocogi_com::com_object(neocogi_gfx_contracts::GfxPluginFactory)]
+#[neocogi_com::com_object(neocogi_gfx_support::abi::GfxPluginFactory)]
 struct GfxPluginFactoryObject;
 
 impl GfxPluginFactory for GfxPluginFactoryObject {
@@ -47,7 +47,7 @@ impl GfxPluginFactory for GfxPluginFactoryObject {
 
 /// Acquires one owned root; object construction remains on its typed methods.
 #[neocogi_com::plugin(name = "neocogi.gfx.runtime")]
-fn acquire_root(_runtime: ::neocogi_com::Runtime) -> Result<neocogi_com::ComPtr<neocogi_gfx_contracts::GfxPluginFactoryAbi>, neocogi_com::NcStatus> {
+fn acquire_root(_runtime: ::neocogi_com::Runtime) -> Result<neocogi_com::ComPtr<neocogi_gfx_support::abi::GfxPluginFactoryAbi>, neocogi_com::NcStatus> {
     GfxPluginFactoryObject::from_value(GfxPluginFactoryObject).query()
 }
 

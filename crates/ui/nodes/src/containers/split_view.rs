@@ -8,8 +8,8 @@ use crate::{
 use crate::math::RectExt;
 use crate::widget_object::{HostedWidget, WidgetRuntime, direct_container_layout_impl, direct_widget_phase_impl};
 use neocogi_com::{ComPtr, NcStatus, NC_E_INVALID_ARG, NC_E_OUT_OF_RANGE};
-use neocogi_ui_core_contracts::{GeometryChange, IChildrenAbi, IChildrenEditorAbi, IWidgetHostAbi};
-use neocogi_ui_nodes_contracts::{SplitAxis, SplitOptions, SplitViewAbi};
+use neocogi_ui::abi::core::{GeometryChange, IChildrenAbi, IChildrenEditorAbi, IWidgetHostAbi};
+use neocogi_ui::abi::nodes::{SplitAxis, SplitOptions, SplitViewAbi};
 
 /// Pointer offset within the divider prevents an initial jump when its edge is grabbed.
 #[derive(Clone, Copy, Default)]
@@ -116,7 +116,7 @@ fn partition(settings: SplitOptions, rect: Recti) -> Partition {
     result
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::SplitView, ownership = exclusive)]
+#[neocogi_com::com_object(neocogi_ui::abi::nodes::SplitView, ownership = exclusive)]
 /// Concrete container owns pane sizing and its divider; no sibling handles share mutable state.
 pub struct SplitView {
     /// Exclusive topology authority; callers receive only its read-only view.
@@ -177,7 +177,7 @@ impl SplitView {
         }
         self.settings.position = position;
         self.runtime.state.record_change(GeometryChange::Changed);
-        let event = neocogi_ui_nodes_contracts::events::split_changed(position)?;
+        let event = neocogi_ui::abi::nodes::events::split_changed(position)?;
         self.runtime.state.post(event)?;
         Ok(Change::Changed)
     }
@@ -204,7 +204,7 @@ impl crate::widget_object::WidgetAlgorithm for SplitView {
 direct_widget_phase_impl!(SplitView);
 direct_container_layout_impl!(SplitView);
 
-impl neocogi_ui_nodes_contracts::SplitView for SplitView {
+impl neocogi_ui::abi::nodes::SplitView for SplitView {
     /// Exposes observation without exposing attachment or removal authority.
     fn children(&self) -> Result<ComPtr<IChildrenAbi>, NcStatus> {
         self.runtime.state.readable()?;
@@ -214,8 +214,8 @@ impl neocogi_ui_nodes_contracts::SplitView for SplitView {
     fn insert(
         &mut self,
         index: u32,
-        child: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
-    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
+        child: neocogi_com::ComBox<neocogi_ui::abi::core::IWidgetAbi>,
+    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui::abi::core::IWidgetAbi>)> {
         let prepared = (|| {
             self.runtime.state.writable()?;
             if self.count >= 2 {
@@ -235,8 +235,8 @@ impl neocogi_ui_nodes_contracts::SplitView for SplitView {
     fn replace(
         &mut self,
         index: u32,
-        child: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
-    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
+        child: neocogi_com::ComBox<neocogi_ui::abi::core::IWidgetAbi>,
+    ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui::abi::core::IWidgetAbi>)> {
         let prepared = (|| {
             self.runtime.state.writable()?;
             Ok(())

@@ -8,15 +8,16 @@ repository.workspace = true
 
 [dependencies]
 neocogi-ui.workspace = true
-neocogi-ui-document-contracts.workspace = true
 neocogi-ui-design.workspace = true
 neocogi-com = { workspace = true, features = ["std", "macros", "runtime"] }
 serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
-neocogi-com-test-contracts.workspace = true
-neocogi-demo-contracts.workspace = true
+neocogi-ui-samples.workspace = true
 # Unit tests exercise document loading through the ordinary static runtime.
 neocogi-com = { workspace = true, features = ["runtime"] }
 neocogi-com-runtime.workspace = true
+
+[build-dependencies]
+neocogi-idl.workspace = true

@@ -20,8 +20,8 @@ This fixture builds no production assembly. UI and renderer dependency versions
 are not covered by the COM compiler floor.
 
 The [native guide](../guides/COM_NATIVE.md) documents ordinary Cargo application
-builds and their current constraints. `cargo-neocogi` retains module authoring;
-its assembly builder and native descriptor-inspection child are removed. The
+builds and their current constraints. IDL generation is an in-process Cargo
+build dependency; the obsolete package-scaffolding CLI is removed. The
 workspace's separate min-size alias requires nightly and `rust-src`.
 
 ## Platforms and renderers

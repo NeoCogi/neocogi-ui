@@ -1,5 +1,5 @@
 //! One authoritative owned child collection with separate read/edit COM capabilities.
-use neocogi_ui_core_contracts::*;
+use neocogi_ui::abi::core::*;
 use neocogi_com::{ComPtr, IUnknown, NcStatus, com_object};
 use std::{
     cell::{Cell, RefCell},

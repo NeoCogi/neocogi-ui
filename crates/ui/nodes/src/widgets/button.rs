@@ -38,8 +38,8 @@ use crate::widget_object::{
     HostedWidget, ImageState, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_icon_role, set_direct_named_font,
     set_direct_named_icon,
 };
-use neocogi_ui_core_contracts::*;
-use neocogi_ui_nodes_contracts::{ButtonAbi, ContentIcon, FillStates};
+use neocogi_ui::abi::core::*;
+use neocogi_ui::abi::nodes::{ButtonAbi, ContentIcon, FillStates};
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString};
 
 use super::*;
@@ -97,7 +97,7 @@ impl ButtonParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Button, ownership = exclusive)]
+#[neocogi_com::com_object(neocogi_ui::abi::nodes::Button, ownership = exclusive)]
 /// Concrete retained button and dynamically constructible COM object.
 ///
 /// The allocation owns its semantic fields directly. `runtime` contains only common host,
@@ -213,7 +213,7 @@ impl Widget for Button {
             return Ok(crate::Change::NoChange);
         }
         // Pointer click, Enter, and Space converge on the button's single typed submission port.
-        let event = neocogi_ui_core_contracts::events::activated()?;
+        let event = neocogi_ui::abi::core::events::activated()?;
         self.runtime.state.post(event)?;
 
         // Submitting leaves the label and preferred dimensions unchanged.
@@ -350,7 +350,7 @@ impl Button {
 direct_widget_phase_impl!(Button);
 direct_leaf_layout_impl!(Button);
 
-impl neocogi_ui_nodes_contracts::Button for Button {
+impl neocogi_ui::abi::nodes::Button for Button {
     /// Validates before committing and only dirties geometry when text actually differs.
     fn set_label(&mut self, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.runtime().state.writable()?;

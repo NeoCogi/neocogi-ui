@@ -2,7 +2,7 @@
 
 use crate::boundary::{local_rect, text};
 use crate::ui_node::{HostState, Observation, WidgetHost};
-use neocogi_ui_core_contracts::*;
+use neocogi_ui::abi::core::*;
 use neocogi_com::{ComPtr, ComRef, IUnknown, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, NC_E_INVALID_TAG, com_object};
 use std::{
     cell::{Cell, RefCell},
@@ -25,14 +25,14 @@ use windows::NativeSurface;
 /// The UI depends only on the GFX contract in shared, monolithic, and WebAssembly deployments.
 pub fn create_runtime_from_assets(
     source: ComRef<'_, IAssetBundleAbi>,
-    gfx: ComRef<'_, neocogi_gfx_contracts::GfxPluginFactoryAbi>,
+    gfx: ComRef<'_, neocogi_gfx_support::abi::GfxPluginFactoryAbi>,
 ) -> Result<ComPtr<UiRuntimeAbi>, NcStatus> {
     let runtime = create_runtime_value(source, gfx)?;
     Ok(Runtime::from_value(runtime).query().expect("runtime interface"))
 }
 
 /// Prepares the actual runtime value before publishing any COM projection.
-fn create_runtime_value(source: ComRef<'_, IAssetBundleAbi>, gfx: ComRef<'_, neocogi_gfx_contracts::GfxPluginFactoryAbi>) -> Result<Runtime, NcStatus> {
+fn create_runtime_value(source: ComRef<'_, IAssetBundleAbi>, gfx: ComRef<'_, neocogi_gfx_support::abi::GfxPluginFactoryAbi>) -> Result<Runtime, NcStatus> {
     // Reject invalid UI metadata before asking GFX to allocate any mutable frame state.
     let assets = crate::assets::ImportedAssets::read(source, None)?;
     // GFX imports the same immutable source during construction. Do not reinstall it into
@@ -47,7 +47,7 @@ fn create_runtime_value(source: ComRef<'_, IAssetBundleAbi>, gfx: ComRef<'_, neo
 
 /// Moves the runtime's private compositor into shared UI storage without exposing its capability.
 /// GFX owns graphics execution; only this runtime selects its resource revisions and frames.
-pub(crate) fn create_storage(assets: crate::assets::ImportedAssets, compositor: ComPtr<neocogi_gfx_contracts::GfxCompositorAbi>) -> Rc<RuntimeStorage> {
+pub(crate) fn create_storage(assets: crate::assets::ImportedAssets, compositor: ComPtr<neocogi_gfx_support::abi::GfxCompositorAbi>) -> Rc<RuntimeStorage> {
     let bundle = assets.bundle().clone();
     let state = Rc::new(HostState::default());
     state.changes_pending.set(true);
@@ -232,7 +232,7 @@ impl IChoiceMenus for Runtime {
         menu_text: NcCopyFromBufferOffset<'_, u8>,
         entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntry>,
         selection: ChoiceSelection,
-        events: neocogi_com::NcValueRef<'_, neocogi_ui_core_contracts::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui::abi::core::EventBinding>,
     ) -> Result<ComPtr<IChoiceMenuAbi>, NcStatus> {
         choices::create_choice_menu(&self.storage, parent, menu_text, entries, selection, events.to_owned()?.into_queue())
     }
@@ -240,7 +240,7 @@ impl IChoiceMenus for Runtime {
 
 impl UiRuntime for Runtime {
     /// Publishes a platform service only through the runtime's exclusive mutation boundary.
-    fn set_clipboard(&mut self, clipboard: ComRef<'_, neocogi_ui_core_contracts::ITextClipboardAbi>) -> Result<(), NcStatus> {
+    fn set_clipboard(&mut self, clipboard: ComRef<'_, neocogi_ui::abi::core::ITextClipboardAbi>) -> Result<(), NcStatus> {
         self.storage.factory.host.check_mutation()?;
         let clipboard = clipboard.try_add_ref()?;
         let _context = self.storage.context()?;
@@ -542,7 +542,7 @@ impl Runtime {
             for mut widget in widgets.iter() {
                 // Selection checks the actual receiver's liveness. Every error
                 // from its behavior propagates, including errors from dependencies.
-                let origin = neocogi_ui_core_contracts::EventOrigin::Widget(widget.clone().into_unknown());
+                let origin = neocogi_ui::abi::core::EventOrigin::Widget(widget.clone().into_unknown());
                 let handled = self.storage.factory.state.event_origins.with_origin(origin, || widget.dispatch_next())??;
                 self.storage.open()?;
                 if self.storage.context()?.window_manager.take_dispatch_order_changed() {
@@ -636,14 +636,14 @@ pub mod testing {
     }
     impl OriginDriver {
         /// Enters the synchronous owner boundary omitted by a direct algorithm call.
-        pub fn with_origin<R>(&self, origin: neocogi_ui_core_contracts::EventOrigin, call: impl FnOnce() -> R) -> Result<R, NcStatus> {
+        pub fn with_origin<R>(&self, origin: neocogi_ui::abi::core::EventOrigin, call: impl FnOnce() -> R) -> Result<R, NcStatus> {
             self.state.event_origins.with_origin(origin, call)
         }
     }
     /// Creates the production runtime and its native test dispatcher authority together.
     pub fn create_runtime(
         source: ComRef<'_, IAssetBundleAbi>,
-        gfx: ComRef<'_, neocogi_gfx_contracts::GfxPluginFactoryAbi>,
+        gfx: ComRef<'_, neocogi_gfx_support::abi::GfxPluginFactoryAbi>,
     ) -> Result<(ComPtr<UiRuntimeAbi>, OriginDriver), NcStatus> {
         let runtime = create_runtime_value(source, gfx)?;
         let driver = OriginDriver {

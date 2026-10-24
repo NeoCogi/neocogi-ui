@@ -1,9 +1,9 @@
 //! Real CPU allocation failures cross generated texture calls and the production frame importer.
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcOutputBuffer, NcStatus, NC_E_BUSY, NC_E_INVALID_ARG, NC_E_OUT_OF_MEMORY, com_object};
-use neocogi_gfx_contracts::{GfxCompositorAbi, SolidVertex};
+use neocogi_gfx_support::abi::{GfxCompositorAbi, SolidVertex};
 use neocogi_gfx_impl::GfxCompositorObject;
 use neocogi_render_support::com::{Batch, PreparedFrame, Resources};
-use neocogi_renderer_contracts::*;
+use neocogi_render_core::abi::*;
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,

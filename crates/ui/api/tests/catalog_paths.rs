@@ -10,9 +10,23 @@ fn raw_identifier_catalog_paths_compile_in_exported_forms() {
     let project = tempfile::tempdir().unwrap();
     let directory = project.path();
     fs::create_dir_all(directory.join("contracts/src/bin")).unwrap();
-    fs::create_dir_all(directory.join("contracts/idl/example")).unwrap();
+    fs::create_dir_all(directory.join("idl/example")).unwrap();
     fs::create_dir_all(directory.join("app/src")).unwrap();
     fs::write(directory.join("Cargo.toml"), "[workspace]\nmembers=['contracts','app']\nresolver='3'\n").unwrap();
+    // The provider and application share source, not a Cargo graph owner.
+    for (source_root, namespace) in [
+        ("crates/render/schemas", "neocogi/renderer"),
+        ("crates/platform/schemas", "neocogi/platform"),
+        ("crates/gfx/schemas", "neocogi/gfx"),
+        ("crates/ui/schemas", "neocogi/ui/core"),
+    ] {
+        let module = neocogi_idl::cargo::ModuleSources::load(&root.join(source_root), Path::new(namespace)).unwrap();
+        for (relative, text) in module.parts() {
+            let source = directory.join("idl").join(relative);
+            fs::create_dir_all(source.parent().unwrap()).unwrap();
+            fs::write(source, text).unwrap();
+        }
+    }
     let dependencies = format!(
         "[dependencies]\nneocogi-com={{path={:?},features=['runtime']}}\nneocogi-com-runtime={{path={:?}}}\nneocogi-ui={{path={:?}}}\nneocogi-ui-document={{path={:?}}}\n",
         root.join("crates/com/api"),
@@ -21,22 +35,29 @@ fn raw_identifier_catalog_paths_compile_in_exported_forms() {
         root.join("crates/ui/document"),
     );
     fs::write(directory.join("contracts/Cargo.toml"), format!(
-        "[package]\nname='path-contracts'\nversion='0.0.0'\nedition='2024'\nlinks='nc_contract_6578616d706c652e7061746873'\n{dependencies}neocogi-ui-core-contracts={{path={:?}}}\nserde_json='1'\n[build-dependencies]\nneocogi-idl={{path={:?}}}\n",
-        root.join("crates/ui/core-contracts"), root.join("crates/com/idl"),
+        "[package]\nname='path-contracts'\nversion='0.0.0'\nedition='2024'\n{dependencies}serde_json='1'\n[build-dependencies]\nneocogi-idl={{path={:?}}}\n",
+        root.join("crates/com/idl"),
     )).unwrap();
     fs::write(
         directory.join("contracts/build.rs"),
         r#"
         /// Publishes generated declarations under a Rust raw-identifier module.
         fn main() {
-            neocogi_idl::cargo::Module::new("idl", "example/paths.ncidl")
-                .rust_path("path_contracts::r#type").build().unwrap();
+            for module in neocogi_idl::cargo::SharedSources::new("../idl")
+                .module("example.paths", "path_contracts::r#type")
+                .import("neocogi.ui.core", "neocogi_ui::abi::core")
+                .import("neocogi.renderer", "neocogi_render_core::abi")
+                .import("neocogi.platform", "neocogi_render_core::platform")
+                .import("neocogi.gfx", "neocogi_gfx_support::abi")
+                .build().unwrap() {
+                println!("cargo::rustc-env=PATH_BINDINGS={}", module.include.display());
+            }
         }
     "#,
     )
     .unwrap();
     fs::write(
-        directory.join("contracts/idl/example/paths.ncidl"),
+        directory.join("idl/example/paths.ncidl"),
         r#"
         extern neocogi.ui.core;
         use neocogi.ui.core::{EventBinding, IEvent};
@@ -66,7 +87,7 @@ fn raw_identifier_catalog_paths_compile_in_exported_forms() {
         r#"
         /// Real public module named with a Rust keyword, separate from its IDL identity.
         pub mod r#type {
-            include!(concat!(env!("OUT_DIR"), "/example_paths.include.rs"));
+            include!(env!("PATH_BINDINGS"));
             neocogi_ui::ui_event_sources! { CounterAbi => [ICounterEventAbi]; }
             #[neocogi_com::com_object(interfaces(ICounterEvent), ownership = exclusive)]
             struct Snapshot(CounterEvent);

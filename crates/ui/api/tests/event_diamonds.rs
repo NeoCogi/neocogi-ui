@@ -59,11 +59,11 @@ fn shared_plain_and_generic_ancestors_publish_getters_once() {
     let project = tempfile::tempdir().unwrap();
     fs::create_dir(project.path().join("src")).unwrap();
     fs::write(project.path().join("Cargo.toml"), format!(
-        "[package]\nname='event-diamonds-proof'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\nneocogi-com={{path={:?}}}\nneocogi-ui={{path={:?}}}\nneocogi-ui-core-contracts={{path={:?}}}\nneocogi-ui-design={{path={:?}}}\n",
-        root.join("crates/com/api"), root.join("crates/ui/api"), root.join("crates/ui/core-contracts"), root.join("crates/ui/design"),
+        "[package]\nname='event-diamonds-proof'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\nneocogi-com={{path={:?}}}\nneocogi-ui={{path={:?}}}\nneocogi-ui-design={{path={:?}}}\n",
+        root.join("crates/com/api"), root.join("crates/ui/api"), root.join("crates/ui/design"),
     )).unwrap();
     let mut paths = event_support::paths();
-    paths.insert("neocogi.ui.core", "neocogi_ui_core_contracts").unwrap();
+    paths.insert("neocogi.ui.core", "neocogi_ui::abi::core").unwrap();
     for name in ["contracts", "left", "right", "source"] {
         paths.insert(&format!("proof.{name}"), &format!("event_diamonds_proof::{name}")).unwrap();
     }

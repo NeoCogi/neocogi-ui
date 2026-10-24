@@ -1,7 +1,7 @@
 //! Owned nested layout scopes; neither COM storage nor retained clients borrow a runtime stack.
 use crate::boundary::local_rect;
 use super::HostState;
-use neocogi_ui_core_contracts::*;
+use neocogi_ui::abi::core::*;
 use neocogi_com::{ComPtr, NcStatus, NC_E_INVALID_ARG, com_object};
 use std::{
     cell::{Cell, RefCell},

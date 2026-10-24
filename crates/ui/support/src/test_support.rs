@@ -1,7 +1,7 @@
 //! Canonical resources for provider tests; no fixture substitutes engine behavior.
 use crate::{AtlasHandle, ChromeRole, ChromeState, ControlRole, ControlState, NinePatch, Skin, SurfaceRole, SurfaceState, Visual};
 use neocogi_ui::assets::{AssetData, AssetTables};
-use neocogi_ui_core_contracts::{AssetFont, AssetGlyph, AssetIcon, AssetRange, Insets, Rect, Size};
+use neocogi_ui::abi::core::{AssetFont, AssetGlyph, AssetIcon, AssetRange, Insets, Rect, Size};
 
 /// Activates the production GFX service for fixtures that construct independent UI runtimes.
 ///
@@ -149,15 +149,15 @@ pub fn replace_chrome_patch(skin: &mut Skin, role: ChromeRole, state: ChromeStat
     skin.set_chrome(role, state, Visual::new(patch, skin.chrome(role, state).content_color));
 }
 
-#[neocogi_com::com_object(interfaces(neocogi_ui_core_contracts::ITexture))]
+#[neocogi_com::com_object(interfaces(neocogi_ui::abi::core::ITexture))]
 /// CPU-only immutable texture supplies dimensions without any native GPU handle.
 struct TestImage {
     /// Positive test dimensions used by the real owning facade image wrapper.
-    size: neocogi_ui_core_contracts::Size,
+    size: neocogi_ui::abi::core::Size,
 }
-impl neocogi_ui_core_contracts::ITexture for TestImage {
+impl neocogi_ui::abi::core::ITexture for TestImage {
     /// A real COM projection obeys the production immutable-dimension contract.
-    fn size(&self) -> Result<neocogi_ui_core_contracts::Size, neocogi_com::NcStatus> {
+    fn size(&self) -> Result<neocogi_ui::abi::core::Size, neocogi_com::NcStatus> {
         Ok(self.size)
     }
 }
@@ -165,7 +165,7 @@ impl neocogi_ui_core_contracts::ITexture for TestImage {
 pub fn test_image(width: i32, height: i32) -> neocogi_ui::Image {
     neocogi_ui::Image::from_interface(
         TestImage::from_value(TestImage {
-            size: neocogi_ui_core_contracts::Size { width, height },
+            size: neocogi_ui::abi::core::Size { width, height },
         })
         .query()
         .unwrap(),

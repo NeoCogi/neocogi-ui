@@ -1,9 +1,9 @@
 //! Small value conversions shared by independently owned foreign-facing implementations.
 //!
-//! Contract declarations remain in `neocogi-ui-core-contracts`; this module only validates borrowed UTF-8
+//! Contract declarations remain in the shared UI IDL, generated in `neocogi_ui::abi::core`; this module only validates borrowed UTF-8
 //! and copies geometry between the contract representation and the retained math representation.
 
-use neocogi_ui_core_contracts::Rect;
+use neocogi_ui::abi::core::Rect;
 use neocogi_com::{NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
 
 /// Validates a whole UTF-8 replacement before touching any live object state.
@@ -30,13 +30,13 @@ pub fn copied_rect(rect: crate::Recti) -> Rect {
 }
 
 /// Resolves one concrete font-role vocabulary for both widget and compact menu presentation.
-pub fn local_font_role(role: neocogi_ui_core_contracts::FontRole) -> Result<crate::FontRole, NcStatus> {
+pub fn local_font_role(role: neocogi_ui::abi::core::FontRole) -> Result<crate::FontRole, NcStatus> {
     match role {
-        neocogi_ui_core_contracts::FontRole::Body => Ok(crate::FontRole::Body),
-        neocogi_ui_core_contracts::FontRole::Small => Ok(crate::FontRole::Small),
-        neocogi_ui_core_contracts::FontRole::Title => Ok(crate::FontRole::Title),
-        neocogi_ui_core_contracts::FontRole::Heading => Ok(crate::FontRole::Heading),
-        neocogi_ui_core_contracts::FontRole::Mono => Ok(crate::FontRole::Mono),
+        neocogi_ui::abi::core::FontRole::Body => Ok(crate::FontRole::Body),
+        neocogi_ui::abi::core::FontRole::Small => Ok(crate::FontRole::Small),
+        neocogi_ui::abi::core::FontRole::Title => Ok(crate::FontRole::Title),
+        neocogi_ui::abi::core::FontRole::Heading => Ok(crate::FontRole::Heading),
+        neocogi_ui::abi::core::FontRole::Mono => Ok(crate::FontRole::Mono),
         _ => Err(NC_E_INVALID_ARG),
     }
 }

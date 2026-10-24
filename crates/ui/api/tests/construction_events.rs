@@ -61,8 +61,8 @@ fn constructor_owns_one_permanent_sink_and_publishes_its_reachable_types() {
     fs::write(
         project.path().join("Cargo.toml"),
         format!(
-            "[package]\nname='construction-events-proof'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\nneocogi-com={{path={:?}}}\nneocogi-ui={{path={:?}}}\nneocogi-ui-core-contracts={{path={:?}}}\nneocogi-ui-design={{path={:?}}}\n",
-            root().join("crates/com/api"), root().join("crates/ui/api"), root().join("crates/ui/core-contracts"), root().join("crates/ui/design")
+            "[package]\nname='construction-events-proof'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\nneocogi-com={{path={:?}}}\nneocogi-ui={{path={:?}}}\nneocogi-ui-design={{path={:?}}}\n",
+            root().join("crates/com/api"), root().join("crates/ui/api"), root().join("crates/ui/design")
         ),
     )
     .unwrap();
@@ -125,7 +125,7 @@ fn constructor_owns_one_permanent_sink_and_publishes_its_reachable_types() {
 fn generate_rust(graph: &neocogi_idl::ResolvedModules, module: &str) -> Result<String, neocogi_idl::GenerateError> {
     let mut paths = event_support::paths();
     if graph.module("neocogi.ui.core").is_some() {
-        paths.insert("neocogi.ui.core", "neocogi_ui_core_contracts").unwrap();
+        paths.insert("neocogi.ui.core", "neocogi_ui::abi::core").unwrap();
     }
     neocogi_idl::generate::generate_rust_with_paths(graph, module, &paths)
 }

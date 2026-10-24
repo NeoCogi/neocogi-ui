@@ -34,7 +34,6 @@ the Cargo package and `--bin` selects one executable:
 | `neocogi-asset-tools` | `neocogi-atlas-export` | Direct Cargo |
 | `neocogi-asset-tools` | `neocogi-mac-os-9-theme-export` | Direct Cargo; requires `png_source` |
 | `neocogi-inspect` | `neocogi-inspect` | Direct Cargo |
-| `cargo-neocogi` | `cargo-neocogi` | Invoked as `cargo neocogi` |
 
 Windows adds `.exe`. Browser binary targets use the same base names with `.wasm`.
 For example, `cargo build -p neocogi-demo-basic --bin neocogi-demo-calculator`

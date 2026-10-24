@@ -20,11 +20,9 @@ builder = ["neocogi-skin-authoring?/builder"]
 
 [dependencies]
 neocogi-skin-authoring = { workspace = true, optional = true }
-neocogi-gfx-contracts.workspace = true
 neocogi-gfx-support.workspace = true
-neocogi-skin-contracts.workspace = true
 neocogi-appearance.workspace = true
-neocogi-platform-contracts.workspace = true
+neocogi-render-core.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
 
 [dev-dependencies]

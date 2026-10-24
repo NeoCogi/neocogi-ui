@@ -6,8 +6,7 @@
 - [WebGL](WEB.md) — build, serve, input and browser deployment.
 - [Cargo features](FEATURES.md) — feature ownership and supported selections.
 - [IDL source maps](IDL_SOURCE_MAPS.md) — generated provenance and source lookup.
-- [cargo neocogi](../../tools/cargo-neocogi/README.md),
-  [IDL CLI](../../tools/idl/README.md), and
+- [IDL compiler library](../../crates/com/idl/README.md) and
   [COM inspection](../../tools/neocogi-inspect/README.md).
 - [Theme editor](../../tools/theme-editor/README.md),
   [UI designer](../../tools/ui-designer/README.md), and

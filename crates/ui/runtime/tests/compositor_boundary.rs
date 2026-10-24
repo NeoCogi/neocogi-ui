@@ -1,8 +1,8 @@
 //! End-to-end coverage for the deployable UI-to-GFX-to-renderer frame path.
 
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, NC_E_OUT_OF_MEMORY, com_object};
-use neocogi_gfx_contracts::{AssetAppearanceRevision, AssetPublisherAbi, GfxPluginFactoryAbi, IAssetBundleAbi};
-use neocogi_renderer_contracts::{IRenderStreamAbi, IRenderer, IRendererAbi, IRendererVtblFor, IRgbaImageAbi, RenderBatch, RenderInfo, RenderVertex};
+use neocogi_gfx_support::abi::{AssetAppearanceRevision, AssetPublisherAbi, GfxPluginFactoryAbi, IAssetBundleAbi};
+use neocogi_render_core::abi::{IRenderStreamAbi, IRenderer, IRendererAbi, IRendererVtblFor, IRgbaImageAbi, RenderBatch, RenderInfo, RenderVertex};
 use neocogi_ui::{Rect, Size, TextWrapping, Ui, UI_E_OWNER};
 use std::{cell::Cell, rc::Rc};
 

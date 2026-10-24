@@ -1,7 +1,7 @@
 //! Standard picker composed by the independently deployed concrete-nodes provider.
 use crate::factory::NodeServices;
-use neocogi_ui_core_contracts::*;
-use neocogi_ui_nodes_contracts::{ContentIcon, CrossSize, FlowDirection, LayoutTrack, LinearEdge};
+use neocogi_ui::abi::core::*;
+use neocogi_ui::abi::nodes::{ContentIcon, CrossSize, FlowDirection, LayoutTrack, LinearEdge};
 use neocogi_ui::{ScrollAreaWidget, TextBlockWidget, TextboxWidget};
 use neocogi_com::{
     ComBox, WeakComBox, ComPtr, ComRef, WeakLocalBox, INcStringComPtrExt, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString, NC_E_INVALID_ARG,
@@ -146,7 +146,7 @@ impl Model {
         if !self.finish_request()? {
             return Ok(false);
         }
-        let event = neocogi_ui_core_contracts::events::file_cancelled()?;
+        let event = neocogi_ui::abi::core::events::file_cancelled()?;
         self.request.post(event)?;
         Ok(true)
     }
@@ -164,7 +164,7 @@ impl Model {
         // Capture the exact native identity once at commit, not through a lossy
         // display label or a dispatcher-time reconstruction of this model.
         if self.finish_request()? {
-            let event = neocogi_ui_core_contracts::events::file_accepted(neocogi_ui::NativePath::new(&path).into_interface())?;
+            let event = neocogi_ui::abi::core::events::file_accepted(neocogi_ui::NativePath::new(&path).into_interface())?;
             self.request.post(event)?;
         }
         Ok(())
@@ -486,7 +486,7 @@ impl FileDialog {
         .into_iter()
         .enumerate()
         {
-            neocogi_ui_nodes_contracts::Linear::insert(&mut shell, index as u32, child, LinearEdge::new(track)).map_err(|(status, _unpublished)| status)?;
+            neocogi_ui::abi::nodes::Linear::insert(&mut shell, index as u32, child, LinearEdge::new(track)).map_err(|(status, _unpublished)| status)?;
         }
         let request = Request {
             phase: RequestPhase::Idle,

@@ -13,11 +13,9 @@ default = []
 test-support = ["neocogi-ui/test-support", "dep:neocogi-appearance", "dep:neocogi-gfx"]
 
 [dependencies]
-neocogi-renderer-contracts.workspace = true
 neocogi-appearance = { workspace = true, optional = true }
 neocogi-gfx = { workspace = true, optional = true }
 neocogi-ui.workspace = true
-neocogi-ui-core-contracts.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
 neocogi-render-core.workspace = true
 bitflags.workspace = true

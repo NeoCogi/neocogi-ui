@@ -1,2 +1,2 @@
-//! Common source-owned IDL contract, compiled independently in both artifact graphs.
-pub use neocogi_runtime_probe_contracts::*;
+//! This consumer's independently generated probe interface.
+include!(env!("IDL_REGISTRY_PROBE"));

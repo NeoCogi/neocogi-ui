@@ -8,7 +8,9 @@
 //! Pure appearance compilation shared by resource construction and Skin policy.
 #![deny(missing_docs)]
 
-use neocogi_gfx_contracts::*;
+extern crate self as neocogi_appearance;
+
+use neocogi_gfx_support::abi::*;
 use neocogi_gfx_support::AssetData;
 use neocogi_gfx_support::{ChromeState, ControlState, MenuState, PointerState, SurfaceState};
 
@@ -278,3 +280,6 @@ fn flat_chrome_visual(frame_insets: Insets, palette: &FlatPalette, role: ChromeR
     patch.content_color = rgba(content_color);
     patch
 }
+
+/// Shared Skin ABI, independent of optional JSON theme authoring.
+pub mod skin;

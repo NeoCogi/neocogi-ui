@@ -92,7 +92,7 @@ impl TextboxParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Textbox, ownership = exclusive)]
+#[neocogi_com::com_object(neocogi_ui::abi::nodes::Textbox, ownership = exclusive)]
 /// Concrete retained textbox and dynamically constructible COM object.
 pub struct Textbox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -189,12 +189,12 @@ impl Textbox {
         let outcome = textbox_update(ctx, input, &mut self.buf, &mut self.cursor, &mut self.editing, font, self.runtime.state.host());
         if outcome.changed {
             // Preserve committed measurement/placement changes even if posting fails.
-            self.runtime.state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
-            let event = neocogi_ui_core_contracts::events::text_changed(&self.buf, self.cursor as u64)?;
+            self.runtime.state.record_change(neocogi_ui::abi::core::GeometryChange::Changed);
+            let event = neocogi_ui::abi::core::events::text_changed(&self.buf, self.cursor as u64)?;
             self.runtime.state.post(event)?;
         }
         if outcome.submitted {
-            let event = neocogi_ui_core_contracts::events::text_submitted(&self.buf)?;
+            let event = neocogi_ui::abi::core::events::text_submitted(&self.buf)?;
             self.runtime.state.post(event)?;
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
@@ -216,7 +216,7 @@ pub(crate) fn textbox_update(
     cursor: &mut usize,
     editing: &mut super::editing::Editing,
     font: FontId,
-    host: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetHostAbi>,
+    host: neocogi_com::ComRef<'_, neocogi_ui::abi::core::IWidgetHostAbi>,
 ) -> TextboxUpdateOutcome {
     let mut outcome = TextboxUpdateOutcome::default();
     let r = ctx.local_rect();
@@ -625,8 +625,8 @@ mod tests {
 }
 
 use crate::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_core_contracts::{GeometryChange, IWidgetHostAbi, FontRole};
-use neocogi_ui_nodes_contracts::{TextboxAbi};
+use neocogi_ui::abi::core::{GeometryChange, IWidgetHostAbi, FontRole};
+use neocogi_ui::abi::nodes::{TextboxAbi};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Textbox);
@@ -658,7 +658,7 @@ impl Textbox {
     }
 }
 
-impl neocogi_ui_nodes_contracts::Textbox for Textbox {
+impl neocogi_ui::abi::nodes::Textbox for Textbox {
     /// Returns an immutable snapshot without exposing the semantic String allocation.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;

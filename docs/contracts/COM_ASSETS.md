@@ -2,11 +2,11 @@
 
 | Owner | Responsibility |
 | --- | --- |
-| `neocogi-renderer-contracts` | Renderer-neutral geometry, images, textures and bulk frame interfaces. |
-| `neocogi-ui-core-contracts` | Shared widget/layout, window, popup, menu, and file-dialog protocols. |
-| `neocogi-ui-nodes-contracts` | Concrete built-in widgets, containers, specialized events, and factory. |
-| `neocogi-gfx-contracts` / `neocogi-gfx` | Portable bundle records, PNG upload, font/icon rasterization, and atlas packing. |
-| `neocogi-skin-contracts` / `neocogi-skin` | Typed appearance derivation and optional external JSON themes. |
+| `neocogi-render-core` | Renderer-neutral geometry, images, textures and bulk frame interfaces. |
+| `neocogi-ui` | Shared widget/layout, window, popup, menu, and file-dialog protocols. |
+| `neocogi-ui` | Concrete built-in widgets, containers, specialized events, and factory. |
+| `neocogi-gfx-support` / `neocogi-gfx` | Portable bundle records, PNG upload, font/icon rasterization, and atlas packing. |
+| `neocogi-skin-authoring` / `neocogi-skin` | Typed appearance derivation and optional external JSON themes. |
 | `neocogi-gfx-support` | Bounded portable data validation, immutable publication, and embedded expansion; no plugin identity. |
 | `crates/gfx/impl` | Private decoder, atlas, bundle, and source-export implementation; no plugin identity. |
 | `crates/appearance` | Pure typed appearance compilation shared with offline resource construction. |

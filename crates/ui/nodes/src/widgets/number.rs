@@ -87,7 +87,7 @@ impl NumberParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Number, ownership = exclusive)]
+#[neocogi_com::com_object(neocogi_ui::abi::nodes::Number, ownership = exclusive)]
 /// Concrete retained number input and dynamically constructible COM object.
 pub struct Number {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -178,8 +178,8 @@ impl Number {
         }
         if self.value != last {
             // Preserve committed measurement/placement changes even if posting fails.
-            self.runtime.state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
-            let event = neocogi_ui_nodes_contracts::events::numeric_changed(self.value)?;
+            self.runtime.state.record_change(neocogi_ui::abi::core::GeometryChange::Changed);
+            let event = neocogi_ui::abi::nodes::events::numeric_changed(self.value)?;
             self.runtime.state.post(event)?;
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
@@ -272,8 +272,8 @@ impl crate::widget_object::FontState for Number {
 }
 
 use crate::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_core_contracts::{GeometryChange, IWidgetHostAbi, FontRole};
-use neocogi_ui_nodes_contracts::{NumberAbi, NumberOptions};
+use neocogi_ui::abi::core::{GeometryChange, IWidgetHostAbi, FontRole};
+use neocogi_ui::abi::nodes::{NumberAbi, NumberOptions};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Number);
@@ -306,7 +306,7 @@ impl Number {
     }
 }
 
-impl neocogi_ui_nodes_contracts::Number for Number {
+impl neocogi_ui::abi::nodes::Number for Number {
     /// Reads the finite value owned by the number editor's concrete semantic algorithm.
     fn value(&self) -> Result<f32, NcStatus> {
         self.runtime().state.readable()?;

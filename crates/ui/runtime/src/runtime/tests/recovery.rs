@@ -1,7 +1,7 @@
 //! Actual foreign COM failures cannot strand runtime-owned invalidation.
 use neocogi_com::{com_object, ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, NcValueRef};
 use neocogi_ui::com::widget::WidgetState;
-use neocogi_ui_core_contracts::*;
+use neocogi_ui::abi::core::*;
 use std::{cell::Cell, rc::Rc};
 
 #[derive(Clone, Copy, Debug)]

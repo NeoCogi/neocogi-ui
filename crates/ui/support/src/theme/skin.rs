@@ -10,7 +10,7 @@
 use super::{ChromeRole, ChromeState, ControlRole, ControlState, FontRef, FontRole, IconRole, MenuRole, MenuState, PointerState, SurfaceRole, SurfaceState, Visual};
 use crate::atlas::{AtlasHandle, FontId};
 use crate::render::{Color, NinePatch, NinePatchCell, NinePatchCells, NinePatchImage, SliceInsets};
-use neocogi_ui_core_contracts::{AssetChrome, AssetMetrics, AssetPatch, AssetVisual, Insets};
+use neocogi_ui::abi::core::{AssetChrome, AssetMetrics, AssetPatch, AssetVisual, Insets};
 
 /// Opaque identity of one immutable skin snapshot installed through [`crate::SkinBundle`].
 ///
@@ -256,7 +256,7 @@ impl Skin {
 }
 
 /// Selects one named pointer branch without flattening the generated state structure.
-fn pointer_visual(values: neocogi_ui_core_contracts::AssetPointerVisuals, state: PointerState) -> AssetVisual {
+fn pointer_visual(values: neocogi_ui::abi::core::AssetPointerVisuals, state: PointerState) -> AssetVisual {
     match state {
         PointerState::Normal => values.normal,
         PointerState::Hovered => values.hovered,
@@ -266,7 +266,7 @@ fn pointer_visual(values: neocogi_ui_core_contracts::AssetPointerVisuals, state:
 
 /// Selects one mutable named pointer branch for canonical test editing.
 #[cfg(any(test, feature = "test-support"))]
-fn pointer_visual_mut(values: &mut neocogi_ui_core_contracts::AssetPointerVisuals, state: PointerState) -> &mut AssetVisual {
+fn pointer_visual_mut(values: &mut neocogi_ui::abi::core::AssetPointerVisuals, state: PointerState) -> &mut AssetVisual {
     match state {
         PointerState::Normal => &mut values.normal,
         PointerState::Hovered => &mut values.hovered,

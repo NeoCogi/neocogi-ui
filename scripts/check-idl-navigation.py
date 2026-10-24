@@ -3,7 +3,7 @@
 
 The ordinary mode requires an installed rust-analyzer; --compile-only exercises
 that same source without an editor. Cached Cargo dependencies and the selected
-workspace compiler are used in a temporary independent nodes-contract consumer.
+workspace compiler are used in a temporary independent UI facade consumer.
 Caller-selected CARGO_TARGET_DIR caches are retained; default scratch targets
 and the language-server process are owned by this invocation.
 """
@@ -26,7 +26,7 @@ from contract_check_support import child_environment
 
 # The compiled source is also the sole source of LSP request positions. Markers
 # distinguish separate uses of the same identifier, including a constructor field.
-PROBE_SOURCE = '''use neocogi_ui_nodes_contracts::*;
+PROBE_SOURCE = '''use neocogi_ui::abi::nodes::*;
 pub fn probe(
     _: Option</*abi*/TextboxAbi>,
     _: Option</*client*/TextboxClient>,
@@ -106,7 +106,7 @@ def expected_origin(repository, probe):
     anchors to that declaration so another enum's Fixed/extent cannot substitute
     for LayoutTrack's member. This is fixture expectation lookup, not an IDL parser.
     """
-    path = repository / "crates/ui/nodes-contracts/idl/neocogi/ui/nodes" / probe.file
+    path = repository / "crates/ui/schemas/neocogi/ui/nodes" / probe.file
     text = path.read_text(encoding="utf-8")
     if text.count(probe.declaration) != 1:
         raise ValueError("expected authored declaration is ambiguous: " + probe.declaration)
@@ -183,10 +183,10 @@ def prepare_probe(directory, repository):
     source = directory / "src/lib.rs"
     source.parent.mkdir()
     source.write_text(PROBE_SOURCE, encoding="utf-8")
-    dependency = json.dumps(str(repository / "crates/ui/nodes-contracts"))
+    dependency = json.dumps(str(repository / "crates/ui/api"))
     (directory / "Cargo.toml").write_text(
         '[package]\nname="neocogi-navigation-probe"\nversion="0.0.0"\nedition="2024"\n'
-        '[workspace]\n[dependencies]\nneocogi-ui-nodes-contracts={path=' + dependency + '}\n', encoding="utf-8",
+        '[workspace]\n[dependencies]\nneocogi-ui={path=' + dependency + '}\n', encoding="utf-8",
     )
     return source
 

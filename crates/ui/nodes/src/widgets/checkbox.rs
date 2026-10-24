@@ -70,7 +70,7 @@ impl CheckboxParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::Checkbox, ownership = exclusive)]
+#[neocogi_com::com_object(neocogi_ui::abi::nodes::Checkbox, ownership = exclusive)]
 /// Concrete retained checkbox and dynamically constructible COM object.
 pub struct Checkbox {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -150,7 +150,7 @@ impl Widget for Checkbox {
         // Windows-style checkboxes toggle with Space; Enter remains available to a default button.
         self.checked = !self.checked;
         let checked = self.checked;
-        let event = neocogi_ui_nodes_contracts::events::checkbox_changed(checked)?;
+        let event = neocogi_ui::abi::nodes::events::checkbox_changed(checked)?;
         self.runtime.state.post(event)?;
 
         // The check mark changes paint only; both states reserve the same icon space.
@@ -204,8 +204,8 @@ impl crate::widget_object::FontState for Checkbox {
 }
 
 use crate::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_core_contracts::{GeometryChange, IWidgetHostAbi, FontRole};
-use neocogi_ui_nodes_contracts::{CheckboxAbi};
+use neocogi_ui::abi::core::{GeometryChange, IWidgetHostAbi, FontRole};
+use neocogi_ui::abi::nodes::{CheckboxAbi};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(Checkbox);
@@ -239,7 +239,7 @@ impl Checkbox {
     }
 }
 
-impl neocogi_ui_nodes_contracts::Checkbox for Checkbox {
+impl neocogi_ui::abi::nodes::Checkbox for Checkbox {
     /// Reads the same boolean state used by pointer/Space updates and paint.
     fn checked(&self) -> Result<bool, NcStatus> {
         self.runtime().state.readable()?;

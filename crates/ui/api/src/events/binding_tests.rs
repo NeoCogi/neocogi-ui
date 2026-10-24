@@ -4,7 +4,7 @@ use super::*;
 use neocogi_com::{ComBox, NcStatus, NcValueRef, NC_E_CLOSED, NC_E_INVALID_ARG};
 use std::{cell::Cell, rc::Rc};
 
-#[neocogi_com::com_object(interfaces(neocogi_ui_core_contracts::IEventReceiver), ownership = exclusive)]
+#[neocogi_com::com_object(interfaces(neocogi_ui::abi::core::IEventReceiver), ownership = exclusive)]
 /// A valid exclusive receiver which must never gain a second owner.
 struct ExclusiveReceiver {
     /// Independent observation of synchronous owner destruction.

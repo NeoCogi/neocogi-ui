@@ -9,9 +9,9 @@ description = "Deployable core retained UI runtime, scoped services, surfaces an
 repository.workspace = true
 categories = ["gui", "rendering"]
 
-links = "nc_contract_6e656f636f67692e75692e72756e74696d652e696e7465726e616c"
 
 [build-dependencies]
+neocogi-render-core.workspace = true
 neocogi-idl.workspace = true
 
 [lib]
@@ -21,26 +21,24 @@ crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 neocogi-ui-support.workspace = true
-neocogi-ui-core-contracts.workspace = true
-neocogi-gfx-contracts.workspace = true
-neocogi-renderer-contracts.workspace = true
+neocogi-ui.workspace = true
+neocogi-gfx-support.workspace = true
+neocogi-render-core.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
 bitflags.workspace = true
 rs-math3d.workspace = true
 
 [dev-dependencies]
 neocogi-ui-document.workspace = true
-neocogi-idl-example-contracts = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "f0481bf3194864596476e7c0ecc81e17c1ddb462" }
 neocogi-ui-nodes.workspace = true
-neocogi-ui-nodes-contracts.workspace = true
 neocogi-ui-support = { workspace = true, features = ["test-support"] }
 neocogi-com = { workspace = true, features = ["runtime"] }
 neocogi-com-runtime.workspace = true
 neocogi-demo-assets = { workspace = true, features = ["embed-assets"] }
 neocogi-gfx-impl = { workspace = true, features = ["publisher"] }
 neocogi-skin-impl.workspace = true
-neocogi-gfx-contracts.workspace = true
-neocogi-skin-contracts.workspace = true
+neocogi-gfx-support.workspace = true
+neocogi-appearance.workspace = true
 neocogi-ui.workspace = true
 tempfile.workspace = true
 trybuild.workspace = true

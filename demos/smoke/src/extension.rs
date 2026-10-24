@@ -1,6 +1,6 @@
 //! Native acceptance uses the same extension protocol in dynamic assemblies and static monoliths.
 use super::*;
-use neocogi_demo_contracts::*;
+use neocogi_ui_samples::abi::*;
 use neocogi_ui::events;
 
 /// Host-local controller owns its labels and the extension's editing projection.

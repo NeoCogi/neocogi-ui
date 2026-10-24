@@ -14,8 +14,8 @@ default = []
 builder = ["dep:neocogi-gfx-impl"]
 
 [dependencies]
+neocogi-render-core.workspace = true
 neocogi-gfx-impl = { workspace = true, optional = true, features = ["builder", "publisher"] }
-neocogi-gfx-contracts.workspace = true
 neocogi-gfx-support.workspace = true
 neocogi-appearance.workspace = true
 neocogi-com = { workspace = true, features = ["macros", "std"] }

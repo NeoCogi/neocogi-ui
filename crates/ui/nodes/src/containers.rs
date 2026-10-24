@@ -106,7 +106,7 @@ pub(super) trait ContainerAlgorithm: crate::widget_object::WidgetAlgorithm + cra
 macro_rules! container_methods {
     () => {
         /// Exposes read-only topology without allowing callers to bypass relationship metadata.
-        fn children(&self) -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::IChildrenAbi>, neocogi_com::NcStatus> {
+        fn children(&self) -> Result<neocogi_com::ComPtr<neocogi_ui::abi::core::IChildrenAbi>, neocogi_com::NcStatus> {
             <Self as crate::widget_object::HostedWidget>::runtime(self).state.readable()?;
             self.editor.view()
         }
@@ -153,7 +153,7 @@ macro_rules! container_edges {
                 <Self as crate::containers::ContainerAlgorithm>::commit_edges(self, prepared);
                 <Self as crate::widget_object::HostedWidget>::runtime_mut(self)
                     .state
-                    .record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
+                    .record_change(neocogi_ui::abi::core::GeometryChange::Changed);
             }
             Ok(())
         }
@@ -162,9 +162,9 @@ macro_rules! container_edges {
         fn insert(
             &mut self,
             index: u32,
-            child: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
+            child: neocogi_com::ComBox<neocogi_ui::abi::core::IWidgetAbi>,
             edge: $edge,
-        ) -> Result<(), (neocogi_com::NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
+        ) -> Result<(), (neocogi_com::NcStatus, neocogi_com::ComBox<neocogi_ui::abi::core::IWidgetAbi>)> {
             let prepared = (|| {
                 <Self as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
                 let edge = $decode(edge)?;
@@ -183,9 +183,9 @@ macro_rules! container_edges {
         fn replace(
             &mut self,
             index: u32,
-            child: neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>,
+            child: neocogi_com::ComBox<neocogi_ui::abi::core::IWidgetAbi>,
             edge: $edge,
-        ) -> Result<(), (neocogi_com::NcStatus, neocogi_com::ComBox<neocogi_ui_core_contracts::IWidgetAbi>)> {
+        ) -> Result<(), (neocogi_com::NcStatus, neocogi_com::ComBox<neocogi_ui::abi::core::IWidgetAbi>)> {
             let prepared = (|| {
                 <Self as crate::widget_object::HostedWidget>::runtime(self).state.writable()?;
                 let edge = $decode(edge)?;
@@ -203,21 +203,21 @@ macro_rules! container_edges {
 }
 
 /// Validates one typed track before topology or semantic mutation begins.
-pub(super) fn local_track(track: neocogi_ui_nodes_contracts::LayoutTrack) -> Result<crate::TrackSize, neocogi_com::NcStatus> {
+pub(super) fn local_track(track: neocogi_ui::abi::nodes::LayoutTrack) -> Result<crate::TrackSize, neocogi_com::NcStatus> {
     match track {
-        neocogi_ui_nodes_contracts::LayoutTrack::Content => Ok(crate::TrackSize::Content),
-        neocogi_ui_nodes_contracts::LayoutTrack::Fixed { extent } if extent >= 0 => Ok(crate::TrackSize::Fixed(extent)),
-        neocogi_ui_nodes_contracts::LayoutTrack::Flex { weight } if weight.is_finite() && weight > 0.0 => Ok(crate::TrackSize::Flex(weight)),
+        neocogi_ui::abi::nodes::LayoutTrack::Content => Ok(crate::TrackSize::Content),
+        neocogi_ui::abi::nodes::LayoutTrack::Fixed { extent } if extent >= 0 => Ok(crate::TrackSize::Fixed(extent)),
+        neocogi_ui::abi::nodes::LayoutTrack::Flex { weight } if weight.is_finite() && weight > 0.0 => Ok(crate::TrackSize::Flex(weight)),
         _ => Err(neocogi_com::NC_E_INVALID_ARG),
     }
 }
 
 /// Copies one retained track policy into the native public contract value.
-pub(super) fn layout_track(track: crate::TrackSize) -> neocogi_ui_nodes_contracts::LayoutTrack {
+pub(super) fn layout_track(track: crate::TrackSize) -> neocogi_ui::abi::nodes::LayoutTrack {
     match track {
-        crate::TrackSize::Content => neocogi_ui_nodes_contracts::LayoutTrack::Content,
-        crate::TrackSize::Fixed(extent) => neocogi_ui_nodes_contracts::LayoutTrack::Fixed { extent },
-        crate::TrackSize::Flex(weight) => neocogi_ui_nodes_contracts::LayoutTrack::Flex { weight },
+        crate::TrackSize::Content => neocogi_ui::abi::nodes::LayoutTrack::Content,
+        crate::TrackSize::Fixed(extent) => neocogi_ui::abi::nodes::LayoutTrack::Fixed { extent },
+        crate::TrackSize::Flex(weight) => neocogi_ui::abi::nodes::LayoutTrack::Flex { weight },
     }
 }
 

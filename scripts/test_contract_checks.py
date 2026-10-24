@@ -34,7 +34,7 @@ class ContractDependencies(unittest.TestCase):
             for consumer in consumers.CONSUMERS:
                 if consumer.implements_objects:
                     manifest = repository / consumer.path / "Cargo.toml"
-                    manifest.parent.mkdir(parents=True)
+                    manifest.parent.mkdir(parents=True, exist_ok=True)
                     manifest.write_text('[dependencies]\nneocogi-com={workspace=true,features=["alloc","macros"]}\n')
             consumers.check_owner_requests(repository)
             for consumer in consumers.CONSUMERS:
@@ -47,8 +47,8 @@ class ContractDependencies(unittest.TestCase):
                     consumers.check_owner_requests(repository)
                 manifest.write_text(original)
 
-    def test_fixture_has_only_its_normal_contract_dependency(self):
-        """Permanent consumers cannot mask their package with an extra COM edge."""
+    def test_fixture_dependencies_match_library_or_local_generation(self):
+        """UI consumers have one normal library edge; local generation uses the SDK."""
         import tomllib
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -56,9 +56,16 @@ class ContractDependencies(unittest.TestCase):
                 directory = root / str(index)
                 consumers.write_consumer(consumer, root, directory)
                 data = tomllib.loads((directory / "Cargo.toml").read_text())
-                self.assertEqual(set(data["dependencies"]), {"contract"})
                 self.assertNotIn("dev-dependencies", data)
-                self.assertEqual(data["dependencies"]["contract"]["package"], consumer.package)
+                if consumer.generated_module:
+                    self.assertEqual(set(data["dependencies"]), {"neocogi-com"})
+                    self.assertEqual(data["dependencies"]["neocogi-com"]["features"], ["alloc"])
+                    self.assertFalse(data["dependencies"]["neocogi-com"]["default-features"])
+                    self.assertEqual(set(data["build-dependencies"]), {"neocogi-idl"})
+                else:
+                    self.assertEqual(set(data["dependencies"]), {"library"})
+                    self.assertEqual(data["dependencies"]["library"]["package"], consumer.package)
+                    self.assertNotIn("build-dependencies", data)
 
 
 class ChildEnvironment(unittest.TestCase):

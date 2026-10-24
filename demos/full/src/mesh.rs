@@ -52,7 +52,7 @@
 //
 //! Suzanne is one local COM widget driving one renderer-owned COM scene.
 use super::{camera::Camera, graphics::*, obj_loader::Obj, polymesh::PolyMesh, view3d::View3D};
-use neocogi_render_mesh_contracts::{IMeshScenesAbi, IMeshSceneAbi, MeshVertex, SceneTransforms};
+use neocogi_render_mesh::abi::{IMeshScenesAbi, IMeshSceneAbi, MeshVertex, SceneTransforms};
 
 /// Concrete camera behavior and cached interface projections share one renderer scene.
 pub(super) struct Suzanne {
@@ -185,7 +185,7 @@ fn mesh_buffers(mesh: &PolyMesh) -> (Vec<MeshVertex>, Vec<u32>) {
 mod viewport_tests {
     use super::*;
     use neocogi_com::com_object;
-    use neocogi_render_mesh_contracts::{IMeshScene, IMeshSceneVtblFor};
+    use neocogi_render_mesh::abi::{IMeshScene, IMeshSceneVtblFor};
     use std::{cell::RefCell, rc::Rc};
 
     #[com_object(interfaces(IMeshScene))]
@@ -239,7 +239,7 @@ mod viewport_tests {
             .unwrap();
         let mut reference = crate::grid::create_grid_view_3d();
         reference.set_viewport(local_rect(visible));
-        let expected: neocogi_render_mesh_contracts::Matrix4 = reference.pvm().into();
+        let expected: neocogi_render_mesh::abi::Matrix4 = reference.pvm().into();
         let edits = transforms.borrow();
         assert_eq!(edits.len(), 1);
         assert_ne!(earlier_projection.col[0].x, widget.view.projection_matrix().col[0].x);

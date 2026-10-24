@@ -1,7 +1,7 @@
 //! Host enqueue policy; shared event decoding lives in provider-independent presentation support.
 use crate::boundary::text;
 use neocogi_com::{NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
-use neocogi_ui_core_contracts::*;
+use neocogi_ui::abi::core::*;
 pub(crate) use neocogi_ui_support::input_contract::{event, snapshot};
 use neocogi_ui_support::input_contract::host_key;
 

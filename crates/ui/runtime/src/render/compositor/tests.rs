@@ -3,7 +3,7 @@
 use super::*;
 use crate::{color, SliceInsets, Vec2i};
 use neocogi_com::{com_object};
-use neocogi_renderer_contracts::*;
+use neocogi_render_core::abi::*;
 use std::{cell::RefCell, rc::Rc};
 
 /// Copied observations outlive a render call without keeping its stream authority active.
@@ -139,16 +139,16 @@ fn atlas() -> AtlasHandle {
         .collect::<Vec<_>>();
     for (icon, is_white) in data.tables.icons.to_mut().iter_mut().zip(white_slots) {
         icon.rect = if is_white {
-            neocogi_ui_core_contracts::Rect { x: 0, y: 0, width: 1, height: 1 }
+            neocogi_ui::abi::core::Rect { x: 0, y: 0, width: 1, height: 1 }
         } else {
-            neocogi_ui_core_contracts::Rect { x: 4, y: 0, width: 4, height: 4 }
+            neocogi_ui::abi::core::Rect { x: 4, y: 0, width: 4, height: 4 }
         };
     }
     for glyph in data.tables.glyphs.to_mut() {
         glyph.advance_x = 4;
         glyph.rect = match char::from_u32(glyph.scalar) {
-            Some('_') => neocogi_ui_core_contracts::Rect { x: 4, y: 4, width: 4, height: 4 },
-            Some(_) => neocogi_ui_core_contracts::Rect { x: 0, y: 4, width: 4, height: 4 },
+            Some('_') => neocogi_ui::abi::core::Rect { x: 4, y: 4, width: 4, height: 4 },
+            Some(_) => neocogi_ui::abi::core::Rect { x: 0, y: 4, width: 4, height: 4 },
             None => unreachable!("the canonical fixture contains only valid scalars"),
         };
     }
@@ -508,7 +508,7 @@ fn solid_replay_preserves_order_across_staging_chunks() {
     let mut vertices = Vec::new();
     for index in 0..300u32 {
         for (x, y) in [(1.0, 1.0), (2.0, 1.0), (1.0, 2.0)] {
-            vertices.push(neocogi_ui_core_contracts::ColoredVertex { x, y, rgba: 0xff000000 | index });
+            vertices.push(neocogi_ui::abi::core::ColoredVertex { x, y, rgba: 0xff000000 | index });
         }
     }
     crate::render::Painter::screen_space(&mut fixture.list, Recti::new(0, 0, 32, 32))

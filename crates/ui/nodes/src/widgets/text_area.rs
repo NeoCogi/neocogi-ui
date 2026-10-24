@@ -98,9 +98,9 @@ use super::text_edit::{
 
 /// Concrete editable text leaf retained as the ordinary content of a [`ScrollArea`].
 #[neocogi_com::com_object(interfaces(
-    neocogi_ui_core_contracts::IMultilineEditor,
-    neocogi_ui_core_contracts::ILeafLayout,
-    neocogi_ui_core_contracts::IFontStyle
+    neocogi_ui::abi::core::IMultilineEditor,
+    neocogi_ui::abi::core::ILeafLayout,
+    neocogi_ui::abi::core::IFontStyle
 ), ownership = exclusive)]
 pub struct TextEditor {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -126,14 +126,14 @@ pub struct TextEditor {
 }
 
 /// Concrete fixed scrolling text-area class with one actual editor child.
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::TextArea, ownership = exclusive)]
+#[neocogi_com::com_object(neocogi_ui::abi::nodes::TextArea, ownership = exclusive)]
 pub struct TextArea {
     /// Exactly three owned structural children: surface and both scrollbar objects.
-    pub(crate) editor: neocogi_com::ComBox<neocogi_ui_core_contracts::IChildrenEditorAbi>,
+    pub(crate) editor: neocogi_com::ComBox<neocogi_ui::abi::core::IChildrenEditorAbi>,
     /// Multiline editing capability of the sole content child.
-    pub(crate) text: neocogi_com::WeakComBox<neocogi_ui_core_contracts::IMultilineEditorAbi>,
+    pub(crate) text: neocogi_com::WeakComBox<neocogi_ui::abi::core::IMultilineEditorAbi>,
     /// Font capability queried from that same content child.
-    pub(crate) font: neocogi_com::WeakComBox<neocogi_ui_core_contracts::IFontStyleAbi>,
+    pub(crate) font: neocogi_com::WeakComBox<neocogi_ui::abi::core::IFontStyleAbi>,
     /// Scalar scrolling state shared with the surface, scrollbars, and editor caret requests.
     pub(crate) model: std::rc::Rc<crate::ScrollModel>,
     /// Private editor facts waiting for the public text-area dispatch scope.
@@ -146,9 +146,9 @@ impl TextArea {
     /// Combines the completed fixed topology and its queried editor capabilities in one class value.
     pub(crate) fn from_runtime(
         runtime: crate::widget_object::WidgetRuntime,
-        editor: neocogi_com::ComBox<neocogi_ui_core_contracts::IChildrenEditorAbi>,
-        text: neocogi_com::WeakComBox<neocogi_ui_core_contracts::IMultilineEditorAbi>,
-        font: neocogi_com::WeakComBox<neocogi_ui_core_contracts::IFontStyleAbi>,
+        editor: neocogi_com::ComBox<neocogi_ui::abi::core::IChildrenEditorAbi>,
+        text: neocogi_com::WeakComBox<neocogi_ui::abi::core::IMultilineEditorAbi>,
+        font: neocogi_com::WeakComBox<neocogi_ui::abi::core::IFontStyleAbi>,
         model: std::rc::Rc<crate::ScrollModel>,
         events: crate::widget_object::CompositeEvents,
     ) -> Self {
@@ -305,12 +305,12 @@ impl TextEditor {
         // Capture committed facts directly; absent destinations discard their owners.
         if outcome.changed {
             // Preserve committed measurement/placement changes even if posting fails.
-            self.runtime.state.record_change(neocogi_ui_core_contracts::GeometryChange::Changed);
-            let event = neocogi_ui_core_contracts::events::text_changed(&self.buf, self.cursor as u64)?;
+            self.runtime.state.record_change(neocogi_ui::abi::core::GeometryChange::Changed);
+            let event = neocogi_ui::abi::core::events::text_changed(&self.buf, self.cursor as u64)?;
             self.runtime.state.post(event)?;
         }
         if outcome.submitted {
-            let event = neocogi_ui_core_contracts::events::text_submitted(&self.buf)?;
+            let event = neocogi_ui::abi::core::events::text_submitted(&self.buf)?;
             self.runtime.state.post(event)?;
         }
         // Only committed value/text changes affect this widget's preferred dimensions.
@@ -712,10 +712,10 @@ use crate::widget_object::{
     HostedWidget, direct_container_layout_impl, direct_leaf_layout_impl, direct_scrolling_impl, direct_widget_phase_impl, set_direct_font_role,
     set_direct_named_font,
 };
-use neocogi_ui_core_contracts::{
+use neocogi_ui::abi::core::{
     GeometryChange, IFontStyle, IMultilineEditor, IMultilineEditorAbi, ITextContent, ITextEditor, IWidgetAbi, IWidgetHostAbi, FontRole, TextWrapping,
 };
-use neocogi_ui_nodes_contracts::{TextAreaAbi};
+use neocogi_ui::abi::nodes::{TextAreaAbi};
 use neocogi_com::{ComPtr, INcStringAbi, NcCopyFromBufferOffset, NcStatus, NcString};
 
 direct_widget_phase_impl!(TextEditor);
@@ -829,7 +829,7 @@ impl TextArea {
     }
 }
 
-impl neocogi_ui_nodes_contracts::TextArea for TextArea {
+impl neocogi_ui::abi::nodes::TextArea for TextArea {
     /// Forwards snapshots after checking the outer object's logical lifetime.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;
@@ -1022,7 +1022,7 @@ mod tests {
         });
         let outer_origin = neocogi_ui::events::EventOrigin::Widget(text_area.0.downgrade().into_unknown());
         text_area.with_origin(outer_origin, |parts| {
-            let mut dispatcher = parts.0.query_weak::<neocogi_ui_core_contracts::IWidgetDispatcherAbi>().unwrap();
+            let mut dispatcher = parts.0.query_weak::<neocogi_ui::abi::core::IWidgetDispatcherAbi>().unwrap();
             while dispatcher.dispatch_next().unwrap() {}
         });
         let mut events = Vec::new();
@@ -1208,7 +1208,7 @@ mod tests {
 }
 
 /// The private editor never publishes itself as the application-facing control.
-impl neocogi_ui_core_contracts::IWidgetDispatcher for TextArea {
+impl neocogi_ui::abi::core::IWidgetDispatcher for TextArea {
     /// Promotes one already captured editor snapshot under the text-area origin.
     fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
         self.events.dispatch_next(&mut self.runtime.state)

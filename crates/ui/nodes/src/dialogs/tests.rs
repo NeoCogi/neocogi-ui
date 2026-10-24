@@ -130,10 +130,10 @@ impl neocogi_ui::events::IEventReceiver for DiscardingCompletion {
 fn active_completions_construct_and_drop_snapshots_with_or_without_a_receiver() {
     use allocations::{Counts, measure};
     let path = PathBuf::from("selected file");
-    let (_, cancelled) = measure(|| drop(neocogi_ui_core_contracts::events::file_cancelled().unwrap()));
+    let (_, cancelled) = measure(|| drop(neocogi_ui::abi::core::events::file_cancelled().unwrap()));
     assert_eq!(cancelled, Counts { allocations: 1, deallocations: 1 });
     let (_, accepted) = measure(|| {
-        drop(neocogi_ui_core_contracts::events::file_accepted(neocogi_ui::NativePath::new(&path).into_interface()).unwrap());
+        drop(neocogi_ui::abi::core::events::file_accepted(neocogi_ui::NativePath::new(&path).into_interface()).unwrap());
     });
     let (_, path_copy) = measure(|| drop(path.clone()));
     for observed in [false, true] {

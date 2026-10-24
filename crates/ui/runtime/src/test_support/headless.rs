@@ -1,7 +1,7 @@
 //! Fixtures assemble real UI and GFX objects; only the final GPU consumer is replaced.
 
 use neocogi_com::{com_object, ComPtr, ComRef, NcStatus};
-use neocogi_renderer_contracts::*;
+use neocogi_render_core::abi::*;
 use neocogi_ui::{IAssetBundleAbi, Ui};
 use std::{cell::RefCell, rc::Rc};
 

@@ -113,9 +113,9 @@ impl<'a> Painter<'a> {
         &mut self,
         rect: Recti,
         color: Color,
-        texture: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextureAbi>,
+        texture: neocogi_com::ComPtr<neocogi_ui::abi::core::ITextureAbi>,
     ) -> Result<(), neocogi_com::NcStatus> {
-        self.com_texture_region(rect, neocogi_ui_core_contracts::TextureRegion::FULL, color, texture)?;
+        self.com_texture_region(rect, neocogi_ui::abi::core::TextureRegion::FULL, color, texture)?;
         Ok(())
     }
 
@@ -123,28 +123,28 @@ impl<'a> Painter<'a> {
     pub fn com_texture_region(
         &mut self,
         rect: Recti,
-        source: neocogi_ui_core_contracts::TextureRegion,
+        source: neocogi_ui::abi::core::TextureRegion,
         color: Color,
-        texture: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextureAbi>,
+        texture: neocogi_com::ComPtr<neocogi_ui::abi::core::ITextureAbi>,
     ) -> Result<(), neocogi_com::NcStatus> {
         self.list.push_com_texture(self.clip, self.screen_rect(rect), source, color, texture)?;
         Ok(())
     }
 
     /// Records application GPU work in the same list as every ordinary widget primitive.
-    pub fn com_item(&mut self, rect: Recti, item: neocogi_com::ComPtr<neocogi_ui_core_contracts::IRenderItemAbi>) -> Result<(), neocogi_com::NcStatus> {
+    pub fn com_item(&mut self, rect: Recti, item: neocogi_com::ComPtr<neocogi_ui::abi::core::IRenderItemAbi>) -> Result<(), neocogi_com::NcStatus> {
         self.list.push_com_item(self.clip, self.screen_rect(rect), item)?;
         Ok(())
     }
 
     /// Appends solid COM geometry directly to the reusable arena; the executor supplies the current
     /// atlas material later, so theme replacement cannot invalidate application-side UV caches.
-    pub fn colored_triangles(&mut self, vertices: &[neocogi_ui_core_contracts::ColoredVertex]) -> Result<(), neocogi_com::NcStatus> {
+    pub fn colored_triangles(&mut self, vertices: &[neocogi_ui::abi::core::ColoredVertex]) -> Result<(), neocogi_com::NcStatus> {
         self.list.push_colored_triangles(self.clip, self.origin, vertices)
     }
 
     /// Copies validated COM atlas geometry and applies this painter's local origin.
-    pub fn atlas_triangles(&mut self, vertices: &[neocogi_ui_core_contracts::RenderVertex]) -> Result<(), neocogi_com::NcStatus> {
+    pub fn atlas_triangles(&mut self, vertices: &[neocogi_ui::abi::core::RenderVertex]) -> Result<(), neocogi_com::NcStatus> {
         self.list.push_atlas_triangles(self.clip, self.origin, vertices)?;
         Ok(())
     }
@@ -227,7 +227,7 @@ impl<'a> Painter<'a> {
     /// non-finite, and self-invalidating inputs safely emit no operation.
     pub fn fill_polygon(&mut self, points: &[Vec2f], color: Color) -> Result<(), neocogi_com::NcStatus> {
         // Reject oversized inputs before even the visibility bounds scan.
-        if points.len() > neocogi_renderer_contracts::MAX_POLYGON_POINTS {
+        if points.len() > neocogi_render_core::abi::MAX_POLYGON_POINTS {
             return Err(neocogi_com::NC_E_OUT_OF_RANGE);
         }
 
@@ -247,7 +247,7 @@ impl<'a> Painter<'a> {
     }
 
     /// Tessellates copied COM polygon points directly into this painter's retained frame storage.
-    pub fn fill_contract_polygon(&mut self, points: &[neocogi_ui_core_contracts::PaintPoint], color: Color) -> Result<(), neocogi_com::NcStatus> {
+    pub fn fill_contract_polygon(&mut self, points: &[neocogi_ui::abi::core::PaintPoint], color: Color) -> Result<(), neocogi_com::NcStatus> {
         if points.len() < 3 || color.a == 0 || !self.clip.has_positive_area() {
             return Ok(());
         }

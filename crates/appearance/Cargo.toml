@@ -9,5 +9,10 @@ description = "Pure typed appearance compilation shared by NeoCogi GFX construct
 publish = false
 
 [dependencies]
-neocogi-gfx-contracts.workspace = true
+neocogi-com = { workspace = true, features = ["alloc"] }
+neocogi-render-core.workspace = true
 neocogi-gfx-support.workspace = true
+
+[build-dependencies]
+neocogi-render-core.workspace = true
+neocogi-idl.workspace = true

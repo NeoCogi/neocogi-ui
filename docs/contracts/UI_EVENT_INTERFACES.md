@@ -1,7 +1,7 @@
 # UI event objects
 
 UI owns the common event protocol, declared in ordinary IDL in
-[UI event IDL](../../crates/ui/core-contracts/idl/neocogi/ui/core/events.ncidl).
+[UI event IDL](../../crates/ui/schemas/neocogi/ui/core/events.ncidl).
 `IEvent` is its root interface. Concrete events derive from this interface and
 expose immutable snapshots through ordinary typed COM getters. Event data is
 independent of the producer's subsequent edits and lifetime.
@@ -103,8 +103,8 @@ application message enum. Applications read the event getters directly and may c
 
 ## Concrete UI snapshots
 
-The [core](../../crates/ui/core-contracts/idl/neocogi/ui/core/semantic_events.ncidl)
-and [node](../../crates/ui/nodes-contracts/idl/neocogi/ui/nodes/semantic_events.ncidl)
+The [core](../../crates/ui/schemas/neocogi/ui/core/semantic_events.ncidl)
+and [node](../../crates/ui/schemas/neocogi/ui/nodes/semantic_events.ncidl)
 contracts define event meaning independently of the producer's concrete class:
 
 | Interface | Immutable information |
@@ -169,7 +169,7 @@ the status without rolling back committed widget changes.
 
 ## Validation
 
-[Common error regressions](../../crates/ui/core-contracts/src/event_transport/error.rs) call actual
+[Common error regressions](../../crates/ui/api/src/abi/core/event_transport/error.rs) call actual
 generated getters, preserve unknown negative codes and immutable string identity,
 reject success codes and verify independent event/string lifetimes.
 [Native update and error-origin regressions](../../crates/ui/runtime/src/runtime/tests/direct_posting.rs)

@@ -1,9 +1,9 @@
 //! Direct native update errors cross the generated COM boundary without shadow context state.
 use super::*;
 use neocogi_ui::events::{EventMessage, EventOrigin, IEventAbi, IEventReceiver, IEventReceiverAbi};
-use neocogi_ui_core_contracts::{IClipboardCompletionAbi, ITextClipboard, ITextClipboardAbi};
+use neocogi_ui::abi::core::{IClipboardCompletionAbi, ITextClipboard, ITextClipboardAbi};
 
-#[com_object(interfaces(neocogi_ui_core_contracts::ITextClipboard))]
+#[com_object(interfaces(neocogi_ui::abi::core::ITextClipboard))]
 /// A platform read whose completion the test delivers between real widget ABI calls.
 struct DeferredRead {
     /// The platform retains only the completion capability, never the editor.

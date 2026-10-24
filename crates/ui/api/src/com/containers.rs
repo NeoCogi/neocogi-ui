@@ -214,7 +214,7 @@ impl Axis {
     /// Executes the selected concrete copied-policy read.
     fn copy(
         &self,
-        grid: &neocogi_ui_nodes_contracts::GridClient<neocogi_com::ThreadLocal>,
+        grid: &neocogi_ui::abi::nodes::GridClient<neocogi_com::ThreadLocal>,
         output: neocogi_com::NcOutput<'_, LayoutTrack>,
     ) -> Result<u32, NcStatus> {
         match self {
@@ -223,7 +223,7 @@ impl Axis {
         }
     }
     /// Allocates an ordinary application snapshot without retaining plugin state.
-    fn read(&self, grid: &neocogi_ui_nodes_contracts::GridClient<neocogi_com::ThreadLocal>) -> Result<Vec<LayoutTrack>, NcStatus> {
+    fn read(&self, grid: &neocogi_ui::abi::nodes::GridClient<neocogi_com::ThreadLocal>) -> Result<Vec<LayoutTrack>, NcStatus> {
         let mut values = neocogi_com::NcOutputBuffer::new();
         let count = self.copy(grid, values.output(0, 0))?;
         if self.copy(grid, values.output(0, count as usize))? != count || values.len() != count as usize {

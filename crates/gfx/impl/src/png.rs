@@ -1,9 +1,9 @@
 //! CPU PNG decoding and renderer upload share one bounded RGBA representation.
 use super::Diagnostic;
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, com_object};
-use neocogi_gfx_contracts::*;
-use neocogi_renderer_contracts::*;
-use neocogi_gfx_contracts::MAX_ASSET_PIXELS_BYTES;
+use neocogi_gfx_support::abi::*;
+use neocogi_render_core::abi::*;
+use neocogi_gfx_support::abi::MAX_ASSET_PIXELS_BYTES;
 use std::io::{self, Cursor};
 
 /// Decoded CPU pixels, ready for atlas packing or a texture-factory upload.
@@ -115,7 +115,7 @@ impl RgbaImage {
     }
 }
 
-#[com_object(neocogi_gfx_contracts::PngDecoder)]
+#[com_object(neocogi_gfx_support::abi::PngDecoder)]
 #[derive(Default)]
 /// Decodes PNGs independently of the optional font rasterizer and JSON compiler.
 pub struct PngDecoderObject {
@@ -149,7 +149,7 @@ impl IGfxDiagnostics for PngDecoderObject {
 mod tests {
     use super::*;
     use neocogi_com::{INcStringComPtrExt, NC_E_INVALID_ARG, com_object};
-    use neocogi_renderer_contracts::RENDER_E_BACKEND;
+    use neocogi_render_core::abi::RENDER_E_BACKEND;
     use std::{cell::Cell, rc::Rc};
 
     /// Encodes one tiny source image using an independent writer configuration.

@@ -1,5 +1,7 @@
 //! Concrete layout samples shared by the full demo and the theme editor, with no application model.
 #![deny(missing_docs)]
+extern crate self as neocogi_ui_samples;
+extern crate alloc;
 use neocogi_com::{ComBox, ComInterface, ComRef, NcStatus, ThreadLocal};
 use neocogi_ui::*;
 
@@ -106,3 +108,6 @@ pub fn append_widget(parent: &mut nodes::LinearClient<ThreadLocal>, child: ComBo
     let index = parent.children()?.child_count()?;
     parent.insert(index, child, LinearEdge::new(track)).map_err(|(status, _candidate)| status)
 }
+
+/// Shared IDL bindings and their Rust conveniences.
+pub mod abi;

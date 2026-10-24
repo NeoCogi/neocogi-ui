@@ -4,8 +4,8 @@ extern crate nc_com as _;
 
 use neocogi_com::{ComBox, INcStringComPtrExt, NcStatus, NC_E_DROPPED, NC_E_INVALID_ARG, NC_E_NOINTERFACE};
 use neocogi_ui::events::{IEvent, IEventAbi};
-use neocogi_ui_core_contracts::*;
-use neocogi_ui_nodes_contracts::*;
+use neocogi_ui::abi::core::*;
+use neocogi_ui::abi::nodes::*;
 use neocogi_ui::events as snapshot;
 
 /// Activation carries occurrence and ancestry only; no copied display text exists.
@@ -80,7 +80,7 @@ fn scalar_events_keep_domain_invariants() {
     assert_eq!(snapshot::split_changed(-1).unwrap_err(), NC_E_INVALID_ARG);
 }
 
-#[neocogi_com::com_object(interfaces(neocogi_ui_nodes_contracts::INumericChangedEvent), ownership = exclusive)]
+#[neocogi_com::com_object(interfaces(neocogi_ui::abi::nodes::INumericChangedEvent), ownership = exclusive)]
 /// A foreign provider can reject a getter even after successful QueryInterface.
 struct RejectedNumeric;
 impl IEvent for RejectedNumeric {}

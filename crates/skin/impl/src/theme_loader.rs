@@ -2,12 +2,12 @@
 
 use super::Diagnostic;
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcStatus, com_object};
-use neocogi_gfx_contracts::{AssetLoaderAbi, AssetPublisherAbi, IAssetBundleAbi};
-use neocogi_platform_contracts::INativePathAbi;
-use neocogi_skin_contracts::{ISkinDiagnostics, ThemeLoader};
+use neocogi_gfx_support::abi::{AssetLoaderAbi, AssetPublisherAbi, IAssetBundleAbi};
+use neocogi_render_core::platform::INativePathAbi;
+use neocogi_appearance::skin::{ISkinDiagnostics, ThemeLoader};
 
 /// External theme compiler retaining the one explicit GFX construction capability it needs.
-#[com_object(neocogi_skin_contracts::ThemeLoader)]
+#[com_object(neocogi_appearance::skin::ThemeLoader)]
 pub struct ThemeLoaderObject {
     /// GFX owns all PNG decoding, font rasterization, atlas packing, and bundle construction.
     assets: ComPtr<AssetLoaderAbi>,

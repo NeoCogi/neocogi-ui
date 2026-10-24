@@ -151,16 +151,16 @@ pub use runtime::{Runtime, create_runtime_from_assets};
 pub use runtime::testing;
 
 /// Stateless process entry that creates independent retained UI runtimes.
-#[neocogi_com::com_object(neocogi_ui_core_contracts::UiPluginFactory)]
+#[neocogi_com::com_object(neocogi_ui::abi::core::UiPluginFactory)]
 struct UiPluginFactoryObject;
 
-impl neocogi_ui_core_contracts::UiPluginFactory for UiPluginFactoryObject {
+impl neocogi_ui::abi::core::UiPluginFactory for UiPluginFactoryObject {
     /// Imports the complete revision and privately creates a compositor before publishing a UI.
     fn create_runtime(
         &self,
-        assets: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IAssetBundleAbi>,
-        gfx: neocogi_com::ComRef<'_, neocogi_gfx_contracts::GfxPluginFactoryAbi>,
-    ) -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::UiRuntimeAbi>, neocogi_com::NcStatus> {
+        assets: neocogi_com::ComRef<'_, neocogi_ui::abi::core::IAssetBundleAbi>,
+        gfx: neocogi_com::ComRef<'_, neocogi_gfx_support::abi::GfxPluginFactoryAbi>,
+    ) -> Result<neocogi_com::ComPtr<neocogi_ui::abi::core::UiRuntimeAbi>, neocogi_com::NcStatus> {
         // The same constructor enforces ownership for direct Rust and deployed COM callers.
         create_runtime_from_assets(assets, gfx)
     }
@@ -168,7 +168,7 @@ impl neocogi_ui_core_contracts::UiPluginFactory for UiPluginFactoryObject {
 
 /// Acquires one owned root; object construction remains on its typed methods.
 #[neocogi_com::plugin(name = "neocogi.ui.runtime")]
-fn acquire_root(_runtime: ::neocogi_com::Runtime) -> Result<neocogi_com::ComPtr<neocogi_ui_core_contracts::UiPluginFactoryAbi>, neocogi_com::NcStatus> {
+fn acquire_root(_runtime: ::neocogi_com::Runtime) -> Result<neocogi_com::ComPtr<neocogi_ui::abi::core::UiPluginFactoryAbi>, neocogi_com::NcStatus> {
     UiPluginFactoryObject::from_value(UiPluginFactoryObject).query()
 }
 
@@ -178,3 +178,9 @@ fn acquire_root(_runtime: ::neocogi_com::Runtime) -> Result<neocogi_com::ComPtr<
 // This unit-test executable owns one runtime; normal library builds never embed it.
 #[cfg(test)]
 extern crate nc_com as _;
+
+/// Independently generated protocol used by runtime persistence tests.
+#[cfg(test)]
+pub mod test_example {
+    include!(env!("IDL_NEOCOGI_IDL_EXAMPLE"));
+}

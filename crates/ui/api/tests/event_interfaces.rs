@@ -35,13 +35,13 @@ fn common_receiver_captures_typed_events_without_owning_their_origins() {
     fs::write(
         project.path().join("Cargo.toml"),
         format!(
-            "[package]\nname='event-interfaces-proof'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\nneocogi-com={{path={:?}}}\nneocogi-ui={{path={:?}}}\nneocogi-ui-core-contracts={{path={:?}}}\n",
-            root.join("crates/com/api"), root.join("crates/ui/api"), root.join("crates/ui/core-contracts"),
+            "[package]\nname='event-interfaces-proof'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\nneocogi-com={{path={:?}}}\nneocogi-ui={{path={:?}}}\n",
+            root.join("crates/com/api"), root.join("crates/ui/api"),
         ),
     )
     .unwrap();
     let mut paths = event_support::paths();
-    paths.insert("neocogi.ui.core", "neocogi_ui_core_contracts").unwrap();
+    paths.insert("neocogi.ui.core", "neocogi_ui::abi::core").unwrap();
     fs::write(
         project.path().join("src/lib.rs"),
         neocogi_idl::generate::generate_rust_with_paths(&graph, "proof.events", &paths).unwrap() + include_str!("fixtures/event_interfaces.rs"),

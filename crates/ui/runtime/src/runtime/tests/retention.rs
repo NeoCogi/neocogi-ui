@@ -1,6 +1,6 @@
 //! Generic borrowed clipboard capabilities never imply shareable ownership.
 use super::*;
-use neocogi_ui_core_contracts::{ITextClipboard, ITextClipboardAbi, IClipboardCompletionAbi};
+use neocogi_ui::abi::core::{ITextClipboard, ITextClipboardAbi, IClipboardCompletionAbi};
 
 /// Independent observation of a clipboard allocation's concrete destruction.
 struct Lifetime(Rc<Cell<u32>>);

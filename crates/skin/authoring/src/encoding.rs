@@ -5,7 +5,7 @@
 //! representation is introduced into the contracts.
 
 use std::collections::BTreeMap;
-use neocogi_gfx_contracts::{AssetMetrics, Color, FlatPalette, Insets};
+use neocogi_gfx_support::abi::{AssetMetrics, Color, FlatPalette, Insets};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::ser::{SerializeMap, Error as _};
 use crate::role_keys::DocumentKey;

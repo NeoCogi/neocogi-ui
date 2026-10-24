@@ -1,6 +1,6 @@
 //! Small immutable resources exercise production consumers without font rasterization or files.
 use neocogi_com::ComPtr;
-use neocogi_gfx_contracts::*;
+use neocogi_gfx_support::abi::*;
 use neocogi_gfx_support::{AssetData, AssetTables};
 
 /// Copies the canonical resource representation for assertions about publication and rendering.

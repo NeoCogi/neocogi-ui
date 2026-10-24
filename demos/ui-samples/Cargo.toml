@@ -8,4 +8,8 @@ repository.workspace = true
 
 [dependencies]
 neocogi-ui.workspace = true
-neocogi-com.workspace = true
+neocogi-com = { workspace = true, features = ["std", "macros"] }
+
+[build-dependencies]
+neocogi-render-core.workspace = true
+neocogi-idl.workspace = true

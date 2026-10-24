@@ -257,7 +257,7 @@ pub(super) fn number_textbox_update(
     precision: DecimalPrecision,
     font: FontId,
     value: &mut Real,
-    host: neocogi_com::ComRef<'_, neocogi_ui_core_contracts::IWidgetHostAbi>,
+    host: neocogi_com::ComRef<'_, neocogi_ui::abi::core::IWidgetHostAbi>,
 ) -> bool {
     let shift_click = matches!(input, Some(UiInputEvent::MouseDown { button, .. }) if button.intersects(MouseButton::LEFT))
         && ctx.modifiers().intersects(Modifiers::SHIFT)

@@ -14,11 +14,7 @@ pub trait CustomWidgetFactory {
     /// Returns complete, versioned metadata for this constructible widget kind.
     fn manifest(&self) -> Result<DesignWidgetManifest, String>;
     /// Optional plugin-owned editor. Absence leaves settings read-only in the designer.
-    fn create_editor(
-        &self,
-        _ui: &Ui,
-        _settings: &[u8],
-    ) -> Result<Option<neocogi_com::ComBox<neocogi_ui_document_contracts::IDesignSettingsEditorAbi>>, NcStatus> {
+    fn create_editor(&self, _ui: &Ui, _settings: &[u8]) -> Result<Option<neocogi_com::ComBox<neocogi_ui::abi::document::IDesignSettingsEditorAbi>>, NcStatus> {
         Ok(None)
     }
     /// Constructs one concrete COM identity using the runtime's widget host.
@@ -113,7 +109,7 @@ impl CustomWidgetRegistry {
         kind: &str,
         ui: &Ui,
         settings: &[u8],
-    ) -> Result<Option<neocogi_com::ComBox<neocogi_ui_document_contracts::IDesignSettingsEditorAbi>>, NcStatus> {
+    ) -> Result<Option<neocogi_com::ComBox<neocogi_ui::abi::document::IDesignSettingsEditorAbi>>, NcStatus> {
         neocogi_ui_design::validate_settings_size(settings).map_err(|_| NC_E_INVALID_ARG)?;
         self.entries.get(kind).ok_or(NC_E_INVALID_ARG)?.factory.create_editor(ui, settings)
     }

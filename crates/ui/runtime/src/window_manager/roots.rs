@@ -547,7 +547,7 @@ struct RootState {
     /// Expanded outer height retained while the minimize button shows a compact window.
     unminimized_height: Option<i32>,
     /// Strong owner of the unified window geometry/lifecycle event stream.
-    events: neocogi_ui_core_contracts::EventPort,
+    events: neocogi_ui::abi::core::EventPort,
     /// Optional concrete menu bar laid out above the application widget body.
     menu_bar: Option<MenuSurface>,
     /// Descendant viewport policy applied when layout enters direct structural child windows.
@@ -574,7 +574,7 @@ enum PopupState {
         /// Exact screen rectangle supplied by the public popup API.
         anchor: Recti,
         /// Strong owner of policy-driven popup lifecycle events.
-        events: neocogi_ui_core_contracts::EventPort,
+        events: neocogi_ui::abi::core::EventPort,
         /// Whether the next committed layout must select this popup's first keyboard target.
         focus_on_layout: bool,
     },
@@ -689,7 +689,7 @@ impl SurfaceNode {
         }
         // Commit visibility before even the mapper can observe the captured transition.
         match hidden {
-            true => self.emit_window_event(neocogi_ui_core_contracts::events::window_hidden()?),
+            true => self.emit_window_event(neocogi_ui::abi::core::events::window_hidden()?),
             false => Ok(()),
         }
     }
@@ -773,7 +773,7 @@ impl SurfaceNode {
     }
 
     /// Emits one concrete window event at the next safe application dispatch boundary.
-    fn emit_window_event(&mut self, event: neocogi_com::ComBox<neocogi_ui_core_contracts::IEventAbi>) -> Result<(), neocogi_com::NcStatus> {
+    fn emit_window_event(&mut self, event: neocogi_com::ComBox<neocogi_ui::abi::core::IEventAbi>) -> Result<(), neocogi_com::NcStatus> {
         // The record owns its receiver; posting owns no queue and invokes no app behavior.
         let events = &mut self.root_mut().expect("window events are emitted only by roots").events;
         events.post(event)
@@ -785,7 +785,7 @@ impl SurfaceNode {
         self.surface.body.clear_transient_targets();
         if let Some(PopupState::Application { events, .. }) = self.popup_mut() {
             // Menu popups have no unobservable lifecycle port; their visibility is wholly internal.
-            events.post(neocogi_ui_core_contracts::events::popup_dismissed()?)?;
+            events.post(neocogi_ui::abi::core::events::popup_dismissed()?)?;
         }
         Ok(())
     }
@@ -895,7 +895,7 @@ impl SurfaceForest {
     fn collect_dispatch_tree(
         &self,
         key: SurfaceKey,
-        drivers: &mut Vec<neocogi_com::WeakComBox<neocogi_ui_core_contracts::IWidgetDispatcherAbi>>,
+        drivers: &mut Vec<neocogi_com::WeakComBox<neocogi_ui::abi::core::IWidgetDispatcherAbi>>,
     ) -> Result<(), neocogi_com::NcStatus> {
         let entry = &self.index[&key];
         for child in entry.children.iter().rev() {

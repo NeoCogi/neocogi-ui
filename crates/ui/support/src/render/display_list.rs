@@ -45,9 +45,9 @@ use rs_math3d::{Color4b, Recti, Vec2f, Vec2i};
 #[derive(Default)]
 pub struct DisplayList {
     /// Foreign primitive intake is charged before validation scans and retained geometry copies.
-    input_budget: neocogi_renderer_contracts::FrameBudget,
+    input_budget: neocogi_render_core::abi::FrameBudget,
     /// Bounds retained commands, copied bytes, and tessellation for every producer, including chrome.
-    retained_budget: neocogi_renderer_contracts::FrameBudget,
+    retained_budget: neocogi_render_core::abi::FrameBudget,
     /// Operations in final painter order.
     pub ops: Vec<DrawOp>,
     /// Retained solid geometry and its reusable tessellation workspace.
@@ -76,18 +76,18 @@ pub enum DrawKind {
     /// Owned external image used by the COM renderer path.
     ComTexture {
         /// Resource retains its renderer/device until submission and GPU destruction finish.
-        texture: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextureAbi>,
+        texture: neocogi_com::ComPtr<neocogi_ui::abi::core::ITextureAbi>,
         /// Destination in screen coordinates.
         rect: Recti,
         /// Normalized source region, retained through repeated clipping.
-        source: neocogi_ui_core_contracts::TextureRegion,
+        source: neocogi_ui::abi::core::TextureRegion,
         /// Multiplicative tint.
         color: Color,
     },
     /// Concrete application scene capability consumed by its co-packaged renderer.
     ComItem {
         /// No native frame or stack borrow is retained by the display list.
-        item: neocogi_com::ComPtr<neocogi_ui_core_contracts::IRenderItemAbi>,
+        item: neocogi_com::ComPtr<neocogi_ui::abi::core::IRenderItemAbi>,
         /// Unclipped destination in screen coordinates.
         rect: Recti,
     },
@@ -134,8 +134,8 @@ impl DisplayList {
     /// Creates an empty display list.
     pub const fn new() -> Self {
         Self {
-            input_budget: neocogi_renderer_contracts::FrameBudget::new(),
-            retained_budget: neocogi_renderer_contracts::FrameBudget::new(),
+            input_budget: neocogi_render_core::abi::FrameBudget::new(),
+            retained_budget: neocogi_render_core::abi::FrameBudget::new(),
             ops: Vec::new(),
             solid_geometry: SolidGeometry::new(),
             atlas_vertices: Vec::new(),
@@ -145,8 +145,8 @@ impl DisplayList {
 
     /// Removes every recorded operation and triangle while retaining allocated storage for reuse.
     pub fn clear(&mut self) {
-        self.input_budget = neocogi_renderer_contracts::FrameBudget::new();
-        self.retained_budget = neocogi_renderer_contracts::FrameBudget::new();
+        self.input_budget = neocogi_render_core::abi::FrameBudget::new();
+        self.retained_budget = neocogi_render_core::abi::FrameBudget::new();
         self.ops.clear();
         self.solid_geometry.clear();
         self.atlas_vertices.clear();
@@ -161,10 +161,10 @@ impl DisplayList {
 
     /// Bounds both retained point storage and worst-case ear-clipping work before tessellation.
     pub fn reserve_polygon(&mut self, points: usize) -> Result<(), neocogi_com::NcStatus> {
-        if points > neocogi_renderer_contracts::MAX_POLYGON_POINTS {
+        if points > neocogi_render_core::abi::MAX_POLYGON_POINTS {
             return Err(neocogi_com::NC_E_OUT_OF_RANGE);
         }
-        self.reserve_draw(points * core::mem::size_of::<neocogi_ui_core_contracts::PaintPoint>(), points * points)
+        self.reserve_draw(points * core::mem::size_of::<neocogi_ui::abi::core::PaintPoint>(), points * points)
     }
 
     /// Reserves before any retained allocation; foreign intake remains an independent boundary.
@@ -174,7 +174,7 @@ impl DisplayList {
 
     /// Bounds polygon scanning, scratch storage, output triangles, and quadratic triangulation work.
     fn reserve_retained_polygon(&mut self, points: usize) -> Result<(), neocogi_com::NcStatus> {
-        if points > neocogi_renderer_contracts::MAX_POLYGON_POINTS {
+        if points > neocogi_render_core::abi::MAX_POLYGON_POINTS {
             return Err(neocogi_com::NC_E_OUT_OF_RANGE);
         }
         let bytes = points * (core::mem::size_of::<SolidTriangle>() + core::mem::size_of::<Vec2f>() + core::mem::size_of::<usize>());
@@ -182,12 +182,7 @@ impl DisplayList {
     }
 
     /// Retains a complete atlas batch in painter order for final viewport clipping.
-    pub fn push_atlas_triangles(
-        &mut self,
-        clip: Recti,
-        origin: Vec2i,
-        vertices: &[neocogi_ui_core_contracts::RenderVertex],
-    ) -> Result<(), neocogi_com::NcStatus> {
+    pub fn push_atlas_triangles(&mut self, clip: Recti, origin: Vec2i, vertices: &[neocogi_ui::abi::core::RenderVertex]) -> Result<(), neocogi_com::NcStatus> {
         self.reserve_retained(core::mem::size_of_val(vertices), vertices.len())?;
         let first = self.atlas_vertices.len();
         // Translate directly into retained storage, with no intermediate per-operation vector.
@@ -213,7 +208,7 @@ impl DisplayList {
         &mut self,
         clip: Recti,
         origin: Vec2i,
-        vertices: &[neocogi_ui_core_contracts::ColoredVertex],
+        vertices: &[neocogi_ui::abi::core::ColoredVertex],
     ) -> Result<(), neocogi_com::NcStatus> {
         use super::geometry::SolidVertex;
         self.reserve_retained(core::mem::size_of_val(vertices), vertices.len())?;
@@ -238,9 +233,9 @@ impl DisplayList {
         &mut self,
         clip: Recti,
         rect: Recti,
-        source: neocogi_ui_core_contracts::TextureRegion,
+        source: neocogi_ui::abi::core::TextureRegion,
         color: Color,
-        texture: neocogi_com::ComPtr<neocogi_ui_core_contracts::ITextureAbi>,
+        texture: neocogi_com::ComPtr<neocogi_ui::abi::core::ITextureAbi>,
     ) -> Result<(), neocogi_com::NcStatus> {
         self.reserve_retained(0, 4)?;
         self.push(clip, DrawKind::ComTexture { texture, rect, source, color });
@@ -252,7 +247,7 @@ impl DisplayList {
         &mut self,
         clip: Recti,
         rect: Recti,
-        item: neocogi_com::ComPtr<neocogi_ui_core_contracts::IRenderItemAbi>,
+        item: neocogi_com::ComPtr<neocogi_ui::abi::core::IRenderItemAbi>,
     ) -> Result<(), neocogi_com::NcStatus> {
         self.reserve_retained(0, 0)?;
         self.push(clip, DrawKind::ComItem { item, rect });
@@ -324,7 +319,7 @@ impl DisplayList {
     pub fn push_contract_polygon(
         &mut self,
         clip: Recti,
-        points: &[neocogi_ui_core_contracts::PaintPoint],
+        points: &[neocogi_ui::abi::core::PaintPoint],
         color: Color4b,
         offset: Vec2f,
     ) -> Result<(), neocogi_com::NcStatus> {
@@ -422,7 +417,7 @@ mod tests {
         list.push_com_texture(
             clips[3],
             Recti::new(10, 11, 12, 13),
-            neocogi_ui_core_contracts::TextureRegion { u0: 0., v0: 0., u1: 1., v1: 1. },
+            neocogi_ui::abi::core::TextureRegion { u0: 0., v0: 0., u1: 1., v1: 1. },
             color(13, 14, 15, 16),
             crate::test_support::test_image(12, 13).into_interface(),
         )
@@ -530,7 +525,7 @@ mod tests {
     fn internal_commands_are_bounded_and_clear_restores_capacity() {
         let mut list = DisplayList::new();
         let clip = Recti::new(0, 0, 20, 20);
-        for _ in 0..neocogi_renderer_contracts::MAX_DRAW_COMMANDS {
+        for _ in 0..neocogi_render_core::abi::MAX_DRAW_COMMANDS {
             list.push_solid_triangles(clip, &[]).unwrap();
         }
         assert_eq!(
@@ -550,12 +545,12 @@ mod tests {
         let clip = Recti::new(0, 0, 20, 20);
         let atlas = test_atlas();
         let font = atlas.font_id("body").unwrap();
-        let oversized = "x".repeat(neocogi_renderer_contracts::MAX_DRAW_WORK + 1);
+        let oversized = "x".repeat(neocogi_render_core::abi::MAX_DRAW_WORK + 1);
         assert_eq!(
             list.push_text(clip, font, Vec2i::default(), color(1, 2, 3, 255), &oversized),
             Err(neocogi_com::NC_E_OUT_OF_RANGE)
         );
-        let points = vec![Vec2f::new(f32::NAN, 0.0); neocogi_renderer_contracts::MAX_POLYGON_POINTS + 1];
+        let points = vec![Vec2f::new(f32::NAN, 0.0); neocogi_render_core::abi::MAX_POLYGON_POINTS + 1];
         assert_eq!(
             list.push_polygon(clip, &points, color4b(1, 2, 3, 255), Vec2f::default()),
             Err(neocogi_com::NC_E_OUT_OF_RANGE)

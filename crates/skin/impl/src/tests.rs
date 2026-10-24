@@ -2,10 +2,10 @@
 
 use super::ThemeLoaderObject;
 use neocogi_com::{ComPtr, INcStringComPtrExt};
-use neocogi_gfx_contracts::*;
+use neocogi_gfx_support::abi::*;
 use neocogi_gfx_impl::{AssetLoaderObject, AssetPublisherObject};
 use neocogi_gfx_support::{AssetData, AssetTables};
-use neocogi_skin_contracts::{ISkinDiagnosticsAbi, ThemeLoaderAbi};
+use neocogi_appearance::skin::{ISkinDiagnosticsAbi, ThemeLoaderAbi};
 use neocogi_ui::NativePath;
 use neocogi_ui_support::assets::ImportedAssets;
 

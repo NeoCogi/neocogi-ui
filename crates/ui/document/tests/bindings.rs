@@ -62,7 +62,7 @@ fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
             neocogi_ui_document::design::DesignWidgetManifest::from_source(
                 "example.button",
                 self.defaults.clone(),
-                &neocogi_demo_contracts::CounterAbi::EVENT_SOURCE,
+                &neocogi_ui_samples::abi::CounterAbi::EVENT_SOURCE,
             )
         }
         /// Binding generation never constructs a live widget.
@@ -88,7 +88,7 @@ fn custom_widget_contract_generates_checked_field_and_direct_event_binding() {
     );
     assert_eq!(Document::from_json(&document.to_json().unwrap()).unwrap(), document);
     assert_eq!(Document::from_binary(&document.to_binary().unwrap()).unwrap(), document);
-    let events: Vec<_> = neocogi_demo_contracts::CounterAbi::EVENT_SOURCE
+    let events: Vec<_> = neocogi_ui_samples::abi::CounterAbi::EVENT_SOURCE
         .events
         .iter()
         .map(|event| neocogi_ui_document::design::DesignEvent::from_idl(event).unwrap())
@@ -117,7 +117,7 @@ fn custom_factory_cannot_omit_its_event_getter_value_graph() {
 
     /// Fabricated metadata omits reachable value definitions for the declared event getters.
     static HIDDEN_EVENT: InterfaceMetadata = InterfaceMetadata {
-        rust_abi: "neocogi_demo_contracts::ICounterChangedEventAbi",
+        rust_abi: "neocogi_ui_samples::abi::ICounterChangedEventAbi",
         methods: &[neocogi_com::idl_metadata::MethodMetadata {
             name: "value",
             receiver: neocogi_com::NcAbiReceiver::Shared,
@@ -125,11 +125,11 @@ fn custom_factory_cannot_omit_its_event_getter_value_graph() {
             returns: neocogi_com::idl_metadata::MethodType::Value(neocogi_com::idl_metadata::ValueType::Named("example.Missing")),
         }],
         values: &[],
-        ..neocogi_demo_contracts::ICounterChangedEventAbi::IDL_INTERFACE
+        ..neocogi_ui_samples::abi::ICounterChangedEventAbi::IDL_INTERFACE
     };
     /// UI publication requires values reachable only through event getters as well.
     static HIDDEN: neocogi_ui::EventSourceMetadata = neocogi_ui::EventSourceMetadata {
-        interface: &neocogi_demo_contracts::CounterAbi::IDL_INTERFACE,
+        interface: &neocogi_ui_samples::abi::CounterAbi::IDL_INTERFACE,
         events: &[&HIDDEN_EVENT],
     };
     /// A provider whose advertised source metadata disagrees with the COM descriptor.
@@ -223,7 +223,7 @@ fn form_fields_allow_rust_aliases_and_independent_event_revisions() {
     let mut metadata = DesignWidgetManifest::from_source("alias.button", vec![], &neocogi_ui::ButtonAbi::EVENT_SOURCE).unwrap();
     metadata.interface.rust_abi = "neocogi_ui::nodes::ButtonAbi".into();
     for value in &mut metadata.interface.values {
-        value.rust_type = value.rust_type.replace("neocogi_ui_nodes_contracts::", "neocogi_ui::nodes::");
+        value.rust_type = value.rust_type.replace("neocogi_ui::abi::nodes::", "neocogi_ui::nodes::");
     }
     let mut registry = CustomWidgetRegistry::new();
     registry.register(Rc::new(Catalog(metadata.clone()))).unwrap();

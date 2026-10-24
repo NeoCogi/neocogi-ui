@@ -1,7 +1,7 @@
 //! Dynamically linked widget-construction shorthand over concrete COM contracts.
 
-use neocogi_ui_core_contracts::*;
-use neocogi_ui_nodes_contracts::*;
+use neocogi_ui::abi::core::*;
+use neocogi_ui::abi::nodes::*;
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, com_object};
 use std::rc::Rc;
 
@@ -34,7 +34,7 @@ impl NodeServices {
     }
 }
 
-#[com_object(neocogi_ui_nodes_contracts::UiFactory)]
+#[com_object(neocogi_ui::abi::nodes::UiFactory)]
 /// Dynamically linked construction shorthand retaining its products' host and one asset value.
 pub struct UiFactory {
     /// Cohesive typed dependencies captured once when this provider binds to a runtime.
@@ -69,7 +69,7 @@ impl IFileDialogs for UiFactory {
     }
 }
 
-impl neocogi_ui_nodes_contracts::UiFactory for UiFactory {
+impl neocogi_ui::abi::nodes::UiFactory for UiFactory {
     /// Validates complete text and wrapping before constructing the fixed scroll/editor composition.
     fn create_text_area(
         &self,

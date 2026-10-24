@@ -19,7 +19,7 @@ use neocogi.ui.core::{IEvent, EventBinding};
 The contract crate publishes its UI outputs beside the generated bindings:
 
 ```rust,ignore
-neocogi_ui_core_contracts::ui_event_sources! {
+neocogi_ui::abi::core::ui_event_sources! {
     CounterAbi => [IChangedAbi];
 }
 ```
@@ -33,7 +33,7 @@ its snapshot implementation and the events it actually sends.
 
 `DesignWidgetManifest::from_source(kind, defaults, &CounterAbi::EVENT_SOURCE)`
 validates publication before copying an owned catalog record. Import
-`neocogi_ui_core_contracts::UiEventSource` to access the trait constant. For
+`neocogi_ui::abi::core::UiEventSource` to access the trait constant. For
 generic snapshots, declare an ordinary concrete IDL interface derived from the
 closed template, then list its generated ABI marker in the UI declaration.
 Every event must

@@ -1,7 +1,7 @@
 //! Concrete COM ownership at the retained node boundary.
 use crate::boundary::{copied_rect, local_rect};
 use super::Observation;
-use neocogi_ui_core_contracts::*;
+use neocogi_ui::abi::core::*;
 use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG};
 use std::{cell::Cell, rc::Rc};
 use crate::{AtlasHandle, Dimensioni, WidgetOption, KeyboardBehavior, WidgetUpdateCtx, WidgetPaintCtx, UiInputEvent, Constraints, Skin};
@@ -98,7 +98,7 @@ impl ComNode {
     pub(crate) fn update(&mut self, ctx: &mut WidgetUpdateCtx<'_>, input: Option<&UiInputEvent>) -> Result<Change, NcStatus> {
         let state = super::input_contract::snapshot(ctx, input, self.policy().1);
         let (event, text) = super::input_contract::event(input);
-        let origin = neocogi_ui_core_contracts::EventOrigin::Widget(self.widget.downgrade().into_unknown());
+        let origin = neocogi_ui::abi::core::EventOrigin::Widget(self.widget.downgrade().into_unknown());
         let result = self
             .services
             .state

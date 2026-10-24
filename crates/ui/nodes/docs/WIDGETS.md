@@ -60,8 +60,8 @@ there is no later attachment operation.
 Use `*_unobserved` constructors when no events are needed.
 Events own the value captured at the interaction. Ordinary programmatic setters
 remain silent. The [events guide](../../runtime/docs/EVENTS.md) describes delivery; exact interfaces and
-shared capabilities are documented in `neocogi-ui-core-contracts`, concrete
-classes in `neocogi-ui-nodes-contracts`, and clients in the facade's API reference.
+shared capabilities are documented in `neocogi-ui`, concrete
+classes in `neocogi-ui`, and clients in the facade's API reference.
 
 Combo boxes retain a selection-menu hierarchy but no generic application payload.
 `Ui::combo_box_with_queue(parent, items, ChoiceSelection::None, queue)` is the flat convenience: it

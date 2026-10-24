@@ -77,7 +77,7 @@ impl ListItemParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::ListItem, ownership = exclusive)]
+#[neocogi_com::com_object(neocogi_ui::abi::nodes::ListItem, ownership = exclusive)]
 /// Concrete retained list item and dynamically constructible COM object.
 pub struct ListItem {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -169,7 +169,7 @@ impl Widget for ListItem {
         if ctx.action(input, self.keyboard_behavior()) != Some(KeyboardAction::Activate) {
             return Ok(crate::Change::NoChange);
         }
-        let event = neocogi_ui_core_contracts::events::activated()?;
+        let event = neocogi_ui::abi::core::events::activated()?;
         self.runtime.state.post(event)?;
 
         // Submitting preserves the label and icon used by intrinsic measurement.
@@ -270,8 +270,8 @@ mod tests {
 use crate::widget_object::{
     HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_icon_role, set_direct_named_font, set_direct_named_icon,
 };
-use neocogi_ui_core_contracts::{GeometryChange, IWidgetHostAbi, FontRole};
-use neocogi_ui_nodes_contracts::{ContentIcon, ListItemAbi};
+use neocogi_ui::abi::core::{GeometryChange, IWidgetHostAbi, FontRole};
+use neocogi_ui::abi::nodes::{ContentIcon, ListItemAbi};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(ListItem);
@@ -303,7 +303,7 @@ impl ListItem {
     }
 }
 
-impl neocogi_ui_nodes_contracts::ListItem for ListItem {
+impl neocogi_ui::abi::nodes::ListItem for ListItem {
     /// Returns an immutable label snapshot from the concrete row.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;

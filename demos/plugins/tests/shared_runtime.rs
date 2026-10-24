@@ -1,5 +1,6 @@
 //! Cargo builds the probe independently and the host calls it only through the C ABI.
 #![cfg(not(target_arch = "wasm32"))]
+extern crate self as probe_bindings;
 #[allow(dead_code, reason = "the host uses ABI clients; only the separate DLL implements this trait")]
 #[path = "runtime-probe/interface.rs"]
 mod interface;

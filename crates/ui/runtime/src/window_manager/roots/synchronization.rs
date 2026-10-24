@@ -15,8 +15,8 @@ impl WindowManager {
     }
 
     /// Copies current window policy into the canonical COM snapshot without a second state store.
-    pub(crate) fn window_snapshot(&self, window: &WindowHandle) -> Result<neocogi_ui_core_contracts::WindowSnapshot, SurfaceMutationError> {
-        use neocogi_ui_core_contracts::{ChildClip, LayerKind, Rect, Visibility, WindowLayer, WindowOptions, WindowSnapshot};
+    pub(crate) fn window_snapshot(&self, window: &WindowHandle) -> Result<neocogi_ui::abi::core::WindowSnapshot, SurfaceMutationError> {
+        use neocogi_ui::abi::core::{ChildClip, LayerKind, Rect, Visibility, WindowLayer, WindowOptions, WindowSnapshot};
         let id = self.window_id(window)?;
         let node = self.root_node(id)?;
         let root = node.root().expect("validated window has root policy");

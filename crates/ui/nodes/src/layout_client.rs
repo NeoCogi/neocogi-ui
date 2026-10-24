@@ -5,7 +5,7 @@
 use crate::boundary::copied_rect;
 use crate::{Constraints, Dimensioni};
 use neocogi_com::{ComRef, NcStatus};
-use neocogi_ui_core_contracts::*;
+use neocogi_ui::abi::core::*;
 pub(crate) use neocogi_ui_support::layout::constraints;
 use neocogi_ui_support::layout::limits;
 

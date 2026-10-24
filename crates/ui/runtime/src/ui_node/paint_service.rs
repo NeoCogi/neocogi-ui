@@ -1,6 +1,6 @@
 //! Runtime-owned paint state lets COM widgets append directly to the one frame display list.
 use crate::boundary::{copied_rect, local_rect, text};
-use neocogi_ui_core_contracts::*;
+use neocogi_ui::abi::core::*;
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
 use crate::{FontRole, WidgetOption, ControlRole};
 use crate::math::RectExt;
@@ -341,7 +341,7 @@ impl PaintService {
 #[cfg(test)]
 mod intake_tests {
     use super::*;
-    use neocogi_renderer_contracts::{MAX_DRAW_INPUT_BYTES, MAX_POLYGON_POINTS};
+    use neocogi_render_core::abi::{MAX_DRAW_INPUT_BYTES, MAX_POLYGON_POINTS};
 
     /// Budget rejection precedes input parsing/tessellation and survives changes of widget scope.
     #[test]

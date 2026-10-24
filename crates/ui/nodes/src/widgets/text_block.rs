@@ -94,7 +94,7 @@ impl TextBlockParameters {
     }
 }
 
-#[neocogi_com::com_object(neocogi_ui_nodes_contracts::TextBlock, ownership = exclusive)]
+#[neocogi_com::com_object(neocogi_ui::abi::nodes::TextBlock, ownership = exclusive)]
 /// Concrete retained text block and dynamically constructible COM object.
 pub struct TextBlock {
     /// Non-semantic COM lifecycle and host-backed phase resources.
@@ -259,8 +259,8 @@ mod tests {
 }
 
 use crate::widget_object::{HostedWidget, direct_leaf_layout_impl, direct_widget_phase_impl, set_direct_font_role, set_direct_named_font};
-use neocogi_ui_core_contracts::{GeometryChange, IWidgetHostAbi, FontRole, TextWrapping};
-use neocogi_ui_nodes_contracts::{TextBlockAbi};
+use neocogi_ui::abi::core::{GeometryChange, IWidgetHostAbi, FontRole, TextWrapping};
+use neocogi_ui::abi::nodes::{TextBlockAbi};
 use neocogi_com::*;
 
 direct_widget_phase_impl!(TextBlock);
@@ -291,7 +291,7 @@ impl TextBlock {
     }
 }
 
-impl neocogi_ui_nodes_contracts::TextBlock for TextBlock {
+impl neocogi_ui::abi::nodes::TextBlock for TextBlock {
     /// Returns an immutable snapshot without exposing the semantic String allocation.
     fn text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         self.runtime().state.readable()?;

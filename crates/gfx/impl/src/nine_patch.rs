@@ -5,8 +5,8 @@
 //! responsible for clipping those cells into final vertices and publishing renderer batches.
 
 use neocogi_com::{NC_E_INVALID_ARG, NC_E_OUT_OF_RANGE, NcStatus};
-use neocogi_gfx_contracts::{AssetIcon, AssetPatch, Insets, NinePatchDraw};
-use neocogi_renderer_contracts::Rect;
+use neocogi_gfx_support::abi::{AssetIcon, AssetPatch, Insets, NinePatchDraw};
+use neocogi_render_core::abi::Rect;
 
 /// Number of rows and columns in the fixed patch grid.
 const PATCH_AXIS_CELLS: usize = 3;
