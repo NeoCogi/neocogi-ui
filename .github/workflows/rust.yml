@@ -97,12 +97,12 @@ jobs:
       - name: Complete COM quality gate, including workspace formatting and strict rustdoc
         run: bash crates/com/scripts/test-quality.sh
       - name: Local ABI, compile cases, inspector and static runtime selection
-        run: cargo test -p neocogi-com-core -p neocogi-com-codegen -p neocogi-com-macros -p neocogi-com-runtime -p neocogi-inspect -p neocogi-com --features neocogi-com/runtime
+        run: cargo test -p neocogi-com-core -p neocogi-com-macros -p neocogi-com-runtime -p neocogi-inspect -p neocogi-com --features neocogi-com/runtime
       # A debug-only overflow assertion previously let optimized retain return
       # uncounted owners. Exercise the boundary and real C entrypoints in release too.
       - name: Strong-only ownership limits with debug assertions disabled
         run: cargo test -p neocogi-com -p neocogi-com-runtime --lib --release -- --test-threads=1
-      - name: IDL value lowering, malformed input and generated compile cases
+      - name: IDL lowering, shared macro backend and generated compile cases
         run: cargo test -p neocogi-idl
       - name: Install the SDK compiler floor for actual archive tests
         run: rustup toolchain install 1.85.0 --profile minimal

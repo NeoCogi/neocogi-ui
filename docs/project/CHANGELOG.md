@@ -2,6 +2,11 @@
 
 ## 0.0.0 (unreleased)
 
+- Consolidate Rust emission and implementation-macro expansion in
+  `neocogi_idl::codegen`. Remove the standalone backend package; keep the thin
+  procedural macro crate dependent on IDL's ordinary library. Generated COM
+  contracts, ABI v1 and the host-owned global registry retain their semantics.
+
 - Initialize the single COM registry in the host through `#[com_main]`; supply
   immutable service access to plugin acquisition and application libraries.
   Remove the COM runtime DSO/native-link bridge and global/default discovery,
