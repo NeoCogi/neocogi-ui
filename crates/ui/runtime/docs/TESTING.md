@@ -86,7 +86,8 @@ cargo test -p neocogi-ui-runtime --offline
 cargo test -p neocogi-ui-nodes --offline
 cargo test -p neocogi-ui-support --offline
 cargo clippy -p neocogi-ui-runtime -p neocogi-ui-nodes -p neocogi-ui-support --offline --lib --tests --no-deps -- -D warnings
-cargo check -p neocogi-ui-runtime -p neocogi-ui-nodes --offline --no-default-features --features dynamic-plugin
+cargo check -p neocogi-ui-runtime --lib --offline --no-default-features --features dynamic-plugin
+cargo check -p neocogi-ui-nodes --lib --offline --no-default-features --features dynamic-plugin
 ```
 
 `--offline` assumes dependencies are already cached. Core retains headless runtime tests,
@@ -96,9 +97,27 @@ fixtures construct the production runtime through public interfaces and never ob
 core storage. The provider-boundary integration test activates both UI plugin roots and the GFX factory,
 rejects cross-runtime factory binding, and delivers real node events through core routing.
 The two plugin checks independently compile both loader roots. These commands
-require no window system or GPU. Broader workspace validation
-uses `cargo test --workspace --offline`; actual native device and presentation
-checks still use the platform-specific scripts described in `BACKENDS.md`.
+require no window system or GPU. Broader library validation selects the reusable
+packages explicitly, as in [CI](../../../../.github/workflows/rust.yml):
+
+```sh
+cargo test -p neocogi-ui -p neocogi-ui-document --features neocogi-com/runtime --offline
+```
+
+Native applications select one linkage and renderer per build. For example,
+check the dynamic and monolithic graphs separately:
+
+```sh
+cargo check -p neocogi-demo-full --no-default-features --features dynamic,glow --offline
+cargo check -p neocogi-demo-full --no-default-features --features monolith,glow,embed-assets --offline
+```
+
+These native checks need the platform prerequisites in
+[BACKENDS.md](BACKENDS.md). The [feature policy](../../../../docs/guides/FEATURES.md)
+defines the supported separate graphs. An aggregate workspace test mixes dynamic
+discovery exports with static/test providers and is not a supported substitute.
+Actual native device and presentation checks use the backend-specific scripts;
+successful compilation does not establish rendering acceptance.
 
 ## Theme editor deployment acceptance
 

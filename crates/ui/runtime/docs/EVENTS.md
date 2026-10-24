@@ -31,8 +31,10 @@ has expired and the example model deliberately ignores it.
 
 Queue `post` captures a checked `EventOrigin` and moves the COM event owner.
 An event stays readable when its source expires. Its handler decides whether to
-ignore a removed source or consume the captured fact. Event queries return weak
-projections; they cannot clone the event's ownership.
+ignore a removed source or consume the captured fact. `EventMessage::query`
+returns a `ComRef` borrowed from the message's event owner. An observer that must
+outlive the message explicitly uses `message.event.query_weak`; it expires when
+the event owner is dropped. Neither operation clones the event's ownership.
 
 Run the exact walkthrough from the workspace root:
 
@@ -262,7 +264,10 @@ drops the previous root; there is no separate teardown result.
 Concrete receivers, channels and message processors compile into the binary that
 owns them. `IEvent` and `IEventReceiver` belong to UI core; concrete snapshot interfaces
 belong to the UI core, nodes or plugin contracts that define their facts. `IWidget`
-and the single-method `IApplicationDispatcher` belong to UI core contracts.
+and `IApplicationDispatcher` belong to UI core contracts. Its `dispatch_next`
+method executes deferred messages; `input_boundary` records notifications around
+each consumed input outside traversal borrows. The two methods retain their
+distinct dispatch and input-bookkeeping responsibilities.
 The COM process runtime has no UI event loop. Hosts and plugins use the same
 contracts and must be rebuilt together after this ABI change.
 

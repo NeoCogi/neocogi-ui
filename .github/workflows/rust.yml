@@ -130,7 +130,7 @@ jobs:
       - name: Install second compiler for independently selected build policies
         if: matrix.suite == 'build-flags'
         run: rustup toolchain install nightly --profile minimal
-      - name: Build explicit runtime DSO and execute relocated host/plugin communication
+      - name: Build independent providers and execute relocated host-owned runtime communication
         run: python3 crates/com/scripts/compatibility.py --suite ${{ matrix.suite }}
 
   # Miri interprets pure Rust; sanitizers execute the real shared-library boundary.
