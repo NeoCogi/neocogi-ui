@@ -113,7 +113,7 @@ class DefinitionResults(unittest.TestCase):
         probe = next(probe for probe in navigation.PROBES if probe.marker == "field")
         expected_file, expected_range = navigation.expected_origin(REPOSITORY, probe)
         with tempfile.TemporaryDirectory() as temporary:
-            generated = Path(temporary) / "neocogi_ui_nodes.rs"
+            generated = Path(temporary) / "module_0123456789abcdef0123456789abcdef.rs"
             generated.write_text("pub enum Track {\n Fixed { extent: i32 },\n}\n")
             mapping = {
                 "schema": 2, "module": "neocogi.ui.nodes", "generated_file": generated.name,
@@ -125,6 +125,11 @@ class DefinitionResults(unittest.TestCase):
             sidecar = generated.with_suffix(".rs.map")
             sidecar.write_text(json.dumps(mapping))
             navigation.validate_definition(REPOSITORY, probe, result)
+            mapping["module"] = "neocogi.ui.core"
+            sidecar.write_text(json.dumps(mapping))
+            with self.assertRaisesRegex(ValueError, "unexpected generated map identity"):
+                navigation.validate_definition(REPOSITORY, probe, result)
+            mapping["module"] = "neocogi.ui.nodes"
             mapping["sources"][0]["location"] = str(expected_file.with_name("widgets.ncidl"))
             sidecar.write_text(json.dumps(mapping))
             with self.assertRaisesRegex(ValueError, "wrong authored origin"):

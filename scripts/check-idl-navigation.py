@@ -162,8 +162,10 @@ def validate_definition(repository, probe, result):
     if parsed.scheme != "file" or parsed.netloc not in ("", "localhost"):
         raise ValueError("definition is not a local generated file: " + uri)
     generated = Path(unquote(parsed.path)).resolve()
-    if generated.name != "neocogi_ui_nodes.rs":
-        raise ValueError("definition did not reach generated nodes Rust: " + str(generated))
+    if generated.suffix != ".rs":
+        raise ValueError("definition did not reach generated Rust: " + str(generated))
+    # BuildOutput owns filenames. The adjacent map supplies exact module/file
+    # identity, so navigation does not reconstruct a logical-name-derived stem.
     position = scalar_position(generated.read_text(encoding="utf-8"), span["start"])
     mapping = json.loads(generated.with_suffix(".rs.map").read_text(encoding="utf-8"))
     if mapping["schema"] != 2 or mapping["module"] != "neocogi.ui.nodes" or mapping["generated_file"] != generated.name:

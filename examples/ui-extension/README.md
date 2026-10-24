@@ -1,11 +1,11 @@
 # Independent widget and container example
 
-This optional assembly depends only on the facade, UI contracts, example contracts,
-neocogi-com (including its common event channel). It contains a counter and a one-child inset container. It is built and
+This optional provider uses the UI API, demo bindings exposed by the sample
+library and the COM facade. UI owns the event channel. It contains a counter and a one-child inset container. It is built and
 loaded separately from the host, UI, and renderer; ordinary demo packages omit it.
 
 ```sh
-cargo neocogi run --assembly smoke --variant glow --variant extension -- --smoke
+cargo run -p neocogi-demo-smoke --no-default-features --features dynamic-extension,glow -- --smoke
 ```
 
 The extension itself also builds with ordinary Cargo:
@@ -19,7 +19,7 @@ Rust monoliths link its `rlib`; the second command additionally produces a nativ
 static archive. The same event path runs in a monolith with embedded resources:
 
 ```sh
-cargo run -p neocogi-demo-smoke --bin neocogi-demo-smoke --features monolith,extension,embed-assets -- --smoke
+cargo run -p neocogi-demo-smoke --no-default-features --features monolith-extension,glow,embed-assets -- --smoke
 ```
 
 For a headless Glow smoke run, set `SDL_VIDEODRIVER=offscreen`.
@@ -28,7 +28,7 @@ Use `vulkan` or `wgpu` for the other native renderers. The same crate also compi
 for `wasm32-unknown-unknown`; static applications register its descriptor explicitly.
 
 The contracts live in [the demo IDL module](../../demos/schemas/neocogi/demo.ncidl).
-`class Counter: IWidget + ILeafLayout + IWidgetProbe`
+`interface Counter: IWidget + ILeafLayout + IWidgetProbe`
 is the concrete counter contract; `IInset: IContainer` is a reusable capability.
 The registered `ExtensionProvider` factory constructs both with a typed
 `IWidgetHost` argument; Counter also receives `EventBinding`. Factories are the only parameterless activation roots.

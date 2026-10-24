@@ -20,15 +20,14 @@ reuse that allocator. Reload tokens contain `(slot_id, attempt)`; this example's
 Save handler continues to authenticate the widget origin directly. See the
 [reload identity contract](../../docs/contracts/RELOAD_GENERATION_IDENTITY.md).
 
-The `runtime-ui` assembly stages `neocogi-example-ui`. Its Cargo package remains
-`neocogi-runtime-ui-example`; use `--bin neocogi-example-ui` when selecting the
-binary explicitly with ordinary Cargo.
+The `neocogi-runtime-ui-example` Cargo package builds `neocogi-example-ui`.
+Its build stages the selected native providers beside that executable.
 
 ```sh
-cargo neocogi build --assembly runtime-ui
-cargo neocogi run --assembly runtime-ui
-cargo neocogi run --assembly runtime-ui -- path/to/form.ui.json
-cargo neocogi build --assembly runtime-ui --variant monolith
+cargo build -p neocogi-runtime-ui-example
+cargo run -p neocogi-runtime-ui-example
+cargo run -p neocogi-runtime-ui-example -- path/to/form.ui.json
+cargo build -p neocogi-runtime-ui-example --no-default-features --features monolith,glow,embed-assets
 cargo check -p neocogi-runtime-ui-example --target wasm32-unknown-unknown --no-default-features --features webgl
 ```
 
