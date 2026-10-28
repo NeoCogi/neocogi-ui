@@ -63,10 +63,10 @@ use std::{
 
 use neocogi_gfx_impl::atlas;
 /// The command-line and Cargo exporters consume the same concrete file recipe.
-#[path = "../../../../demos/assets/src/recipe.rs"]
+#[path = "../../../../examples/assets/src/recipe.rs"]
 mod recipe;
 /// Compile the shared recipe without linking the demo application's runtime loader.
-#[path = "../../../../demos/assets/src/recipe_data.rs"]
+#[path = "../../../../examples/assets/src/recipe_data.rs"]
 mod recipe_data;
 
 /// Parses the output path and writes the generated atlas source.

@@ -7,7 +7,7 @@ use neocogi_com::{
     NcCopyFromBufferOffset, NcGuid, NC_E_ABI_VERSION, NC_E_INVALID_ARG, NC_E_OUT_OF_RANGE,
 };
 use neocogi_com::persistence::{snapshot, FactoryRegistry, ObjectRecord};
-use crate::test_example::{ICompositionRoot, ICompositionRootAbi};
+use crate::test_composition::{ICompositionRoot, ICompositionRootAbi};
 
 /// Persistent recipe identity remains independent from runtime/widget identities.
 const VIEW_KIND: NcGuid = guid_from_qualified_name("example.persisted-settings-view");
@@ -28,7 +28,7 @@ struct Settings {
 }
 
 /// Private control handles never cross the application's integration boundary.
-#[com_object(interfaces(neocogi_com::persistence::IPersistable, crate::test_example::ICompositionRoot))]
+#[com_object(interfaces(neocogi_com::persistence::IPersistable, crate::test_composition::ICompositionRoot))]
 struct SettingsView {
     /// Mountable composition root.
     root: Option<OwnedWidget<LinearAbi>>,

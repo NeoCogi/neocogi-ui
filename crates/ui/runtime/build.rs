@@ -1,7 +1,9 @@
-//! Compiles private and local test protocols from the shared source tree.
+//! Compiles the runtime protocol and its independently owned persistence fixture.
 #[path = "../../../scripts/idl_build.rs"]
 mod shared_idl;
 fn main() {
-    let request = shared_idl::sources("../../..", &["neocogi.ui.runtime.internal"]).module("neocogi.idl_example", "nc_ui::test_example");
-    shared_idl::build(request);
+    shared_idl::build(shared_idl::sources("../../..", &["neocogi.ui.runtime.internal"]));
+    // The saved-component regression needs only a mountable composition contract,
+    // rather than the independent COM SDK's example objects and event transport.
+    shared_idl::build(neocogi_idl::cargo::SharedSources::new("schemas").module("nc.tests.composition_root", "nc_ui::test_composition"));
 }

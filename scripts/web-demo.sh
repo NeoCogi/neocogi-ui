@@ -3,12 +3,9 @@ set -euo pipefail
 
 workspace_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 target="wasm32-unknown-unknown"
-# Both authoring and demo use one binding/staging implementation with explicit package choices.
-case "${NEOCOGI_WEB_APP:-full}" in
-  full) artifact_name="neocogi-demo-full"; template="demos/full/web/index.html"; site_name="web-demo" ;;
-  theme-editor) artifact_name="neocogi-theme-editor"; template="tools/theme-editor/web/index.html"; site_name="web-theme-editor" ;;
-  *) echo "NEOCOGI_WEB_APP must be full or theme-editor" >&2; exit 2 ;;
-esac
+artifact_name="neocogi-demo-full"
+template="examples/full/web/index.html"
+site_name="web-demo"
 target_dir="${CARGO_TARGET_DIR:-$workspace_root/target}"
 if [[ "$target_dir" != /* ]]; then target_dir="$workspace_root/$target_dir"; fi
 profile="${NEOCOGI_WEB_PROFILE:-release}"

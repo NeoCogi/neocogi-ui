@@ -3,7 +3,7 @@
 
 The runtime previously appeared as a build-tool artifact and silently received
 unoptimized/unwinding settings. Inspect Cargo's own unit graph for the complete
-Vulkan application; real loader/ABI execution lives in demos/plugins tests.
+Vulkan application; real loader/ABI execution lives in examples/plugins tests.
 """
 import json
 from pathlib import Path

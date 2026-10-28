@@ -181,6 +181,6 @@ extern crate neocogi_com_host as _;
 
 /// Independently generated protocol used by runtime persistence tests.
 #[cfg(test)]
-pub mod test_example {
-    include!(env!("IDL_NEOCOGI_IDL_EXAMPLE"));
+pub mod test_composition {
+    include!(env!("IDL_NC_TESTS_COMPOSITION_ROOT"));
 }

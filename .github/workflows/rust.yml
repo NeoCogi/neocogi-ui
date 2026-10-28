@@ -2,7 +2,7 @@ name: Rust
 
 on:
   push:
-    branches: ["master", "0.9-alpha.0"]
+    branches: ["master"]
   pull_request:
 
 permissions:
@@ -42,8 +42,8 @@ jobs:
         run: rustup component add rust-analyzer
       - name: Actual editor definitions and exact authored IDL origins
         run: python3 scripts/check-idl-navigation.py
-      - run: cargo test -p neocogi-ui-runtime -p neocogi-ui-nodes -p neocogi-ui-support
-      - run: cargo test -p neocogi-ui -p neocogi-ui-document --features neocogi-com/runtime
+      - run: cargo test --locked -p neocogi-ui-runtime -p neocogi-ui-nodes -p neocogi-ui-support
+      - run: cargo test --locked -p neocogi-ui -p neocogi-ui-document --features neocogi-com/runtime
 
   assets:
     runs-on: ubuntu-latest
@@ -54,46 +54,26 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       # Allocation failures run in their own executable, alongside every library feature selection.
-      - run: cargo test -p neocogi-gfx-impl --no-default-features --features '${{ matrix.features }}' --lib --test texture_reservation
+      - run: cargo test --locked -p neocogi-gfx-impl --no-default-features --features '${{ matrix.features }}' --lib --test texture_reservation
 
-  # Authoring tests need a real renderer and embedded assets, not just a successful library build.
-  authoring:
+  # Example integration exercises the real renderer, assets and deployment boundaries.
+  examples:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - name: Install the offscreen software OpenGL host
         run: sudo apt-get update -qq && sudo apt-get install -y libsdl2-dev libgl1-mesa-dri
       - name: Validate linked static factory selection
-        run: cargo test -p neocogi-demo-host --features monolith-gfx,glow
+        run: cargo test --locked -p neocogi-demo-host --features monolith-gfx,glow
       # Optional benchmark clients must compile after every ownership/ABI migration.
       - name: Static native composition with the independent extension
         env:
           SDL_VIDEODRIVER: offscreen
-        run: cargo run -p neocogi-demo-smoke --no-default-features --features monolith-extension,glow,embed-assets -- --smoke
+        run: cargo run --locked -p neocogi-demo-smoke --no-default-features --features monolith-extension,glow,embed-assets -- --smoke
       - name: Host registry identity through a Cargo-built probe DLL
-        run: cargo test -p neocogi-demo-plugins -p neocogi-ui-support --test shared_runtime --features neocogi-demo-plugins/glow,neocogi-demo-plugins/skin,neocogi-demo-plugins/extension
+        run: cargo test --locked -p neocogi-demo-plugins -p neocogi-ui-support --test shared_runtime --features neocogi-demo-plugins/glow,neocogi-demo-plugins/skin,neocogi-demo-plugins/extension
       - name: Compile the real COM performance harness
-        run: cargo check -p neocogi-demo-smoke --no-default-features --features benchmark,glow --bin neocogi-com-bench
-      - name: Build the independent provider before designer discovery
-        run: cargo rustc -p neocogi-example-ui-extension --lib --crate-type cdylib --features dynamic-plugin
-      - name: Exercise the real designer and theme editor
-        env:
-          SDL_VIDEODRIVER: offscreen
-        run: cargo test -p neocogi-ui-designer -p neocogi-theme-editor --lib --no-default-features --features neocogi-ui-designer/glow,neocogi-ui-designer/monolith,neocogi-ui-designer/embed-assets,neocogi-theme-editor/glow,neocogi-theme-editor/monolith,neocogi-theme-editor/embed-assets -- --include-ignored --skip benchmark --test-threads=1
-
-  # SDK quality, ABI safety, MSRV and archive gates belong to neocogi-com.
-  # This workspace verifies its own host/provider consumers of the pinned SDK.
-  com-consumers:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    steps:
-      - uses: actions/checkout@v6
-      - name: Relocated monolith using the pinned COM dependency
-        run: cargo test -p neocogi-example-com-host --test build_modes
-
+        run: cargo check --locked -p neocogi-demo-smoke --no-default-features --features benchmark,glow --bin neocogi-com-bench
   native:
     runs-on: ubuntu-latest
     strategy:
@@ -113,17 +93,17 @@ jobs:
         run: python3 scripts/test-native-build.py
       - name: Native staging destination policy
         if: matrix.backend == 'vulkan'
-        run: cargo test -p neocogi-native-layout
+        run: cargo test --locked -p neocogi-native-layout
       - name: Native path privacy, cached renderer switches and relocated startup
         if: matrix.backend == 'vulkan'
         run: |
           xvfb-run -a python3 scripts/test-native-layout.py --cache --run
           xvfb-run -a python3 scripts/test-native-layout.py --profile release --run
-          cargo test -p neocogi-demo-plugins --profile min-size --features vulkan,skin,extension
+          cargo test --locked -p neocogi-demo-plugins --profile min-size --features vulkan,skin,extension
       - name: Backend-specific frame/resource checks
-        run: xvfb-run -a cargo test -p neocogi-render-plugin --lib --no-default-features --features ${{ matrix.backend }} -- --include-ignored
+        run: xvfb-run -a cargo test --locked -p neocogi-render-plugin --lib --no-default-features --features ${{ matrix.backend }} -- --include-ignored
       - name: Check demo and platform warnings for this backend
-        run: cargo clippy -p neocogi-demo-full -p neocogi-demo-basic -p neocogi-render-plugin --all-targets --no-default-features --features dynamic,${{ matrix.backend }} -- -D warnings
+        run: cargo clippy --locked -p neocogi-demo-full -p neocogi-demo-basic -p neocogi-render-plugin --all-targets --no-default-features --features dynamic,${{ matrix.backend }} -- -D warnings
 
   # These jobs validate the native loader/package shape without assuming a hosted runner has a GPU desktop.
   native-platform:
@@ -147,11 +127,11 @@ jobs:
           "LIB=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\lib;$env:LIB" >> $env:GITHUB_ENV
           "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin" >> $env:GITHUB_PATH
       - name: Build Cargo-owned native Glow artifacts
-        run: cargo build -p neocogi-demo-full
+        run: cargo build --locked -p neocogi-demo-full
       - name: Relocated host and independent plugin share the runtime
-        run: cargo test -p neocogi-demo-plugins -p neocogi-ui-support --test shared_runtime --features neocogi-demo-plugins/glow,neocogi-demo-plugins/skin,neocogi-demo-plugins/extension
+        run: cargo test --locked -p neocogi-demo-plugins -p neocogi-ui-support --test shared_runtime --features neocogi-demo-plugins/glow,neocogi-demo-plugins/skin,neocogi-demo-plugins/extension
       - name: Platform-neutral contracts and facade behavior
-        run: cargo test -p neocogi-ui --features neocogi-com/runtime
+        run: cargo test --locked -p neocogi-ui --features neocogi-com/runtime
 
   browser:
     runs-on: ubuntu-latest
@@ -164,7 +144,3 @@ jobs:
         run: scripts/test-browser-input.sh input
       - name: All full-demo themes/images/actions and both animation teardown paths
         run: scripts/test-browser-input.sh full
-      - name: Compile the WebGL designer and exercise browser file transport
-        run: |
-          cargo check -p neocogi-ui-designer --target wasm32-unknown-unknown --no-default-features --features webgl
-          scripts/test-browser-input.sh designer

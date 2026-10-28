@@ -6,10 +6,8 @@ cd "$workspace_root"
 suite="${1:-input}"
 case "$suite" in
   input) package="neocogi-render-plugin"; fixture="crates/render/plugin/tests/browser-input.html" ;;
-  theme-editor) package="neocogi-theme-editor"; fixture="tools/theme-editor/tests/browser-editor.html" ;;
-  designer) package="neocogi-ui-designer"; fixture="tools/ui-designer/tests/browser-files.html" ;;
-  full) package="neocogi-demo-full"; fixture="demos/full/tests/browser-full.html" ;;
-  *) echo "usage: $0 [input|full|theme-editor|designer]" >&2; exit 2 ;;
+  full) package="neocogi-demo-full"; fixture="examples/full/tests/browser-full.html" ;;
+  *) echo "usage: $0 [input|full]" >&2; exit 2 ;;
 esac
 site_dir="${CARGO_TARGET_DIR:-$workspace_root/target}/browser-$suite-tests"
 build_log="$(mktemp)"
@@ -44,10 +42,6 @@ PY
 mkdir -p "$site_dir"
 "$wasm_bindgen" --target web --out-dir "$site_dir" --out-name input-test "$artifact"
 cp "$fixture" "$site_dir/index.html"
-if [[ "$suite" == theme-editor ]]; then
-  cp themes/windows-95/raised.png "$site_dir/raised.png"
-  cp assets/NORMAL.ttf "$site_dir/normal.ttf"
-fi
 python3 -m http.server "$port" --bind 127.0.0.1 --directory "$site_dir" > "$site_dir/server.log" 2>&1 &
 server_pid=$!
 curl --retry-connrefused --retry 10 --retry-delay 1 --fail --silent "http://127.0.0.1:$port" > /dev/null

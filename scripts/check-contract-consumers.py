@@ -54,12 +54,7 @@ CONSUMERS = (
         drop(owner);
         assert!(contract::events::numeric_changed(f32::NAN).is_err());
     ''', namespace="abi::nodes"),
-    Consumer("neocogi-com", "", '''
-        let extent = contract::Extent { width: 640, height: 480 };
-        assert_eq!(extent.width, 640);
-        let _ = contract::ExtentBinding::Unobserved;
-    ''', generated_module="neocogi.idl_example", implements_objects=False),
-    Consumer("neocogi-ui-samples", "demos/ui-samples", '''
+    Consumer("neocogi-ui-samples", "examples/ui-samples", '''
         let owner = contract::events::counter_changed(73).unwrap();
         {
             let fact = owner.query_ref::<contract::ICounterChangedEventAbi>().unwrap();
@@ -97,7 +92,7 @@ def write_consumer(consumer, repository, directory):
         manifest += git_dependency(repository, "neocogi-com", ["alloc"])
         manifest += '[build-dependencies]\n' + git_dependency(repository, "neocogi-idl")
         (directory / "build.rs").write_text(
-            'fn main() { for module in neocogi_idl::cargo::SharedSources::new(' + json.dumps(str(repository / ("examples/schemas" if consumer.generated_module == "neocogi.idl_example" else "crates/render/schemas"))) + ')'
+            'fn main() { for module in neocogi_idl::cargo::SharedSources::new(' + json.dumps(str(repository / "crates/render/schemas")) + ')'
             '.module(' + json.dumps(consumer.generated_module) + ', "contract_consumer_check::contract").build().unwrap() {'
             'println!("cargo::rustc-env=CONSUMER_BINDINGS={}", module.include.display()); } }\n')
         prefix = 'extern crate self as contract_consumer_check;\nmod contract { include!(env!("CONSUMER_BINDINGS")); }\n'
@@ -129,7 +124,7 @@ def check_consumer(consumer, repository, directory, environment):
 
 
 def main():
-    """Check declared owners, then five separate graphs with one owned scratch root."""
+    """Check declared owners, then four separate graphs with one owned scratch root."""
     repository = Path(__file__).resolve().parents[1]
     check_owner_requests(repository)
     environment = child_environment(repository)
@@ -139,7 +134,7 @@ def main():
         environment.setdefault("CARGO_TARGET_DIR", str(root / "target"))
         for index, consumer in enumerate(CONSUMERS):
             check_consumer(consumer, repository, root / str(index), environment)
-    print("three independent UI event consumers and two generated-only controls passed", flush=True)
+    print("three independent UI event consumers and one generated-only renderer control passed", flush=True)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,8 @@
+/// Opaque saved UI composition exposes its mountable root and checked children.
+#[version(1)]
+interface ICompositionRoot {
+    /// Transfers the exclusive root once for the host's mount operation.
+    fn take_root(&mut self) -> Result<ComBox<IUnknown>>;
+    /// Resolves one authored child without retaining ownership of the widget.
+    fn widget(&self, name: &[u8]) -> Result<WeakComBox<IUnknown>>;
+}
