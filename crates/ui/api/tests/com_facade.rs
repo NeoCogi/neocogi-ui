@@ -1,6 +1,6 @@
 //! Exercises the static facade against independent concrete COM implementations.
 // This executable owns the test runtime; no production client dependency is added.
-extern crate nc_com as _;
+extern crate neocogi_com_host as _;
 
 mod tests {
     use neocogi_ui::com::*;

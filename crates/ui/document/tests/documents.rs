@@ -206,4 +206,4 @@ fn json_byte_limit_counts_escaped_text_and_aggregate_overhead() {
 }
 
 // This final integration-test executable owns one embedded runtime.
-extern crate nc_com as _;
+extern crate neocogi_com_host as _;

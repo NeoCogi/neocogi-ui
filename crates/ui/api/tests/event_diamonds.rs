@@ -1,4 +1,6 @@
 //! Canonical getter ancestry must survive local generic projections and catalog transport.
+#[path = "../../../../scripts/com_dependencies.rs"]
+mod com_dependencies;
 #[path = "support/event_support.rs"]
 mod event_support;
 use neocogi_idl::{AbiType, Module, parse_module};
@@ -59,8 +61,8 @@ fn shared_plain_and_generic_ancestors_publish_getters_once() {
     let project = tempfile::tempdir().unwrap();
     fs::create_dir(project.path().join("src")).unwrap();
     fs::write(project.path().join("Cargo.toml"), format!(
-        "[package]\nname='event-diamonds-proof'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\nneocogi-com={{path={:?}}}\nneocogi-ui={{path={:?}}}\nneocogi-ui-design={{path={:?}}}\n",
-        root.join("crates/com/api"), root.join("crates/ui/api"), root.join("crates/ui/design"),
+        "[package]\nname='event-diamonds-proof'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\n{}neocogi-ui={{path={:?}}}\nneocogi-ui-design={{path={:?}}}\n",
+        com_dependencies::dependency("neocogi-com", &["std", "macros"]), root.join("crates/ui/api"), root.join("crates/ui/design"),
     )).unwrap();
     let mut paths = event_support::paths();
     paths.insert("neocogi.ui.core", "neocogi_ui::abi::core").unwrap();

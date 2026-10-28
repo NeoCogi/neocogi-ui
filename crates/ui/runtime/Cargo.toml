@@ -33,7 +33,7 @@ neocogi-ui-document.workspace = true
 neocogi-ui-nodes.workspace = true
 neocogi-ui-support = { workspace = true, features = ["test-support"] }
 neocogi-com = { workspace = true, features = ["runtime"] }
-neocogi-com-runtime.workspace = true
+neocogi-com-host.workspace = true
 neocogi-demo-assets = { workspace = true, features = ["embed-assets"] }
 neocogi-gfx-impl = { workspace = true, features = ["publisher"] }
 neocogi-skin-impl.workspace = true

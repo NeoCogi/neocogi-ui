@@ -9,8 +9,8 @@ use std::{
     rc::Rc,
 };
 
-// Reuse the existing allocation-free, thread-local injector in this independent test executable.
-#[path = "../../../com/api/integration-tests/support/allocation_probe.rs"]
+// This GFX regression owns its allocation-free, thread-local fault injector.
+#[path = "support/allocation_probe.rs"]
 mod allocation_probe;
 // The shared fixture includes a table-copy helper used only by other test executables.
 // This test needs its immutable bundle, with no optional builder, filesystem, or GPU.
@@ -323,4 +323,4 @@ fn texture_reservation_errors_allow_failed_submit_and_next_frame() {
 }
 
 // This final integration-test executable owns one embedded runtime.
-extern crate nc_com as _;
+extern crate neocogi_com_host as _;

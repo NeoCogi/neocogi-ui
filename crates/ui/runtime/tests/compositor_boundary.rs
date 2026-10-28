@@ -223,11 +223,11 @@ fn production_runtime_uses_the_gfx_compositor() {
 }
 
 // This final integration-test executable owns one embedded runtime.
-extern crate nc_com as _;
+extern crate neocogi_com_host as _;
 
 /// Initializes the selected implementation owned by this test executable.
 #[cfg(test)]
 fn host_runtime() -> neocogi_com::Runtime {
     // SAFETY: this explicit host owns the complete immutable process-lived graph.
-    unsafe { neocogi_com::Runtime::__from_host_api(nc_com::initialize_process()) }.expect("compatible test host")
+    unsafe { neocogi_com::Runtime::__from_host_api(neocogi_com_host::initialize_process()) }.expect("compatible test host")
 }

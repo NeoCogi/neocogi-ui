@@ -5,7 +5,7 @@ extern crate self as probe_bindings;
 #[path = "runtime-probe/interface.rs"]
 mod interface;
 use interface::IRegistryProbeAbi;
-use neocogi_com::{Runtime, guid_from_qualified_name};
+use neocogi_com::guid_from_qualified_name;
 
 #[path = "../../../tools/native-layout/src/profile.rs"]
 mod profile;
@@ -87,5 +87,5 @@ fn cargo_host_and_plugin_share_one_runtime_catalog() {
 #[cfg(test)]
 fn host_runtime() -> neocogi_com::Runtime {
     // SAFETY: this explicit host owns the complete immutable process-lived graph.
-    unsafe { neocogi_com::Runtime::__from_host_api(nc_com::initialize_process()) }.expect("compatible test host")
+    unsafe { neocogi_com::Runtime::__from_host_api(neocogi_com_host::initialize_process()) }.expect("compatible test host")
 }

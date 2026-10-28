@@ -1,4 +1,6 @@
 //! Real generated factory calls prove that event ownership starts at construction.
+#[path = "../../../../scripts/com_dependencies.rs"]
+mod com_dependencies;
 #[path = "support/event_support.rs"]
 mod event_support;
 use neocogi_idl::{parse_module};
@@ -61,8 +63,8 @@ fn constructor_owns_one_permanent_sink_and_publishes_its_reachable_types() {
     fs::write(
         project.path().join("Cargo.toml"),
         format!(
-            "[package]\nname='construction-events-proof'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\nneocogi-com={{path={:?}}}\nneocogi-ui={{path={:?}}}\nneocogi-ui-design={{path={:?}}}\n",
-            root().join("crates/com/api"), root().join("crates/ui/api"), root().join("crates/ui/design")
+            "[package]\nname='construction-events-proof'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\n{}neocogi-ui={{path={:?}}}\nneocogi-ui-design={{path={:?}}}\n",
+            com_dependencies::dependency("neocogi-com", &["std", "macros"]), root().join("crates/ui/api"), root().join("crates/ui/design")
         ),
     )
     .unwrap();

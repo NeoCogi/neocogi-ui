@@ -1,4 +1,6 @@
 //! Public walkthroughs run against real providers instead of copied test examples.
+#[path = "../../../../../../scripts/com_dependencies.rs"]
+mod com_dependencies;
 
 use std::{fs, path::Path, process::Command};
 
@@ -35,15 +37,15 @@ fn documented_onboarding_reload_and_event_dispatch_execute() {
         project.path().join("Cargo.toml"),
         format!(
             "[package]\nname='documented-form-events'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\n\
-         neocogi-com={{path={:?},features=['runtime']}}\n\
-         neocogi-com-runtime={{path={:?}}}\n\
+         {}\
+         {}\
          neocogi-ui={{path={:?}}}\n\
          neocogi-ui-document={{path={:?}}}\n\
          neocogi-ui-runtime={{path={:?}}}\n\
          neocogi-ui-nodes={{path={:?}}}\n\
          neocogi-ui-support={{path={:?},features=['test-support']}}\n",
-            root.join("crates/com/api"),
-            root.join("crates/com/runtime"),
+            com_dependencies::dependency("neocogi-com", &["std", "macros", "runtime"]),
+            com_dependencies::dependency("neocogi-com-host", &[]),
             root.join("crates/ui/api"),
             root.join("crates/ui/document"),
             root.join("crates/ui/runtime"),

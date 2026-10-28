@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 import tomllib
 
-from contract_check_support import child_environment
+from contract_check_support import child_environment, git_dependency
 
 
 @dataclass(frozen=True)
@@ -22,9 +22,9 @@ class Consumer:
     """One actual package and its independent executable acceptance body."""
 
     package: str
-    """Published Cargo package selected through its real checkout manifest."""
+    """Cargo package supplying the actual library or generated-only Git SDK."""
     path: str
-    """Repository-relative directory; no package source is copied or replaced."""
+    """Repository-relative owner directory, or empty for generated-only Git consumers."""
     body: str
     """Rust main body that exercises the public contract without importing COM."""
     namespace: str = ""
@@ -54,7 +54,7 @@ CONSUMERS = (
         drop(owner);
         assert!(contract::events::numeric_changed(f32::NAN).is_err());
     ''', namespace="abi::nodes"),
-    Consumer("neocogi-com", "crates/com/api", '''
+    Consumer("neocogi-com", "", '''
         let extent = contract::Extent { width: 640, height: 480 };
         assert_eq!(extent.width, 640);
         let _ = contract::ExtentBinding::Unobserved;
@@ -67,7 +67,7 @@ CONSUMERS = (
         }
         drop(owner);
     ''', namespace="abi"),
-    Consumer("neocogi-com", "crates/com/api", '''
+    Consumer("neocogi-com", "", '''
         let _: Option<contract::IRendererAbi> = None;
     ''', generated_module="neocogi.renderer", implements_objects=False),
 )
@@ -94,8 +94,8 @@ def write_consumer(consumer, repository, directory):
     manifest = ('[package]\nname="contract-consumer-check"\nversion="0.0.0"\nedition="2024"\n'
                 '[workspace]\n[dependencies]\n')
     if consumer.generated_module:
-        manifest += 'neocogi-com={path=' + json.dumps(str(repository / "crates/com/api")) + ',default-features=false,features=["alloc"]}\n'
-        manifest += '[build-dependencies]\nneocogi-idl={path=' + json.dumps(str(repository / "crates/com/idl")) + '}\n'
+        manifest += git_dependency(repository, "neocogi-com", ["alloc"])
+        manifest += '[build-dependencies]\n' + git_dependency(repository, "neocogi-idl")
         (directory / "build.rs").write_text(
             'fn main() { for module in neocogi_idl::cargo::SharedSources::new(' + json.dumps(str(repository / ("examples/schemas" if consumer.generated_module == "neocogi.idl_example" else "crates/render/schemas"))) + ')'
             '.module(' + json.dumps(consumer.generated_module) + ', "contract_consumer_check::contract").build().unwrap() {'

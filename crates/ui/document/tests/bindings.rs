@@ -247,4 +247,4 @@ fn form_fields_allow_rust_aliases_and_independent_event_revisions() {
 }
 
 // This final integration-test executable owns one embedded runtime.
-extern crate nc_com as _;
+extern crate neocogi_com_host as _;

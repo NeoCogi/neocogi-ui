@@ -24,7 +24,7 @@ pub use reload::{Generation, ReloadIds, ReloadSlot, Reloaded};
 
 // This unit-test executable owns one runtime; normal library builds never embed it.
 #[cfg(test)]
-extern crate nc_com as _;
+extern crate neocogi_com_host as _;
 
 /// Local receiver regression bindings; no separate contract package.
 #[cfg(test)]

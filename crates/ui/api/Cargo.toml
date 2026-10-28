@@ -30,7 +30,7 @@ trybuild.workspace = true
 
 # Every integration-test executable owns its linked runtime, independently of
 # production feature unification or a deployed native shared library.
-neocogi-com-runtime.workspace = true
+neocogi-com-host.workspace = true
 
 [build-dependencies]
 neocogi-render-core.workspace = true

@@ -1,4 +1,6 @@
 //! Compile and execute generated message delivery through real COM entry points.
+#[path = "../../../../scripts/com_dependencies.rs"]
+mod com_dependencies;
 
 #[path = "support/event_support.rs"]
 mod event_support;
@@ -74,8 +76,9 @@ fn concrete_messages_cross_com_and_acquire_consumer_ownership() {
     fs::write(
         project.path().join("Cargo.toml"),
         format!(
-            "[package]\nname='message-proof'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\nneocogi-com={{path={0:?}}}\nneocogi-ui={{path={1:?}}}\n",
-            root.join("crates/com/api"), root.join("crates/ui/api"),
+            "[package]\nname='message-proof'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\n{0}neocogi-ui={{path={1:?}}}\n",
+            com_dependencies::dependency("neocogi-com", &["std", "macros"]),
+            root.join("crates/ui/api"),
         ),
     )
     .unwrap();

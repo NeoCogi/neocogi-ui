@@ -18,7 +18,7 @@ monolith = ["neocogi-demo-host/monolith-gfx"]
 embed-assets = ["neocogi-demo-assets/embed-assets"]
 
 [dependencies]
-neocogi-com-runtime.workspace = true
+neocogi-com-host.workspace = true
 neocogi-ui.workspace = true
 neocogi-ui-document.workspace = true
 neocogi-com = { workspace = true, features = ["std", "macros"] }

@@ -162,5 +162,5 @@ pub(crate) use neocogi_ui_support::test_support::assets;
 #[cfg(test)]
 pub(crate) fn host_runtime() -> neocogi_com::Runtime {
     // SAFETY: this explicit host owns the complete immutable process-lived graph.
-    unsafe { neocogi_com::Runtime::__from_host_api(nc_com::initialize_process()) }.expect("compatible test host")
+    unsafe { neocogi_com::Runtime::__from_host_api(neocogi_com_host::initialize_process()) }.expect("compatible test host")
 }

@@ -52,6 +52,13 @@ class ContractDependencies(unittest.TestCase):
         import tomllib
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            # Independent graphs inherit the production Git source and revision,
+            # while their facade deliberately selects allocation without macros.
+            (root / "Cargo.toml").write_text(
+                '[workspace.dependencies]\n'
+                'neocogi-com={git="ssh://git@github.com/NeoCogi/neocogi-com.git",rev="fixture-revision",default-features=false}\n'
+                'neocogi-idl={git="ssh://git@github.com/NeoCogi/neocogi-com.git",rev="fixture-revision"}\n'
+            )
             for index, consumer in enumerate(consumers.CONSUMERS):
                 directory = root / str(index)
                 consumers.write_consumer(consumer, root, directory)
@@ -62,6 +69,10 @@ class ContractDependencies(unittest.TestCase):
                     self.assertEqual(data["dependencies"]["neocogi-com"]["features"], ["alloc"])
                     self.assertFalse(data["dependencies"]["neocogi-com"]["default-features"])
                     self.assertEqual(set(data["build-dependencies"]), {"neocogi-idl"})
+                    for dependency in (data["dependencies"]["neocogi-com"], data["build-dependencies"]["neocogi-idl"]):
+                        self.assertEqual(dependency["git"], "ssh://git@github.com/NeoCogi/neocogi-com.git")
+                        self.assertEqual(dependency["rev"], "fixture-revision")
+                        self.assertNotIn("path", dependency)
                 else:
                     self.assertEqual(set(data["dependencies"]), {"library"})
                     self.assertEqual(data["dependencies"]["library"]["package"], consumer.package)
@@ -88,6 +99,15 @@ class ChildEnvironment(unittest.TestCase):
             environment = child_environment(Path("/repository"))
         self.assertEqual(environment["RUSTUP_TOOLCHAIN"], "workspace-nightly")
         self.assertNotIn("CARGO_TARGET_DIR", environment)
+        self.assertEqual(environment["CARGO_NET_GIT_FETCH_WITH_CLI"], "true")
+
+    def test_explicit_git_client_policy_is_preserved(self):
+        """The workspace default must not override an explicit caller preference."""
+        with patch.dict(os.environ, {"CARGO_NET_GIT_FETCH_WITH_CLI": "false"}, clear=True), patch(
+            "contract_check_support.subprocess.check_output", return_value="workspace-nightly\n"
+        ):
+            environment = child_environment(Path("/repository"))
+        self.assertEqual(environment["CARGO_NET_GIT_FETCH_WITH_CLI"], "false")
 
     def test_cargo_network_policy_reaches_both_consumer_commands(self):
         """Fresh runners may fetch; explicit true/false reach event and facade checks."""
@@ -102,6 +122,7 @@ class ChildEnvironment(unittest.TestCase):
                 self.assertEqual(os.environ, caller)
                 with tempfile.TemporaryDirectory() as temporary:
                     root = Path(temporary)
+                    (root / "Cargo.toml").write_text((Path(__file__).resolve().parents[1] / "Cargo.toml").read_text())
                     for index, consumer in enumerate((consumers.CONSUMERS[0], consumers.CONSUMERS[-1])):
                         with patch.object(consumers.subprocess, "run") as run, patch.object(
                             consumers.subprocess, "check_output", return_value=facade

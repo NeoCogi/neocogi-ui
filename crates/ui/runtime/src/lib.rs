@@ -177,7 +177,7 @@ fn acquire_root(_runtime: ::neocogi_com::Runtime) -> Result<neocogi_com::ComPtr<
 
 // This unit-test executable owns one runtime; normal library builds never embed it.
 #[cfg(test)]
-extern crate nc_com as _;
+extern crate neocogi_com_host as _;
 
 /// Independently generated protocol used by runtime persistence tests.
 #[cfg(test)]

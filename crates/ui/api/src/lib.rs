@@ -15,7 +15,7 @@ extern crate self as neocogi_ui;
 extern crate alloc;
 // Unit-test executables own one runtime just like this package's integration tests.
 #[cfg(test)]
-extern crate nc_com as _;
+extern crate neocogi_com_host as _;
 
 /// Typed clients and concrete UI interface definitions.
 pub mod com;

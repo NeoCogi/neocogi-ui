@@ -1,4 +1,6 @@
 //! UI catalog paths survive real form export and generated COM calls.
+#[path = "../../../../scripts/com_dependencies.rs"]
+mod com_dependencies;
 use std::path::Path;
 /// Builds an IDL owner, discovers its COM catalog, then compiles a downstream form.
 /// The fixture lives in a temporary workspace so its raw module and Cargo dependency
@@ -28,16 +30,20 @@ fn raw_identifier_catalog_paths_compile_in_exported_forms() {
         }
     }
     let dependencies = format!(
-        "[dependencies]\nneocogi-com={{path={:?},features=['runtime']}}\nneocogi-com-runtime={{path={:?}}}\nneocogi-ui={{path={:?}}}\nneocogi-ui-document={{path={:?}}}\n",
-        root.join("crates/com/api"),
-        root.join("crates/com/runtime"),
+        "[dependencies]\n{}{}neocogi-ui={{path={:?}}}\nneocogi-ui-document={{path={:?}}}\n",
+        com_dependencies::dependency("neocogi-com", &["std", "macros", "runtime"]),
+        com_dependencies::dependency("neocogi-com-host", &[]),
         root.join("crates/ui/api"),
         root.join("crates/ui/document"),
     );
-    fs::write(directory.join("contracts/Cargo.toml"), format!(
-        "[package]\nname='path-contracts'\nversion='0.0.0'\nedition='2024'\n{dependencies}serde_json='1'\n[build-dependencies]\nneocogi-idl={{path={:?}}}\n",
-        root.join("crates/com/idl"),
-    )).unwrap();
+    fs::write(
+        directory.join("contracts/Cargo.toml"),
+        format!(
+            "[package]\nname='path-contracts'\nversion='0.0.0'\nedition='2024'\n{dependencies}serde_json='1'\n[build-dependencies]\n{}",
+            com_dependencies::dependency("neocogi-idl", &[]),
+        ),
+    )
+    .unwrap();
     fs::write(
         directory.join("contracts/build.rs"),
         r#"

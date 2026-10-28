@@ -108,4 +108,4 @@ pub(crate) use widget::{Widget, LeafWidget, WidgetFillOption};
 
 // This unit-test executable owns one runtime; normal library builds never embed it.
 #[cfg(test)]
-extern crate nc_com as _;
+extern crate neocogi_com_host as _;

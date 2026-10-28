@@ -1,4 +1,6 @@
 //! UI admission validates ordinary IDL methods rather than extending the compiler language.
+#[path = "../../../../scripts/com_dependencies.rs"]
+mod com_dependencies;
 #[path = "support/event_support.rs"]
 mod event_support;
 use std::{fs, path::Path, process::Command};
@@ -36,8 +38,8 @@ fn ui_admits_snapshot_contracts_and_merges_their_value_graphs() {
     let project = tempfile::tempdir().unwrap();
     fs::create_dir(project.path().join("src")).unwrap();
     fs::write(project.path().join("Cargo.toml"), format!(
-        "[package]\nname='ui-admission-proof'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\nneocogi-com={{path={:?}}}\nneocogi-ui={{path={:?}}}\nneocogi-ui-design={{path={:?}}}\n",
-        root.join("crates/com/api"), root.join("crates/ui/api"), root.join("crates/ui/design"),
+        "[package]\nname='ui-admission-proof'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\n{}neocogi-ui={{path={:?}}}\nneocogi-ui-design={{path={:?}}}\n",
+        com_dependencies::dependency("neocogi-com", &["std", "macros"]), root.join("crates/ui/api"), root.join("crates/ui/design"),
     )).unwrap();
     fs::write(
         project.path().join("src/contract.rs"),

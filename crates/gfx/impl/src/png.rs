@@ -2,7 +2,6 @@
 use super::Diagnostic;
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcCopyFromBufferOffset, NcStatus, com_object};
 use neocogi_gfx_support::abi::*;
-use neocogi_render_core::abi::*;
 use neocogi_gfx_support::abi::MAX_ASSET_PIXELS_BYTES;
 use std::io::{self, Cursor};
 

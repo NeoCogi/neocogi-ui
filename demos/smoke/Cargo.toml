@@ -27,7 +27,7 @@ benchmark = ["embed-assets", "monolith", "dep:neocogi-ui-nodes", "dep:neocogi-gf
 embed-assets = ["neocogi-demo-assets/embed-assets"]
 
 [dependencies]
-neocogi-com-runtime.workspace = true
+neocogi-com-host.workspace = true
 neocogi-demo-host.workspace = true
 neocogi-ui-samples.workspace = true
 neocogi-render-mesh.workspace = true

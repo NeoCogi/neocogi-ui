@@ -89,11 +89,11 @@ mod tests {
 }
 
 // The fixture final executable explicitly owns its process runtime.
-extern crate nc_com as _;
+extern crate neocogi_com_host as _;
 
 /// This generated walkthrough executable explicitly selects its host owner.
 #[cfg(test)]
 fn host_runtime() -> neocogi_com::Runtime {
     // SAFETY: its linked implementation owns the complete immutable process-lived graph.
-    unsafe { neocogi_com::Runtime::__from_host_api(nc_com::initialize_process()) }.unwrap()
+    unsafe { neocogi_com::Runtime::__from_host_api(neocogi_com_host::initialize_process()) }.unwrap()
 }

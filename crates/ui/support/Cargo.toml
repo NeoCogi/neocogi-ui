@@ -24,4 +24,4 @@ rs-math3d.workspace = true
 [dev-dependencies]
 neocogi-appearance.workspace = true
 neocogi-com = { workspace = true, features = ["runtime"] }
-neocogi-com-runtime.workspace = true
+neocogi-com-host.workspace = true

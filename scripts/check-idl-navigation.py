@@ -26,10 +26,12 @@ from contract_check_support import child_environment
 
 # The compiled source is also the sole source of LSP request positions. Markers
 # distinguish separate uses of the same identifier, including a constructor field.
+# Client views are unsized projections borrowed from COM handles; the probe must
+# borrow the view too rather than trying to store it directly inside Option.
 PROBE_SOURCE = '''use neocogi_ui::abi::nodes::*;
 pub fn probe(
     _: Option</*abi*/TextboxAbi>,
-    _: Option</*client*/TextboxClient>,
+    _: Option<&/*client*/TextboxClient>,
     _: Option</*vtable*/TextboxVTable>,
     _: Option</*struct*/SliderOptions>,
     _: Option</*enum*/LayoutTrack>,

@@ -10,6 +10,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
 
 jobs:
   # Debugger metadata checks need no SDL or display server.
@@ -80,70 +81,18 @@ jobs:
           SDL_VIDEODRIVER: offscreen
         run: cargo test -p neocogi-ui-designer -p neocogi-theme-editor --lib --no-default-features --features neocogi-ui-designer/glow,neocogi-ui-designer/monolith,neocogi-ui-designer/embed-assets,neocogi-theme-editor/glow,neocogi-theme-editor/monolith,neocogi-theme-editor/embed-assets -- --include-ignored --skip benchmark --test-threads=1
 
-  # The declared compiler floor is separate from the rolling stable/nightly matrix.
-  com-msrv:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - run: rustup toolchain install 1.85.0 --profile minimal
-      # The library source fixture owns a floor-compatible independent lockfile.
-      - run: bash crates/com/scripts/test-msrv.sh
-
-  com:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - run: rustup toolchain install nightly --profile minimal
-      - name: Complete COM quality gate, including workspace formatting and strict rustdoc
-        run: bash crates/com/scripts/test-quality.sh
-      - name: Local ABI, compile cases, inspector and static runtime selection
-        run: cargo test -p neocogi-com-core -p neocogi-com-macros -p neocogi-com-runtime -p neocogi-inspect -p neocogi-com --features neocogi-com/runtime
-      # A debug-only overflow assertion previously let optimized retain return
-      # uncounted owners. Exercise the boundary and real C entrypoints in release too.
-      - name: Strong-only ownership limits with debug assertions disabled
-        run: cargo test -p neocogi-com -p neocogi-com-runtime --lib --release -- --test-threads=1
-      - name: IDL lowering, shared macro backend and generated compile cases
-        run: cargo test -p neocogi-idl
-      - name: Install the SDK compiler floor for actual archive tests
-        run: rustup toolchain install 1.85.0 --profile minimal
-      - name: Extract SDK archives, run their unit tests and execute generated COM
-        run: bash crates/com/scripts/test-packages.sh
-      - name: Driver rejects missing tests, artifacts and stale success evidence
-        run: python3 -m unittest discover -s crates/com/scripts -p test_compatibility.py
-      - name: Relocated monolith without native NeoCogi libraries
-        run: cargo test -p neocogi-example-com-host --test build_modes
-
-  # Independent role builds are distinct from ordinary same-compiler unit tests.
-  com-compatibility:
+  # SDK quality, ABI safety, MSRV and archive gates belong to neocogi-com.
+  # This workspace verifies its own host/provider consumers of the pinned SDK.
+  com-consumers:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { os: ubuntu-latest, suite: linked }
-          - { os: ubuntu-latest, suite: build-flags }
-          - { os: macos-latest, suite: linked }
-          - { os: windows-latest, suite: linked }
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v6
-      - run: rustup toolchain install stable --profile minimal
-      - name: Install second compiler for independently selected build policies
-        if: matrix.suite == 'build-flags'
-        run: rustup toolchain install nightly --profile minimal
-      - name: Build independent providers and execute relocated host-owned runtime communication
-        run: python3 crates/com/scripts/compatibility.py --suite ${{ matrix.suite }}
-
-  # Miri interprets pure Rust; sanitizers execute the real shared-library boundary.
-  com-safety:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        suite: [safety, address, thread]
-    steps:
-      - uses: actions/checkout@v6
-      - run: rustup toolchain install nightly --profile minimal --component miri --component rust-src
-      - run: python3 crates/com/scripts/compatibility.py --suite ${{ matrix.suite }}
+      - name: Relocated monolith using the pinned COM dependency
+        run: cargo test -p neocogi-example-com-host --test build_modes
 
   native:
     runs-on: ubuntu-latest

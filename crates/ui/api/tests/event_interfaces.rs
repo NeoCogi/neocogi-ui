@@ -1,4 +1,6 @@
 //! Common IDL event transport preserves typed snapshots and both weak ownership kinds.
+#[path = "../../../../scripts/com_dependencies.rs"]
+mod com_dependencies;
 #[path = "support/event_support.rs"]
 mod event_support;
 use neocogi_idl::{parse_module};
@@ -35,8 +37,9 @@ fn common_receiver_captures_typed_events_without_owning_their_origins() {
     fs::write(
         project.path().join("Cargo.toml"),
         format!(
-            "[package]\nname='event-interfaces-proof'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\nneocogi-com={{path={:?}}}\nneocogi-ui={{path={:?}}}\n",
-            root.join("crates/com/api"), root.join("crates/ui/api"),
+            "[package]\nname='event-interfaces-proof'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\n{}neocogi-ui={{path={:?}}}\n",
+            com_dependencies::dependency("neocogi-com", &["std", "macros"]),
+            root.join("crates/ui/api"),
         ),
     )
     .unwrap();

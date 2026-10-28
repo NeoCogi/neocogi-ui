@@ -21,4 +21,4 @@ mod tests {
 }
 
 // The fixture final executable explicitly owns its process runtime.
-extern crate nc_com as _;
+extern crate neocogi_com_host as _;
