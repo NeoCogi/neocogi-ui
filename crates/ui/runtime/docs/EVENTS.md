@@ -203,7 +203,7 @@ service. Neither is a scheduler instruction to skip the receiver. The attempted
 message stays consumed, while successors, later widget/application work and later
 raw input remain queued. Completed handler edits are not rolled back. Retry
 rebuilds the current tree. See the [dispatch and iterator contract](../../../../docs/contracts/WIDGET_EVENT_DISPATCH.md)
-and [status meanings](../../../../docs/contracts/COM_LIFETIME_ERRORS.md).
+and [status meanings](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/COM_LIFETIME_ERRORS.md).
 
 Passive widgets advertise no private dispatcher and receive no empty COM calls.
 Nodes own typed weak capability projections, while a conservative zero-dispatcher
@@ -272,7 +272,7 @@ The COM process runtime has no UI event loop. Hosts and plugins use the same
 contracts and must be rebuilt together after this ABI change.
 
 [Widget dispatch](../../../../docs/contracts/WIDGET_EVENT_DISPATCH.md) records the design
-and ownership rules. The [channel experiment](../../../../docs/experiments/README.md#standard-channel)
+and ownership rules. The channel experiment
 describes a superseded implementation rather than current event performance.
 
 ## Caption intent and parent policy

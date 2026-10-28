@@ -2,11 +2,11 @@
 
 | Example | Demonstrates |
 | --- | --- |
-| [simple](../../demos/basic/src/bin/simple.rs) | A small facade-only application with one framed button. |
-| [calculator](../../demos/basic/src/bin/calculator.rs) | Concrete typed actions, text updates and weighted layout. |
-| [backend-frame-cube](../../demos/basic/src/bin/backend-frame-cube.rs) | A local COM leaf emitting solid triangles through the shared painter. |
-| [full](../../demos/full/src/app.rs) | Menus, dialogs, editing, images, themes, containers and custom graphics. |
-| [smoke](../../demos/smoke/src/main.rs) | Independent dynamic loading and explicit runtime/renderer boundary checks. |
+| [simple](../../examples/basic/src/bin/simple.rs) | A small facade-only application with one framed button. |
+| [calculator](../../examples/basic/src/bin/calculator.rs) | Concrete typed actions, text updates and weighted layout. |
+| [backend-frame-cube](../../examples/basic/src/bin/backend-frame-cube.rs) | A local COM leaf emitting solid triangles through the shared painter. |
+| [full](../../examples/full/src/app.rs) | Menus, dialogs, editing, images, themes, containers and custom graphics. |
+| [smoke](../../examples/smoke/src/main.rs) | Independent dynamic loading and explicit runtime/renderer boundary checks. |
 
 Build and run the selected application directly:
 
@@ -28,9 +28,6 @@ the Cargo package and `--bin` selects one executable:
 | `neocogi-demo-smoke` | `neocogi-demo-smoke` | `smoke` |
 | `neocogi-demo-smoke` | `neocogi-com-bench` | Direct Cargo; requires `benchmark` |
 | `neocogi-runtime-ui-example` | `neocogi-example-ui` | `runtime-ui` |
-| `neocogi-example-com-plugin` | `neocogi-example-com` | [Direct Cargo](../../examples/com-plugin/README.md); requires `host` or `monolith` |
-| `neocogi-theme-editor` | `neocogi-theme-editor` | `theme-editor` |
-| `neocogi-ui-designer` | `neocogi-ui-designer` | `ui-designer` |
 | `neocogi-asset-tools` | `neocogi-atlas-export` | Direct Cargo |
 | `neocogi-asset-tools` | `neocogi-mac-os-9-theme-export` | Direct Cargo; requires `png_source` |
 | `neocogi-inspect` (upstream) | `neocogi-inspect` | [Install the pinned upstream tool](COM_DEPENDENCY.md#inspector) |
@@ -63,10 +60,10 @@ Accepted edits publish one immutable revision; animation frames do not repeatedl
 reinstall unchanged styles. The log uses the actual TextBlock as its stored text,
 and Enter/Submit share the concrete submission operation.
 
-The [painter](../../demos/full/src/painter_demo.rs),
-[falloff editor](../../demos/full/src/falloff.rs),
-[grid](../../demos/full/src/grid.rs) and
-[Suzanne viewport](../../demos/full/src/mesh.rs) implement `LeafContent` directly.
+The [painter](../../examples/full/src/painter_demo.rs),
+[falloff editor](../../examples/full/src/falloff.rs),
+[grid](../../examples/full/src/grid.rs) and
+[Suzanne viewport](../../examples/full/src/mesh.rs) implement `LeafContent` directly.
 There is one COM widget allocation for each. Solid drawing uses the shared UI
 painter; Suzanne edits one renderer-owned `IMeshScene: IRenderItem` object, whose
 backend-specific GPU implementation stays in the renderer plugin.

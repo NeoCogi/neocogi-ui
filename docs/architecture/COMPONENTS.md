@@ -158,10 +158,3 @@ Their application feature graphs omit the Skin contract descriptor and their
 packages omit the corresponding authored theme directories as well.
 Embedded applications keep the compact GFX compositor but can omit its builder and the
 Skin plugin when their generated bundle is sufficient.
-
-The theme editor is a concrete tool over these same boundaries. Its normal UI,
-interactive preview, and cached state sheet use separate compositors/sessions on
-one renderer device. `neocogi-skin-authoring` provides its document/compiler;
-there is no editor-specific runtime schema or reflected property framework.
-See [the guide](../../tools/theme-editor/README.md), [coverage](../validation/THEME_EDITOR_COVERAGE.md),
-and the [live-edit benchmark](../../tools/theme-editor/src/app/benchmark.rs).

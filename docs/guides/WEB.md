@@ -112,20 +112,3 @@ A successful deployment publishes the demo at:
 
 The workflow deploys only generated files from `target/web-demo`; generated bindings and binaries do
 not need to be committed.
-
-The Rust CI browser job also compiles the WebGL UI designer and runs its
-JSON/ZIP file picker and ZIP download fixture through real DOM file objects.
-
-## Theme editor
-
-Set `NEOCOGI_WEB_APP=theme-editor` when running `scripts/web-demo.sh build` or
-`serve`. The shared editor/compiler runs on WebGL with independent immutable
-preview surfaces. Browser-specific code owns only file selection, bounded byte
-storage, downloads, and dirty-tab close handling. Open files/folder and Add resources
-feed the same theme schema/compiler as native projects. Saves download JSON;
-resources remain separate files. See the [editor guide](../../tools/theme-editor/README.md)
-for exact path, size, missing-file, and Save As behavior.
-
-`./scripts/test-browser-input.sh theme-editor` exercises actual WebGL and DOM file,
-IME, history, export, resizing, and teardown paths. Set `NEOCOGI_BROWSER_SCALE=2`
-for physical/CSS coordinate coverage, including the embedded preview IME area.

@@ -80,7 +80,7 @@ and `NC_E_CLOSED` from a closed service. Neither status identifies which object
 failed. A dequeued message remains consumed; its successors, later widgets,
 application messages and unattempted raw input wait for a later update. No partial
 frame is committed and no already-performed handler mutation is rolled back.
-See the [lifetime error contract](COM_LIFETIME_ERRORS.md) for exact status meanings.
+See the [lifetime error contract](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/COM_LIFETIME_ERRORS.md) for exact status meanings.
 
 After a handled message or a topology change, iteration stops so layout can settle
 and a new pass can begin. A changed tree is rebuilt first; merely skipping expired
@@ -180,27 +180,6 @@ work budgets, compiled-form lifetime, and application examples. The superseded
 `IEventOwner` and separate mount/retire design remains in Git history (`6078b286`
 replaced it with behavior on the mounted widget).
 
-## Verification on 2026-09-29
-
-After the exclusive-ownership migration (`2cb90ec9`):
-
-- `cargo test --workspace --offline --no-fail-fast`: 868 passed, 23 ignored,
-  no failures.
-- Offscreen designer and theme-editor library suites with monolith/embedded assets,
-  ignored acceptance tests enabled and the live-edit benchmark excluded: 33 and
-  18 passed. These runs include independently built custom-catalog discovery.
-- `SDL_VIDEODRIVER=offscreen scripts/test-extension.sh glow`: independently built
-  shared plugins loaded, and extension/COM smoke scenarios passed.
-- WebGL test-target compilation for the full demo, UI designer and theme editor
-  on `wasm32-unknown-unknown`: passed. This is compilation, not browser execution.
-- Changed Markdown link/fence validation and `git diff --check`: passed.
-
-The browser compilation check covers its download/export dialogs and preview test
-harness, which now transfer owners into windows and retain only weak editing
-handles. The native popup regression removes a combo during event forwarding and
-checks that its queue is released without a fallible close callback. No binary-size
-or frame-time improvement is claimed by these functional checks.
-
 ## Iterator and failure regressions
 
 The September 30 review traced the status suppression to `2cb90ec9`, which replaced
@@ -223,34 +202,6 @@ The current regression suite covers:
 
 These changes add no dispatch ticket, per-widget active flag, new close phase or
 second queue. The older verification section above remains historical evidence.
-
-## Executed acceptance — October 1, 2026
-
-Revisions `bd213e1c` (status meanings) and `a805e1dc` (iterator and propagation)
-implement this contract on `fix/widget-dispatch-iteration-errors`. Before the
-scheduler change, three new regressions failed because live `NC_E_CLOSED` errors
-were swallowed; the real expired-dependency test already passed after the status
-split. All four behavior regressions and the iterator regression now pass. This
-separately demonstrates why changing status names was insufficient.
-
-Executed after the scheduler change:
-
-| Verification | Result |
-| --- | --- |
-| Runtime and node library suites | 204 runtime + 91 node tests passed, including existing budget, topology, reentrancy and idle-allocation checks. |
-| Native demo, theme editor and designer | 6 + 25 + 33 tests passed with `SDL_VIDEODRIVER=offscreen`, `monolith,embed-assets`, normally ignored tests included, benchmarks excluded and one test thread. The designer exercised its independent custom-plugin fixture. |
-| WebGL consumers | Demo and both editors compiled with tests for `wasm32-unknown-unknown`, no default features and `webgl`. No browser was executed for this change. |
-| Workspace | `cargo check --workspace --all-targets` passed; existing unrelated dead-code warnings remain. |
-| Native C ABI | The generated ABI fixture passed again after its expiry-status parameter names were updated. |
-
-The preceding status commit also passed COM core tests/doctests (52), focused
-ABI/status/native-C integration tests (10 outer tests), shared/exclusive lifetime
-and output-completion tests (44), compiled IDL tests (121), UI facade tests (3),
-and cargo-neocogi module tests (3). Its runtime/node suite passed before the five
-additional scheduler tests were added. These checks cover the changed status
-consumers; they do not claim a new multi-compiler compatibility matrix, sanitizer
-run, or binary-size result. Cargo artifacts were cleaned before and after each
-commit.
 
 ## Inline leaf geometry publication
 

@@ -10,7 +10,7 @@ not yet make.
 The workspace uses Rust 2024 edition. The COM core, facade, runtime, macros and
 IDL compiler declare Rust **1.85** as their minimum supported Rust version. The
 inspector and normative ABI snippets are also exercised by the
-[minimum-version suite](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/tools/xtask/README.md), which has a
+[minimum-version suite](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/tools/xtask/README.md), which has a
 dedicated upstream CI job. Compile-test tooling is pinned to a floor-compatible version.
 The development workspace pins nightly Cargo because its native compositions use
 artifact dependencies. External COM/IDL consumers retain the Rust 1.85 floor.
@@ -50,11 +50,11 @@ is not a promise that the unreleased checkout matches a published package.
 The COM SDK, host implementation and IDL compiler are pinned Git dependencies
 from `NeoCogi/neocogi-com`; this checkout owns their UI/render integration. Core, plugin
 descriptor and runtime table ABIs remain at version 1 during pre-alpha.
-The [COM ABI-v1 specification](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/docs/abi-v1.md) describes that
-baseline; the [core version constant](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/crates/core/src/metadata/contract.rs)
+The [COM ABI-v1 specification](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/abi-v1.md) describes that
+baseline; the [core version constant](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/crates/core/src/metadata/contract.rs)
 is its numeric authority. The compiler owns the separate
-[module fingerprint grammar](../contracts/IDL_MODULES.md#canonical-signatures)
-and [encoder](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/crates/idl/src/resolve.rs). None promises
+[module fingerprint grammar](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/IDL_MODULES.md#canonical-signatures)
+and [encoder](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/crates/idl/src/resolve.rs). None promises
 compatibility across pre-alpha checkout revisions.
 Use the same pinned Git revision for hosts and providers; a crates.io dependency
 with the same pre-alpha package version has a different Cargo identity. Native

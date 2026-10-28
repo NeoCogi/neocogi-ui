@@ -1,6 +1,6 @@
 # NeoCogi component design
 
-The [upstream COM SDK reference](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/docs/COM.md) owns the compiler and ABI
+The [upstream COM SDK reference](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/COM.md) owns the compiler and ABI
 contract. This guide records UI integration; SDK implementation and
 qualification are maintained in `NeoCogi/neocogi-com`.
 
@@ -41,7 +41,7 @@ registry through their acquisition call. No COM runtime DSO is deployed. Contrac
 artifact dependencies build native compositions directly; [the native guide](../guides/COM_NATIVE.md)
 explains the graph and final link ownership.
 The
-[standalone sample](../../examples/com-plugin/README.md) also demonstrates the raw
+[standalone sample](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/examples/com-plugin/README.md) also demonstrates the raw
 shared-library boundary and monolithic linking.
 
 ## Construction and interface storage
@@ -56,7 +56,7 @@ A handle carries the object address and selected static interface table.
 Interfaces add no fields to each object allocation. The compiler deduplicates
 inherited projections, so a diamond does not duplicate object headers. Querying
 selects another table for the same allocation after exact identity checks. The
-[storage guide](../contracts/COM_INTERFACE_STORAGE.md) explains why the two-word handle replaced
+[storage guide](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/COM_INTERFACE_STORAGE.md) explains why the two-word handle replaced
 recursive headers and records the measured tradeoffs of earlier attempts.
 
 `#[com_object(Interface)]` associates private Rust state with any closed contract. Shared ownership generates `from_value` and `ComPtr` helpers;
@@ -71,13 +71,13 @@ a Rust reference; conflicting or reentrant access returns `NC_E_BUSY`. Shared
 objects keep their method borrow state separate from strong counting. Exclusive
 objects combine owner presence and reader/writer admission in one atomic word.
 The ABI implementation contains the necessary `UnsafeCell`; semantic state stays
-in ordinary fields. See the [current ABI](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/docs/abi-v1.md) for layouts,
+in ordinary fields. See the [current ABI](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/abi-v1.md) for layouts,
 ownership transfer and the limits of concurrent Drop.
 
 ## Events and UI ownership
 
 COM provides ordinary callable interfaces and explicit ownership. Domains can
-use typed observers without depending on UI, as the [standalone example](../../examples/com-plugin/README.md)
+use typed observers without depending on UI, as the [standalone example](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/examples/com-plugin/README.md)
 demonstrates. UI owns its [event protocol and deferred delivery](../../crates/ui/api/EVENTS.md),
 [producer publication](../contracts/UI_EVENT_METADATA.md) and [widget origins](../contracts/WIDGET_EVENT_ORIGINS.md).
 Those contracts do not add event syntax or policy to IDL or the COM process runtime.
@@ -85,14 +85,14 @@ Those contracts do not add event syntax or policy to IDL or the COM process runt
 Ordinary widgets post through their owning traversal scope; services and explicit
 out-of-traversal completions retain the weak origins justified by the UI contract.
 [Exclusive ownership](../contracts/EXCLUSIVE_WIDGET_OWNERSHIP.md) and
-[lifetime errors](../contracts/COM_LIFETIME_ERRORS.md) define synchronous owner
+[lifetime errors](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/COM_LIFETIME_ERRORS.md) define synchronous owner
 removal and its distinction from a service's optional close operation. Queues and
 UI origin scopes remain under their own owners, independent of the single global
 plugin registry in the host-owned `neocogi_com_host` implementation.
 
 ## Independent-build compatibility
 
-The [IDL reference](../contracts/IDL_MODULES.md) owns canonical fingerprint encoding and
+The [IDL reference](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/IDL_MODULES.md) owns canonical fingerprint encoding and
 declaration version rules. Each exact declaration signature includes the module's
 transitive revision. Generic binder spelling is normalized by parameter position;
 authored members and policies remain contract inputs. Interface identity alone
@@ -114,13 +114,13 @@ Dynamic and static assemblies use the same typed acquisition. Dynamic builds exp
 `nc_get_plugin_descriptor_v1`; monoliths register the same provider's Rust
 descriptor and link the runtime statically. Independent compiler versions and
 build flags are supported when the target C ABI, core generation and exact contract
-signatures agree. The [compatibility matrix](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/docs/abi-v1.md#independent-build-compatibility)
-records actual cross-build verification. The [current contract index](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/docs/abi-v1.md)
+signatures agree. The [compatibility matrix](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/abi-v1.md#independent-build-compatibility)
+records actual cross-build verification. The [current contract index](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/abi-v1.md)
 separates core ABI generation from discovery versions and IDL hash encoding.
 
 Inspection exposes plugin and factory compatibility metadata. A custom widget
 catalog additionally transports the finite reachable value graph needed for
-authoring; [recursive inspection](../contracts/RECURSIVE_VALUE_CONTRACT.md#com-inspection-graph)
+authoring; [recursive inspection](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/RECURSIVE_VALUE_CONTRACT.md#com-inspection-graph)
 defines that graph. Build-time IDL inventories and runtime widget catalogs have
 different consumers and do not recreate a process-wide class registry.
 

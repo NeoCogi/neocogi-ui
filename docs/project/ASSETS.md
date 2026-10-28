@@ -21,7 +21,7 @@ rxi/microui and bundled third-party assets retain the following names, provenanc
   there except `WHITE.png`, which is a plain atlas texel) are derived from
   Google's Material Design Icons and are licensed under the
   bundled [Apache License 2.0](../../LICENSES/Apache-2.0.txt).
-- **Facepalm demo image** (`demos/full/assets/FACEPALM.png`) — copyright Raja Lehtihet &
+- **Facepalm demo image** (`examples/full/assets/FACEPALM.png`) — copyright Raja Lehtihet &
   Wael El Oraiby; licensed under this repository's
   [BSD 3-Clause license](../../LICENSE).
 - **Suzanne demo mesh** (`assets/suzanne.obj`) — exported with Blender 2.80 from Blender's
@@ -36,3 +36,6 @@ rxi/microui and bundled third-party assets retain the following names, provenanc
 
 The font names above come from the TTFs' embedded name records; `NORMAL.ttf`,
 `BOLD.ttf`, and `CONSOLE.ttf` are only the filenames used by this repository.
+
+UI persistence fixtures and the GFX allocation probe retain the
+[COM fixture MIT notice](../../LICENSES/COM-fixtures-MIT.txt).

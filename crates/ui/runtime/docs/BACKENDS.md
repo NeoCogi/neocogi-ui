@@ -65,7 +65,7 @@ The platform then resumes ordinary UI drawing in painter order.
 The generic application renderer types in the native backend crates are statically
 linked implementation helpers. Their Rust command values, frame borrows and GPU
 objects never cross the COM ABI. See [the mesh renderer](../../../render/mesh/src)
-for concrete backend implementations and [the application mesh component](../../../../demos/full/src/mesh.rs)
+for concrete backend implementations and [the application mesh component](../../../../examples/full/src/mesh.rs)
 for owned COM rendering.
 
 ## Resource lifetime and thread rules

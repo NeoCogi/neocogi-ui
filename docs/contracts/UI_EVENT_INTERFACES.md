@@ -184,20 +184,9 @@ The generated receiver and event getters are invoked through actual COM tables.
 The [snapshot and channel regressions](../../crates/ui/api/tests/event_snapshots.rs)
 also verify that the standard inbox preserves allocation identity, keeps facts
 readable after source destruction, and restores the same owner on disconnection.
-Each observed scalar event now requires an exclusive allocation. The existing
-[allocation probe](../../examples/com-host/examples/event_allocations.rs), run
-on October 4 with `--features monolith`, recorded 2 setup allocations and 10,323
-allocations for 10,000 scalar events including channel storage. That historical
-unobserved path skipped construction and performed 10,000 updates with zero
-allocations; the direct-post contract now constructs and discards those snapshots. These are
-allocation counts, not an elapsed-time benchmark. See the
-[migration record in Git history](../validation/README.md#historical-records).
+Each observed scalar event requires an exclusive allocation.
 
 [Built-in list-item regressions](../../crates/ui/runtime/src/runtime/tests/list_item_events.rs)
 also measure empty, nonempty and Unicode labels through real COM updates for
 pointer, Enter and Space activation. They verify one marker allocation per activation independently of label size,
 exact weak source identity after edits/destruction and state preservation on rejected delivery.
-
-The [October 4 benchmark](../experiments/README.md#event-downcasts) measured
-shared `ComPtr` queries. Its exact timings do not measure this exclusive event
-transfer and weak-projection path.

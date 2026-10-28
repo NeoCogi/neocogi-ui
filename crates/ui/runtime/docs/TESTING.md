@@ -118,33 +118,3 @@ defines the supported separate graphs. An aggregate workspace test mixes dynamic
 discovery exports with static/test providers and is not a supported substitute.
 Actual native device and presentation checks use the backend-specific scripts;
 successful compilation does not establish rendering acceptance.
-
-## Theme editor deployment acceptance
-
-The editor's native acceptance tests use the same host, state, UI routers,
-compiler, renderer surfaces, history, and file operations as the application.
-The script builds and launches the production application for three frames with
-ordinary Cargo. Its test runner copies the compiled test, runtime, plugins and
-resources into a temporary executable-relative layout, then runs that test without
-Unix loader overrides. `NEOCOGI_TEST_ASSET_ROOT` selects test fixture inputs;
-production resources remain adjacent to the executable. Shared and monolithic
-modes are separate selections on each backend:
-
-```sh
-SDL_VIDEODRIVER=offscreen ./scripts/test-theme-editor.sh glow shared
-SDL_VIDEODRIVER=offscreen ./scripts/test-theme-editor.sh glow monolith
-./scripts/test-theme-editor.sh vulkan shared
-./scripts/test-theme-editor.sh vulkan monolith
-./scripts/test-theme-editor.sh wgpu shared
-./scripts/test-theme-editor.sh wgpu monolith
-./scripts/test-browser-input.sh theme-editor
-NEOCOGI_BROWSER_SCALE=2 ./scripts/test-browser-input.sh theme-editor
-```
-
-Vulkan/WGPU require a native display; Vulkan validation layers may be enabled
-through `VK_INSTANCE_LAYERS`. Browser tests execute WebGL, real DOM file/IME
-listeners, exact imported bytes and downloaded JSON, resizing, readback and teardown.
-Synthetic pointer tests stub only the browser's trusted capture-token handshake;
-native tests verify capture/outside-release, modal exclusion, and cancellation
-through both real UI routers. The [live-edit benchmark](../../../../tools/theme-editor/src/app/benchmark.rs)
-distinguishes measured command-to-render-return latency from display scanout.

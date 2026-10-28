@@ -8,7 +8,7 @@
   fonts against the bundle catalog; use semantic roles when the selected theme should
   determine the exact baked resource.
 - Font sizes are selected by choosing another baked font variant, not by scaling one bitmap font at runtime.
-- `demos/full` uses this directly: `NORMAL.ttf` for control/body text, `BOLD.ttf` for window titles, and `CONSOLE.ttf` for the log window’s input/output text.
+- `examples/full` uses this directly: `NORMAL.ttf` for control/body text, `BOLD.ttf` for window titles, and `CONSOLE.ttf` for the log window’s input/output text.
 
 ## Text encoding and glyph coverage
 

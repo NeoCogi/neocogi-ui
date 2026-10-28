@@ -67,7 +67,7 @@ use one atomic header word for owner presence and reader/writer access, followed
 by the weak count and class descriptor pointer. Their generated allocation is one
 common header plus `UnsafeCell<MaybeUninit<T>>`; there is no separate call gate or
 execution pin. Both kinds of provider-local lease occupy two words. Only C-shaped
-records cross plugin boundaries; see [the current core ABI](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/docs/abi-v1.md).
+records cross plugin boundaries; see [the current core ABI](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/abi-v1.md).
 
 ## Cached weak calls and threading
 
@@ -167,7 +167,7 @@ caller can retry or drop it after the descendant returns. `ComBoxInput` is remov
 Facade insert/replace/window calls return the original typed widget in their error.
 `Mountable::with_mount` restores the concrete projection on failure; compiled forms
 also restore their unmounted root. No widget is detached after successful mounting.
-Bottom-up construction remains supported. See [ABI v1](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/docs/abi-v1.md)
+Bottom-up construction remains supported. See [ABI v1](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/abi-v1.md)
 for multi-input calls and the invalid-success-output contract.
 
 Construction helpers that intentionally abandon rejected candidates need not
@@ -239,11 +239,8 @@ weak token. No claim is made that arbitrary foreign raw pointers are safe.
 
 The COM foundation is committed as `490e24cb`, the IDL transfer contract as
 `8667603d`, concrete initialization access as `db15a693`, and the complete UI and
-consumer migration as `2cb90ec9`. Fresh verification passed 868 workspace tests
-(23 ignored by default), 51 native editor acceptance tests, and the independently
-built native extension smoke run. Browser targets and their test code compile;
-no browser execution or binary-size measurement is claimed. Commands and scope
-are recorded in [widget dispatch verification](WIDGET_EVENT_DISPATCH.md#verification-on-2026-09-29).
+consumer migration as `2cb90ec9`. Current library and consumer validation
+commands are recorded in [UI testing](../../crates/ui/runtime/docs/TESTING.md).
 
 ## Measured implementation cost
 

@@ -2,6 +2,12 @@
 
 ## 0.0.0 (unreleased)
 
+- Extract the standalone `NeoCogi/neocogi-ui` library and UI examples with 1,411
+  source commits from UI. Keep renderer, resource, skin and runtime
+  document dependencies; move runnable demos and shared example providers under
+  `examples/`. Use the COM Git SDK at `4d8d7228efbcc400f63a016f9d04ee81f6f5baf8`
+  and commit the resolved lockfile. See [source history](HISTORY.md).
+
 - Replace the in-tree COM SDK/compiler/runtime and inspector with the extracted
   `NeoCogi/neocogi-com` Git source at `245701e39ad5cede0876d05c4da67c5ada986612`.
   Hosts now explicitly link `neocogi-com-host`; generated bindings, independent
@@ -43,9 +49,11 @@
   origin stack. Reporting is explicit and delivery failures still return statuses.
   The single shared COM runtime continues to own the global plugin registry.
 
+- Merge issue navigation into reviews and open work,
   removing the redundant issues folder and linking directly to the current backlog.
 
 - Consolidate current adversarial findings, decisions, investigations and
+  simplification work in one review.
   Archive superseded reports and make issue/optimization pages navigation only;
   retain native probes and independent rerun evidence.
 
@@ -72,7 +80,8 @@
 - Organize repository documentation by purpose: issues, optimization opportunities,
   contracts, experiments, measurements, architecture, guides, validation, reviews
   and project information. Update cross-links and executable documentation paths.
-  [optimization opportunities](../optimizations/OPPORTUNITIES.md), retire completed
+- Reconcile unresolved review findings in issues and
+  optimization opportunities, retire completed
   reviews and superseded plans, and update ownership, event and IDL guidance.
 
 - Add `LocalCom::downgrade` and `WeakLocalCom<T>::upgrade` for construction-proven
@@ -139,7 +148,7 @@
   generic enum, remove special optional lowering, and require borrowing the whole
   enum for owned payloads. Expose enum deserialization and conditional library
   decoder policies. COM designer catalog schema 5 uses named enum definitions
-  for optional fields. See [the generic value contract](../contracts/IDL_GENERIC_VALUES.md) for syntax,
+  for optional fields. See [the generic value contract](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/IDL_GENERIC_VALUES.md) for syntax,
   ownership, migration rules, and the remaining explicit limits.
 
 - Reset all workspace packages and plugin release metadata to **0.0.0** for
@@ -697,4 +706,4 @@ Version 0.6 introduced retained `WidgetTree` authoring on top of the earlier per
 - Transport complete structured value definitions, named recursion, and enum tags
   through COM designer catalog schema 4. Keep one stream/one lifetime consumer
   and explicit application handlers; values no longer manufacture receivers.
-  See [the recursive value contract](../contracts/RECURSIVE_VALUE_CONTRACT.md) for the supported positions and validation evidence.
+  See [the recursive value contract](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/RECURSIVE_VALUE_CONTRACT.md) for the supported positions and validation evidence.

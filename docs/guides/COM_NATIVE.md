@@ -19,8 +19,6 @@ cargo run -p neocogi-demo-full
 cargo run -p neocogi-demo-full --release --no-default-features --features dynamic,vulkan
 cargo run -p neocogi-demo-basic --bin neocogi-demo-calculator
 cargo run -p neocogi-demo-smoke -- --smoke
-cargo run -p neocogi-theme-editor
-cargo run -p neocogi-ui-designer
 ```
 
 Native applications default to `dynamic,glow`. Cargo features are additive:
@@ -103,7 +101,7 @@ requirements of those providers.
 
 Host services and loaded provider code remain process/Wasm-instance-lived, so
 returned COM objects and browser callbacks can outlive main's invocation.
-See the [portable host/provider example](../../examples/com-plugin/README.md).
+See the [portable host/provider example](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/examples/com-plugin/README.md).
 
 ## Interfaces and implementation
 
@@ -126,8 +124,8 @@ Cargo package version; `dependencies = [PLUGIN_ID]` declares hard providers.
 The macro generates `plugin_descriptor()` for static registration and the native
 `nc_get_plugin_descriptor_v1` export under `dynamic-plugin`. No `class`/`factory`
 IDL roles or factory bootstrap traits are required. A finished service is also a
-valid plugin root. See [IDL modules](../contracts/IDL_MODULES.md) and the
-[macro reference](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/crates/macros/README.md).
+valid plugin root. See [IDL modules](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/IDL_MODULES.md) and the
+[macro reference](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/crates/macros/README.md).
 
 Consumers need generated interface definitions, not a Rust dependency on their
 implementors. NCIDL imports read declarations at generation time. A public
@@ -258,7 +256,7 @@ Debug symbols in the copied ELF libraries are preserved. The native acceptance
 test scripts still use their copied test layout; launching an acceptance test's
 compiler-directory binary directly does not supply adjacent resources. Separate
 PDB/dSYM staging and Windows/macOS debugger execution are not covered by the
-Linux checks alone. See the [current debugger validation scope](../validation/README.md#tooling-and-debugger-metadata).
+Linux checks alone. See the [current debugger validation scope](../../crates/ui/runtime/docs/TESTING.md).
 
 ## Browser
 
@@ -276,8 +274,8 @@ it does not build a second native Cargo graph.
 
 ## Validation
 
-`scripts/test-demo.sh`, `scripts/test-extension.sh` and
-`scripts/test-theme-editor.sh` execute normal Cargo builds and application tests.
+`scripts/test-demo.sh` and `scripts/test-extension.sh` execute normal Cargo
+builds and application tests.
 The build itself copies its selected files. `scripts/test-native-layout.py --cache
 --run` checks actual Linux binaries, cached backend switches, deleted outputs and
 a renamed full application directory. The plugin regression also relocates its
@@ -286,6 +284,6 @@ Cargo nests unit-test executables in compiler directories. The acceptance script
 use `scripts/run-native-test.py` as a Cargo runner to copy an already compiled
 test and its staged inputs into a temporary application directory. This test-only
 runner never builds; production startup always uses adjacent files directly.
-Cross-compiler tests for the standalone COM sample remain separate.
-The [current native validation guide](../validation/README.md#renderers-and-native-applications)
+SDK cross-compiler and ABI qualification belong to the upstream COM workspace.
+The [current native validation guide](../../crates/ui/runtime/docs/TESTING.md)
 lists maintained entrypoints and platform limitations.

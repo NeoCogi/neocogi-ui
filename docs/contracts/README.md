@@ -7,19 +7,19 @@ These guides define current behavior. For component responsibilities see
 ## COM and IDL
 
 - [COM author responsibilities](COM_AUTHORS.md).
-- [Current COM ABI](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/docs/abi-v1.md) and
-  [local typed ownership](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/crates/com/README.md), including `WeakLocalCom`.
-- [Object/interface storage](COM_INTERFACE_STORAGE.md) and
-  [lifetime errors](COM_LIFETIME_ERRORS.md).
-- [IDL language and generation](IDL_MODULES.md),
-  [generic values](IDL_GENERIC_VALUES.md),
+- [Current COM ABI](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/abi-v1.md) and
+  [local typed ownership](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/crates/com/README.md), including `WeakLocalCom`.
+- [Object/interface storage](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/COM_INTERFACE_STORAGE.md) and
+  [lifetime errors](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/COM_LIFETIME_ERRORS.md).
+- [IDL language and generation](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/IDL_MODULES.md),
+  [generic values](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/IDL_GENERIC_VALUES.md),
   [event metadata](UI_EVENT_METADATA.md), and
-  [generated identifier hygiene](COM_GENERATED_IDENTIFIER_HYGIENE.md).
-- [Recursive wire values](RECURSIVE_VALUE_CONTRACT.md),
-  [directional output buffers](COM_OUTPUT_BUFFERS.md), and
-  [consuming-call output completion](COM_OUTPUT_COMPLETION.md).
-- [NCB persistence](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/crates/core/README.md#why-persistence-is-ncb-only) and
-  [independent-build compatibility](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/docs/abi-v1.md#independent-build-compatibility).
+  [generated identifier hygiene](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/COM_GENERATED_IDENTIFIER_HYGIENE.md).
+- [Recursive wire values](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/RECURSIVE_VALUE_CONTRACT.md),
+  [directional output buffers](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/COM_OUTPUT_BUFFERS.md), and
+  [consuming-call output completion](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/COM_OUTPUT_COMPLETION.md).
+- [NCB persistence](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/crates/core/README.md#why-persistence-is-ncb-only) and
+  [independent-build compatibility](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/abi-v1.md#independent-build-compatibility).
 
 ## Events and UI ownership
 
@@ -46,10 +46,5 @@ application channels and whole-module IDL identity are deliberate policies.
 - [Document resource admission](DOCUMENT_RESOURCE_ADMISSION.md).
 - [Reload generation identity](RELOAD_GENERATION_IDENTITY.md).
 - [Plugin-owned designer settings](PLUGIN_DESIGNER_SETTINGS.md).
-- [Theme editor transactions](THEME_EDITOR_TRANSACTIONS.md).
 
-Provider sticky geometry and conservative host notification work together.
-Explicit Reset/Open intent may require preview replacement even when recipes are
-equal. Weak-local ownership is implemented; it does not imply a runtime-storage
-contracts describe accepted behavior and must not present proposed changes as
-already implemented.
+Contracts describe accepted behavior and its ownership and failure boundaries.

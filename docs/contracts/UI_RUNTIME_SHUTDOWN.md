@@ -18,7 +18,7 @@ field destruction determine widget and descendant lifetime. Logical window
 capabilities can remain allocated after their widgets are gone. Their operations
 report `NC_E_CLOSED`; calls through weak observers of destroyed widget owners
 report `NC_E_DROPPED`. The precise status and concurrent ownership rules remain in
-[COM lifetime errors](COM_LIFETIME_ERRORS.md).
+[COM lifetime errors](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/COM_LIFETIME_ERRORS.md).
 
 ## Acceptance and commit boundary
 
@@ -129,25 +129,3 @@ proving shutdown adds no new lifecycle posts. Before the implementation change,
 three of the first five new tests failed: explicit shutdown still posted terminal
 facts and retained its private context. Individual removal and final runtime Drop
 already matched their intended contracts.
-
-The consolidated open-only audit records implementation revisions and executed
-validation when this finding is retired. Historical review text remains evidence
-of the earlier contract and is not rewritten as current behavior.
-
-
-## Executed validation — October 1, 2026
-
-Implementation revision `89c1618f`, branch `fix/runtime-terminal-shutdown`:
-
-| Check | Result |
-| --- | --- |
-| `cargo test -p neocogi-ui-runtime -p neocogi-ui-nodes --lib` | 210 runtime tests and 91 node tests passed. This includes all six shutdown regressions and existing ownership, dispatch, input and dialog coverage. |
-| Native full demo, theme editor and designer library tests | 6 + 25 + 33 passed with `SDL_VIDEODRIVER=offscreen`, `monolith,embed-assets`, ignored tests included, the benchmark excluded and one test thread. The designer exercised its independently built custom-widget plugin. |
-| WebGL consumer check | The demo and both tools compiled with tests for `wasm32-unknown-unknown`, without default features and with `webgl`. This was compilation, not browser execution. |
-| `cargo check --workspace --all-targets` | Passed with existing unrelated dead-code warnings. |
-| Documentation | Relative file links, balanced fences, audit disposition and `git diff --check` passed. |
-
-The baseline run of the first five tests had two passes and three failures; the
-additional root-application-dispatch test was added during implementation. Cargo
-artifacts were cleaned before and after each commit. These checks establish the
-shutdown behavior; no deployed binary-size result is asserted.

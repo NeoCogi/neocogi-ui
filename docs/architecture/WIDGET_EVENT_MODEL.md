@@ -255,9 +255,8 @@ and End outside traversal borrows. All dispatch caused by that input precedes
 End; End is attempted on failure too. These hooks record ownership facts only,
 without geometry edits or more raw input. Native polling may run ahead, so a
 deferred consumer retains the markers in the same FIFO as its original COM
-events and stamps each decoded command before consuming later markers. The
-[theme-editor contract](../contracts/THEME_EDITOR_TRANSACTIONS.md) specifies its
-pointer/keyboard Undo groups. Eventless work has no input scope.
+events and stamps each decoded command before consuming later markers.
+Eventless work has no input scope.
 
 One shared budget bounds private work, application work, reconciliation and
 consumed input scopes with application bookkeeping across
@@ -318,8 +317,7 @@ releases traversal ownership. The handler can then use ordinary window or tree
 editing operations, each with its own short transaction. The widget's or
 application dispatcher's own mutable COM gate still protects the active handler.
 
-These are implementation boundaries, not three application layers. The
-`WeakLocalCom` foundation exists, but replacing this storage arrangement or boxing
+The runtime releases each context transaction before invoking application code.
 The source is [runtime.rs](../../crates/ui/runtime/src/runtime.rs) and
 [runtime_context.rs](../../crates/ui/runtime/src/runtime_context.rs).
 

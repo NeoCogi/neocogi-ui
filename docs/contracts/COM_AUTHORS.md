@@ -118,7 +118,7 @@ processor. It returns `WeakLocalCom<Dispatcher<Processor>>`; `upgrade()?` return
 an optional strong local owner without borrowing the value. The promoted owner's
 `try_borrow` methods enforce the same gate, and final strong release expires the
 weak handle. Concrete local types stay inside Rust; IDL transports shared weak
-interface references as `WeakComPtr<I>`. See [typed local ownership](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/crates/com/README.md).
+interface references as `WeakComPtr<I>`. See [typed local ownership](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/crates/com/README.md).
 
 For coalesced publication, implement `MessageProcessor::apply_pending_changes` (or the
 host's `AppState::apply_pending_changes`) and return `ApplyOutcome::ChangesApplied`
@@ -966,7 +966,7 @@ the next preparation, and outstanding slots keep their GPU buffers alive. These
 owners remain private to the renderer and do not retain the COM scene or window.
 
 Use `Painter::texture(rect, rgba, image)` and `Painter::item(rect, scene)` at the
-intended source position. The full example is `demos/smoke/src/gpu.rs`. Scene edits
+intended source position. The full example is `examples/smoke/src/gpu.rs`. Scene edits
 normally change paint only: render again; a UI update is needed if widget geometry or
 other retained inputs also changed. Perform scene edits before painting. The GPU
 owner can detect its own active preparation/execution, but cannot detect a separate
@@ -1064,13 +1064,13 @@ results and converted writable buffers; the maximum must fit before dispatch.
 Your implementation still prepares its own fallible work before committing.
 Completion does not allocate replacement buffers, and all converted outputs are
 validated before any is published. Direct numeric buffers remain in-place.
-[Prepared output completion](COM_OUTPUT_COMPLETION.md) explains the IDL/Rust
+[Prepared output completion](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/COM_OUTPUT_COMPLETION.md) explains the IDL/Rust
 contract, its conservative enum limit, and failure-injection tests.
 
 Fresh private builders may deliberately discard returned candidates after a
 failed ABI call, provided those candidates cannot own an active receiver. There
 is no implicit tuple-to-status conversion that would hide that decision. See
-[ABI v1](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/docs/abi-v1.md) for wire slots, forwarding, multiple inputs
+[ABI v1](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/abi-v1.md) for wire slots, forwarding, multiple inputs
 and the requirement to return valid output after accepting ownership.
 
 For construction code that deliberately abandons failed candidates, convert to
@@ -1090,7 +1090,7 @@ input. Providers implement `NcOutputWriter<'_, T>`, write using `push` or
 `NcOutputBuffer<T>::output(offset, capacity)` and read its published `as_slice()`
 after success. Short results expose only their initialized prefix. A true
 transformation takes a distinct `&[T]` input and output argument. See
-[the complete contract](COM_OUTPUT_BUFFERS.md) for forwarding, allocation-free
+[the complete contract](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/COM_OUTPUT_BUFFERS.md) for forwarding, allocation-free
 identity storage, failure semantics, wire validation, and ABI v1.
 
 Private content created by `WidgetFactory::dispatching_leaf` receives a borrowed

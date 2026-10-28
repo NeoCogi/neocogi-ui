@@ -5,6 +5,6 @@
 - [Asset attribution and licenses](ASSETS.md).
 - [Project overview](../../README.md).
 
-including correctness findings, investigations and optional simplification. Start
-from the [documentation index](../README.md) for contracts, guides and implementation
-notes.
+- [Source history and extraction](HISTORY.md).
+
+Start from the [documentation index](../README.md) for contracts, guides and implementation notes.
