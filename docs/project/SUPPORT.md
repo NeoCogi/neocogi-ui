@@ -10,14 +10,14 @@ not yet make.
 The workspace uses Rust 2024 edition. The COM core, facade, runtime, macros and
 IDL compiler declare Rust **1.85** as their minimum supported Rust version. The
 inspector and normative ABI snippets are also exercised by the
-[minimum-version suite](../../crates/com/scripts/test-msrv.sh), which has a
-dedicated CI job. Compile-test tooling is pinned to a floor-compatible version.
+[minimum-version suite](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/tools/xtask/README.md), which has a
+dedicated upstream CI job. Compile-test tooling is pinned to a floor-compatible version.
 The development workspace pins nightly Cargo because its native compositions use
 artifact dependencies. External COM/IDL consumers retain the Rust 1.85 floor.
-The stable/MSRV and cross-compiler suites copy the library source boundary into
-a temporary test workspace, excluding development-only artifact manifests.
-This fixture builds no production assembly. UI and renderer dependency versions
-are not covered by the COM compiler floor.
+The upstream Rust task runner owns compiler-floor, extracted-archive and
+independent host/provider checks. UI CI checks the pinned SDK through
+its own UI, renderer and application consumers. UI and renderer dependency
+versions are not covered by the COM compiler floor.
 
 The [native guide](../guides/COM_NATIVE.md) documents ordinary Cargo application
 builds and their current constraints. IDL generation is an in-process Cargo
@@ -47,16 +47,17 @@ it. There is no compatibility or long-term-support commitment. Pin the checkout 
 your application and every plugin together, and review the [changelog](CHANGELOG.md) before upgrading. The manifest version
 is not a promise that the unreleased checkout matches a published package.
 
-The neocogi-com sources in `crates/com` are part of this checkout. Core, plugin
+The COM SDK, host implementation and IDL compiler are pinned Git dependencies
+from `NeoCogi/neocogi-com`; this checkout owns their UI/render integration. Core, plugin
 descriptor and runtime table ABIs remain at version 1 during pre-alpha.
-The [COM ABI-v1 specification](../../crates/com/docs/abi-v1.md) describes that
-baseline; the [core version constant](../../crates/com/core/src/metadata/contract.rs)
+The [COM ABI-v1 specification](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/docs/abi-v1.md) describes that
+baseline; the [core version constant](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/crates/core/src/metadata/contract.rs)
 is its numeric authority. The compiler owns the separate
 [module fingerprint grammar](../contracts/IDL_MODULES.md#canonical-signatures)
-and [encoder](../../crates/com/idl/src/resolve.rs). None promises
+and [encoder](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/crates/idl/src/resolve.rs). None promises
 compatibility across pre-alpha checkout revisions.
-Use the workspace sources for both producer and consumer; a crates.io dependency
-with the same pre-alpha package version is not a substitute for this fork. Native
+Use the same pinned Git revision for hosts and providers; a crates.io dependency
+with the same pre-alpha package version has a different Cargo identity. Native
 modules stay loaded for the process lifetime; hot reload/unload is unsupported.
 
 ## Reporting a problem

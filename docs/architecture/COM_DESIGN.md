@@ -1,5 +1,9 @@
 # NeoCogi component design
 
+The [upstream COM SDK reference](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/docs/COM.md) owns the compiler and ABI
+contract. This guide records UI integration; SDK implementation and
+qualification are maintained in `NeoCogi/neocogi-com`.
+
 A contract describes values, callable interfaces and required projections at
 compile time. Rust owns concrete object fields and method bodies through
 `#[com_object]`. `#[plugin]` publishes a typed acquisition function receiving host runtime access;
@@ -29,8 +33,8 @@ already-computed identities and signatures.
 
 COM responsibilities have concrete owners: `core` supplies ABI and value support;
 `idl` owns parsing through Cargo integration, including its shared `codegen` module;
-`macros` supplies thin Rust implementation/persistence entrypoints; `api` supplies
-object helpers, static IDL metadata and runtime clients; `runtime` owns loading, the plugin catalog
+`macros` supplies thin Rust implementation/persistence entrypoints; `com` supplies
+object helpers, static IDL metadata and runtime clients; `host` owns loading, the plugin catalog
 and persistence execution. The final executable links its runtime implementation
 and initializes it through `#[com_main]`. Plugins receive access to that one global
 registry through their acquisition call. No COM runtime DSO is deployed. Contracts and facade helpers compile into their consumers. Cargo
@@ -67,7 +71,7 @@ a Rust reference; conflicting or reentrant access returns `NC_E_BUSY`. Shared
 objects keep their method borrow state separate from strong counting. Exclusive
 objects combine owner presence and reader/writer admission in one atomic word.
 The ABI implementation contains the necessary `UnsafeCell`; semantic state stays
-in ordinary fields. See the [current ABI](../../crates/com/docs/abi-v1.md) for layouts,
+in ordinary fields. See the [current ABI](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/docs/abi-v1.md) for layouts,
 ownership transfer and the limits of concurrent Drop.
 
 ## Events and UI ownership
@@ -84,7 +88,7 @@ out-of-traversal completions retain the weak origins justified by the UI contrac
 [lifetime errors](../contracts/COM_LIFETIME_ERRORS.md) define synchronous owner
 removal and its distinction from a service's optional close operation. Queues and
 UI origin scopes remain under their own owners, independent of the single global
-plugin registry in the host-owned `nc_com` implementation.
+plugin registry in the host-owned `neocogi_com_host` implementation.
 
 ## Independent-build compatibility
 
@@ -110,8 +114,8 @@ Dynamic and static assemblies use the same typed acquisition. Dynamic builds exp
 `nc_get_plugin_descriptor_v1`; monoliths register the same provider's Rust
 descriptor and link the runtime statically. Independent compiler versions and
 build flags are supported when the target C ABI, core generation and exact contract
-signatures agree. The [compatibility matrix](../../crates/com/docs/abi-v1.md#independent-build-compatibility)
-records actual cross-build verification. The [current contract index](../../crates/com/docs/abi-v1.md)
+signatures agree. The [compatibility matrix](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/docs/abi-v1.md#independent-build-compatibility)
+records actual cross-build verification. The [current contract index](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/docs/abi-v1.md)
 separates core ABI generation from discovery versions and IDL hash encoding.
 
 Inspection exposes plugin and factory compatibility metadata. A custom widget
@@ -132,7 +136,8 @@ ownership error.
 
 Current examples therefore execute the exact source published in their guide:
 the Button walkthrough covers input delivery, removal and queued stale origins;
-the COM/IDL documentation test generates the marked language examples and executes
-the factory bootstrap. Package overviews link to one current ABI index, checked
+the upstream COM/IDL documentation test generates its own marked language examples
+and executes the factory bootstrap. UI retains its Button and document
+walkthrough tests. Package overviews link to one current ABI index, checked
 against the core version constant. Historical reports and measurements retain
 their evidence with dated follow-up status rather than serving as current API guides.

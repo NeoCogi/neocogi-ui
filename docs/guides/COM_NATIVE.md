@@ -87,7 +87,7 @@ use normal Rust providers. This crate neither invokes Cargo nor resolves package
 
 ## One host-owned runtime
 
-The final executable depends on `neocogi-com-runtime` and initializes its one
+The final executable depends on `neocogi-com-host` and initializes its one
 registry through `#[neocogi_com::com_main]`. Its authored main receives `Runtime`;
 application libraries accept that handle. Each plugin's typed acquisition accepts
 one supplied handle, with the generated C bootstrap forwarding the immutable
@@ -127,7 +127,7 @@ The macro generates `plugin_descriptor()` for static registration and the native
 `nc_get_plugin_descriptor_v1` export under `dynamic-plugin`. No `class`/`factory`
 IDL roles or factory bootstrap traits are required. A finished service is also a
 valid plugin root. See [IDL modules](../contracts/IDL_MODULES.md) and the
-[macro reference](../../crates/com/macros/README.md).
+[macro reference](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/crates/macros/README.md).
 
 Consumers need generated interface definitions, not a Rust dependency on their
 implementors. NCIDL imports read declarations at generation time. A public
@@ -217,7 +217,7 @@ dependency on a package advertising both rlib/cdylib may also emit an unused sha
 library during monolith/browser builds; removing that extra link would require
 separate static/dynamic target packages or another crate-type selection mechanism.
 
-The host implementation Rust target is `nc_com`. Native provider names remain `nc_ui`, `nc_ui_nodes`, `nc_render`,
+The host implementation Rust target is `neocogi_com_host`. Native provider names remain `nc_ui`, `nc_ui_nodes`, `nc_render`,
 `nc_gfx`, `nc_skin` and optional `nc_ui_extension`. The executable is in the usual
 `target/<profile>` directory when no explicit target is selected. Dependency DLLs
 remain in Cargo's artifact directories as compiler inputs, with deployment copies

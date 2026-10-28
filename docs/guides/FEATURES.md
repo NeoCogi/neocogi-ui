@@ -40,7 +40,7 @@ style editor. The browser links/registers that provider without its filesystem-b
 the simple demo does not need it.
 
 Cargo may freely unify the `runtime` client capability. The executable selects
-`nc_com` as an ordinary Rust dependency, initializes it through `#[com_main]` and
+`neocogi_com_host` as an ordinary Rust dependency, initializes it through `#[com_main]` and
 passes `Runtime` to providers and reusable libraries. The same ownership applies
 to native dynamic, monolithic and browser applications; final test executables
 select their owner explicitly. Neither COM nor UI facade has a feature that

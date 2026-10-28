@@ -66,7 +66,7 @@ Event lists are UI metadata and do not change a producer's callable ABI signatur
 Changing an event's ordinary getter contract still changes that event's signature.
 Canonical module encoding **v13** removes the old application event edges; rebuild
 all contracts and consumers together. Core object ABI and runtime discovery are
-unchanged. Native plugins continue to share the single global `nc_com` registry.
+unchanged. Native plugins continue to share the single global `neocogi_com_host` registry.
 
 `#[events(...)]` is no longer IDL syntax. Its former compiler validation and
 `IdlEvent` records have been removed rather than retained as compatibility paths.

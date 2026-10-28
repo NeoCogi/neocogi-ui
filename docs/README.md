@@ -27,12 +27,12 @@ purpose; this directory contains only the main index.
   ownership, message flow and how an update reaches a renderable state.
 - [COM author contracts](contracts/COM_AUTHORS.md),
   [IDL language](contracts/IDL_MODULES.md), and
-  [current COM ABI](../crates/com/docs/abi-v1.md).
+  [current COM ABI](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/docs/abi-v1.md).
 - [Application and widget dispatch](contracts/WIDGET_EVENT_DISPATCH.md),
   [typed event queues](contracts/CLASS_EVENT_STREAMS.md), and
   [exclusive widget ownership](contracts/EXCLUSIVE_WIDGET_OWNERSHIP.md).
 - [Native deployment](guides/COM_NATIVE.md), [examples](guides/EXAMPLES.md),
-  [WebGL](guides/WEB.md), and [IDL generation](../crates/com/idl/README.md).
+  [WebGL](guides/WEB.md), and [IDL generation](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/crates/idl/README.md).
 - [Theme editor](../tools/theme-editor/README.md) and
   [UI designer](../tools/ui-designer/README.md).
 

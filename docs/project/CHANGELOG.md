@@ -2,6 +2,12 @@
 
 ## 0.0.0 (unreleased)
 
+- Replace the in-tree COM SDK/compiler/runtime and inspector with the extracted
+  `NeoCogi/neocogi-com` Git source at `245701e39ad5cede0876d05c4da67c5ada986612`.
+  Hosts now explicitly link `neocogi-com-host`; generated bindings, independent
+  test consumers and plugins use the same revision. Keep UI regression schemas
+  local and SDK qualification upstream. See [dependency updates](../guides/COM_DEPENDENCY.md).
+
 - Consolidate Rust emission and implementation-macro expansion in
   `neocogi_idl::codegen`. Remove the standalone backend package; keep the thin
   procedural macro crate dependent on IDL's ordinary library. Generated COM
@@ -13,7 +19,7 @@
   retaining the runtime as a host rlib. Core/runtime/plugin remain ABI v1.
 
 - Consolidate the COM object/runtime/compatibility specifications into one
-  [ABI-v1 guide](../../crates/com/docs/abi-v1.md). Core, runtime and plugin
+  ABI-v1 guide. Core, runtime and plugin
   discovery share the pre-release v1 baseline; IDL fingerprints and UI schemas
   retain separate version authorities. Rebuild every peer from the same checkout.
 

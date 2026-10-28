@@ -118,7 +118,7 @@ processor. It returns `WeakLocalCom<Dispatcher<Processor>>`; `upgrade()?` return
 an optional strong local owner without borrowing the value. The promoted owner's
 `try_borrow` methods enforce the same gate, and final strong release expires the
 weak handle. Concrete local types stay inside Rust; IDL transports shared weak
-interface references as `WeakComPtr<I>`. See [typed local ownership](../../crates/com/api/README.md).
+interface references as `WeakComPtr<I>`. See [typed local ownership](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/crates/com/README.md).
 
 For coalesced publication, implement `MessageProcessor::apply_pending_changes` (or the
 host's `AppState::apply_pending_changes`) and return `ApplyOutcome::ChangesApplied`
@@ -1070,7 +1070,7 @@ contract, its conservative enum limit, and failure-injection tests.
 Fresh private builders may deliberately discard returned candidates after a
 failed ABI call, provided those candidates cannot own an active receiver. There
 is no implicit tuple-to-status conversion that would hide that decision. See
-[ABI v1](../../crates/com/docs/abi-v1.md) for wire slots, forwarding, multiple inputs
+[ABI v1](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/docs/abi-v1.md) for wire slots, forwarding, multiple inputs
 and the requirement to return valid output after accepting ownership.
 
 For construction code that deliberately abandons failed candidates, convert to

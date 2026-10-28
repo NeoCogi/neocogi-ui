@@ -7,8 +7,8 @@ These guides define current behavior. For component responsibilities see
 ## COM and IDL
 
 - [COM author responsibilities](COM_AUTHORS.md).
-- [Current COM ABI](../../crates/com/docs/abi-v1.md) and
-  [local typed ownership](../../crates/com/api/README.md), including `WeakLocalCom`.
+- [Current COM ABI](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/docs/abi-v1.md) and
+  [local typed ownership](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/crates/com/README.md), including `WeakLocalCom`.
 - [Object/interface storage](COM_INTERFACE_STORAGE.md) and
   [lifetime errors](COM_LIFETIME_ERRORS.md).
 - [IDL language and generation](IDL_MODULES.md),
@@ -18,8 +18,8 @@ These guides define current behavior. For component responsibilities see
 - [Recursive wire values](RECURSIVE_VALUE_CONTRACT.md),
   [directional output buffers](COM_OUTPUT_BUFFERS.md), and
   [consuming-call output completion](COM_OUTPUT_COMPLETION.md).
-- [NCB persistence](../../crates/com/core/README.md#why-persistence-is-ncb-only) and
-  [independent-build compatibility](../../crates/com/docs/abi-v1.md#independent-build-compatibility).
+- [NCB persistence](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/crates/core/README.md#why-persistence-is-ncb-only) and
+  [independent-build compatibility](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/docs/abi-v1.md#independent-build-compatibility).
 
 ## Events and UI ownership
 

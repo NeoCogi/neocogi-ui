@@ -4,7 +4,7 @@
 
 NeoCogi UI, formerly **microui-redux**, grew from
 [rxi/microui](https://github.com/rxi/microui) into a broader workspace for modular
-Rust applications. It now includes a COM component model and IDL tooling, a
+Rust applications. It uses the [NeoCogi COM SDK](https://github.com/NeoCogi/neocogi-com) and IDL tooling, a
 shared-library and plugin architecture, retained UI and rendering, a
 [theme editor](tools/theme-editor/README.md), and an experimental
 [UI designer](tools/ui-designer/README.md).
@@ -16,8 +16,8 @@ optional monolithic build; browsers register the same interfaces with one static
 runtime. The editors use these same components for live theme and UI previews.
 
 All workspace packages use version **0.0.0**, pre-alpha. APIs and binary contracts may change
-without compatibility layers. The imported neocogi-com implementation is maintained in
-this workspace. Concrete controls such as `Button` have callable COM interface contracts;
+without compatibility layers. COM and IDL are revision-pinned Git dependencies from
+[`NeoCogi/neocogi-com`](https://github.com/NeoCogi/neocogi-com). Concrete controls such as `Button` have callable COM interface contracts;
 shared protocols such as `IWidget` and `ILeafLayout` remain interfaces on the same
 object and state.
 
@@ -32,6 +32,10 @@ and [executable mapping](docs/guides/EXAMPLES.md) for exact outputs.
 | ![Windows 3.11 theme](res/microui-windows-3.11.png) | ![Mac OS 9 theme](res/microui-mac-os-9.png) |
 
 ## Run the demos
+
+The private COM Git dependency requires SSH access to `NeoCogi/neocogi-com`.
+Cargo uses the ordinary Git client and your configured GitHub SSH identity. See [dependency updates](docs/guides/COM_DEPENDENCY.md) for
+credentials, revision updates and integration checks.
 
 The checkout pins nightly for native artifact/linkage integration and target
 standard-library builds. Build and run the selected application directly:
@@ -70,15 +74,20 @@ and generated COM code. See [native debugging](docs/guides/COM_NATIVE.md#debuggi
 
 ## Workspace layout
 
-COM infrastructure lives under `crates/com`: `core` defines the ABI vocabulary,
-`macros` supplies Rust implementation helpers, `api` is the safe client surface,
-and `runtime` owns the host's process-wide registry. The final executable selects
-and initializes that implementation; plugins receive runtime access.
-The `neocogi-idl` compiler owns parsing, resolution, fingerprints, Rust generation
-and Cargo integration. Shared sources stay under their subsystem: UI in
-[`crates/ui/schemas/`](crates/ui/schemas), renderer in [`crates/render/schemas/`](crates/render/schemas),
-COM fixtures in [`crates/com/schemas/`](crates/com/schemas), and likewise for
-platform, GFX, skin, demos and examples. Consumers generate bindings into their own `OUT_DIR`. Standalone contract packages
+COM infrastructure and the IDL compiler are maintained in
+[`NeoCogi/neocogi-com`](https://github.com/NeoCogi/neocogi-com). The workspace
+uses its shared `neocogi-com` SDK, `neocogi-com-host` implementation, and
+`neocogi-idl` compiler at one exact Git revision in `Cargo.toml`. The final
+executable selects and initializes the host implementation; plugins receive
+runtime access. The SDK's core and macros resolve transitively from that same
+revision. SDK tests, packaging and the inspector are owned upstream.
+
+Shared IDL stays under its subsystem: UI in
+[`crates/ui/schemas/`](crates/ui/schemas), renderer in
+[`crates/render/schemas/`](crates/render/schemas), and likewise for platform,
+GFX, skin, demos and examples. UI document regression schemas live in
+[`crates/ui/document/schemas/`](crates/ui/document/schemas).
+Consumers generate bindings into their own `OUT_DIR`. Standalone contract packages
 are unnecessary. Existing Rust helper libraries expose their own bindings where
 ordinary Rust calls need those exact types.
 
@@ -156,7 +165,7 @@ assume the repository is cloned into a sibling directory named `ui`:
 ```toml
 [dependencies]
 neocogi-ui = { path = "../neocogi-ui/crates/ui/api" }
-neocogi-com = { path = "../neocogi-ui/crates/com/api" }
+neocogi-com = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "245701e39ad5cede0876d05c4da67c5ada986612" }
 ```
 
 With an initialized `Ui`, the facade creates and edits the actual objects:
@@ -255,6 +264,8 @@ source. [FEATURES.md](docs/guides/FEATURES.md) defines current feature ownership
 
 ## License
 
-Project-authored code uses the [BSD 3-Clause License](LICENSE). Imported neocogi-com and
-portions derived from rxi/microui retain their MIT terms. Bundled assets retain the
+Project-authored code uses the [BSD 3-Clause License](LICENSE). The external
+[neocogi-com SDK](https://github.com/NeoCogi/neocogi-com/blob/245701e39ad5cede0876d05c4da67c5ada986612/LICENSE-MIT)
+and portions derived from rxi/microui use MIT terms. The retained GFX allocation
+probe and document test schema keep their [COM fixture MIT notice](LICENSES/COM-fixtures-MIT.txt). Bundled assets retain the
 licenses recorded in [asset attribution](docs/project/ASSETS.md).

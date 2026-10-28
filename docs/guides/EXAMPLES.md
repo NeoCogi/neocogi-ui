@@ -33,7 +33,7 @@ the Cargo package and `--bin` selects one executable:
 | `neocogi-ui-designer` | `neocogi-ui-designer` | `ui-designer` |
 | `neocogi-asset-tools` | `neocogi-atlas-export` | Direct Cargo |
 | `neocogi-asset-tools` | `neocogi-mac-os-9-theme-export` | Direct Cargo; requires `png_source` |
-| `neocogi-inspect` | `neocogi-inspect` | Direct Cargo |
+| `neocogi-inspect` (upstream) | `neocogi-inspect` | [Install the pinned upstream tool](COM_DEPENDENCY.md#inspector) |
 
 Windows adds `.exe`. Browser binary targets use the same base names with `.wasm`.
 For example, `cargo build -p neocogi-demo-basic --bin neocogi-demo-calculator`
