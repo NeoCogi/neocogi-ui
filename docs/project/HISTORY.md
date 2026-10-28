@@ -1,50 +1,55 @@
-# Source history and standalone extraction
+# UI and COM history
 
-NeoCogi UI continues the microui-redux UI lineage through
-[NeoCogi UI](https://github.com/NeoCogi/neocogi-ui). The extraction uses
-UI branch `refactor/external-neocogi-com` at
-`84d8fdd5`.
+`neocogi-ui` and [`neocogi-com`](https://github.com/NeoCogi/neocogi-com) evolve
+through corresponding revisions. Each historical UI commit that uses COM pins
+its SDK/compiler dependencies to the matching commit in
+`git@github.com:NeoCogi/neocogi-com.git`.
 
-The imported ancestry starts with the original November 21, 2022 commit
-`6db90618220a0b462999d24a419825978566919d`. It includes the microui-redux
-`0.9-alpha.0` baseline at
-`6b4fd86f`,
-which maps to `b39cfe076ff5140b3d14371057004c69720cc7a2` here. The local
-`microui-redux-0.9-alpha.0` tag marks that imported baseline.
+The [revision ledger](COM_HISTORY.tsv) covers the initial **1,413 UI commits**.
+It records **570 UI-to-COM links across 268 COM revisions**. A `-` marks each of
+the 843 early UI commits before COM was introduced. Historical package names,
+versions, features, default-feature selections and artifact policies are retained;
+SDK dependency paths become exact Git sources. Workspace selections include
+only the packages present in the UI repository.
 
-The filtered import contains **1,411 commits**. Original authors, committers,
-timestamps, messages and retained source changes are preserved. Removing files
-and commits changes downstream Git identities. The original-to-imported mapping
-is retained locally in `.git/info/ui-commit-map`.
+## Following a revision
 
-## Extraction boundaries
+A linked commit records its companion revision directly:
 
-Retained source includes the UI client API, runtime, nodes, support, shared IDL,
-runtime documents, serialization/manifests, renderer/platform providers, GFX,
-skin, appearance, assets, themes, UI examples and their build/validation helpers.
-Their historical names and file moves remain in the imported ancestry.
-`neocogi-ui-design` is a library for document/settings serialization and extension
-manifests used by the runtime loader and extension example.
+```text
+NeoCogi-Com-Repository: git@github.com:NeoCogi/neocogi-com.git
+NeoCogi-Com-Commit: <full COM commit ID>
+```
 
-Designer and theme-editor applications, their tests/scripts, in-tree COM/IDL
-implementations and SDK-only tools/examples are excluded from every imported
-revision. Review, audit, plan, proposal and experiment documents are excluded
-throughout history. Documentation-only commits recording those activities are
-also omitted; implementation fixes and their tests remain.
+Read those trailers with `git show --format=fuller <UI revision>` or look up the
+UI commit in the ledger. Authors, committers and timestamps are preserved.
+Commit IDs change when dependency declarations or parent commits change.
+The `microui-redux-0.9-alpha.0` tag selects the corresponding UI baseline.
 
-The import follows the standalone COM extraction pattern: filtered source
-history first, followed by explicit workspace and documentation commits.
-Runnable UI applications and shared example hosts/assets/providers live under
-`examples/`; libraries remain under their subsystem in `crates/`, with `tools/`,
-`scripts/` and `docs/` for their existing responsibilities.
-The source checkouts are unchanged by this extraction.
+Later commits use their root Cargo dependency pins as the authority. If a COM
+trailer is present, it must match those declarations. The current SDK, host and
+compiler use [`4d8d7228`](https://github.com/NeoCogi/neocogi-com/commit/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8).
+The [dependency guide](../guides/COM_DEPENDENCY.md) explains coordinated updates.
 
-## COM source
+## Verification
 
-The SDK, host and compiler are Git dependencies from
-`git@github.com:NeoCogi/neocogi-com.git`, pinned together to
-[`4d8d7228`](https://github.com/NeoCogi/neocogi-com/commit/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8),
-the sibling COM checkout's `master`/`origin/master` at extraction. Cargo uses the
-SSH URL form of the same repository and commits its complete lockfile.
-Upstream documentation links use that revision. Follow the
-[COM dependency guide](../guides/COM_DEPENDENCY.md) when advancing the pin.
+With both repositories checked out as siblings, run:
+
+```sh
+python3 scripts/check_com_history.py
+```
+
+The read-only audit checks ledger coverage, commit trailers, every historical
+Cargo dependency source, requested package existence and COM ancestry. It reads
+Git objects directly; it does not build archived snapshots or require their
+packages in the current workspace. Use `--com path/to/neocogi-com` for another
+checkout location.
+
+Older COM revisions predate its standalone workspace manifest. Exact historical
+linkage and matching SDK contents are verified; independent buildability of every
+archived UI/COM pair is not claimed. Current UI builds use the packaged COM revision
+and the committed lockfile.
+
+The history retains the UI libraries, renderer/platform providers, resources,
+themes and UI examples. Standalone editor applications, reviews and plans remain
+outside this repository's history.

@@ -2,11 +2,16 @@
 
 ## 0.0.0 (unreleased)
 
-- Extract the standalone `NeoCogi/neocogi-ui` library and UI examples with 1,411
-  source commits from UI. Keep renderer, resource, skin and runtime
+- Link historical UI revisions to their exact companion COM revisions in Cargo
+  declarations and commit trailers. Retain a complete UI/COM revision ledger and
+  a read-only audit command. Use the UI identity throughout the repository and
+  its history. See [UI and COM history](HISTORY.md).
+
+- Establish the standalone `NeoCogi/neocogi-ui` library and UI examples with 1,411
+  history commits. Keep renderer, resource, skin and runtime
   document dependencies; move runnable demos and shared example providers under
   `examples/`. Use the COM Git SDK at `4d8d7228efbcc400f63a016f9d04ee81f6f5baf8`
-  and commit the resolved lockfile. See [source history](HISTORY.md).
+  and commit the resolved lockfile. See [UI and COM history](HISTORY.md).
 
 - Replace the in-tree COM SDK/compiler/runtime and inspector with the extracted
   `NeoCogi/neocogi-com` Git source at `245701e39ad5cede0876d05c4da67c5ada986612`.

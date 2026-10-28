@@ -5,9 +5,8 @@ document loading, rendering, resources, themes, and UI examples. Components use
 typed COM interfaces with independently deployable UI runtime, node, renderer,
 GFX, and skin providers.
 
-The project continues the microui-redux lineage imported through NeoCogi
-UI. See [history and extraction scope](docs/project/HISTORY.md) for
-source revisions and the retained commit history.
+See [UI and COM history](docs/project/HISTORY.md) for the matching dependency
+revisions throughout the commit history.
 
 ## Workspace layout
 

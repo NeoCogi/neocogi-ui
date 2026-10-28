@@ -5,6 +5,6 @@
 - [Asset attribution and licenses](ASSETS.md).
 - [Project overview](../../README.md).
 
-- [Source history and extraction](HISTORY.md).
+- [UI and COM history](HISTORY.md).
 
 Start from the [documentation index](../README.md) for contracts, guides and implementation notes.
