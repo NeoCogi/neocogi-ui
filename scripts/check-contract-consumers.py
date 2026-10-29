@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 import tomllib
 
-from contract_check_support import child_environment, git_dependency
+from contract_check_support import child_environment, registry_dependency
 
 
 @dataclass(frozen=True)
@@ -22,9 +22,9 @@ class Consumer:
     """One actual package and its independent executable acceptance body."""
 
     package: str
-    """Cargo package supplying the actual library or generated-only Git SDK."""
+    """Cargo package supplying the actual library or generated-only registry SDK."""
     path: str
-    """Repository-relative owner directory, or empty for generated-only Git consumers."""
+    """Repository-relative owner directory, or empty for generated-only registry consumers."""
     body: str
     """Rust main body that exercises the public contract without importing COM."""
     namespace: str = ""
@@ -89,8 +89,8 @@ def write_consumer(consumer, repository, directory):
     manifest = ('[package]\nname="contract-consumer-check"\nversion="0.0.0"\nedition="2024"\n'
                 '[workspace]\n[dependencies]\n')
     if consumer.generated_module:
-        manifest += git_dependency(repository, "neocogi-com", ["alloc"])
-        manifest += '[build-dependencies]\n' + git_dependency(repository, "neocogi-idl")
+        manifest += registry_dependency(repository, "neocogi-com", ["alloc"])
+        manifest += '[build-dependencies]\n' + registry_dependency(repository, "neocogi-idl")
         (directory / "build.rs").write_text(
             'fn main() { for module in neocogi_idl::cargo::SharedSources::new(' + json.dumps(str(repository / "crates/render/schemas")) + ')'
             '.module(' + json.dumps(consumer.generated_module) + ', "contract_consumer_check::contract").build().unwrap() {'

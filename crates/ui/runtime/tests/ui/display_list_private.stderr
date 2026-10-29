@@ -5,7 +5,10 @@ error[E0603]: struct `DisplayList` is private
   |                    ^^^^^^^^^^^ private struct
   |
 note: the struct `DisplayList` is defined here
- --> /cargo/deps/neocogi-ui-runtime-0.0.0/src/render.rs:8:15
+ --> src/render.rs
+  |
+  | pub(crate) use display_list::DisplayList;
+  |                ^^^^^^^^^^^^^^^^^^^^^^^^^
 help: import `DisplayList` directly
   |
 3 - use nc_ui::render::DisplayList;

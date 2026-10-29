@@ -6,13 +6,15 @@ import tempfile
 import unittest
 
 from check_com_history import (
-    COM_REPOSITORY, COM_URL, declared_revision, dependency_tables, manifest_links,
+    COM_REPOSITORY, COM_URL, SdkSource, declared_source, dependency_tables, manifest_links,
     message_link, read_ledger, sdk_package, verify,
 )
 
 
 UI_REVISION = "1" * 40
 COM_REVISION = "2" * 40
+GIT_SOURCE = SdkSource("git", COM_REVISION)
+REGISTRY_SOURCE = SdkSource("crates.io", "=0.1.0-alpha.1")
 
 
 class Ledger(unittest.TestCase):
@@ -73,19 +75,19 @@ class ManifestSources(unittest.TestCase):
     def test_workspace_inheritance_and_local_ui_dependencies_are_preserved(self):
         manifest = {"workspace": {"dependencies": {"neocogi-com": self.source()}},
                     "dependencies": {"neocogi-com": {"workspace": True}, "neocogi-ui": {"path": "crates/ui/api"}}}
-        self.assertEqual(manifest_links(manifest, COM_REVISION), {"neocogi-com"})
+        self.assertEqual(manifest_links(manifest, GIT_SOURCE), {"neocogi-com"})
 
     def test_alias_and_artifact_policy_does_not_change_source_ownership(self):
         declaration = self.source(package="neocogi-com-runtime", artifact="cdylib", target="target", optional=True)
         manifest = {"target": {"cfg(unix)": {"build-dependencies": {"com-library": declaration}}}}
-        self.assertEqual(manifest_links(manifest, COM_REVISION), {"neocogi-com-runtime"})
+        self.assertEqual(manifest_links(manifest, GIT_SOURCE), {"neocogi-com-runtime"})
 
     def test_every_dependency_table_is_inspected(self):
         manifest = {"dependencies": {}, "dev-dependencies": {}, "build-dependencies": {},
                     "workspace": {"dependencies": {}}, "target": {"cfg(unix)": {"dependencies": {}}},
                     "patch": {"some-source": {"sdk": self.source(package="neocogi-com")}}}
         self.assertEqual(len(list(dependency_tables(manifest))), 8)
-        self.assertEqual(manifest_links(manifest, COM_REVISION), {"neocogi-com"})
+        self.assertEqual(manifest_links(manifest, GIT_SOURCE), {"neocogi-com"})
 
     def test_different_floating_or_local_sources_are_rejected(self):
         declarations = ("0.0.0", {"path": "../com"}, self.source(rev="3" * 40),
@@ -93,19 +95,39 @@ class ManifestSources(unittest.TestCase):
                         self.source(tag="release"), self.source(path="../com"))
         for dependency in declarations:
             with self.subTest(dependency=dependency), self.assertRaises(ValueError):
-                manifest_links({"dependencies": {"neocogi-com": dependency}}, COM_REVISION)
+                manifest_links({"dependencies": {"neocogi-com": dependency}}, GIT_SOURCE)
 
     def test_pre_com_commit_cannot_silently_acquire_an_sdk_dependency(self):
         with self.assertRaises(ValueError):
             manifest_links({"dependencies": {"neocogi-com": self.source()}}, None)
 
     def test_later_root_pins_reject_mixed_or_unpinned_sources(self):
-        self.assertEqual(declared_revision({"workspace": {"dependencies": {"neocogi-com": self.source()}}}), COM_REVISION)
+        self.assertEqual(declared_source({"workspace": {"dependencies": {"neocogi-com": self.source()}}}), GIT_SOURCE)
         for dependencies in ({"neocogi-com": {"git": COM_URL}},
                              {"neocogi-com": self.source(rev=123)},
                              {"neocogi-com": self.source(), "neocogi-idl": self.source(rev="3" * 40)}):
             with self.subTest(dependencies=dependencies), self.assertRaises(ValueError):
-                declared_revision({"dependencies": dependencies})
+                declared_source({"dependencies": dependencies})
+
+    def test_registry_selection_requires_one_exact_crates_io_version(self):
+        """Published snapshots retain source identity without inventing Git linkage."""
+        declaration = {"version": "=0.1.0-alpha.1", "default-features": False}
+        manifest = {"workspace": {"dependencies": {"neocogi-com": declaration, "neocogi-idl": declaration}}}
+        self.assertEqual(declared_source(manifest), REGISTRY_SOURCE)
+        self.assertEqual(manifest_links(manifest, REGISTRY_SOURCE), {"neocogi-com", "neocogi-idl"})
+        self.assertEqual(declared_source({"dependencies": {"neocogi-com": "=0.1.0-alpha.1"}}), REGISTRY_SOURCE)
+        for invalid in ("0.1.0-alpha.1", "=0.1.0-alpha.1, <0.2", {**declaration, "registry": "private"},
+                        {**declaration, "path": "../com"}, {**declaration, "rev": COM_REVISION}):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                declared_source({"dependencies": {"neocogi-com": invalid}})
+
+    def test_registry_and_git_or_distinct_release_pins_cannot_mix(self):
+        """Equal-looking SDK versions do not make different Cargo sources identical."""
+        for other in (self.source(), {"version": "=0.1.0-alpha.2"}):
+            with self.subTest(other=other), self.assertRaises(ValueError):
+                declared_source({"dependencies": {"neocogi-com": {"version": REGISTRY_SOURCE.pin}, "neocogi-idl": other}})
+        with self.assertRaises(ValueError):
+            manifest_links({"dependencies": {"neocogi-com": self.source()}}, REGISTRY_SOURCE)
 
 
 class RepositoryAudit(unittest.TestCase):
@@ -181,6 +203,35 @@ class RepositoryAudit(unittest.TestCase):
         (self.ui / "Cargo.toml").write_text(self.manifest)
         self.commit(self.ui, "Restore the prior SDK pin")
         self.assertEqual(verify(self.ui, self.com, self.ledger), (4, 3, 2, 3))
+
+    def test_later_published_release_preserves_historical_git_validation(self):
+        """Registry packages are validated by Cargo, not looked up in an old Git tree."""
+        (self.ui / "Cargo.toml").write_text(
+            '[workspace.dependencies]\nneocogi-com={version="=0.1.0-alpha.1"}\n'
+            'neocogi-com-host={version="=0.1.0-alpha.1"}\nneocogi-idl={version="=0.1.0-alpha.1"}\n'
+        )
+        self.commit(self.ui, "Use the published SDK")
+        self.assertEqual(verify(self.ui, self.com, self.ledger), (3, 2, 1, 3))
+        # An ordinary later snapshot must keep validating its registry declaration.
+        (self.ui / "README.md").write_text("Published SDK documentation\n")
+        self.commit(self.ui, "Document registry usage")
+        self.assertEqual(verify(self.ui, self.com, self.ledger), (4, 3, 1, 3))
+
+    def test_published_snapshot_rejects_git_member(self):
+        """A release cannot silently retain a second SDK source in a member."""
+        (self.ui / "Cargo.toml").write_text('[workspace.dependencies]\nneocogi-com={version="=0.1.0-alpha.1"}\n')
+        member = self.ui / "app/Cargo.toml"
+        member.parent.mkdir()
+        member.write_text(self.manifest.replace("[workspace.dependencies]", "[dependencies]"))
+        self.commit(self.ui, "Accidentally mix SDK sources")
+        with self.assertRaisesRegex(ValueError, "source/pin"):
+            verify(self.ui, self.com, self.ledger)
+    def test_published_snapshot_rejects_git_trailer(self):
+        """A Git revision trailer cannot override a registry release selection."""
+        (self.ui / "Cargo.toml").write_text('[workspace.dependencies]\nneocogi-com={version="=0.1.0-alpha.1"}\n')
+        self.commit(self.ui, self.message(self.com_revision))
+        with self.assertRaisesRegex(ValueError, "root dependency pin"):
+            verify(self.ui, self.com, self.ledger)
 
 
 if __name__ == "__main__":

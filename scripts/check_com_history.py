@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Verify that historical UI manifests and commits select one exact COM revision.
+"""Verify exact COM sources across historical Git pins and published releases.
 
 The checked-in ledger records the initial history. Later commits use their root
-dependency pins; revision trailers, when present, must agree. COM manifests are
-inspected from Git objects, so archives need no build artifacts or checkout.
+dependency pins; revision trailers, when present, must agree with Git selections.
+Historical package availability is checked from Git objects. Cargo resolves
+registry releases and verifies their checksums; this audit does not fetch them.
 """
 
 import argparse
@@ -17,6 +18,33 @@ import tomllib
 COM_URL = "ssh://git@github.com/NeoCogi/neocogi-com.git"
 COM_REPOSITORY = "git@github.com:NeoCogi/neocogi-com.git"
 REVISION = re.compile(r"[0-9a-f]{40}")
+EXACT_VERSION = re.compile(r"=[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?")
+
+
+@dataclass(frozen=True)
+class SdkSource:
+    """One source identity shared by a snapshot's SDK and compiler declarations."""
+
+    kind: str
+    """Either git for historical commits or crates.io for published packages."""
+    pin: str
+    """Full Git commit ID or exact Cargo version requirement including its equals sign."""
+
+
+def dependency_source(alias, dependency):
+    """Reject floating, alternate or mixed SDK sources before comparing identities."""
+    declaration = {"version": dependency} if isinstance(dependency, str) else dependency
+    if not isinstance(declaration, dict) or any(key in declaration for key in ("path", "branch", "tag", "registry", "registry-index")):
+        raise ValueError(f"{alias}: SDK dependency has an alternate or floating source")
+    if "git" in declaration:
+        revision = declaration.get("rev", "")
+        if declaration["git"] != COM_URL or not isinstance(revision, str) or not REVISION.fullmatch(revision):
+            raise ValueError(f"{alias}: SDK Git source must pin a full companion commit")
+        return SdkSource("git", revision)
+    version = declaration.get("version", "")
+    if "rev" in declaration or not isinstance(version, str) or not EXACT_VERSION.fullmatch(version):
+        raise ValueError(f"{alias}: SDK registry dependency must pin one exact crates.io version")
+    return SdkSource("crates.io", version)
 
 
 @dataclass(frozen=True)
@@ -94,13 +122,9 @@ def manifest_links(manifest, expected):
             if isinstance(dependency, dict) and dependency.get("workspace") is True:
                 continue
             if expected is None:
-                raise ValueError(f"{alias}: SDK dependency has no recorded COM revision")
-            if not isinstance(dependency, dict):
-                raise ValueError(f"{alias}: historical SDK dependency must select Git")
-            if dependency.get("git") != COM_URL or dependency.get("rev") != expected:
-                raise ValueError(f"{alias}: SDK Git source/revision differs from its commit link")
-            if any(key in dependency for key in ("path", "branch", "tag")):
-                raise ValueError(f"{alias}: SDK dependency has an alternate or floating source")
+                raise ValueError(f"{alias}: SDK dependency has no recorded source")
+            if dependency_source(alias, dependency) != expected:
+                raise ValueError(f"{alias}: SDK source/pin differs from its snapshot selection")
             requested.add(package)
     return requested
 
@@ -124,23 +148,18 @@ def message_link(message):
     return revisions[0]
 
 
-def declared_revision(manifest):
+def declared_source(manifest):
     """Read a later commit's authoritative root pin without requiring a trailer."""
-    revisions = set()
+    sources = set()
     for table in dependency_tables(manifest):
         for alias, dependency in table.items():
             package = dependency.get("package", alias) if isinstance(dependency, dict) else alias
             if not sdk_package(package) or (isinstance(dependency, dict) and dependency.get("workspace") is True):
                 continue
-            if not isinstance(dependency, dict) or dependency.get("git") != COM_URL:
-                raise ValueError(f"{alias}: root SDK declaration must select the companion Git source")
-            revision = dependency.get("rev", "")
-            if not isinstance(revision, str) or not REVISION.fullmatch(revision):
-                raise ValueError(f"{alias}: root SDK declaration must pin a full commit")
-            revisions.add(revision)
-    if len(revisions) > 1:
-        raise ValueError("root SDK declarations select different COM revisions")
-    return next(iter(revisions), None)
+            sources.add(dependency_source(alias, dependency))
+    if len(sources) > 1:
+        raise ValueError("root SDK declarations select different COM sources or pins")
+    return next(iter(sources), None)
 
 
 class ObjectReader:
@@ -184,16 +203,19 @@ def verify(ui, com, ledger):
     for identifier in commits:
         tree = ui_objects.tree(identifier)
         message = git(ui, "show", "-s", "--format=%B", identifier).decode()
-        revision = message_link(message)
-        if identifier in expected and revision != expected[identifier]:
+        trailer = message_link(message)
+        if identifier in expected and trailer != expected[identifier]:
             raise ValueError(f"{identifier}: commit trailer disagrees with the COM ledger")
+        source = SdkSource("git", trailer) if trailer else None
         if identifier not in expected:
-            root_revision = declared_revision(tomllib.loads(ui_objects.blob(tree["Cargo.toml"]).decode()))
-            if revision is not None and revision != root_revision:
+            root_source = declared_source(tomllib.loads(ui_objects.blob(tree["Cargo.toml"]).decode()))
+            if trailer is not None and source != root_source:
                 raise ValueError(f"{identifier}: COM trailer disagrees with the root dependency pin")
-            revision = root_revision
-        if revision:
+            source = root_source
+        if source:
             linked += 1
+        if source and source.kind == "git":
+            revision = source.pin
             if revision not in packages:
                 # Resolving commit type rejects annotated tags, blobs and other
                 # object kinds even if they happen to use a full identifier.
@@ -206,20 +228,21 @@ def verify(ui, com, ledger):
                         if name:
                             package_names.add(name)
                 packages[revision] = package_names
-            if identifier in expected and previous and revision != previous:
-                git(com, "merge-base", "--is-ancestor", previous, revision)
-            previous = revision
+            if identifier in expected and previous and source != previous:
+                git(com, "merge-base", "--is-ancestor", previous.pin, revision)
             seen_com.add(revision)
-        elif previous:
+        elif source is None and previous:
             raise ValueError(f"{identifier}: COM linkage disappears after its introduction")
+        if source:
+            previous = source
         for path, blob in tree.items():
-            if not path.endswith("Cargo.toml") or (blob, revision) in seen_manifest_checks:
+            if not path.endswith("Cargo.toml") or (blob, source) in seen_manifest_checks:
                 continue
             manifest = tomllib.loads(ui_objects.blob(blob).decode())
-            requested = manifest_links(manifest, revision)
-            if revision and not requested <= packages[revision]:
+            requested = manifest_links(manifest, source)
+            if source and source.kind == "git" and not requested <= packages[source.pin]:
                 raise ValueError(f"{identifier}:{path}: package absent from the selected COM revision")
-            seen_manifest_checks.add((blob, revision))
+            seen_manifest_checks.add((blob, source))
     return len(commits), linked, len(seen_com), len(seen_manifest_checks)
 
 
@@ -233,7 +256,7 @@ def main():
     com = options.com or options.ui.parent / "neocogi-com"
     ledger = options.ledger or options.ui / "docs/project/COM_HISTORY.tsv"
     commits, linked, revisions, manifests = verify(options.ui, com, ledger)
-    print(f"Verified {commits} UI commits, {linked} COM links, {revisions} COM revisions and {manifests} manifest checks.")
+    print(f"Verified {commits} UI commits, {linked} SDK-dependent snapshots, {revisions} historical COM revisions and {manifests} manifest checks.")
 
 
 if __name__ == "__main__":
