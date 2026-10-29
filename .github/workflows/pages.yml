@@ -14,9 +14,6 @@ concurrency:
   group: webgl-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
-
 jobs:
   build:
     runs-on: ubuntu-latest

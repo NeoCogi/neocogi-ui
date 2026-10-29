@@ -101,7 +101,7 @@ requirements of those providers.
 
 Host services and loaded provider code remain process/Wasm-instance-lived, so
 returned COM objects and browser callbacks can outlive main's invocation.
-See the [portable host/provider example](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/examples/com-plugin/README.md).
+See the [portable host/provider example](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/examples/com-plugin/README.md).
 
 ## Interfaces and implementation
 
@@ -124,8 +124,8 @@ Cargo package version; `dependencies = [PLUGIN_ID]` declares hard providers.
 The macro generates `plugin_descriptor()` for static registration and the native
 `nc_get_plugin_descriptor_v1` export under `dynamic-plugin`. No `class`/`factory`
 IDL roles or factory bootstrap traits are required. A finished service is also a
-valid plugin root. See [IDL modules](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/IDL_MODULES.md) and the
-[macro reference](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/crates/macros/README.md).
+valid plugin root. See [IDL modules](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/docs/contracts/IDL_MODULES.md) and the
+[macro reference](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/crates/macros/README.md).
 
 Consumers need generated interface definitions, not a Rust dependency on their
 implementors. NCIDL imports read declarations at generation time. A public

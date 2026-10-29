@@ -81,12 +81,12 @@ operation, described in the [event guide](EVENTS.md).
 Insertion and replacement prepare validation and fallible storage before accepting
 the incoming owner. Failure returns that same `ComBox`; success transfers it.
 The [Grid contract](../../../../docs/contracts/GRID_PLACEMENT.md) documents bounded placement
-and metadata preparation. The [COM output contract](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/COM_OUTPUT_COMPLETION.md)
+and metadata preparation. The [COM output contract](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/docs/contracts/COM_OUTPUT_COMPLETION.md)
 defines the generated consuming-call boundary, including result publication.
 
 `NC_E_DROPPED` and `NC_E_CLOSED` can also come from a live handler's dependencies.
 The dispatch iterator determines whether its receiver still exists; it propagates
-errors from live receivers. The [lifetime error contract](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/COM_LIFETIME_ERRORS.md)
+errors from live receivers. The [lifetime error contract](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/docs/contracts/COM_LIFETIME_ERRORS.md)
 prevents interpreting any returned status as proof that the receiver died.
 
 ## Frame and event phases

@@ -24,9 +24,9 @@ revisions throughout the commit history.
 | `docs` | UI contracts, architecture, deployment and attribution |
 
 The [COM SDK, host implementation, IDL compiler and inspector](https://github.com/NeoCogi/neocogi-com)
-are maintained upstream. All COM dependencies use one exact Git revision from
-`git@github.com:NeoCogi/neocogi-com.git`; see the
-[dependency guide](docs/guides/COM_DEPENDENCY.md) for updates and credentials.
+are maintained together. All COM dependencies use the exact published crates.io
+release `0.1.0-alpha.1`; see the
+[dependency guide](docs/guides/COM_DEPENDENCY.md) for updates and validation.
 
 ## Build and run
 
@@ -73,7 +73,7 @@ assume the repository is cloned into a sibling directory named `neocogi-ui`:
 ```toml
 [dependencies]
 neocogi-ui = { path = "../neocogi-ui/crates/ui/api" }
-neocogi-com = { git = "ssh://git@github.com/NeoCogi/neocogi-com.git", rev = "4d8d7228efbcc400f63a016f9d04ee81f6f5baf8" }
+neocogi-com = { version = "=0.1.0-alpha.1" }
 ```
 
 With an initialized `Ui`, the facade creates and edits the actual objects:
@@ -173,7 +173,7 @@ source. [FEATURES.md](docs/guides/FEATURES.md) defines current feature ownership
 ## License
 
 Project-authored code uses the [BSD 3-Clause License](LICENSE). The external
-[neocogi-com SDK](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/LICENSE-MIT)
+[neocogi-com SDK](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/LICENSE-MIT)
 and portions derived from rxi/microui use MIT terms. The retained GFX allocation
 probe and document test schema keep their [COM fixture MIT notice](LICENSES/COM-fixtures-MIT.txt). Bundled assets retain the
 licenses recorded in [asset attribution](docs/project/ASSETS.md).

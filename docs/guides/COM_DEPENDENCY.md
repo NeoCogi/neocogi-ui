@@ -1,9 +1,9 @@
 # COM dependency
 
-NeoCogi UI consumes the shared COM SDK, host implementation and IDL compiler
-from [`NeoCogi/neocogi-com`](https://github.com/NeoCogi/neocogi-com), pinned to
-`4d8d7228efbcc400f63a016f9d04ee81f6f5baf8` in the root `Cargo.toml`.
-There is no local SDK fork or path override.
+NeoCogi UI consumes the published COM SDK, host implementation and IDL compiler
+at exactly `0.1.0-alpha.1` from crates.io. The root `Cargo.toml` selects
+`=0.1.0-alpha.1` for `neocogi-com`, `neocogi-com-host` and `neocogi-idl`.
+There is no local SDK fork, Git dependency or path override.
 
 `neocogi-com` supplies caller/provider contracts, owned handles, object macros
 and optional supplied-host service clients. Final hosts and test executables
@@ -11,64 +11,55 @@ explicitly link `neocogi-com-host`, whose Rust crate is `neocogi_com_host`.
 `#[neocogi_com::com_main]` initializes that implementation. Providers use their
 supplied `Runtime` handle; enabling `neocogi-com/runtime` selects clients only.
 `neocogi-idl` generates bindings from the subsystem-owned `.ncidl` sources.
-The SDK's core and macros resolve transitively from the same Git source.
+The SDK's core and macros resolve transitively from the same published release.
 
-## Credentials
+## Fetching packages
 
-The Git URL uses SSH and the caller's existing GitHub credentials. The workspace
-sets `net.git-fetch-with-cli = true`, so ordinary Cargo builds use Git's SSH
-configuration. For commands outside this workspace, including installation of
-the inspector, select that behavior in the environment:
+Ordinary Cargo builds download the public packages from crates.io. A GitHub SSH
+identity is not required for the COM dependencies or the inspector. Run
+`cargo fetch --locked` to populate the local registry cache; callers with a
+complete cache can select `CARGO_NET_OFFLINE=true`.
 
-```sh
-export CARGO_NET_GIT_FETCH_WITH_CLI=true
-cargo fetch
-```
+## Updating the release
 
-Both CI workflows set that Cargo option. Their runners also need an SSH identity
-with read access to the dependency repository; the checkout token for
-NeoCogi UI alone does not grant access to a different private repository.
-Credential provisioning belongs to the runner environment. No new secret or
-credential-management action is introduced here.
+Update all three exact `version` requirements in the root `Cargo.toml` together,
+then update `Cargo.lock`. Preserve one SDK source and version across hosts and
+providers: a Git/path dependency and a registry dependency have different Rust
+package identities even when their version strings match. Independent Rust/Python
+fixture builders copy the root declarations instead of maintaining their own pins.
+Build and deploy peers together after changing the compiler or SDK.
 
-## Updating the revision
-
-Update all three Git dependency `rev` values in the root `Cargo.toml` together,
-then run `cargo fetch`. Preserve one SDK source and revision across hosts and
-providers; two Cargo sources with the same pre-alpha version still produce
-different Rust types. Independent Rust/Python fixture builders copy the root
-declarations instead of maintaining their own pins. Build and deploy every peer
-again after changing the compiler or SDK; the extracted compiler contains ABI
-and generation fixes beyond the former in-tree implementation.
-
-The committed root lockfile fixes the complete standalone graph. Keep it current
-when changing the explicit COM revisions, and validate with `--locked`.
+The committed lockfile records registry checksums and the complete dependency
+graph. Keep it current when changing the explicit COM versions, and validate
+with `--locked`. Historical Git revision links remain recorded in
+[UI and COM history](../project/HISTORY.md); switching the current dependency
+source does not rewrite those snapshots.
 
 Run these integration checks from NeoCogi UI, sequentially:
 
 ```sh
 python3 -m unittest discover -s scripts -p 'test_*.py'
 python3 scripts/check-contract-consumers.py
-cargo test -p neocogi-ui -p neocogi-ui-document -p neocogi-ui-runtime -p neocogi-ui-nodes -p neocogi-ui-support -p neocogi-ui-design --features neocogi-com/runtime --all-targets
-cargo test -p neocogi-demo-plugins -p neocogi-ui-support --test shared_runtime --features neocogi-demo-plugins/glow,neocogi-demo-plugins/skin,neocogi-demo-plugins/extension
-cargo check -p neocogi-demo-full
-cargo check -p neocogi-demo-full --no-default-features --features monolith,glow,embed-assets
-cargo check -p neocogi-demo-full --target wasm32-unknown-unknown --no-default-features --features webgl
+cargo test --locked -p neocogi-ui -p neocogi-ui-document -p neocogi-ui-runtime -p neocogi-ui-nodes -p neocogi-ui-support -p neocogi-ui-design --features neocogi-com/runtime --all-targets
+cargo test --locked -p neocogi-demo-plugins -p neocogi-ui-support --test shared_runtime --features neocogi-demo-plugins/glow,neocogi-demo-plugins/skin,neocogi-demo-plugins/extension
+cargo check --locked -p neocogi-demo-full
+cargo check --locked -p neocogi-demo-full --no-default-features --features monolith,glow,embed-assets
+cargo check --locked -p neocogi-demo-full --target wasm32-unknown-unknown --no-default-features --features webgl
 ```
 
-The document receiver schema now belongs to `crates/ui/document/schemas`.
-SDK unit/ABI/compiler-floor/archive/sanitizer checks belong to the upstream
-workspace and its [Rust task runner](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/tools/xtask/README.md).
+The document receiver schema belongs to `crates/ui/document/schemas`.
+SDK unit/ABI/compiler-floor/archive/sanitizer checks belong to the companion
+workspace and its [Rust task runner](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/tools/xtask/README.md).
 
 ## Inspector
 
-The inspector is maintained with the SDK. Install the same revision rather than
-building a second local copy:
+The inspector is published with the SDK. Install the matching release:
 
 ```sh
-cargo install --git ssh://git@github.com/NeoCogi/neocogi-com.git --rev 4d8d7228efbcc400f63a016f9d04ee81f6f5baf8 --locked neocogi-inspect
+cargo install neocogi-inspect --version '=0.1.0-alpha.1' --locked
 neocogi-inspect dump path/to/plugin.so
 ```
 
-See the [upstream inspector guide](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/tools/neocogi-inspect/README.md)
-for metadata, compatibility and load-order commands. The UI examples exercise this workspace as callers and providers.
+See the [inspector guide](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/tools/neocogi-inspect/README.md)
+for metadata, compatibility and load-order commands. The UI examples exercise
+this workspace as callers and providers.

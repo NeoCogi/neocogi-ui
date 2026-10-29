@@ -928,7 +928,7 @@ dependencies = [
 [[package]]
 name = "neocogi-native-layout"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=95c2ecfd434e9dc6db480d4dd5c809bc06753de5#95c2ecfd434e9dc6db480d4dd5c809bc06753de5"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=5463d8ccfeb8fda6292b5bf9d6705fe013626a42#5463d8ccfeb8fda6292b5bf9d6705fe013626a42"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -939,7 +939,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-core"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=95c2ecfd434e9dc6db480d4dd5c809bc06753de5#95c2ecfd434e9dc6db480d4dd5c809bc06753de5"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=5463d8ccfeb8fda6292b5bf9d6705fe013626a42#5463d8ccfeb8fda6292b5bf9d6705fe013626a42"
 dependencies = [
  "neocogi-com",
  "neocogi-idl",
@@ -949,7 +949,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-glow"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=95c2ecfd434e9dc6db480d4dd5c809bc06753de5#95c2ecfd434e9dc6db480d4dd5c809bc06753de5"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=5463d8ccfeb8fda6292b5bf9d6705fe013626a42#5463d8ccfeb8fda6292b5bf9d6705fe013626a42"
 dependencies = [
  "glow 0.18.0",
  "neocogi-render-core",
@@ -959,7 +959,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-mesh"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=95c2ecfd434e9dc6db480d4dd5c809bc06753de5#95c2ecfd434e9dc6db480d4dd5c809bc06753de5"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=5463d8ccfeb8fda6292b5bf9d6705fe013626a42#5463d8ccfeb8fda6292b5bf9d6705fe013626a42"
 dependencies = [
  "ash",
  "glow 0.18.0",
@@ -976,7 +976,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-plugin"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=95c2ecfd434e9dc6db480d4dd5c809bc06753de5#95c2ecfd434e9dc6db480d4dd5c809bc06753de5"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=5463d8ccfeb8fda6292b5bf9d6705fe013626a42#5463d8ccfeb8fda6292b5bf9d6705fe013626a42"
 dependencies = [
  "glow 0.18.0",
  "js-sys",
@@ -998,7 +998,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-support"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=95c2ecfd434e9dc6db480d4dd5c809bc06753de5#95c2ecfd434e9dc6db480d4dd5c809bc06753de5"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=5463d8ccfeb8fda6292b5bf9d6705fe013626a42#5463d8ccfeb8fda6292b5bf9d6705fe013626a42"
 dependencies = [
  "neocogi-com",
  "neocogi-render-core",
@@ -1007,7 +1007,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-vulkan"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=95c2ecfd434e9dc6db480d4dd5c809bc06753de5#95c2ecfd434e9dc6db480d4dd5c809bc06753de5"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=5463d8ccfeb8fda6292b5bf9d6705fe013626a42#5463d8ccfeb8fda6292b5bf9d6705fe013626a42"
 dependencies = [
  "ash",
  "ash-window",
@@ -1020,7 +1020,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-webgl"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=95c2ecfd434e9dc6db480d4dd5c809bc06753de5#95c2ecfd434e9dc6db480d4dd5c809bc06753de5"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=5463d8ccfeb8fda6292b5bf9d6705fe013626a42#5463d8ccfeb8fda6292b5bf9d6705fe013626a42"
 dependencies = [
  "glow 0.18.0",
  "neocogi-render-core",
@@ -1030,7 +1030,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-wgpu"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=95c2ecfd434e9dc6db480d4dd5c809bc06753de5#95c2ecfd434e9dc6db480d4dd5c809bc06753de5"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=5463d8ccfeb8fda6292b5bf9d6705fe013626a42#5463d8ccfeb8fda6292b5bf9d6705fe013626a42"
 dependencies = [
  "neocogi-render-core",
  "pollster",

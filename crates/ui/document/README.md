@@ -12,7 +12,7 @@ the same policy. The 16 MiB byte ceiling does not override the one-million-value
 limit: the persistence envelope stores the encoded document as `Vec<u8>`, so each
 state byte counts as one collection element and one value, alongside the outer
 record's other values. This is intentional collection accounting, not an implicit
-binary-blob representation. See the [binary limit definitions](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/crates/core/README.md#binary-resource-limits).
+binary-blob representation. See the [binary limit definitions](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/crates/core/README.md#binary-resource-limits).
 
 Typed `Loader::compile` uses `Document::validate_binary()` before cloning the recipe
 or calling any widget factory. It checks both persistence layers without allocating

@@ -2,6 +2,12 @@
 
 ## 0.0.0 (unreleased)
 
+- Use the published crates.io COM SDK, host and IDL compiler at exactly
+  `0.1.0-alpha.1`, including standalone generated-binding fixtures. Record registry
+  checksums in the lockfile, remove the SSH fetching requirement, and retain
+  historical Git linkage validation alongside current registry selections.
+  See [dependency updates](../guides/COM_DEPENDENCY.md).
+
 - Link historical UI revisions to their exact companion COM revisions in Cargo
   declarations and commit trailers. Retain a complete UI/COM revision ledger and
   a read-only audit command. Use the UI identity throughout the repository and

@@ -18,7 +18,7 @@ field destruction determine widget and descendant lifetime. Logical window
 capabilities can remain allocated after their widgets are gone. Their operations
 report `NC_E_CLOSED`; calls through weak observers of destroyed widget owners
 report `NC_E_DROPPED`. The precise status and concurrent ownership rules remain in
-[COM lifetime errors](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/COM_LIFETIME_ERRORS.md).
+[COM lifetime errors](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/docs/contracts/COM_LIFETIME_ERRORS.md).
 
 ## Acceptance and commit boundary
 

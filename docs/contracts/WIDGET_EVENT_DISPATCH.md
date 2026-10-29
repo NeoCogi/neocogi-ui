@@ -80,7 +80,7 @@ and `NC_E_CLOSED` from a closed service. Neither status identifies which object
 failed. A dequeued message remains consumed; its successors, later widgets,
 application messages and unattempted raw input wait for a later update. No partial
 frame is committed and no already-performed handler mutation is rolled back.
-See the [lifetime error contract](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/COM_LIFETIME_ERRORS.md) for exact status meanings.
+See the [lifetime error contract](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/docs/contracts/COM_LIFETIME_ERRORS.md) for exact status meanings.
 
 After a handled message or a topology change, iteration stops so layout can settle
 and a new pass can begin. A changed tree is rebuilt first; merely skipping expired

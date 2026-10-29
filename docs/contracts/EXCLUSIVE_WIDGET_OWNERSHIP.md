@@ -67,7 +67,7 @@ use one atomic header word for owner presence and reader/writer access, followed
 by the weak count and class descriptor pointer. Their generated allocation is one
 common header plus `UnsafeCell<MaybeUninit<T>>`; there is no separate call gate or
 execution pin. Both kinds of provider-local lease occupy two words. Only C-shaped
-records cross plugin boundaries; see [the current core ABI](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/abi-v1.md).
+records cross plugin boundaries; see [the current core ABI](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/docs/abi-v1.md).
 
 ## Cached weak calls and threading
 
@@ -167,7 +167,7 @@ caller can retry or drop it after the descendant returns. `ComBoxInput` is remov
 Facade insert/replace/window calls return the original typed widget in their error.
 `Mountable::with_mount` restores the concrete projection on failure; compiled forms
 also restore their unmounted root. No widget is detached after successful mounting.
-Bottom-up construction remains supported. See [ABI v1](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/abi-v1.md)
+Bottom-up construction remains supported. See [ABI v1](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/docs/abi-v1.md)
 for multi-input calls and the invalid-success-output contract.
 
 Construction helpers that intentionally abandon rejected candidates need not

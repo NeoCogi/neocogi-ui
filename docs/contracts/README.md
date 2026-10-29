@@ -7,19 +7,19 @@ These guides define current behavior. For component responsibilities see
 ## COM and IDL
 
 - [COM author responsibilities](COM_AUTHORS.md).
-- [Current COM ABI](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/abi-v1.md) and
-  [local typed ownership](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/crates/com/README.md), including `WeakLocalCom`.
-- [Object/interface storage](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/COM_INTERFACE_STORAGE.md) and
-  [lifetime errors](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/COM_LIFETIME_ERRORS.md).
-- [IDL language and generation](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/IDL_MODULES.md),
-  [generic values](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/IDL_GENERIC_VALUES.md),
+- [Current COM ABI](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/docs/abi-v1.md) and
+  [local typed ownership](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/crates/com/README.md), including `WeakLocalCom`.
+- [Object/interface storage](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/docs/contracts/COM_INTERFACE_STORAGE.md) and
+  [lifetime errors](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/docs/contracts/COM_LIFETIME_ERRORS.md).
+- [IDL language and generation](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/docs/contracts/IDL_MODULES.md),
+  [generic values](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/docs/contracts/IDL_GENERIC_VALUES.md),
   [event metadata](UI_EVENT_METADATA.md), and
-  [generated identifier hygiene](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/COM_GENERATED_IDENTIFIER_HYGIENE.md).
-- [Recursive wire values](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/RECURSIVE_VALUE_CONTRACT.md),
-  [directional output buffers](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/COM_OUTPUT_BUFFERS.md), and
-  [consuming-call output completion](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/contracts/COM_OUTPUT_COMPLETION.md).
-- [NCB persistence](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/crates/core/README.md#why-persistence-is-ncb-only) and
-  [independent-build compatibility](https://github.com/NeoCogi/neocogi-com/blob/4d8d7228efbcc400f63a016f9d04ee81f6f5baf8/docs/abi-v1.md#independent-build-compatibility).
+  [generated identifier hygiene](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/docs/contracts/COM_GENERATED_IDENTIFIER_HYGIENE.md).
+- [Recursive wire values](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/docs/contracts/RECURSIVE_VALUE_CONTRACT.md),
+  [directional output buffers](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/docs/contracts/COM_OUTPUT_BUFFERS.md), and
+  [consuming-call output completion](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/docs/contracts/COM_OUTPUT_COMPLETION.md).
+- [NCB persistence](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/crates/core/README.md#why-persistence-is-ncb-only) and
+  [independent-build compatibility](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/docs/abi-v1.md#independent-build-compatibility).
 
 ## Events and UI ownership
 
