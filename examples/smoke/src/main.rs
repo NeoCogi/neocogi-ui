@@ -85,7 +85,9 @@ fn main(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
     let renderer: ComPtr<IRendererAbi> = native.query()?;
     let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
     let runtime_factory = runtime.acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
-    let ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
+    let mut ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
+    let render_host = native.query::<neocogi_render_gpu::abi::IRenderHostAbi>()?;
+    ui_runtime.set_render_broker(render_host.recording_broker()?.as_com_ref())?;
     let node_provider = runtime.acquire_plugin_root::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
     let node_factory = node_provider.bind(ui_runtime.as_com_ref())?;
     let mut ui = Ui::from_interfaces(ui_runtime, node_factory)?;
@@ -174,7 +176,7 @@ fn main(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
         extension::smoke(runtime, &ui, size, renderer.as_com_ref())?;
         ui.close()?;
         println!(
-            "COM smoke passed: dynamic activation, native GPU frame and 3D mesh, texture ownership, inherited widgets, composed containers, menus, native-path dialog, input, invalidation, resize, closure"
+            "COM smoke passed: dynamic activation, native GPU frame and generic graphics, texture ownership, inherited widgets, composed containers, menus, native-path dialog, input, invalidation, resize, closure"
         );
         return Ok(());
     }

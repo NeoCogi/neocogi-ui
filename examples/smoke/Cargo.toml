@@ -30,7 +30,7 @@ embed-assets = ["neocogi-demo-assets/embed-assets"]
 neocogi-com-host.workspace = true
 neocogi-demo-host.workspace = true
 neocogi-ui-samples.workspace = true
-neocogi-render-mesh.workspace = true
+neocogi-render-gpu.workspace = true
 rs-math3d.workspace = true
 neocogi-ui = { workspace = true, features = ["skin"] }
 neocogi-com = { workspace = true, default-features = false, features = ["runtime", "macros", "std"] }

@@ -1,13 +1,14 @@
 //! Actual generated painter calls capture scene-widget output without a native window.
 use crate::graphics::*;
-use neocogi_com::{com_object};
+use neocogi_com::{com_object, ComBox};
+use neocogi_render_gpu::GpuDevice;
 use std::{cell::RefCell, rc::Rc};
 
 /// Shared observations outlive the exclusive COM recorder invocation in the test.
 #[derive(Default)]
 pub(crate) struct Output {
-    /// Item allocations remain full-sized even when the scene fits a smaller visible area.
-    pub(crate) items: Vec<Rect>,
+    /// Host controllers prove what the real generic recorder captures through its generated ABI.
+    pub(crate) views: Vec<ComBox<IRenderViewSessionAbi>>,
     /// Copied grid geometry contains no borrowed ABI storage.
     pub(crate) vertices: Vec<ColoredVertex>,
 }
@@ -16,21 +17,24 @@ pub(crate) struct Output {
 struct Recorder {
     /// The COM object and its test caller share observations; no borrow crosses a COM call.
     output: Rc<RefCell<Output>>,
+    /// Test-only trusted frame; ordinary grid-only fixtures intentionally have none.
+    frame: Option<ComBox<IRenderRecordingFrameAbi>>,
 }
 impl IPainter for Recorder {
-    /// This semantic-only fixture must never silently accept generic GPU output.
-    fn begin_render_view(
-        &mut self,
-        _: PaintScope,
-        _: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>,
-    ) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::IRenderViewAbi>, NcStatus> {
-        panic!("unexpected GPU view")
+    /// Uses the actual generic broker; the fixture supplies a committed visible root.
+    fn begin_render_view(&mut self, scope: PaintScope, resources: ComRef<'_, IRenderResourcesAbi>) -> Result<ComBox<IRenderViewAbi>, NcStatus> {
+        let mut session = self
+            .frame
+            .as_mut()
+            .expect("unexpected GPU view")
+            .begin_view(RenderViewRoot { client: scope.clip, target: scope.clip }, resources)?;
+        let view = session.view()?;
+        self.output.borrow_mut().views.push(session);
+        Ok(view)
     }
-
-    /// Copies the full allocation without retaining a native or scene borrow.
-    fn item(&mut self, _: PaintScope, rect: Rect, _: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
-        self.output.borrow_mut().items.push(rect);
-        Ok(())
+    /// Semantic renderer items are outside this generic viewport fixture.
+    fn item(&mut self, _: PaintScope, _: Rect, _: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
+        panic!("obsolete item");
     }
     /// Copies grid output while the generated ABI input slice is live.
     fn colored_triangles(&mut self, _: PaintScope, vertices: NcCopyFromBufferOffset<'_, ColoredVertex>) -> Result<(), NcStatus> {
@@ -78,7 +82,20 @@ impl IPainter for Recorder {
 /// Owns the generated painter interface independently of its captured observations.
 pub(crate) fn recorder() -> (ComPtr<IPainterAbi>, Rc<RefCell<Output>>) {
     let output = Rc::new(RefCell::new(Output::default()));
-    let recorder = Recorder::from_value(Recorder { output: output.clone() }).query().unwrap();
+    let recorder = Recorder::from_value(Recorder { output: output.clone(), frame: None }).query().unwrap();
+    (recorder, output)
+}
+
+/// Grants the same logical device whose restricted resources the widget owns.
+pub(crate) fn gpu_recorder(device: &GpuDevice) -> (ComPtr<IPainterAbi>, Rc<RefCell<Output>>) {
+    let output = Rc::new(RefCell::new(Output::default()));
+    let frame = device.broker().begin_frame().unwrap();
+    let recorder = Recorder::from_value(Recorder {
+        output: output.clone(),
+        frame: Some(frame),
+    })
+    .query()
+    .unwrap();
     (recorder, output)
 }
 

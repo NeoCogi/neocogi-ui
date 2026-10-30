@@ -183,6 +183,8 @@ pub(super) enum Message {
 pub(super) struct State {
     /// Plain owned control identities and the one shared posting capability.
     inputs: Inputs,
+    /// Trusted application ownership controls client-domain closure; widgets receive factories only.
+    gpu_domains: Vec<ComBox<neocogi_render_core::abi::IRenderClientDomainAbi>>,
     /// A retained runtime projection reads during handlers and installs after dispatch returns.
     pub(super) ui: Ui,
     /// Named palette authoring and the actual retained editor controls.
@@ -383,7 +385,7 @@ impl State {
                 self.demo.raise()
             }
             Action::ShowTextures => self.sample_scroll.scroll_to_end(),
-            Action::About => self.write_log("neocogi-ui COM demo: concrete widgets, typed events, shared layout, PNG images and renderer-owned 3D scenes."),
+            Action::About => self.write_log("neocogi-ui COM demo: concrete widgets, typed events, shared layout, PNG images and client-owned 3D graphics."),
         }
     }
 
@@ -593,6 +595,7 @@ fn create(runtime: neocogi_com::Runtime) -> Result<(Host, State, std::sync::mpsc
     open_item.set_enabled(file_dialog.is_some())?;
     let mut state = State {
         inputs: events_tx,
+        gpu_domains: Vec::new(),
         ui: ui.clone(),
         style,
         grid,
@@ -752,6 +755,10 @@ fn build_controls(
 
 /// Mounts the log, typography, layout and custom drawing examples as ordinary structural children.
 fn build_examples(host: &Host, state: &mut State, log_owner: OwnedWidget<ScrollAreaAbi>, entry_owner: OwnedWidget<TextboxAbi>) -> Result<(), HostError> {
+    let clients = host.renderer.query::<neocogi_render_core::abi::IRenderClientFactoryAbi>()?;
+    let domain = clients.create_client(neocogi_render_core::abi::RenderClientLimits::default())?;
+    let resources = domain.resources()?;
+    state.gpu_domains.push(domain);
     let events_tx = &mut state.inputs;
     let ui = &state.ui;
     let desktop = state.desktop.as_com_ref();
@@ -802,7 +809,7 @@ fn build_examples(host: &Host, state: &mut State, log_owner: OwnedWidget<ScrollA
         desktop,
         "Suzanne Window",
         rect(220, 220, 300, 300),
-        into_widget(ui.widgets().leaf(Suzanne::new(host.renderer.as_com_ref())?, WidgetOptions::NONE)?)?,
+        into_widget(ui.widgets().leaf(Suzanne::new(resources.as_com_ref())?, WidgetOptions::NONE)?)?,
     )?;
     // All sample buttons share this parent destination; each widget retains it at creation.
     let sample_sink = events_tx.queue.clone();
