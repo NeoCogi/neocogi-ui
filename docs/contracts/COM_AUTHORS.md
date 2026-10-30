@@ -229,9 +229,9 @@ An immutable COM string is UTF-8 display text. It is not a native filesystem pat
 
 Copy buffers are typed, borrowed for one call, and define explicit offset/count semantics. A whole-string replacement requires offset zero, validates UTF-8, and copies before returning. Validate bounds and overflow before writes or allocations. Immutable returned snapshots own their storage and release through their producer's COM reference counting.
 
-The complete resource, replacement and authoring contract is documented in [COM_ASSETS.md](COM_ASSETS.md). Obtain the current bundle through `IWidgetHost::assets` and refresh any independent widget cache when its identity changes. Logical asset metadata and font tables may be cached per immutable bundle revision. Do not introduce a COM call per glyph or per vertex. Rendering crosses the boundary in bulk, ordered frames/batches; resource references are typed capabilities with validated renderer ownership. Preserve source ordering across ordinary UI geometry and custom render items.
+The complete resource, replacement and authoring contract is documented in [COM_ASSETS.md](COM_ASSETS.md). Obtain the current bundle through `IWidgetHost::assets` and refresh any independent widget cache when its identity changes. Logical asset metadata and font tables may be cached per immutable bundle revision. Do not introduce a COM call per glyph or per vertex. Rendering crosses the boundary in bulk, ordered frames/batches; resource references are typed capabilities with validated renderer ownership. Preserve source ordering across ordinary UI geometry and sealed scoped graphics blocks.
 
-Native GPU integrations belong in the same platform/render plugin as their backend. Rust `wgpu::RenderPass`, `CommandEncoder`, Ash owners, SDL windows, and `Rc<glow::Context>` do not become ABI-safe because the application facade is generic. Keep the backend-specific Rust integration local and expose concrete scene/mesh/camera/render-item interfaces outward. OS-window/context lifetime must cover GPU resource destruction.
+Native GPU integrations belong in the same platform/render plugin as their backend. Rust `wgpu::RenderPass`, `CommandEncoder`, Ash owners, SDL windows, and `Rc<glow::Context>` do not become ABI-safe because the application facade is generic. Keep native execution local and expose typed generic graphics resources, binding commands and bounded primitive draws through the generated COM contracts. Application geometry, camera and material semantics belong to the client. OS-window/context lifetime must cover GPU resource destruction.
 
 A frame finishes explicitly and reports submission/presentation errors. Dropping an unfinished frame abandons it. A successful upload/replacement is published only after validation and backend preparation succeed. On failure, the previous valid bundle remains active. NcStatus reports the recoverable failure category; preserve useful backend diagnostics through the documented diagnostic capability.
 
@@ -959,6 +959,13 @@ owner expiry prevents a later draw from capturing that resource; earlier draws r
 private immutable versions through execution/completion. A weak lifetime check is
 neither a callback nor a GPU completion signal. Pipelines retain their shader artifacts
 independently of public shader owners.
+
+GL/WebGL keeps issued native snapshots and their device-free byte/capacity receipts
+behind completion fences. Collection observes those fences before refunding charges.
+An abandoned immediate frame keeps any already-issued work pending; its destructor
+does not issue native commands. The next preparation seals and collects that work,
+and final executor destruction waits before releasing it. Public owner expiry alone
+never establishes that the driver has finished using an allocation.
 
 `Painter::begin_render_view(resources)` reserves an exact painter-order position and
 returns a temporary exclusive command view. Its copied client information comes from
