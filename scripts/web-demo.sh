@@ -28,7 +28,11 @@ build() {
   if ! rustup target list --installed | grep -Fxq "$target"; then rustup target add "$target"; fi
   profile_args=()
   if [[ "$profile" == release ]]; then profile_args+=(--release); fi
-  if [[ ! -x "$wasm_bindgen" ]] || [[ "$($wasm_bindgen --version)" != "wasm-bindgen $wasm_bindgen_version" ]]; then
+  if [[ ! -x "$wasm_bindgen" ]] || ! actual_version="$("$wasm_bindgen" --version)" || [[ "$actual_version" != "wasm-bindgen $wasm_bindgen_version" ]]; then
+    if [[ -n "${NEOCOGI_WASM_BINDGEN:-}" ]]; then
+      echo "NEOCOGI_WASM_BINDGEN selects $wasm_bindgen; expected an installed wasm-bindgen $wasm_bindgen_version executable." >&2
+      exit 1
+    fi
     cargo install \
       --root "$web_tools_dir" \
       --version "$wasm_bindgen_version" \

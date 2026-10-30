@@ -9,14 +9,18 @@ case "$suite" in
   full) package="neocogi-demo-full"; fixture="examples/full/tests/browser-full.html" ;;
   *) echo "usage: $0 [input|full]" >&2; exit 2 ;;
 esac
-site_dir="${CARGO_TARGET_DIR:-$workspace_root/target}/browser-$suite-tests"
+# Keep this small path policy in agreement with web-demo.sh; subprocess tests
+# exercise both scripts together, including roots and executable paths with spaces.
+target_dir="${CARGO_TARGET_DIR:-$workspace_root/target}"
+if [[ "$target_dir" != /* ]]; then target_dir="$workspace_root/$target_dir"; fi
+site_dir="$target_dir/browser-$suite-tests"
 build_log="$(mktemp)"
 server_pid=""
 trap 'if [[ -n "$server_pid" ]]; then kill "$server_pid" 2>/dev/null || true; fi; rm -f "$build_log"' EXIT
 port="${NEOCOGI_BROWSER_TEST_PORT:-8118}"
-wasm_bindgen="${NEOCOGI_WASM_BINDGEN:-$workspace_root/target/web-tools/bin/wasm-bindgen}"
+wasm_bindgen="${NEOCOGI_WASM_BINDGEN:-$target_dir/web-tools/bin/wasm-bindgen}"
 if [[ ! -x "$wasm_bindgen" ]]; then
-  echo "Run ./scripts/web-demo.sh build first to install the matching wasm-bindgen CLI." >&2
+  echo "Matching wasm-bindgen CLI not found at $wasm_bindgen. Run ./scripts/web-demo.sh build first to install it." >&2
   exit 1
 fi
 browser="${CHROME_BIN:-}"

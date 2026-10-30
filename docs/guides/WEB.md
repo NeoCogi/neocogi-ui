@@ -48,8 +48,13 @@ Its sole scheduling adapter uses `requestAnimationFrame`. The full demo reserves
 The browser build has no virtual filesystem: the file-dialog entry is disabled, while all bundled
 themes and demonstration assets are embedded and remain available.
 
-`CARGO_TARGET_DIR` changes generated output locations. `NEOCOGI_WASM_BINDGEN` selects an
-already installed matching CLI, and `NEOCOGI_WEB_PROFILE=debug` enables a faster development build.
+`CARGO_TARGET_DIR` selects the shared artifact, browser-test site and installed tool
+root for both scripts. Relative roots resolve from the workspace; spaces are
+supported. `NEOCOGI_WASM_BINDGEN` takes precedence and selects an already installed
+matching CLI (relative paths also resolve from the workspace). The builder reports
+an invalid explicit path/version without installing a different default executable.
+Automatic installation applies to the derived default tool path.
+`NEOCOGI_WEB_PROFILE=debug` enables a faster development build.
 The `frames` query parameter, such as `?frames=8`, renders a finite number of frames and then
 releases the session and host. Normal stop and asynchronous frame errors both break the RAF
 ownership cycle. A lost WebGL context requires recreating the window and its GPU resources;
@@ -91,10 +96,17 @@ teardown, including final application-state and canvas/textarea release.
 The script builds the wasm library test export, starts a temporary localhost server, and checks its
 result in headless Chromium. Set `CHROME_BIN` to a compatible executable or
 `NEOCOGI_BROWSER_TEST_PORT` to change the default port 8118. Generated bindings and result HTML
-remain under `target/browser-input-tests` and `target/browser-full-tests`. The fixture covers DOM composition/paste, keyboard,
+remain under the selected target root's `browser-input-tests` and `browser-full-tests`
+directories (default `target`). The fixture covers DOM composition/paste, keyboard,
 wheel conversion, button chords, cancellation, and teardown. It stubs capture acquisition because
 synthetic pointer events cannot acquire native capture; trusted pointer/OS IME/mobile behavior
 still needs interactive platform testing.
+
+The fast producer/consumer path and install-policy matrix runs with
+`python3 -m unittest discover -s scripts -p test_web_paths.py`. It uses actual
+script copies and subprocess canaries, so it does not replace the real wasm/browser
+suites. The browser CI job runs both real suites under a custom target root with
+spaces, while the Pages job retains its deployment artifact path.
 
 ## GitHub Pages
 

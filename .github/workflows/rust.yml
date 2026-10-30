@@ -145,8 +145,12 @@ jobs:
 
   browser:
     runs-on: ubuntu-latest
+    env:
+      CARGO_TARGET_DIR: target/browser qualification
     steps:
       - uses: actions/checkout@v6
+      - name: Browser producer/consumer paths and explicit override policy
+        run: python3 -m unittest discover -s scripts -p test_web_paths.py
       - run: rustup target add wasm32-unknown-unknown
       - name: Build the static browser application and matching binding tool
         run: scripts/web-demo.sh build
