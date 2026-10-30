@@ -229,7 +229,7 @@ An immutable COM string is UTF-8 display text. It is not a native filesystem pat
 
 Copy buffers are typed, borrowed for one call, and define explicit offset/count semantics. A whole-string replacement requires offset zero, validates UTF-8, and copies before returning. Validate bounds and overflow before writes or allocations. Immutable returned snapshots own their storage and release through their producer's COM reference counting.
 
-The complete resource, replacement and authoring contract is documented in [COM_ASSETS.md](COM_ASSETS.md). Obtain the current bundle through `IWidgetHost::assets` and refresh any independent widget cache when its identity changes. Logical asset metadata and font tables may be cached per immutable bundle revision. Do not introduce a COM call per glyph or per vertex. Rendering crosses the boundary in bulk, ordered frames/batches; resource references are typed capabilities with validated renderer ownership. Preserve source ordering across ordinary UI geometry and sealed scoped graphics blocks.
+The complete resource, replacement and authoring contract is documented in [COM_ASSETS.md](COM_ASSETS.md). Obtain the current bundle through `IWidgetHost::assets` and refresh any independent widget cache when its identity changes. Logical asset metadata and font tables may be cached per immutable bundle revision. Do not introduce a COM call per glyph or per vertex. Rendering crosses the boundary in complete, ordered frames of sealed generic blocks; resource references are typed capabilities with validated renderer ownership. Preserve source ordering across ordinary UI geometry and sealed scoped graphics blocks.
 
 Native GPU integrations belong in the same platform/render plugin as their backend. Rust `wgpu::RenderPass`, `CommandEncoder`, Ash owners, SDL windows, and `Rc<glow::Context>` do not become ABI-safe because the application facade is generic. Keep native execution local and expose typed generic graphics resources, binding commands and bounded primitive draws through the generated COM contracts. Application geometry, camera and material semantics belong to the client. OS-window/context lifetime must cover GPU resource destruction.
 
@@ -448,7 +448,7 @@ The skin plugin's `StyleCompiler` class supports typed palette and metric editor
 `compiler.derive_style(base, metrics, PaletteEdit::Preserve.into())` keeps the base
 theme artwork; `PaletteEdit::Flat(palette)` compiles complete flat appearance tables.
 Both return a new immutable bundle in the current catalog without installing it
-or changing the retained tree. Call `ui.install_assets(candidate, renderer)` through
+or changing the retained tree. Call `ui.install_assets(candidate)` through
 a mutable `Ui` reference to publish it through the same validation and GPU preparation
 as any other revision.
 Invalid metrics or unknown palette tags leave the installed resources unchanged.
@@ -882,7 +882,7 @@ semantic operations in painter order. Each nine-patch crosses into the retained 
 as one closed typed operation; GFX owns its source lookup, nine-cell expansion, visibility,
 final clipping, and atlas batching alongside text and icon expansion. It then publishes the owned
 `IRenderStream`. A retained stream/token expires
-on success and failure, including zero-length reads and indexed resource queries.
+on success and failure, including indexed block queries.
 
 GFX validates foreign geometry before classifying its visibility. Triangles fully
 inside the effective clip retain their vertices directly; triangles wholly outside
@@ -897,24 +897,22 @@ font and buffer validation still applies to invisible text; empty or zero-area
 runs keep their existing no-geometry behavior. Solid geometry reuses the white
 tile cached when the current immutable resource revision was installed.
 
-A stream contains a bulk vertex buffer and ordered `RenderBatch` records. Atlas
-ranges contain positive multiples of three vertices; image ranges contain four
-vertices. Ranges must partition the buffer without gaps, overlap or unused trailing
-vertices. Custom items contain positive content/clip rectangles, with the clip inside
-both content and viewport. Unknown tags, invalid rectangles, non-finite vertex
-components, truncated copies, zero invocation tokens and excess counts fail before
-GPU execution. Limits are 16M vertices and 1M batches per complete frame. Adjacent
-atlas triangles are coalesced. The native plugin makes two bulk reads, plus one owned
-resource fetch for each image/custom batch, and reuses its CPU allocations.
+A stream contains only ordered weak observers of sealed generic graphics blocks.
+GFX owns the UI shader, `RenderVertex` layout, tessellation, atlas selection and
+image sampling. It encodes explicit vertex bytes and bindings using the same resource
+and command vocabulary as client widgets. The renderer receives no UI vertices,
+batch tags, implicit atlas or application-specific draw objects. GFX limits its CPU
+output to 16M vertices and 1M UI batches; the renderer independently limits a complete
+frame to 1M blocks and validates the envelope and each immutable root.
 
-The backend detaches its complete mutable state before calling a foreign stream or
-querying resource identities. Native render/upload/scene-creation reentry returns
-`UI_E_BUSY`; scene edits also reject preparation/execution reentry. All source reads
-and resource authentication finish before a native frame is acquired. A failed
-preparation discards already resolved resource snapshots and allows retry. GPU
-execution failure is reported by explicit finish and does not present the failed
-frame. Immediate GL work may already have executed: abandonment is not GPU rollback,
-and native device/surface loss can require constructing a replacement renderer.
+The backend detaches its complete mutable state before calling a foreign stream.
+Native rendering, uploads and resource creation reject overlapping preparation or
+execution with `UI_E_BUSY`. All block authentication and foreign access finish before
+native target acquisition. A final pass checks every domain gate, because a later
+foreign callback can close an earlier domain. Preparation failure releases all partial
+snapshots and allows retry. Explicit finish reports execution failure and suppresses
+failed-frame presentation. Immediate GL work may already have executed: abandonment
+is not GPU rollback, and native device/surface loss may require a replacement renderer.
 
 Create immutable images through the chosen renderer's `ITextureFactory`. Uploads
 must have offset zero and exactly width*height*4 RGBA bytes, with positive dimensions
@@ -928,7 +926,7 @@ normalized `TextureRegion`: finite, ordered edges in `[0, 1]`. Destination clipp
 interpolates within that source region. Built-in paint forwarding preserves ordered
 atlas/image boundaries and cropped source coordinates through the same executor;
 it releases queued image references on forwarding errors and after completed
-frames. Keeping a copied frame's vertices does not keep the image alive.
+frames. Native captures retain the shared immutable image allocation through completion.
 
 Resources belong to one native window/renderer instance, even when two instances
 use the same GPU API. The native plugin authenticates canonical COM identity against
@@ -939,8 +937,8 @@ The UI's frame API reports backend failures as `UI_E_RENDER`; query
 native-driver detail. Returned diagnostic strings are immutable snapshots.
 
 An image keeps its native allocation, window and context alive after the public
-window interface is released. A prepared draw keeps its image alive until finish or
-abandonment. Final COM release immediately removes registry authentication before
+window interface is released. Prepared and submitted draws retain their immutable native images until their
+actual completion requirements are satisfied. Final COM release immediately removes registry authentication before
 that address can be reused; final native-image release deletes while idle, or queues
 deletion until the active ownership transaction exits. Deletion selects the owning
 GL context, and destructors never submit or present. Idle frame storage retains no

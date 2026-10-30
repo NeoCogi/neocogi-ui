@@ -9,7 +9,7 @@ pub fn export_imported_data(imported: &ImportedAssets, bundle: &SkinBundle) -> R
     let mut data = export_bundle_data(bundle)?;
     let count = imported.source().info()?.rgba_bytes()?;
     let mut pixels = neocogi_com::NcOutputBuffer::new();
-    imported.image().pixels(pixels.output(0, count))?;
+    imported.source().image()?.pixels(pixels.output(0, count))?;
     data.pixels = pixels.into_vec().into();
     Ok(data)
 }

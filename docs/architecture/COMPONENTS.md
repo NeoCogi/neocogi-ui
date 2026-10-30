@@ -120,18 +120,18 @@ Plugin separation does not add a second per-widget dispatch layer or any per-dra
   nine flat colors or one typed bundle-local image description.
 - GFX validates and expands that complete nine-patch operation, including source slicing,
   tiny-destination partitioning, cell visibility, final clipping, and adjacent batching. It
-  then submits one bounded `IRenderStream` to the renderer; vertices and batches transfer
-  through bulk slices.
+  then encodes explicit generic resources and submits one bounded `IRenderStream` of
+  sealed graphics blocks. UI and client blocks execute through the same native path.
 - Skin authoring and GFX construction services run only while loading, rebuilding, or
   editing an immutable bundle. The GFX compositor remains active for coarse frame
   execution. A JSON theme crosses the Skin-to-GFX boundary once per
   referenced resource, once for atlas finalization, and once for bulk appearance
   publication; those authoring services are absent from ordinary update, layout, and paint.
-- The UI imports font/icon/appearance tables once per installed revision and
-  caches the independent `IRgbaImage` returned by `IAssetBundle::image()`.
+- The UI imports font/icon/appearance tables once per installed revision. Its GFX
+  compositor retains the independent `IRgbaImage` returned by `IAssetBundle::image()`.
   Appearance-only revisions retain its identity; rebuilt pixels have a new identity.
-- The renderer compares image identity before upload and retains GPU textures;
-  it never asks the skin plugin to resolve a draw.
+- GFX compares image identity before preparing its private generic texture through
+  the graphics host. The renderer receives sealed blocks without an implicit atlas.
 - Platform polling transfers normalized copied events. No SDL event, DOM object,
   or native handle enters UI code.
 

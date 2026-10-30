@@ -5,10 +5,10 @@
 //! lives in the UI plugin; this facade depends only on the contracts and COM
 //! object support.
 
+pub use neocogi_gfx_support::abi::RenderVertex;
 pub use neocogi_render_core::abi::{
     Color, IRenderDiagnostics, IRenderDiagnosticsAbi, IRenderStream, IRenderStreamAbi, IRenderer, IRendererAbi, IRgbaImage, IRgbaImageAbi, ITexture,
-    ITextureAbi, ITextureFactory, ITextureFactoryAbi, MAX_IMAGE_BYTES, MAX_RENDER_BATCHES, MAX_RENDER_VERTICES, Rect, RenderBatch, RenderInfo, RenderVertex,
-    Size, TextureRegion, color, rgba_bytes,
+    ITextureAbi, ITextureFactory, ITextureFactoryAbi, MAX_IMAGE_BYTES, Rect, RenderInfo, Size, TextureRegion, color, rgba_bytes,
 };
 pub use neocogi_render_core::platform::{
     IInputSink, IInputSinkAbi, IPlatformWindow, IPlatformWindowAbi, KeyCode, KeyStroke, Platform, PlatformAbi, Point, PollStatus, TextInputArea, UiInput,
@@ -805,8 +805,8 @@ impl Ui {
         self.runtime.assets()
     }
     /// Replaces this UI's runtime-wide resources through exclusive access; call update after success.
-    pub fn install_assets(&mut self, assets: ComRef<'_, IAssetBundleAbi>, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
-        self.runtime.install_assets(assets, renderer)
+    pub fn install_assets(&mut self, assets: ComRef<'_, IAssetBundleAbi>) -> Result<(), NcStatus> {
+        self.runtime.install_assets(assets)
     }
     /// Terminates this UI context, synchronously dropping mounted trees and private resources.
     /// Does not publish window/popup lifecycle events or dispatch pending application work.

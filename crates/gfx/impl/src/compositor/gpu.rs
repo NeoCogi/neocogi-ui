@@ -1,5 +1,6 @@
 //! GFX-owned UI layout, shaders and lowering into the common graphics command vocabulary.
 use super::{Batch, FrameState, RenderVertex};
+use neocogi_gfx_support::{MAX_UI_BATCHES, MAX_UI_VERTICES};
 use neocogi_com::{
     com_object, ComBox, ComPtr, ComRef, NcCopyFromBufferOffset, NcOutputBuffer, NcOutputWriter, NcStatus, NC_E_INVALID_ARG, NC_E_OUT_OF_MEMORY,
     NC_E_OUT_OF_RANGE,
@@ -53,9 +54,9 @@ impl Graphics {
             resources: 65_536,
             live_bytes: 1024 * 1024 * 1024,
             pending_bytes: 64 * 1024 * 1024,
-            frame_draws: MAX_RENDER_BATCHES + 1,
-            frame_indices: u64::from(MAX_RENDER_VERTICES) * 2 + 3,
-            live_views: MAX_RENDER_BATCHES + 1,
+            frame_draws: MAX_UI_BATCHES + 1,
+            frame_indices: u64::from(MAX_UI_VERTICES) * 2 + 3,
+            live_views: MAX_UI_BATCHES + 1,
             stack_depth: 1,
         })?;
         let resources = domain.resources()?;

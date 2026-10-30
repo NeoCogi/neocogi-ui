@@ -13,7 +13,6 @@ enum RefreshAction {
         /// Independent immutable candidate in the same original namespace.
         next: ComPtr<IAssetBundleAbi>,
         /// Concrete CPU backend used only for the authorized installation callback.
-        renderer: ComPtr<IRendererAbi>,
         /// Optional distinct widget publication before returning to the outer import.
         sibling: Option<WeakComBox<ButtonAbi>>,
     },
@@ -62,9 +61,9 @@ impl IAssetBundle for ReentrantAssets {
             self.fired.set(self.fired.get() + 1);
             match action {
                 RefreshAction::Sibling(mut sibling) => named_font(&mut sibling)?,
-                RefreshAction::Replace { runtime, next, renderer, sibling } => {
+                RefreshAction::Replace { runtime, next, sibling } => {
                     let mut runtime = runtime.upgrade()?.ok_or(neocogi_com::NC_E_DROPPED)?;
-                    runtime.install_assets(next.as_com_ref(), renderer.as_com_ref())?;
+                    runtime.install_assets(next.as_com_ref())?;
                     if let Some(mut sibling) = sibling {
                         named_font(&mut sibling)?;
                     }
@@ -179,7 +178,7 @@ impl Fixture {
 
     /// Installs through the real transaction, then leaves the node cache lazily outdated.
     fn install(&mut self, source: &ComPtr<IAssetBundleAbi>) {
-        self.runtime.install_assets(source.as_com_ref(), self.renderer.as_com_ref()).unwrap();
+        self.runtime.install_assets(source.as_com_ref()).unwrap();
     }
 
     /// Normal update and render must reuse the published import and produce valid geometry.
@@ -299,7 +298,6 @@ fn third_revision_during_import_is_not_overwritten_by_stale_candidate() {
     *action.borrow_mut() = Some(RefreshAction::Replace {
         runtime: fixture.runtime.downgrade().unwrap(),
         next: next.clone(),
-        renderer: fixture.renderer.clone(),
         sibling: Some(fixture.sibling.clone()),
     });
     assert_eq!(named_font(&mut fixture.first), Err(NC_E_BUSY));
@@ -363,7 +361,6 @@ fn third_revision_without_nested_publication_imports_on_retry() {
     *action.borrow_mut() = Some(RefreshAction::Replace {
         runtime: fixture.runtime.downgrade().unwrap(),
         next,
-        renderer: fixture.renderer.clone(),
         sibling: None,
     });
     assert_eq!(named_font(&mut fixture.first), Err(NC_E_BUSY));

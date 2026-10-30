@@ -24,8 +24,6 @@ pub struct ImportedCatalog {
 pub struct ImportedAssets {
     /// Retained source allows renderers and other consumers to import this exact revision.
     source: ComPtr<IAssetBundleAbi>,
-    /// Narrow renderer projection avoids querying or exposing UI metadata during every frame.
-    image: ComPtr<IRgbaImageAbi>,
     /// Stable original namespace; private theme artwork never enters its named catalog.
     catalog: ImportedCatalog,
     /// Complete validated local skin and matching font/icon lookup metadata.
@@ -40,7 +38,6 @@ impl ImportedAssets {
     pub fn read(source: ComRef<'_, IAssetBundleAbi>, previous: Option<&ImportedCatalog>) -> Result<Self, NcStatus> {
         let catalog = source.catalog()?;
         let identity = catalog.query::<IUnknown>()?;
-        let image = source.image()?;
         if previous.is_some_and(|previous| previous.identity.as_raw().object != identity.as_raw().object) {
             return Err(UI_E_OWNER);
         }
@@ -61,7 +58,6 @@ impl ImportedAssets {
         ResourceCatalog::new(original.clone()).validate_bundle(&bundle).map_err(|_| NC_E_INVALID_ARG)?;
         Ok(Self {
             source: source.try_add_ref()?,
-            image,
             catalog,
             bundle,
         })
@@ -75,11 +71,6 @@ impl ImportedAssets {
     /// Borrows the retained immutable source for another binary's bulk import.
     pub fn source(&self) -> ComRef<'_, IAssetBundleAbi> {
         self.source.as_com_ref()
-    }
-
-    /// Borrows only the packed RGBA capability consumed by graphics and renderer plugins.
-    pub fn image(&self) -> ComRef<'_, IRgbaImageAbi> {
-        self.image.as_com_ref()
     }
 
     /// Borrows the original catalog atlas; named application references must resolve here.

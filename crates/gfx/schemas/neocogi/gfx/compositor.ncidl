@@ -1,4 +1,19 @@
-use neocogi.renderer::{IRenderHost, IRenderViewBlock, IRenderer, ITexture, Rect, RenderVertex, Size, TextureRegion};
+use neocogi.renderer::{IRenderHost, IRenderViewBlock, IRenderer, ITexture, Rect, Size, TextureRegion};
+
+#[version(1)]
+/// GFX textured UI vertex before private clipping and generic-command lowering.
+struct RenderVertex {
+    /// Horizontal position in drawable pixels.
+    x: f32,
+    /// Vertical position in drawable pixels.
+    y: f32,
+    /// Normalized horizontal texture coordinate.
+    u: f32,
+    /// Normalized vertical texture coordinate.
+    v: f32,
+    /// Color packed as red in the least significant byte, then green, blue, and alpha.
+    rgba: u32,
+}
 
 #[version(1)]
 /// One solid-color vertex in final drawable coordinates before rectangular clipping.
@@ -36,7 +51,7 @@ struct NinePatchDraw {
     patch: AssetPatch,
 }
 
-#[version(4)]
+#[version(5)]
 /// Renderer-neutral display-list executor owned by the GFX plugin.
 ///
 /// UI code supplies semantic operations in painter order. The compositor owns

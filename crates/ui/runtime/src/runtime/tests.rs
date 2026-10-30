@@ -1,4 +1,5 @@
 //! Runtime boundary regressions use deliberately retaining and reentrant components.
+use neocogi_gfx_support::testing::UiBatch;
 use super::*;
 use neocogi_ui::abi::nodes::*;
 use neocogi_com::{ComBox, WeakComBox, INcStringComPtrExt, NC_E_BUSY, NcOutputWriter};
@@ -277,15 +278,11 @@ struct Renderer {
 }
 
 impl IRenderer for Renderer {
-    /// This CPU recorder accepts validated images without a GPU upload.
-    fn prepare_atlas(&self, _atlas: ComRef<'_, IRgbaImageAbi>) -> Result<(), NcStatus> {
-        Ok(())
-    }
     /// Copies bulk geometry during its valid scope and retains authority for later rejection tests.
-    fn render(&self, info: RenderInfo, _atlas: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
+    fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
         assert_eq!(batches.len(), 1);
-        assert!(matches!(batches[0], RenderBatch::Atlas { first: 0, count } if count as usize == vertices.len()));
+        assert!(matches!(batches[0], UiBatch::Atlas { first: 0, count } if count as usize == vertices.len()));
         assert!(vertices.len() >= 6);
         assert!(vertices.iter().all(|v| v.x.is_finite() && v.y.is_finite()));
         *self.probe.vertices.borrow_mut() = vertices;
@@ -350,9 +347,9 @@ fn rendering_requires_synchronized_geometry_and_streams_expire_after_success_and
     probe.fail.set(true);
     assert_eq!(runtime.render(resized, renderer.as_com_ref()), Err(UI_E_RENDER));
     for (stream, scope) in probe.streams.borrow().iter() {
-        assert_eq!(stream.vertices(*scope, neocogi_com::NcOutputBuffer::new().output(0, 0)), Err(NC_E_INVALID_ARG));
-        assert_eq!(stream.batches(*scope, neocogi_com::NcOutputBuffer::new().output(0, 0)), Err(NC_E_INVALID_ARG));
-        assert_eq!(stream.texture(*scope, 0).unwrap_err(), NC_E_INVALID_ARG);
+        assert_eq!(stream.view(*scope, 0).unwrap_err(), NC_E_INVALID_ARG);
+        assert_eq!(stream.view(*scope, 0).unwrap_err(), NC_E_INVALID_ARG);
+
         assert_eq!(stream.view(*scope, 0).unwrap_err(), NC_E_INVALID_ARG);
     }
 }

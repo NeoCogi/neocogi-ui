@@ -287,8 +287,8 @@ impl AppState for State {
 
     /// Publishes assets prepared by the previous frame's handlers before this frame's UI update.
     /// Geometry and FPS text join that same update, so rendering sees their committed layout.
-    fn frame(&mut self, host: &Host, size: Size, seconds: f64) -> Result<bool, NcStatus> {
-        self.style.install(&mut self.ui, host.renderer.as_com_ref())?;
+    fn frame(&mut self, _host: &Host, size: Size, seconds: f64) -> Result<bool, NcStatus> {
+        self.style.install(&mut self.ui)?;
         let area = rect(0, 0, size.width, size.height);
         if self.desktop.snapshot()?.rect != area {
             self.desktop.set_rect(area)?;

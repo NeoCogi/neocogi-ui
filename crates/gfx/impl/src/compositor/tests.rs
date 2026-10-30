@@ -1,4 +1,5 @@
 //! Production compositor tests use a small immutable atlas without optional builders.
+use neocogi_gfx_support::testing::UiBatch;
 use super::*;
 use crate::test_support::{test_bundle, data};
 use neocogi_com::{com_object};
@@ -107,7 +108,7 @@ struct RenderCapture {
     /// Final bulk vertices copied while the stream token was active.
     vertices: std::cell::RefCell<Vec<RenderVertex>>,
     /// Final ordered batch records copied while the stream token was active.
-    batches: std::cell::RefCell<Vec<RenderBatch>>,
+    batches: std::cell::RefCell<Vec<UiBatch>>,
     /// Retained stream and expired invocation used to verify post-call revocation.
     retained: std::cell::RefCell<Option<(u64, ComPtr<IRenderStreamAbi>)>>,
 }
@@ -120,18 +121,8 @@ struct CaptureRenderer {
 }
 
 impl IRenderer for CaptureRenderer {
-    /// Atlas preparation is outside the focused compositor stream test.
-    fn prepare_atlas(&self, _atlas: neocogi_com::ComRef<'_, IRgbaImageAbi>) -> Result<(), NcStatus> {
-        Ok(())
-    }
-
     /// Copies every declared record while the invocation is active, then retains the stream.
-    fn render(
-        &self,
-        info: RenderInfo,
-        _atlas: neocogi_com::ComRef<'_, IRgbaImageAbi>,
-        stream: neocogi_com::ComRef<'_, IRenderStreamAbi>,
-    ) -> Result<(), NcStatus> {
+    fn render(&self, info: RenderInfo, stream: neocogi_com::ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
         *self.capture.vertices.borrow_mut() = vertices;
         *self.capture.batches.borrow_mut() = batches;
@@ -620,11 +611,10 @@ fn compositor_owns_final_geometry_batching_and_stream_scope() {
     assert_eq!(capture.vertices.borrow().len() % 3, 0);
     assert_eq!(capture.batches.borrow().len(), 1, "adjacent primary-atlas output must merge");
     let (invocation, stream) = capture.retained.borrow().as_ref().cloned().unwrap();
-    let mut vertex = neocogi_com::NcOutputBuffer::<RenderVertex>::new();
     assert_eq!(
-        stream.vertices(invocation, vertex.output(0, 1)),
-        Err(NC_E_INVALID_ARG),
-        "the renderer cannot reuse a stream after its synchronous call"
+        stream.view(invocation, 0).unwrap_err(),
+        NC_E_INVALID_ARG,
+        "expired streams cannot expose blocks"
     );
 
     // Equal table positions from a separately constructed bundle do not establish revision

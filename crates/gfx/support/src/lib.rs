@@ -17,6 +17,8 @@ mod glyph_index;
 #[cfg(feature = "test-support")]
 pub mod testing;
 mod validation;
+mod vertex;
+pub use vertex::{MAX_UI_VERTICES, MAX_UI_BATCHES};
 pub use glyph_index::AsciiGlyphIndex;
 
 /// Concrete appearance states used while compiling and resolving complete records.

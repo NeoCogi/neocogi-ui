@@ -1,8 +1,9 @@
 //! Real CPU allocation failures cross generated texture calls and the production frame importer.
+use neocogi_gfx_support::testing::UiBatch;
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, NC_E_BUSY, NC_E_OUT_OF_MEMORY, com_object};
-use neocogi_gfx_support::abi::{GfxCompositorAbi, SolidVertex};
+use neocogi_gfx_support::abi::{GfxCompositorAbi, SolidVertex, RenderVertex};
 use neocogi_gfx_impl::GfxCompositorObject;
-use neocogi_render_support::com::{Batch, PreparedFrame, Resources};
+use neocogi_render_support::com::{PreparedFrame, Resources};
 use neocogi_render_core::abi::*;
 use std::{
     cell::{Cell, RefCell},
@@ -50,12 +51,6 @@ impl Resources for OwnedTextures {
     fn view(&self, view: neocogi_com::WeakComBox<IRenderViewBlockAbi>) -> Result<Rc<neocogi_render_gpu::record::Block>, NcStatus> {
         neocogi_gfx_support::testing::snapshot(view.as_com_ref())
     }
-    /// Imported batches own the real COM texture until CPU preparation is cleared.
-    type Texture = ComPtr<ITextureAbi>;
-    /// Retains the actual capability until imported-frame cleanup.
-    fn texture(&self, texture: ComPtr<ITextureAbi>) -> Result<Self::Texture, NcStatus> {
-        Ok(texture)
-    }
 }
 
 /// Observations retain copied geometry and identities, without keeping textures alive.
@@ -66,7 +61,7 @@ struct Capture {
     /// Complete geometry copied by the production importer.
     vertices: RefCell<Vec<RenderVertex>>,
     /// Pointer-free batch records copied while the stream token remains active.
-    batches: RefCell<Vec<RenderBatch>>,
+    batches: RefCell<Vec<UiBatch>>,
     /// Actual retained texture identities resolved only after partition validation.
     textures: RefCell<Vec<usize>>,
     /// Optional renderer error occurs after CPU validation, independently of allocation injection.
@@ -79,24 +74,17 @@ struct Renderer {
     capture: Rc<Capture>,
 }
 impl IRenderer for Renderer {
-    /// Atlas preparation is outside this CPU frame-partition regression.
-    fn prepare_atlas(&self, _: ComRef<'_, IRgbaImageAbi>) -> Result<(), NcStatus> {
-        Ok(())
-    }
     /// The shared production importer rejects orphan vertices before resolving any texture.
-    fn render(&self, info: RenderInfo, _: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        let mut frame = PreparedFrame::<ComPtr<ITextureAbi>>::default();
+    fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
+        let mut frame = PreparedFrame::default();
         frame.read(info, stream, &OwnedTextures)?;
         let (vertices, records) = neocogi_gfx_support::testing::read(info, stream)?;
         *self.capture.vertices.borrow_mut() = vertices;
         *self.capture.batches.borrow_mut() = records;
         *self.capture.textures.borrow_mut() = frame
-            .batches()
+            .blocks()
             .iter()
-            .flat_map(|batch| {
-                let Batch::View(block) = batch else {
-                    panic!("expected only generic graphics blocks")
-                };
+            .flat_map(|block| {
                 block.commands.iter().filter_map(|command| {
                     let neocogi_render_gpu::command::Command::Draw(draw) = command else {
                         return None;
@@ -229,9 +217,9 @@ fn assert_frame(capture: &Capture, textures: usize) {
     assert_eq!(capture.vertices.borrow().len(), 3 + textures * 4);
     let records = capture.batches.borrow();
     assert_eq!(records.len(), 1 + textures);
-    assert!(matches!(records[0], RenderBatch::Atlas { first: 0, count: 3 }));
+    assert!(matches!(records[0], UiBatch::Atlas { first: 0, count: 3 }));
     for (index, record) in records[1..].iter().enumerate() {
-        assert!(matches!(record, RenderBatch::Texture { first } if *first as usize == 3 + index * 4));
+        assert!(matches!(record, UiBatch::Texture { first } if *first as usize == 3 + index * 4));
     }
     let vertices = capture.vertices.borrow();
     assert_eq!(
@@ -296,7 +284,7 @@ fn assert_new_frame(recording: &mut Recording) {
     assert_eq!(recording.capture.vertices.borrow().len(), 4);
     let batches = recording.capture.batches.borrow();
     assert_eq!(batches.len(), 1);
-    assert!(matches!(batches[0], RenderBatch::Texture { first: 0 }));
+    assert!(matches!(batches[0], UiBatch::Texture { first: 0 }));
     assert_eq!(&*recording.capture.textures.borrow(), &[identity]);
     assert_eq!(drops.get(), 1);
 }

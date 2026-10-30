@@ -2,9 +2,12 @@
 
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, NC_E_OUT_OF_MEMORY, com_object};
 use neocogi_gfx_support::abi::{AssetAppearanceRevision, AssetPublisherAbi, GfxPluginFactoryAbi, IAssetBundleAbi};
-use neocogi_render_core::abi::{IRenderStreamAbi, IRenderer, IRendererAbi, IRendererVtblFor, IRgbaImageAbi, RenderInfo};
+use neocogi_render_core::abi::{IRenderStreamAbi, IRenderer, IRendererAbi, IRendererVtblFor, RenderInfo};
 use neocogi_ui::{Rect, Size, TextWrapping, Ui, UI_E_OWNER};
-use std::{cell::Cell, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
 /// Identical drawable dimensions keep alternating frames comparable across independent UIs.
 const SIZE: Size = Size { width: 200, height: 120 };
@@ -19,7 +22,9 @@ struct Observation {
     /// Last batch count copied from the compositor-owned stream.
     batches: Cell<u32>,
     /// Borrowed image identity observed only while the test retains its owning bundle.
-    atlas: Cell<usize>,
+    pixels: RefCell<Vec<u8>>,
+    /// Recorded atlas shape is checked independently of the exposed UI asset metadata.
+    size: Cell<Option<Size>>,
 }
 
 #[com_object(interfaces(IRenderer))]
@@ -30,42 +35,38 @@ struct CaptureRenderer {
 }
 
 impl IRenderer for CaptureRenderer {
-    /// Accepts a logical upload without allocating a native graphics backend.
-    fn prepare_atlas(&self, _atlas: ComRef<'_, IRgbaImageAbi>) -> Result<(), NcStatus> {
-        Ok(())
-    }
-
     /// Copies both bounded arrays while the invocation token is valid.
-    fn render(&self, info: RenderInfo, atlas: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
+    fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
         self.observation.vertices.set(vertices.len() as u32);
         self.observation.batches.set(batches.len() as u32);
         self.observation.calls.set(self.observation.calls.get() + 1);
-        self.observation.atlas.set(atlas.as_raw().object as usize);
+        let blocks = neocogi_gfx_support::testing::blocks(info, stream)?;
+        let atlas = blocks.iter().flat_map(|block| &block.commands).find_map(|command| {
+            if let neocogi_render_gpu::command::Command::Draw(draw) = command {
+                Some(draw.textures[0].texture.clone())
+            } else {
+                None
+            }
+        });
+        if let Some(atlas) = atlas {
+            self.observation.size.set(Some(atlas.desc.size));
+            *self.observation.pixels.borrow_mut() = atlas.pixels().unwrap().to_vec();
+        }
         Ok(())
-    }
-}
-
-#[com_object(interfaces(IRenderer))]
-/// Rejects an atlas upload without retaining resources or adding mutable fixture state.
-struct RejectingRenderer;
-
-impl IRenderer for RejectingRenderer {
-    /// Models a backend allocation failure before the runtime publishes a candidate revision.
-    fn prepare_atlas(&self, _atlas: ComRef<'_, IRgbaImageAbi>) -> Result<(), NcStatus> {
-        Err(NC_E_OUT_OF_MEMORY)
-    }
-
-    /// No frame should reach this upload-only failure probe.
-    fn render(&self, _info: RenderInfo, _atlas: ComRef<'_, IRgbaImageAbi>, _stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        panic!("failed upload must not submit a frame")
     }
 }
 
 /// Constructs and mounts an ordinary UI through the public production entrypoint.
 fn create_ui(assets: ComRef<'_, IAssetBundleAbi>, gfx: ComRef<'_, GfxPluginFactoryAbi>) -> Ui {
+    create_ui_with_failure(assets, gfx, Rc::new(Cell::new(None)))
+}
+/// Failure injection belongs to private native preparation rather than the final renderer sink.
+fn create_ui_with_failure(assets: ComRef<'_, IAssetBundleAbi>, gfx: ComRef<'_, GfxPluginFactoryAbi>, failure: Rc<Cell<Option<NcStatus>>>) -> Ui {
     let mut runtime = nc_ui::create_runtime_from_assets(assets, gfx).unwrap();
-    runtime.set_render_host(neocogi_gfx_support::testing::host().as_com_ref()).unwrap();
+    runtime
+        .set_render_host(neocogi_gfx_support::testing::host_with_preparation_failure(failure).as_com_ref())
+        .unwrap();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
     let text = ui.widgets().text_block("Independent UI", TextWrapping::None).unwrap();
     ui.window("Independent UI", Rect { x: 4, y: 4, width: 160, height: 80 }, text).unwrap();
@@ -81,7 +82,12 @@ fn assert_frame(ui: &Ui, assets: ComRef<'_, IAssetBundleAbi>, renderer: ComRef<'
     assert_eq!(ui.assets().unwrap().as_raw().object, assets.as_raw().object);
     ui.render(SIZE, renderer).unwrap();
     assert_eq!(observation.calls.get(), calls + 1);
-    assert_eq!(observation.atlas.get(), image.as_raw().object as usize);
+    let size = image.size().unwrap();
+    let len = neocogi_render_core::abi::rgba_bytes(size).unwrap();
+    let mut pixels = neocogi_com::NcOutputBuffer::new();
+    image.pixels(pixels.output(0, len)).unwrap();
+    assert_eq!(observation.size.get(), Some(size));
+    assert_eq!(observation.pixels.borrow().as_slice(), pixels.as_slice());
     assert!(observation.vertices.get() > 0);
     assert!(observation.batches.get() > 0);
 }
@@ -122,7 +128,8 @@ fn shared_graphics_service_keeps_runtime_resources_independent() {
     assert_ne!(base_image.as_raw().object, revision_image.as_raw().object);
     let gfx = neocogi_ui_support::test_support::gfx_factory(host_runtime());
     let first = create_ui(base.as_com_ref(), gfx.as_com_ref());
-    let mut second = create_ui(revision.as_com_ref(), gfx.as_com_ref());
+    let failure = Rc::new(Cell::new(None));
+    let mut second = create_ui_with_failure(revision.as_com_ref(), gfx.as_com_ref(), failure.clone());
     let observation = Rc::new(Observation::default());
     let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { observation: observation.clone() })
         .query()
@@ -133,13 +140,18 @@ fn shared_graphics_service_keeps_runtime_resources_independent() {
     assert_frame(&second, revision.as_com_ref(), renderer.as_com_ref(), &observation);
     assert_frame(&first, base.as_com_ref(), renderer.as_com_ref(), &observation);
 
-    let next = appearance_revision(revision.as_com_ref());
-    let rejecting: ComPtr<IRendererAbi> = RejectingRenderer::from_value(RejectingRenderer).query().unwrap();
-    assert_eq!(second.install_assets(next.as_com_ref(), rejecting.as_com_ref()), Err(NC_E_OUT_OF_MEMORY));
+    let styled = appearance_revision(revision.as_com_ref());
+    let next = neocogi_ui::assets::AssetData::read(styled.as_com_ref())
+        .unwrap()
+        .into_revision(revision.as_com_ref())
+        .unwrap();
+    failure.set(Some(NC_E_OUT_OF_MEMORY));
+    assert_eq!(second.install_assets(next.as_com_ref()), Err(NC_E_OUT_OF_MEMORY));
     assert_frame(&second, revision.as_com_ref(), renderer.as_com_ref(), &observation);
     assert_frame(&first, base.as_com_ref(), renderer.as_com_ref(), &observation);
 
-    second.install_assets(next.as_com_ref(), renderer.as_com_ref()).unwrap();
+    failure.set(None);
+    second.install_assets(next.as_com_ref()).unwrap();
     second.update(SIZE).unwrap();
     assert_frame(&second, next.as_com_ref(), renderer.as_com_ref(), &observation);
     assert_frame(&first, base.as_com_ref(), renderer.as_com_ref(), &observation);
@@ -168,7 +180,7 @@ fn shared_factory_supports_independent_catalogs() {
 
     assert_frame(&first, base.as_com_ref(), renderer.as_com_ref(), &observation);
     assert_frame(&second, unrelated.as_com_ref(), renderer.as_com_ref(), &observation);
-    assert_eq!(first.install_assets(unrelated.as_com_ref(), renderer.as_com_ref()), Err(UI_E_OWNER));
+    assert_eq!(first.install_assets(unrelated.as_com_ref()), Err(UI_E_OWNER));
     assert_frame(&first, base.as_com_ref(), renderer.as_com_ref(), &observation);
     assert_frame(&second, unrelated.as_com_ref(), renderer.as_com_ref(), &observation);
 }

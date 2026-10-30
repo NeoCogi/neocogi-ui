@@ -4,10 +4,10 @@ use nc_ui::render::{FrameInfo, RendererBackend, RendererFrame};
 
 #[allow(dead_code)]
 fn acquire_once<B: RendererBackend>(backend: &mut B, info: FrameInfo) {
-    let mut frame = backend.frame(info).expect("the fixture characterizes ownership after successful acquisition");
-    // A frame operation proves the associated type exposes the intended public frame contract.
-    frame.flush();
+    let frame = backend.frame(info).expect("the fixture characterizes ownership after successful acquisition");
     drop(frame);
+    // Abandonment releases the borrow; a fresh frame can be explicitly completed.
+    backend.frame(info).unwrap().finish().unwrap();
 }
 
 fn main() {}

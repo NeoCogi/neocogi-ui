@@ -13,17 +13,17 @@ call gate rejects retained or reentrant aliases while one operation mutates them
 
 ```text
 IWidget.paint -> scoped IPainter -> runtime frame display list
-             -> coarse GfxCompositor operations -> one bulk neocogi.renderer submission
+             -> coarse GfxCompositor operations -> one ordered neocogi.renderer block submission
 ```
 
-The display list owns text, solid geometry and retained image/render-item interfaces.
+The display list owns text, solid geometry and retained images and sealed graphics blocks.
 There is no per-widget COM command queue and no replay into a second display list. UI sends
 one typed compositor call per retained draw operation, never one call per glyph or vertex.
 The GFX compositor clears reusable output storage after submission or failure. Adjacent
-compatible geometry batches together; images and application render items preserve painter order.
+compatible geometry batches together; images and client graphics blocks preserve painter order.
 Inputs are validated before entering the list and the completed frame is validated
 before GPU work, including buffer bounds, finite values, resource provenance and
-supported batch kinds.
+immutable clip roots and domain admission.
 
 The runtime creates a private compositor through the shareable `GfxPluginFactory`.
 Each successful factory call returns independent resource selection, frame state,
@@ -33,11 +33,12 @@ Standalone GFX clients may create their own sessions through the same factory.
 
 The runtime, its dynamically linked widget factory, and its private GFX compositor
 use the same immutable asset revision as every built-in product. Frame, icon, and
-font slots therefore resolve against that revision without reconstructing an atlas or skin per widget. The
-import stores a separate `IRgbaImage` projection beside the UI bundle. Only that narrow
-projection crosses into `IRenderer::prepare_atlas` and `GfxCompositor::submit`; GFX passes
-it to `IRenderer::render`, and no renderer
-can inspect the bundle's theme, font, icon, chrome, or catalog tables.
+font slots therefore resolve against that revision without reconstructing an atlas or skin per widget.
+The compositor retains the bundle's narrow `IRgbaImage` projection and uses its bound
+`IRenderHost` to prepare a private generic texture. Native preparation must succeed
+before an asset replacement is published; unchanged image identity reuses that texture.
+`Ui::install_assets` takes only the candidate bundle. The final `IRenderer::render`
+receives frame metadata and a sealed block stream, with no atlas or UI metadata.
 
 ## Update and frame validity
 
@@ -62,23 +63,20 @@ those clips from committed geometry, so paint and hit testing share their bounda
 The GFX compositor clips atlas rectangles and adjusts their sampling coordinates,
 clips image quads while preserving UV projection, and clips solid triangles against
 the operation clip and viewport. Empty geometry is discarded. Backends receive final
-screen-space UI vertices. `RenderVertex` from the standalone `neocogi.renderer`
-contract module is the one canonical vertex representation
-used by clipping, the COM stream, platform validation and concrete GPU backends; the
-boundary performs its required bulk copy without packing and unpacking every vertex
-into a duplicate native struct. Each validated atlas range is then presented to the native
-frame as one slice. Contiguous buffered backends append it once, while indexed backends can
-use the trait's per-triangle fallback. A render item additionally receives its authoritative
-visible region because its own mesh drawing happens at that ordered boundary.
+screen-space geometry inside GFX. `RenderVertex` belongs to the `neocogi.gfx`
+contract and is reexported by the UI facade. GFX encodes its vertex layout explicitly
+into generic buffers; native executors do not depend on that record's ABI or know
+its meaning. Client graphics blocks retain their authoritative visible-client root
+at the same ordered boundary.
 
 The COM recorder appends semantic operations to UI-local storage. At frame execution UI sends
 complete triangle, text, icon, and nine-patch inputs to GFX with one call per operation. A
 `NinePatchDraw` contains only destination insets, center visibility, and closed flat-or-image
 content; UI never derives its nine cell rectangles. GFX resolves bundle-local image sources,
 partitions source and destination cells, removes empty cells, clips final geometry, and folds the
-result into adjacent atlas work. It exposes all final vertices and batch metadata to the renderer
-in two bulk reads. Texture and custom-item capabilities are fetched only for their corresponding
-batches.
+result into adjacent atlas work. GFX records that geometry and ordinary images as generic
+commands in its private UI domain. Client blocks seal preceding UI work and retain their
+original painter positions. The final stream exposes only sealed block observers.
 
 The portable target is a positive drawable up to 8192 by 8192 pixels. Translated logical
 edges must remain in `-32768..=40960`, allowing four maximum drawable spans off-screen.
@@ -107,7 +105,7 @@ ownership, validation, viewport and work-budget rules.
 | --- | --- |
 | `ui_node/paint_service.rs` | Scoped foreign access to the runtime-owned frame paint context |
 | [crates/gfx/impl/src/nine_patch.rs](../../../gfx/impl/src/nine_patch.rs) | Nine-patch validation, source resolution, cell partitioning, and visibility |
-| [crates/gfx/impl/src/compositor.rs](../../../gfx/impl/src/compositor.rs) | Final clipping, batching, and bulk frame transport |
+| [crates/gfx/impl/src/compositor.rs](../../../gfx/impl/src/compositor.rs) | Final clipping, batching, and generic block transport |
 | `render/painter.rs` | Private built-in geometry recording |
 | `render/display_list.rs` | Owned ordered operations and reusable geometry |
 | `render/compositor.rs` | Thin production replay into the GFX compositor |

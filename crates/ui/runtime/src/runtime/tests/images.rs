@@ -1,4 +1,5 @@
 //! Image controls preserve immutable ownership, paint ordering, and clipped source coordinates.
+use neocogi_gfx_support::testing::UiBatch;
 use super::*;
 
 #[derive(Default)]
@@ -129,17 +130,13 @@ struct ImageFrameRenderer {
     quads: Rc<RefCell<Vec<[RenderVertex; 4]>>>,
 }
 impl IRenderer for ImageFrameRenderer {
-    /// The CPU sink has no upload phase; the runtime already validated the immutable image.
-    fn prepare_atlas(&self, _: ComRef<'_, IRgbaImageAbi>) -> Result<(), NcStatus> {
-        Ok(())
-    }
     /// Resolves each texture only during the active stream, then immediately releases the projection.
-    fn render(&self, info: RenderInfo, _: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
+    fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
         let quads = batches
             .into_iter()
             .filter_map(|batch| {
-                if let RenderBatch::Texture { first } = batch {
+                if let UiBatch::Texture { first } = batch {
                     Some(vertices[first as usize..first as usize + 4].try_into().unwrap())
                 } else {
                     None

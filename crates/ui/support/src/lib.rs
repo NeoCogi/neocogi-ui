@@ -33,8 +33,8 @@ pub mod prelude {
     pub use crate::image::{ImageError, ImageSource, ImageStorageError, MAX_DECODED_RGBA_BYTES, load_image_bytes};
     pub use crate::input::{Key, KeyEvent, KeyState, Modifiers, MouseButton};
     pub use crate::render::{
-        AtlasUploadError, FrameError, FrameInfo, FrameInfoError, NinePatch, NinePatchCell, NinePatchCells, NinePatchContent, NinePatchImage, RendererBackend,
-        RendererFrame, SliceInsets, TextureError, TextureId,
+        FrameError, FrameInfo, FrameInfoError, NinePatch, NinePatchCell, NinePatchCells, NinePatchContent, NinePatchImage, RendererBackend, RendererFrame,
+        SliceInsets, TextureError, TextureId,
     };
     pub use crate::math::{expand_rect, rect, vec2};
     pub use crate::theme::{
@@ -52,7 +52,7 @@ pub use image::{ImageError, ImageSource, ImageStorageError, MAX_DECODED_RGBA_BYT
 pub use input::{Key, KeyEvent, KeyState, Modifiers, MouseButton};
 pub use layout::{AvailableSpace, Constraints, TrackSize};
 pub use math::{expand_rect, rect, vec2};
-pub use render::{AtlasUploadError, NinePatch, NinePatchCell, NinePatchCells, NinePatchContent, NinePatchImage, SliceInsets, TextureError, TextureId};
+pub use render::{NinePatch, NinePatchCell, NinePatchCells, NinePatchContent, NinePatchImage, SliceInsets, TextureError, TextureId};
 pub use text_layout::TextWrap;
 pub use interaction::{Change, KeyboardAction, KeyboardBehavior, WidgetOption};
 pub use widget_context::{WidgetPaintCtx, WidgetUpdateCtx};

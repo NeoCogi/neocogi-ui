@@ -18,8 +18,7 @@ fn gfx_generic_blocks_preserve_window_order_and_immutable_surface_output() {
         .acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
         .unwrap();
     let assets = neocogi_demo_assets::load_bundle(runtime).unwrap();
-    let atlas = assets.image().unwrap();
-    let native = PlatformObject::default().window("GFX generic executor", SIZE, atlas.as_com_ref()).unwrap();
+    let native = PlatformObject::default().window("GFX generic executor", SIZE).unwrap();
     let weak = Rc::downgrade(&native.device);
     let window = WindowObject::from_value(native);
     let renderer: ComPtr<IRendererAbi> = window.query().unwrap();
@@ -75,7 +74,7 @@ fn gfx_generic_blocks_preserve_window_order_and_immutable_surface_output() {
     assert_eq!(pixel(60, 60), [0, 255, 0, 255]);
 
     let surfaces: ComPtr<IRenderSurfaceFactoryAbi> = window.query().unwrap();
-    let surface = surfaces.create_surface(SIZE, atlas.as_com_ref()).unwrap();
+    let surface = surfaces.create_surface(SIZE).unwrap();
     let preview: ComPtr<IRendererAbi> = surface.query().unwrap();
     compositor.begin(SIZE, 0xff000000).unwrap();
     compositor.texture(bounds, bounds, unit, 0xffffffff, image.as_com_ref()).unwrap();
@@ -108,74 +107,34 @@ struct ClosingUiStream {
     blocks: Vec<ComBox<IRenderViewBlockAbi>>,
     /// Dropping the controller is terminal even though the immutable block is retained.
     close: Rc<RefCell<Option<ComBox<IRenderClientDomainAbi>>>>,
-    /// Select closure at the second block read, or leave it for the atlas pixel callback.
-    close_in_stream: bool,
     /// A different still-open factory verifies the device-wide preparation gate.
     editing: ComPtr<IRenderResourcesAbi>,
 }
 impl IRenderStream for ClosingUiStream {
     fn view(&self, _: u64, index: u32) -> Result<WeakComBox<IRenderViewBlockAbi>, NcStatus> {
-        if index == 1 && self.close_in_stream {
+        assert!(matches!(
+            self.editing.create_buffer(
+                GpuBufferDesc { role: GpuBufferRole::Vertex, byte_len: 4 },
+                Bytes::source(vec![0; 4]).as_com_ref()
+            ),
+            Err(RENDER_E_BUSY)
+        ));
+        if index == 1 {
             drop(self.close.borrow_mut().take());
         }
         self.blocks.get(index as usize).map(ComBox::downgrade).ok_or(NC_E_INVALID_ARG)
     }
-    fn vertices(&self, _: u64, _: NcOutputWriter<'_, RenderVertex>) -> Result<u32, NcStatus> {
-        assert!(
-            matches!(
-                self.editing.create_buffer(
-                    GpuBufferDesc { role: GpuBufferRole::Vertex, byte_len: 4 },
-                    Bytes::source(vec![0; 4]).as_com_ref(),
-                ),
-                Err(RENDER_E_BUSY)
-            ),
-            "surface preparation must exclude foreign resource edits"
-        );
-        Ok(0)
-    }
-    fn batches(&self, _: u64, mut output: NcOutputWriter<'_, RenderBatch>) -> Result<u32, NcStatus> {
-        for _ in &self.blocks {
-            output.push(RenderBatch::View)?;
-        }
-        Ok(self.blocks.len() as u32)
-    }
-    fn texture(&self, _: u64, _: u32) -> Result<ComPtr<ITextureAbi>, NcStatus> {
-        Err(NC_E_INVALID_ARG)
-    }
 }
 
-#[com_object(interfaces(IRgbaImage))]
-/// Atlas upload closes captured authority after the last stream read.
-struct ClosingAtlas {
-    /// No reference to the surface or runtime is retained by the foreign producer.
-    close: Rc<RefCell<Option<ComBox<IRenderClientDomainAbi>>>>,
-}
-impl IRgbaImage for ClosingAtlas {
-    fn size(&self) -> Result<Size, NcStatus> {
-        Ok(Size { width: 1, height: 1 })
-    }
-    fn pixels(&self, mut output: NcOutputWriter<'_, u8>) -> Result<(), NcStatus> {
-        drop(self.close.borrow_mut().take());
-        let first = output.offset() as usize;
-        let end = first + output.capacity();
-        output.extend_from_slice([255; 4].get(first..end).ok_or(NC_E_INVALID_ARG)?)
-    }
-}
-
-/// Both late stream and late image callbacks must revoke surface admission before target mutation.
+/// Late stream callbacks revoke surface admission before target mutation.
 #[test]
 #[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
 fn surfaces_recheck_ui_domains_and_exclude_resource_reentry_after_foreign_callbacks() {
     let _session = native_session();
-    let atlas: ComPtr<IRgbaImageAbi> = White::from_value(White).query().unwrap();
-    let native = PlatformObject::default().window("surface admission", SIZE, atlas.as_com_ref()).unwrap();
+    let native = PlatformObject::default().window("surface admission", SIZE).unwrap();
     let window = WindowObject::from_value(native);
     let host = window.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap();
-    let surface = window
-        .query::<IRenderSurfaceFactoryAbi>()
-        .unwrap()
-        .create_surface(SIZE, atlas.as_com_ref())
-        .unwrap();
+    let surface = window.query::<IRenderSurfaceFactoryAbi>().unwrap().create_surface(SIZE).unwrap();
     let renderer: ComPtr<IRendererAbi> = surface.query().unwrap();
     let empty: ComPtr<IRenderStreamAbi> = super::view_geometry::ViewStream::from_value(super::view_geometry::ViewStream { blocks: vec![] })
         .query()
@@ -184,12 +143,11 @@ fn surfaces_recheck_ui_domains_and_exclude_resource_reentry_after_foreign_callba
         size: SIZE,
         clear: 0xff112233,
         invocation: 1,
-        vertex_count: 0,
-        batch_count: 0,
+        block_count: 0,
     };
-    renderer.render(info, atlas.as_com_ref(), empty.as_com_ref()).unwrap();
+    renderer.render(info, empty.as_com_ref()).unwrap();
     let previous = surface.completed_image().unwrap();
-    for close_in_stream in [true, false] {
+    {
         let first = host.create_ui_client(RenderClientLimits::default()).unwrap();
         let second = host.create_ui_client(RenderClientLimits::default()).unwrap();
         let first_resources = first.resources().unwrap();
@@ -208,18 +166,12 @@ fn surfaces_recheck_ui_domains_and_exclude_resource_reentry_after_foreign_callba
         let stream: ComPtr<IRenderStreamAbi> = ClosingUiStream::from_value(ClosingUiStream {
             blocks,
             close: close.clone(),
-            close_in_stream,
             editing: second_resources,
         })
         .query()
         .unwrap();
-        let image = if close_in_stream {
-            atlas.clone()
-        } else {
-            ClosingAtlas::from_value(ClosingAtlas { close: close.clone() }).query().unwrap()
-        };
         assert_eq!(
-            renderer.render(RenderInfo { batch_count: 2, ..info }, image.as_com_ref(), stream.as_com_ref()),
+            renderer.render(RenderInfo { block_count: 2, ..info }, stream.as_com_ref()),
             Err(neocogi_com::NC_E_DROPPED)
         );
         assert!(close.borrow().is_none());
@@ -227,56 +179,30 @@ fn surfaces_recheck_ui_domains_and_exclude_resource_reentry_after_foreign_callba
     }
 }
 
-#[com_object(interfaces(IRgbaImage))]
-/// Deterministic UI atlas; this GPU test needs an opaque white texel, without font metadata.
-struct White;
-impl IRgbaImage for White {
-    /// Exactly one complete initialized texel.
-    fn size(&self) -> Result<Size, NcStatus> {
-        Ok(Size { width: 1, height: 1 })
+/// Submit UI/client/UI through the actual GFX producer, with no renderer UI command vocabulary.
+fn submit_interleaved(host: ComRef<'_, IRenderHostAbi>, renderer: ComRef<'_, IRendererAbi>, block: ComBox<IRenderViewBlockAbi>, vertices: &[RenderVertex]) {
+    use neocogi_gfx_support::abi::{GfxPluginFactoryAbi, SolidVertex};
+    let runtime = crate::host_runtime();
+    // SAFETY: the linked descriptor and all implementation data live for the process.
+    unsafe {
+        runtime.register_plugin_descriptor(nc_gfx::plugin_descriptor()).unwrap();
     }
-    /// Supplies the exact requested prefix through the real image ABI.
-    fn pixels(&self, mut output: NcOutputWriter<'_, u8>) -> Result<(), NcStatus> {
-        let first = output.offset() as usize;
-        let end = first + output.capacity();
-        output.extend_from_slice([255; 4].get(first..end).ok_or(NC_E_INVALID_ARG)?)
-    }
-}
-
-#[com_object(interfaces(IRenderStream))]
-/// Owns one sealed contribution and ordinary UI geometry at later painter positions.
-struct Source {
-    /// Exclusive ownership lasts through the synchronous renderer call.
-    block: ComBox<IRenderViewBlockAbi>,
-    /// Green background and a later magenta overlay are ordinary UI triangles.
-    vertices: Vec<RenderVertex>,
-}
-impl IRenderStream for Source {
-    /// Observes only the declared generic position.
-    fn view(&self, _: u64, index: u32) -> Result<WeakComBox<IRenderViewBlockAbi>, NcStatus> {
-        if index != 1 {
-            return Err(NC_E_INVALID_ARG);
-        }
-        Ok(self.block.downgrade())
-    }
-    /// Copies complete ordinary geometry around the generic contribution.
-    fn vertices(&self, _: u64, mut output: NcOutputWriter<'_, RenderVertex>) -> Result<u32, NcStatus> {
-        output.extend_from_slice(&self.vertices)?;
-        Ok(self.vertices.len() as u32)
-    }
-    /// Preserves atlas, generic, atlas order without a semantic renderer command.
-    fn batches(&self, _: u64, mut output: NcOutputWriter<'_, RenderBatch>) -> Result<u32, NcStatus> {
-        output.extend_from_slice(&[
-            RenderBatch::Atlas { first: 0, count: 6 },
-            RenderBatch::View,
-            RenderBatch::Atlas { first: 6, count: 6 },
-        ])?;
-        Ok(3)
-    }
-    /// No ordinary image capabilities are requested by this fixture.
-    fn texture(&self, _: u64, _: u32) -> Result<ComPtr<ITextureAbi>, NcStatus> {
-        Err(NC_E_INVALID_ARG)
-    }
+    let gfx = runtime
+        .acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
+        .unwrap();
+    let assets = neocogi_demo_assets::load_bundle(runtime).unwrap();
+    let mut compositor = gfx.create_compositor(assets.as_com_ref()).unwrap();
+    compositor.bind_render_host(host).unwrap();
+    compositor.begin(SIZE, 0xff000000).unwrap();
+    let bounds = Rect { x: 0, y: 0, width: 64, height: 64 };
+    let draw = |compositor: &mut ComPtr<neocogi_gfx_support::abi::GfxCompositorAbi>, vertices: &[RenderVertex]| {
+        let vertices = vertices.iter().map(|v| SolidVertex { x: v.x, y: v.y, rgba: v.rgba }).collect::<Vec<_>>();
+        compositor.solid_triangles(bounds, NcCopyFromBufferOffset::new(0, &vertices)).unwrap();
+    };
+    draw(&mut compositor, &vertices[..6]);
+    compositor.render_view(block).unwrap();
+    draw(&mut compositor, &vertices[6..]);
+    compositor.submit(renderer).unwrap();
 }
 
 /// Encodes an ordinary white-atlas rectangle using the actual renderer wire values.
@@ -291,8 +217,7 @@ fn rectangle(rect: Rect, color: u32) -> Vec<RenderVertex> {
 fn private_ui_image_import_renders_without_a_native_cache_com_cycle() {
     let _session = native_session();
     let platform = PlatformObject::default();
-    let atlas: ComPtr<IRgbaImageAbi> = White::from_value(White).query().unwrap();
-    let native = platform.window("private UI image import", SIZE, atlas.as_com_ref()).unwrap();
+    let native = platform.window("private UI image import", SIZE).unwrap();
     let device = Rc::downgrade(&native.device);
     let window = WindowObject::from_value(native);
     let renderer: ComPtr<IRendererAbi> = window.query().unwrap();
@@ -372,10 +297,8 @@ fn private_ui_image_import_renders_without_a_native_cache_com_cycle() {
                 size: SIZE,
                 clear: 0xff000000,
                 invocation: 1,
-                vertex_count: 0,
-                batch_count: 1,
+                block_count: 1,
             },
-            atlas.as_com_ref(),
             source.as_com_ref(),
         )
         .unwrap();
@@ -405,8 +328,7 @@ fn private_ui_image_import_renders_without_a_native_cache_com_cycle() {
 fn generic_pipeline_renders_in_its_root_and_preserves_surrounding_ui() {
     let _session = native_session();
     let platform = PlatformObject::default();
-    let atlas: ComPtr<IRgbaImageAbi> = White::from_value(White).query().unwrap();
-    let native = platform.window("generic graphics acceptance", SIZE, atlas.as_com_ref()).unwrap();
+    let native = platform.window("generic graphics acceptance", SIZE).unwrap();
     let device = Rc::downgrade(&native.device);
     let unknown = WindowObject::from_value(native);
     let renderer: ComPtr<IRendererAbi> = unknown.query().unwrap();
@@ -467,21 +389,13 @@ fn generic_pipeline_renders_in_its_root_and_preserves_surrounding_ui() {
     let vertices = rectangle(Rect { x: 0, y: 0, width: 64, height: 64 }, 0xff00ff00)
         .into_iter()
         .chain(rectangle(Rect { x: 28, y: 28, width: 8, height: 8 }, 0xffff00ff))
-        .collect();
-    let source = Source::from_value(Source { block, vertices }).query::<IRenderStreamAbi>().unwrap();
-    renderer
-        .render(
-            RenderInfo {
-                size: SIZE,
-                clear: 0xff000000,
-                invocation: 1,
-                vertex_count: 12,
-                batch_count: 3,
-            },
-            atlas.as_com_ref(),
-            source.as_com_ref(),
-        )
-        .unwrap();
+        .collect::<Vec<_>>();
+    submit_interleaved(
+        unknown.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap().as_com_ref(),
+        renderer.as_com_ref(),
+        block,
+        &vertices,
+    );
     let owner = device.upgrade().unwrap();
     let access = owner.access().unwrap();
     let pixels = access.state.as_ref().unwrap().gpu.last_pixels();
@@ -492,7 +406,7 @@ fn generic_pipeline_renders_in_its_root_and_preserves_surrounding_ui() {
     assert_eq!(pixel(31, 31), [255, 0, 255, 255]); // Later UI remains above generic work.
     assert_eq!(pixel(50, 50), [0, 255, 0, 255]);
     drop(access);
-    drop((owner, source, resources, domain, broker, clients, renderer, unknown));
+    drop((owner, resources, domain, broker, clients, renderer, unknown));
     assert!(device.upgrade().is_none(), "native caches must not retain their host through a domain");
 }
 
@@ -502,8 +416,7 @@ fn generic_pipeline_renders_in_its_root_and_preserves_surrounding_ui() {
 fn generic_indexed_texture_and_uniform_snapshots_reach_the_native_pipeline() {
     let _session = native_session();
     let platform = PlatformObject::default();
-    let atlas: ComPtr<IRgbaImageAbi> = White::from_value(White).query().unwrap();
-    let native = platform.window("generic bindings acceptance", SIZE, atlas.as_com_ref()).unwrap();
+    let native = platform.window("generic bindings acceptance", SIZE).unwrap();
     let device = Rc::downgrade(&native.device);
     let unknown = WindowObject::from_value(native);
     let renderer: ComPtr<IRendererAbi> = unknown.query().unwrap();
@@ -653,21 +566,13 @@ fn generic_indexed_texture_and_uniform_snapshots_reach_the_native_pipeline() {
     let vertices = rectangle(Rect { x: 0, y: 0, width: 64, height: 64 }, 0xff00ff00)
         .into_iter()
         .chain(rectangle(Rect { x: 28, y: 28, width: 8, height: 8 }, 0xffffffff))
-        .collect();
-    let source = Source::from_value(Source { block, vertices }).query::<IRenderStreamAbi>().unwrap();
-    renderer
-        .render(
-            RenderInfo {
-                size: SIZE,
-                clear: 0xff000000,
-                invocation: 2,
-                vertex_count: 12,
-                batch_count: 3,
-            },
-            atlas.as_com_ref(),
-            source.as_com_ref(),
-        )
-        .unwrap();
+        .collect::<Vec<_>>();
+    submit_interleaved(
+        unknown.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap().as_com_ref(),
+        renderer.as_com_ref(),
+        block,
+        &vertices,
+    );
     let pixels = {
         let device = device.upgrade().unwrap();
         let access = device.access().unwrap();
@@ -687,8 +592,7 @@ fn generic_indexed_texture_and_uniform_snapshots_reach_the_native_pipeline() {
 #[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
 fn generic_depth_survives_draws_and_reset_with_independent_ordered_views() {
     let _session = native_session();
-    let atlas: ComPtr<IRgbaImageAbi> = White::from_value(White).query().unwrap();
-    let native = PlatformObject::default().window("generic depth and clears", SIZE, atlas.as_com_ref()).unwrap();
+    let native = PlatformObject::default().window("generic depth and clears", SIZE).unwrap();
     let device = Rc::downgrade(&native.device);
     let window = WindowObject::from_value(native);
     let renderer: ComPtr<IRendererAbi> = window.query().unwrap();
@@ -802,10 +706,8 @@ fn generic_depth_survives_draws_and_reset_with_independent_ordered_views() {
                 size: SIZE,
                 clear: 0xff13110f,
                 invocation: 3,
-                vertex_count: 0,
-                batch_count: 3,
+                block_count: 3,
             },
-            atlas.as_com_ref(),
             source.as_com_ref(),
         )
         .unwrap();

@@ -273,7 +273,7 @@ impl UiRuntime for Runtime {
         revision.source().try_add_ref()
     }
     /// Uses exclusive runtime access to prepare CPU state and the GPU upload before publication.
-    fn install_assets(&mut self, source: ComRef<'_, IAssetBundleAbi>, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
+    fn install_assets(&mut self, source: ComRef<'_, IAssetBundleAbi>) -> Result<(), NcStatus> {
         let storage = &self.storage;
         storage.factory.host.check_mutation()?;
         // Dispatch returns the context specifically to permit application edits. The active
@@ -282,15 +282,12 @@ impl UiRuntime for Runtime {
         let _phase = Observation::begin(&storage.factory.state);
         let previous = storage.factory.resources.borrow().clone();
         if previous.source().as_raw().object == source.as_raw().object {
-            // The UI revision is already current. Only the explicitly supplied renderer may
-            // need to switch back from another UI's atlas; do not invalidate unchanged geometry.
-            return renderer.prepare_atlas(previous.image());
+            return Ok(()); // No metadata or GPU resource changed; preserve committed geometry.
         }
         let basis = previous.catalog();
         drop(previous);
         // Keep only an owned immutable catalog basis across provider callbacks.
         let next = crate::assets::ImportedAssets::read(source, Some(&basis))?;
-        renderer.prepare_atlas(next.image())?;
         context.install_compositor_assets(source)?;
         // ImportedAssets has already proved every original identity survives. The COM backend's
         // atlas replacement is a local assignment; this commit performs no further foreign calls.

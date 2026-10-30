@@ -4,14 +4,37 @@
 //! runtimes and assertion renderers can exchange real sealed blocks. Domains and their quotas
 //! remain independent. Ordinary images must be explicitly registered with trusted fixture sizes;
 //! this is not a native image authenticator and must never accept untrusted application images.
+use crate::abi::RenderVertex;
 use neocogi_com::{com_object, ComBox, ComPtr, ComRef, NcStatus, NC_E_INVALID_ARG};
 use neocogi_render_core::{abi::*, TextureId};
 use neocogi_render_gpu::{
     command::{Command, DrawRange},
     GpuDevice,
 };
-use std::{cell::RefCell, collections::HashMap};
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+};
 use std::rc::Rc;
+
+/// Decoded UI observations used only by headless integration assertions.
+#[derive(Clone, Debug)]
+pub enum UiBatch {
+    /// Complete triangles using the private UI atlas.
+    Atlas {
+        /// First decoded vertex.
+        first: u32,
+        /// Triangle-aligned decoded vertex count.
+        count: u32,
+    },
+    /// Four corners recovered from one immutable-image draw.
+    Texture {
+        /// First decoded corner.
+        first: u32,
+    },
+    /// Opaque client contribution retains its painter position.
+    View,
+}
 
 thread_local! {
     /// Thread affinity matches COM objects and the production graphics recorder.
@@ -25,6 +48,8 @@ thread_local! {
 struct Host {
     /// Canonical recording and private UI-resource provenance.
     device: GpuDevice,
+    /// Caller-owned failure injection has no reference to the runtime or widgets.
+    failure: Rc<Cell<Option<NcStatus>>>,
 }
 impl IRenderHost for Host {
     /// Import requires prior explicit fixture registration and never calls the image's getters.
@@ -37,7 +62,10 @@ impl IRenderHost for Host {
     /// Run real logical provenance checks; this assembly owns no native texture upload.
     fn prepare_ui_texture(&self, resources: ComRef<'_, IRenderResourcesAbi>, texture: ComRef<'_, IGpuTextureAbi>) -> Result<(), NcStatus> {
         self.device.ui_texture_snapshot(resources, texture)?;
-        Ok(())
+        match self.failure.get() {
+            Some(status) => Err(status),
+            None => Ok(()),
+        }
     }
     /// UI provenance is granted only through the trusted fixture assembly.
     fn create_ui_client(&self, limits: RenderClientLimits) -> Result<ComBox<IRenderClientDomainAbi>, NcStatus> {
@@ -51,7 +79,16 @@ impl IRenderHost for Host {
 
 /// Creates a trusted CPU host on the current test thread, with no native upload behavior.
 pub fn host() -> ComPtr<IRenderHostAbi> {
-    DEVICE.with(|device| Host::from_value(Host { device: device.clone() }).query().expect("Host declares IRenderHost"))
+    host_with_preparation_failure(Rc::new(Cell::new(None)))
+}
+
+/// Models a native preparation failure without bypassing provenance or capturing runtime owners.
+pub fn host_with_preparation_failure(failure: Rc<Cell<Option<NcStatus>>>) -> ComPtr<IRenderHostAbi> {
+    DEVICE.with(|device| {
+        Host::from_value(Host { device: device.clone(), failure })
+            .query()
+            .expect("Host declares IRenderHost")
+    })
 }
 
 /// Registers dimensions known by the fixture owner, preserving hostile getter/reentrancy tests.
@@ -68,6 +105,14 @@ pub fn image_identity(id: TextureId) -> Option<usize> {
 /// Authenticates a real sealed contribution on this thread's fixture assembly.
 pub fn snapshot(block: ComRef<'_, IRenderViewBlockAbi>) -> Result<Rc<neocogi_render_gpu::record::Block>, NcStatus> {
     DEVICE.with(|device| device.block_snapshot(block))
+}
+
+/// Inspect an actual private UI texture version while a fixture models native preparation.
+pub fn texture(
+    resources: ComRef<'_, IRenderResourcesAbi>,
+    texture: ComRef<'_, IGpuTextureAbi>,
+) -> Result<Rc<neocogi_render_gpu::resource::TextureVersion>, NcStatus> {
+    DEVICE.with(|device| device.ui_texture_snapshot(resources, texture))
 }
 
 /// Creates a real client controller; tests keep it alive while submitting its blocks.
@@ -90,7 +135,7 @@ pub fn client_block(root: RenderViewRoot) -> (ComBox<IRenderClientDomainAbi>, Co
 
 /// Authenticates actual generic blocks for CPU benchmarks and assertions, without decoding UI bytes.
 pub fn blocks(info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<Vec<Rc<neocogi_render_gpu::record::Block>>, NcStatus> {
-    (0..info.batch_count)
+    (0..info.block_count)
         .map(|index| {
             let observer = stream.view(info.invocation, index)?;
             DEVICE.with(|device| device.block_snapshot(observer.as_com_ref()))
@@ -102,13 +147,12 @@ pub fn blocks(info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<
 ///
 /// Atlas draws remain triangles; sampled immutable-image draws are observed as four-corner quads.
 /// Client blocks remain opaque. This assertion adapter neither clips nor tessellates geometry.
-pub fn read(info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(Vec<RenderVertex>, Vec<RenderBatch>), NcStatus> {
-    assert_eq!(info.vertex_count, 0, "native streams carry generic blocks only");
+pub fn read(info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(Vec<RenderVertex>, Vec<UiBatch>), NcStatus> {
     let mut vertices = Vec::new();
     let mut batches = Vec::new();
     for block in blocks(info, stream)? {
         if !block.is_ui() {
-            batches.push(RenderBatch::View);
+            batches.push(UiBatch::View);
             continue;
         }
         for command in &block.commands {
@@ -136,12 +180,12 @@ pub fn read(info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(V
             if draw.textures[0].texture.imported_id().is_some() {
                 assert_eq!(decoded.len(), 6);
                 vertices.extend([decoded[0], decoded[1], decoded[2], decoded[5]]);
-                batches.push(RenderBatch::Texture { first });
+                batches.push(UiBatch::Texture { first });
             } else {
                 vertices.extend(decoded);
                 match batches.last_mut() {
-                    Some(RenderBatch::Atlas { count: previous, .. }) => *previous += count,
-                    _ => batches.push(RenderBatch::Atlas { first, count }),
+                    Some(UiBatch::Atlas { count: previous, .. }) => *previous += count,
+                    _ => batches.push(UiBatch::Atlas { first, count }),
                 }
             }
         }

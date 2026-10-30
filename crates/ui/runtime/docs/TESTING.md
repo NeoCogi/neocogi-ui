@@ -16,8 +16,10 @@ alternate runtime, renderer executor or object model.
 | Support `test_support/assets.rs` | Publish deterministic canonical input tables and expected revisions | Explicit pixel transfers happen here, outside deployed resource import |
 | Runtime callback probes | Act as independent COM widgets, containers, renderers and resources, including deliberately failing/reentrant components | Concrete fields and typed interfaces; no `Any`, downcasting or native callback registry |
 
-A renderer fixture reads `IRenderStream` only while its invocation token is active.
-It may keep copied vertices and batches for assertions. Tests that deliberately
+A renderer fixture reads `IRenderStream` block observers only while its invocation
+token is active. The shared GFX test helper authenticates real generic snapshots and
+decodes GFX's explicit vertex bytes and sampled bindings into copied geometry and
+`UiBatch` observations for assertions. Those observations are not a renderer wire API. Tests that deliberately
 retain the stream verify rejection after the renderer returns, including failures.
 GFX owns that rejection status (`NC_E_INVALID_ARG`); UI scope errors do not replace
 renderer contract behavior.

@@ -77,11 +77,7 @@ fn main(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
     let platform = runtime.acquire_plugin_root::<PlatformAbi>(neocogi_com::guid_from_qualified_name(renderer_plugin_name()))?;
     let assets = neocogi_demo_assets::load_bundle(runtime)?;
     let atlas = assets.image()?;
-    let native = platform.create_window(
-        NcCopyFromBufferOffset::new(0, b"NeoCogi UI"),
-        Size { width: 640, height: 400 },
-        atlas.as_com_ref(),
-    )?;
+    let native = platform.create_window(NcCopyFromBufferOffset::new(0, b"NeoCogi UI"), Size { width: 640, height: 400 })?;
     let renderer: ComPtr<IRendererAbi> = native.query()?;
     let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
     let runtime_factory = runtime.acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
@@ -106,7 +102,7 @@ fn main(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
             },
         )?;
         let rebuilt = builder.finish()?;
-        ui.install_assets(rebuilt.as_com_ref(), renderer.as_com_ref())?;
+        ui.install_assets(rebuilt.as_com_ref())?;
     }
     if let Some(path) = &options.theme {
         // Relative paths belong to the staged package, so startup remains independent of cwd.
@@ -130,7 +126,7 @@ fn main(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
                 .unwrap_or_default();
             format!("theme load failed: {error}: {detail}")
         })?;
-        ui.install_assets(theme.as_com_ref(), renderer.as_com_ref())?;
+        ui.install_assets(theme.as_com_ref())?;
     }
     let host = ui.widgets().host()?;
     if options.smoke {
@@ -164,7 +160,7 @@ fn main(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
         ui.update_with_events(size, owner.as_com_ref())?;
         ui.render(size, renderer.as_com_ref())?;
         // Restoring the compiled bundle exercises a second real upload and shared UI revision.
-        ui.install_assets(assets.as_com_ref(), renderer.as_com_ref())?;
+        ui.install_assets(assets.as_com_ref())?;
         ui.update_with_events(size, owner.as_com_ref())?;
         ui.render(size, renderer.as_com_ref())?;
         window.close()?;

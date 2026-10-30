@@ -54,7 +54,7 @@
 use super::app::{append, column, into_widget, label, row, slider, rgba, NumericTarget};
 use neocogi_ui::*;
 use neocogi_demo_assets::themes::Theme;
-use neocogi_com::{ComPtr, ComRef, NcStatus};
+use neocogi_com::{ComPtr, NcStatus};
 
 /// Palette and metric edits promoted into the application's single message inbox.
 pub(super) enum Message {
@@ -293,11 +293,11 @@ impl StyleEditor {
         Ok(())
     }
     /// Installs the latest candidate only after the active event-dispatch call has returned.
-    pub(super) fn install(&mut self, ui: &mut Ui, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
+    pub(super) fn install(&mut self, ui: &mut Ui) -> Result<(), NcStatus> {
         let Some(candidate) = self.pending.take() else {
             return Ok(());
         };
-        if let Err(error) = ui.install_assets(candidate.as_com_ref(), renderer) {
+        if let Err(error) = ui.install_assets(candidate.as_com_ref()) {
             self.pending = Some(candidate);
             return Err(error);
         }

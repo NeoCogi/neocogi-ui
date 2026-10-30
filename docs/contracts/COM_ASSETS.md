@@ -2,7 +2,7 @@
 
 | Owner | Responsibility |
 | --- | --- |
-| `neocogi-render-core` | Renderer-neutral geometry, images, textures and bulk frame interfaces. |
+| `neocogi-render-core` | Renderer-neutral geometry, images, resources and sealed generic block interfaces. |
 | `neocogi-ui` | Shared widget/layout, window, popup, menu, and file-dialog protocols. |
 | `neocogi-ui` | Concrete built-in widgets, containers, specialized events, and factory. |
 | `neocogi-gfx-support` / `neocogi-gfx` | Portable bundle records, PNG upload, font/icon rasterization, and atlas packing. |
@@ -114,12 +114,10 @@ explicit `AssetSource` implementation for referenced files; runtime filesystem
 compilation uses the bounded `FileAssets` source.
 
 ```rust,ignore
-let assets = neocogi_demo_assets::load_bundle()?;
-let atlas = assets.image()?;
+let assets = neocogi_demo_assets::load_bundle(runtime)?;
 let native = platform.create_window(
     NcCopyFromBufferOffset::new(0, b"Application"),
     Size { width: 800, height: 600 },
-    atlas.as_com_ref(),
 )?;
 let renderer = native.query::<IRendererAbi>()?;
 // runtime is passed from the application entry or acquiring host.
@@ -129,11 +127,13 @@ let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(
 let runtime_factory = runtime.acquire_plugin_root::<UiPluginFactoryAbi>(
     neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"),
 )?;
-let ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
+let mut ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
 let node_provider = runtime.acquire_plugin_root::<NodesPluginFactoryAbi>(
     neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"),
 )?;
 let factory = node_provider.bind(ui_runtime.as_com_ref())?;
+let graphics = native.graphics_host()?;
+ui_runtime.set_render_host(graphics.as_com_ref())?;
 let mut ui = Ui::from_interfaces(ui_runtime, factory)?;
 ```
 
@@ -157,29 +157,28 @@ the caller's compositor allocation. `UiPluginFactory` is now version 3, so rebui
 the application and plugins together. Shared libraries, native monoliths, and
 WebAssembly all use this same factory contract; core UI links only GFX contracts.
 
-`ui.install_assets(candidate, renderer)` requires mutable access to the `Ui` because it
-replaces the resource value shared by that runtime's nodes and services. The call owns one
-transaction: it validates and imports bounded metadata, asks the renderer to prepare
-the image (copying/uploading only if its identity changed),
-installs the same catalog-compatible revision in its private GFX compositor,
-then publishes the retained canonical tables and their local lookup indices. Only success
-publishes the new revision to `IWidgetHost`, the window manager, text metrics, and
-scoped layout services together. Failed validation or upload leaves the previous UI
-resources and GPU atlas usable. The renderer is borrowed for the call; the UI retains
-neither a platform/window nor a second CPU image merely to remember its resources.
-The compositor retains the narrow image projection used for final renderer submission.
+`ui.install_assets(candidate)` requires mutable access to the `Ui` because it
+replaces the resource value shared by that runtime's nodes and services. The call owns
+one transaction: validate and import bounded metadata, ask the private GFX compositor
+to prepare the candidate image through its bound graphics host, then publish the same
+catalog-compatible revision and its local lookup indices. Only success publishes the
+new revision to `IWidgetHost`, the window manager, text metrics and scoped layout services.
+Failed validation or upload leaves the previous UI resources and GPU atlas usable.
+GFX retains the narrow image projection and its private generic texture capability;
+the final renderer receives sealed command blocks, with no atlas argument or UI metadata.
 
 After a changed revision succeeds, call `update` or `update_with_events` before
 `render`. Old measurement entries, including hidden trees, are invalidated by the
-shared skin revision. Installing the identical bundle does not invalidate unchanged
-UI geometry, though the supplied renderer may need to switch back from another UI's
-atlas. Event handlers may prepare and retain an immutable candidate, but they install it
-only after `update_with_events` returns because that call still holds shared runtime access.
-Installation from event dispatch, widget update, paint, layout or another installation
-returns `NC_E_BUSY`. The renderer may observe the old installed bundle through an
-independent `IWidgetHost`; overlapping calls through the same `UiRuntime` allocation remain
-excluded until upload and publication finish. No foreign call runs with a live resource-cell
-borrow.
+shared skin revision. Installing an identical bundle does not invalidate unchanged
+geometry. Appearance-only revisions sharing the same immutable image reuse that
+runtime's prepared atlas. Separate runtimes own separate compositor sessions.
+Event handlers may retain an immutable candidate, but install it after
+`update_with_events` returns because that call still holds shared runtime access.
+Installation during event dispatch, widget update, paint, layout or another
+installation returns `NC_E_BUSY`. Provider callbacks may observe the old installed
+bundle through an independent `IWidgetHost`; overlapping calls through the same
+`UiRuntime` allocation remain excluded until preparation and publication finish.
+No foreign call runs with a live resource-cell borrow.
 
 `Ui::assets()` and `IWidgetHost::assets()` retain the current immutable revision.
 Independent widget implementations can obtain the latter through their
@@ -203,10 +202,10 @@ authenticated original namespace and original local names/IDs. Its clones use
 local `Rc` operations, including for the retained COM identity, so acquiring the
 basis invokes no foreign lifetime method. It retains no obsolete bundle/image
 and copies no metadata tables. The cache borrow ends before `catalog`, `image`,
-bulk getters or renderer preparation run. Core installation uses the same owned
+bulk getters or graphics-host preparation run. Core installation uses the same owned
 basis. The core cache holds an immutable revision through a local `Rc`; host
 getters clone that local owner before foreign `AddRef`, and identical-bundle
-renderer preparation uses it after releasing the cache borrow. The slot and
+installation uses it after releasing the cache borrow. The slot and
 the selected immutable value have separate lifetimes, without duplicating tables.
 
 During lazy node refresh, a provider getter may reenter a different widget sharing
@@ -407,7 +406,7 @@ draft.add_icon(
     NativePath::new(Path::new("image.png")).as_interface(),
 )?;
 let expanded = draft.finish()?;
-ui.install_assets(expanded.as_com_ref(), renderer.as_com_ref())?;
+ui.install_assets(expanded.as_com_ref())?;
 ui.update(size)?;
 ```
 
@@ -430,7 +429,7 @@ let theme = theme_loader.load_theme(
     NativePath::new(Path::new("themes/windows-95/theme.json")).as_interface(),
     assets.as_com_ref(),
 )?;
-ui.install_assets(theme.as_com_ref(), renderer.as_com_ref())?;
+ui.install_assets(theme.as_com_ref())?;
 ui.update_with_events(size, owner.as_com_ref())?;
 ```
 

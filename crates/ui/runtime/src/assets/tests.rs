@@ -245,7 +245,7 @@ fn overhanging_text_widgets_measure_exact_source_slices_through_com() {
 /// Observable renderer state contains only owned capabilities and ordinary single-threaded cells.
 struct Probe {
     /// Reentry must fail while the runtime owns its installation transaction.
-    runtime: ComPtr<UiRuntimeAbi>,
+    runtime: std::rc::Weak<ComPtr<UiRuntimeAbi>>,
     /// Setter reentry must also fail during the upload boundary.
     button: neocogi_com::WeakComBox<ButtonAbi>,
     /// Last successfully uploaded renderer-owned image projection.
@@ -254,40 +254,94 @@ struct Probe {
     fail: Cell<bool>,
     /// Proves malformed candidates fail before reaching GPU preparation.
     uploads: Cell<u32>,
+    /// Initial host binding is prepared before the test arms reentry/failure injection.
+    armed: Cell<bool>,
+    /// The observer must see the exact atlas version accepted by native preparation.
+    prepared: Cell<u64>,
 }
+#[com_object(interfaces(neocogi_render_core::abi::IRenderHost))]
+/// Native preparation probes run through the private graphics host, without owning their runtime.
+struct UploadHost {
+    /// CPU assembly authenticates real generic resources and blocks.
+    inner: ComPtr<neocogi_render_core::abi::IRenderHostAbi>,
+    /// Runtime and widget observations are weak to avoid a host-to-runtime ownership cycle.
+    probe: Rc<Probe>,
+}
+impl neocogi_render_core::abi::IRenderHost for UploadHost {
+    fn import_ui_texture(
+        &self,
+        resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>,
+        image: ComRef<'_, ITextureAbi>,
+    ) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::IGpuTextureAbi>, NcStatus> {
+        self.inner.import_ui_texture(resources, image)
+    }
+    fn create_ui_client(
+        &self,
+        limits: neocogi_render_core::abi::RenderClientLimits,
+    ) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::IRenderClientDomainAbi>, NcStatus> {
+        self.inner.create_ui_client(limits)
+    }
+    fn recording_broker(&self) -> Result<ComPtr<neocogi_render_core::abi::IRenderViewBrokerAbi>, NcStatus> {
+        self.inner.recording_broker()
+    }
+    fn prepare_ui_texture(
+        &self,
+        resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>,
+        texture: ComRef<'_, neocogi_render_core::abi::IGpuTextureAbi>,
+    ) -> Result<(), NcStatus> {
+        let version = neocogi_gfx_support::testing::texture(resources, texture)?;
+        self.inner.prepare_ui_texture(resources, texture)?;
+        if self.probe.armed.get() {
+            self.probe.uploads.set(self.probe.uploads.get() + 1);
+            let installed = self.probe.button.host()?.assets()?.image()?;
+            assert_eq!(installed.as_raw().object, self.probe.current.borrow().as_raw().object);
+            let runtime = self.probe.runtime.upgrade().expect("test owns runtime reentry capability");
+            assert_eq!(runtime.update(SIZE), Err(NC_E_BUSY));
+            let mut button = self.probe.button.clone();
+            assert_eq!(button.set_label(NcCopyFromBufferOffset::new(0, b"reentrant")), Err(UI_E_BUSY));
+            let installed = self.probe.button.host()?.assets()?;
+            let mut runtime = runtime.as_ref().clone();
+            assert_eq!(runtime.install_assets(installed.as_com_ref()), Err(NC_E_BUSY));
+            if self.probe.fail.get() {
+                return Err(UI_E_RENDER);
+            }
+        }
+        self.probe.prepared.set(version.id);
+        Ok(())
+    }
+}
+
 #[com_object(interfaces(IRenderer))]
-/// Concrete test backend models atomic native atlas upload and observes final frame submission.
+/// Observes actual recorded atlas versions, independently of source image identity.
 struct UploadRenderer(Rc<Probe>);
 impl IRenderer for UploadRenderer {
-    /// Confirms mutation/reentry gates, then commits only a successful fake GPU upload.
-    fn prepare_atlas(&self, source: ComRef<'_, IRgbaImageAbi>) -> Result<(), NcStatus> {
-        self.0.uploads.set(self.0.uploads.get() + 1);
-        // The independently allocated host still exposes the old, fully installed UI revision.
-        let installed = self.0.button.host()?.assets()?.image()?;
-        assert_eq!(installed.as_raw().object, self.0.current.borrow().as_raw().object);
-        // The mutable runtime call excludes every overlapping call on that same COM allocation.
-        assert_eq!(self.0.runtime.update(SIZE), Err(NC_E_BUSY));
-        let mut button = self.0.button.clone();
-        assert_eq!(button.set_label(NcCopyFromBufferOffset::new(0, b"reentrant")), Err(UI_E_BUSY));
-        let recursive: ComPtr<IRendererAbi> = Self::from_value(Self(self.0.clone())).query()?;
-        let mut runtime = self.0.runtime.clone();
-        let installed = self.0.button.host()?.assets()?;
-        assert_eq!(runtime.install_assets(installed.as_com_ref(), recursive.as_com_ref()), Err(NC_E_BUSY));
-        if self.0.fail.get() {
-            return Err(UI_E_RENDER);
+    fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
+        let blocks = neocogi_gfx_support::testing::blocks(info, stream)?;
+        let mut draws = 0;
+        for block in blocks {
+            for command in &block.commands {
+                if let neocogi_render_gpu::command::Command::Draw(draw) = command {
+                    assert_eq!(draw.textures[0].texture.id, self.0.prepared.get());
+                    draws += 1;
+                }
+            }
         }
-        let source = source.try_add_ref()?;
-        let old = self.0.current.replace(source);
-        drop(old);
+        assert!(draws > 0);
         Ok(())
     }
-    /// Final geometry must use the exact bundle prepared by the successful upload.
-    fn render(&self, info: RenderInfo, source: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        assert_eq!(source.as_raw().object, self.0.current.borrow().as_raw().object);
-        let (vertices, _) = neocogi_gfx_support::testing::read(info, stream)?;
-        assert!(!vertices.is_empty());
-        Ok(())
-    }
+}
+/// Bind real host preparation before arming injection; no observer owns a strong runtime cycle.
+fn upload_renderer(probe: Rc<Probe>) -> ComPtr<IRendererAbi> {
+    let host: ComPtr<neocogi_render_core::abi::IRenderHostAbi> = UploadHost::from_value(UploadHost {
+        inner: neocogi_gfx_support::testing::host(),
+        probe: probe.clone(),
+    })
+    .query()
+    .unwrap();
+    let mut runtime = probe.runtime.upgrade().unwrap().as_ref().clone();
+    runtime.set_render_host(host.as_com_ref()).unwrap();
+    probe.armed.set(true);
+    UploadRenderer::from_value(UploadRenderer(probe)).query().unwrap()
 }
 /// Drawable dimensions used by the complete runtime integration fixture.
 const SIZE: Size = Size { width: 640, height: 400 };
@@ -298,8 +352,6 @@ struct ThemeState {
     ui: neocogi_ui::Ui,
     /// Validated candidate belongs to the current resource catalog.
     candidate: ComPtr<IAssetBundleAbi>,
-    /// Test GPU upload also probes recursive update, installation and widget mutation.
-    renderer: ComPtr<IRendererAbi>,
     /// Counts successful handler commits; failures must leave this unchanged.
     installed: u32,
 }
@@ -308,7 +360,7 @@ struct InstallTheme;
 impl InstallTheme {
     /// The generated COM borrow gate rejects this call before the renderer observes a candidate.
     fn handle(&mut self, state: &mut ThemeState, _: &()) -> Result<(), NcStatus> {
-        state.ui.install_assets(state.candidate.as_com_ref(), state.renderer.as_com_ref())?;
+        state.ui.install_assets(state.candidate.as_com_ref())?;
         state.installed += 1;
         Ok(())
     }
@@ -332,14 +384,17 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
             ),
         )
         .unwrap();
+    let runtime_owner = Rc::new(runtime.clone());
     let probe = Rc::new(Probe {
-        runtime,
+        runtime: Rc::downgrade(&runtime_owner),
         button: button.as_interface().downgrade(),
         current: RefCell::new(source.image().unwrap()),
         fail: Cell::new(true),
         uploads: Cell::new(0),
+        armed: Cell::new(false),
+        prepared: Cell::new(0),
     });
-    let renderer: ComPtr<IRendererAbi> = UploadRenderer::from_value(UploadRenderer(probe.clone())).query().unwrap();
+    let renderer = upload_renderer(probe.clone());
     let _window = ui.window("theme callback", Rect { x: 0, y: 0, width: 400, height: 250 }, button).unwrap();
     let mut data = export_bundle_data(&bundle()).unwrap();
     data.tables.metrics.padding += 10;
@@ -347,7 +402,6 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
     let state = ThemeState {
         ui: ui.clone(),
         candidate: candidate.clone(),
-        renderer: renderer.clone(),
         installed: 0,
     };
 
@@ -375,8 +429,7 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
     {
         let state = &mut *app.state();
         let candidate = state.candidate.clone();
-        let renderer = state.renderer.clone();
-        assert_eq!(state.ui.install_assets(candidate.as_com_ref(), renderer.as_com_ref()), Err(UI_E_RENDER));
+        assert_eq!(state.ui.install_assets(candidate.as_com_ref()), Err(UI_E_RENDER));
     }
     assert_eq!(ui.assets().unwrap().as_raw().object, source.as_raw().object);
     assert_eq!(probe.uploads.get(), 1);
@@ -384,8 +437,7 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
     {
         let state = &mut *app.state();
         let candidate = state.candidate.clone();
-        let renderer = state.renderer.clone();
-        state.ui.install_assets(candidate.as_com_ref(), renderer.as_com_ref()).unwrap();
+        state.ui.install_assets(candidate.as_com_ref()).unwrap();
         state.installed += 1;
     }
     assert_eq!(probe.uploads.get(), 2);
@@ -404,14 +456,17 @@ fn runtime_install_is_atomic_and_updates_shared_widget_measurement() {
     let mut ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
     let button = ui.widgets().button_unobserved("resources").unwrap();
     let button_interface = button.as_interface().downgrade();
+    let runtime_owner = Rc::new(runtime.clone());
     let probe = Rc::new(Probe {
-        runtime: runtime.clone(),
+        runtime: Rc::downgrade(&runtime_owner),
         button: button_interface.clone(),
         current: RefCell::new(source.image().unwrap()),
         fail: Cell::new(false),
         uploads: Cell::new(0),
+        armed: Cell::new(false),
+        prepared: Cell::new(0),
     });
-    let renderer: ComPtr<IRendererAbi> = UploadRenderer::from_value(UploadRenderer(probe.clone())).query().unwrap();
+    let renderer = upload_renderer(probe.clone());
     let _window = ui.window("assets", Rect { x: 0, y: 0, width: 400, height: 250 }, button).unwrap();
     let mut leaf: neocogi_com::WeakComBox<ILeafLayoutAbi> = button_interface.query().unwrap();
     let metrics: ComPtr<ITextMetricsAbi> = UnusedMetrics::from_value(UnusedMetrics).query().unwrap();
@@ -427,16 +482,16 @@ fn runtime_install_is_atomic_and_updates_shared_widget_measurement() {
     data.tables.metrics.padding += 10;
     let candidate = data.into_revision(source.as_com_ref()).unwrap();
     probe.fail.set(true);
-    assert_eq!(ui.install_assets(candidate.as_com_ref(), renderer.as_com_ref()), Err(UI_E_RENDER));
+    assert_eq!(ui.install_assets(candidate.as_com_ref()), Err(UI_E_RENDER));
     assert_eq!(ui.assets().unwrap().as_raw().object, source.as_raw().object);
     assert_eq!(leaf.measure(limits, metrics.as_com_ref()).unwrap(), before);
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
 
     let unrelated = export_bundle(&bundle()).unwrap();
-    assert_eq!(ui.install_assets(unrelated.as_com_ref(), renderer.as_com_ref()), Err(UI_E_OWNER));
+    assert_eq!(ui.install_assets(unrelated.as_com_ref()), Err(UI_E_OWNER));
     assert_eq!(probe.uploads.get(), 1);
     probe.fail.set(false);
-    ui.install_assets(candidate.as_com_ref(), renderer.as_com_ref()).unwrap();
+    ui.install_assets(candidate.as_com_ref()).unwrap();
     assert_eq!(probe.uploads.get(), 2);
     assert_eq!(button_interface.host().unwrap().assets().unwrap().as_raw().object, candidate.as_raw().object);
     assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));

@@ -35,9 +35,8 @@ pub mod geometry;
 mod nine_patch;
 mod painter;
 
-pub use neocogi_render_core::{
-    AtlasUploadError, Color, FrameError, FrameInfo, FrameInfoError, RenderItemArgs, RendererBackend, RendererFrame, TextureError, TextureId, Vertex, color,
-};
+pub use neocogi_render_core::{Color, FrameError, FrameInfo, FrameInfoError, RendererBackend, RendererFrame, TextureError, TextureId, color};
+pub use neocogi_ui::RenderVertex as Vertex;
 pub use display_list::DisplayList;
 pub use painter::Painter;
 pub use nine_patch::{NinePatch, NinePatchCell, NinePatchCells, NinePatchContent, NinePatchImage, SliceInsets};

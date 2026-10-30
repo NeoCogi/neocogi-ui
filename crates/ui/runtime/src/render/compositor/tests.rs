@@ -1,9 +1,11 @@
 //! Production replay regressions inspect the actual GFX stream, without a second executor.
 
+use neocogi_gfx_support::testing::UiBatch;
 use super::*;
 use crate::{color, SliceInsets, Vec2i};
 use neocogi_com::{com_object};
 use neocogi_render_core::abi::*;
+use neocogi_gfx_support::abi::RenderVertex;
 use std::{cell::RefCell, rc::Rc};
 
 /// Copied observations outlive a render call without keeping its stream authority active.
@@ -14,7 +16,7 @@ struct Capture {
     /// Exact vertices supplied by the production compositor in the most recent call.
     vertices: Vec<RenderVertex>,
     /// Decoded commands retain painter order and their native contract distinctions.
-    batches: Vec<RenderBatch>,
+    batches: Vec<UiBatch>,
     /// Stream and token are retained only to assert expiration after the foreign call returns.
     stream: Option<(ComPtr<IRenderStreamAbi>, u64)>,
     /// A test can reject the next submission without replacing composition behavior.
@@ -28,13 +30,8 @@ struct Recorder {
     capture: Rc<RefCell<Capture>>,
 }
 impl IRenderer for Recorder {
-    /// Logical image preparation requires no GPU upload in a stream-consumer fixture.
-    fn prepare_atlas(&self, _: ComRef<'_, IRgbaImageAbi>) -> Result<(), NcStatus> {
-        Ok(())
-    }
-
     /// Copies the live stream before borrowing assertion storage, keeping foreign calls reentrant.
-    fn render(&self, info: RenderInfo, _: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
+    fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
         let mut capture = self.capture.borrow_mut();
         capture.calls += 1;
@@ -145,7 +142,7 @@ fn semantic_atlas_operations_use_the_cached_atlas_and_one_executor() {
     let captured = fixture.capture.borrow();
     assert_eq!(captured.calls, 1);
     assert_eq!(captured.vertices.len(), 24);
-    assert!(matches!(captured.batches.as_slice(), [RenderBatch::Atlas { first: 0, count: 24 }]));
+    assert!(matches!(captured.batches.as_slice(), [UiBatch::Atlas { first: 0, count: 24 }]));
     assert!(fixture.list.is_empty());
 }
 
@@ -215,16 +212,11 @@ fn external_texture_clipping_preserves_uv_mapping_and_stream_order() {
     let capture = fixture.capture.borrow();
     assert!(matches!(
         capture.batches.as_slice(),
-        [
-            RenderBatch::Atlas { .. },
-            RenderBatch::Texture { first: 6 },
-            RenderBatch::View,
-            RenderBatch::Atlas { .. }
-        ]
+        [UiBatch::Atlas { .. }, UiBatch::Texture { first: 6 }, UiBatch::View, UiBatch::Atlas { .. }]
     ));
     vertex(capture.vertices[6], [20., 20.], [0.2, 0.2]);
     vertex(capture.vertices[8], [60., 60.], [0.6, 0.6]);
-    assert!(matches!(capture.batches[2], RenderBatch::View));
+    assert!(matches!(capture.batches[2], UiBatch::View));
 }
 
 /// Nine-patch source slicing is observed through GFX's actual final triangles.
@@ -261,7 +253,7 @@ fn flat_nine_patch_filters_its_hidden_center_during_gfx_expansion() {
 
     let capture = fixture.capture.borrow();
     assert_eq!(capture.vertices.len(), 48, "eight visible border cells must produce eight quads");
-    assert!(matches!(capture.batches.as_slice(), [RenderBatch::Atlas { first: 0, count: 48 }]));
+    assert!(matches!(capture.batches.as_slice(), [UiBatch::Atlas { first: 0, count: 48 }]));
 }
 
 /// Rejected renderer calls expire their stream and clear commands before the next frame.
@@ -272,7 +264,7 @@ fn frame_finish_failure_is_observable_and_the_next_frame_can_complete() {
     assert_eq!(fixture.submit(Size { width: 32, height: 32 }), Err(NC_E_INVALID_ARG));
     assert!(fixture.list.is_empty());
     let (stream, invocation) = fixture.capture.borrow().stream.clone().unwrap();
-    assert!(stream.vertices(invocation, neocogi_com::NcOutputBuffer::new().output(0, 0)).is_err());
+    assert!(stream.view(invocation, 0).is_err());
     fixture.capture.borrow_mut().fail = false;
     fixture.submit(Size { width: 32, height: 32 }).unwrap();
     assert_eq!(fixture.capture.borrow().calls, 2);
@@ -418,7 +410,7 @@ fn fully_clipped_operations_leave_existing_output_unchanged() {
         fixture.submit(Size { width: 40, height: 40 }).unwrap();
         let capture = fixture.capture.borrow();
         assert_eq!(capture.vertices.len(), 6);
-        assert!(matches!(capture.batches.as_slice(), [RenderBatch::Atlas { first: 0, count: 6 }]));
+        assert!(matches!(capture.batches.as_slice(), [UiBatch::Atlas { first: 0, count: 6 }]));
     }
 }
 
@@ -493,5 +485,5 @@ fn solid_replay_preserves_order_across_staging_chunks() {
     for (actual, expected) in capture.vertices.iter().zip(vertices) {
         assert_eq!((actual.x, actual.y, actual.rgba), (expected.x, expected.y, expected.rgba));
     }
-    assert!(matches!(capture.batches.as_slice(), [RenderBatch::Atlas { count: 900, .. }]));
+    assert!(matches!(capture.batches.as_slice(), [UiBatch::Atlas { count: 900, .. }]));
 }

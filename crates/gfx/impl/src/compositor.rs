@@ -6,15 +6,12 @@
 
 use super::Diagnostic;
 use neocogi_com::{
-    ComBox, ComPtr, ComRef, WeakComBox, INcStringAbi, NC_E_BUSY, NC_E_INVALID_ARG, NC_E_OUT_OF_MEMORY, NC_E_OUT_OF_RANGE, NcCopyFromBufferOffset,
-    NcOutputWriter, NcStatus, com_object,
+    ComBox, ComPtr, ComRef, WeakComBox, INcStringAbi, NC_E_BUSY, NC_E_INVALID_ARG, NC_E_OUT_OF_MEMORY, NC_E_OUT_OF_RANGE, NcCopyFromBufferOffset, NcStatus,
+    com_object,
 };
 use neocogi_gfx_support::abi::*;
-use neocogi_gfx_support::{AssetTables, AsciiGlyphIndex};
-use neocogi_render_core::abi::{
-    IRenderViewBlockAbi, IRenderStream, IRenderStreamAbi, IRenderStreamVtblFor, IRgbaImageAbi, IRendererAbi, ITextureAbi, MAX_RENDER_BATCHES,
-    MAX_RENDER_VERTICES, RenderBatch, RenderInfo, RenderVertex,
-};
+use neocogi_gfx_support::{AssetTables, AsciiGlyphIndex, MAX_UI_BATCHES, MAX_UI_VERTICES};
+use neocogi_render_core::abi::{IRenderViewBlockAbi, IRenderStream, IRenderStreamAbi, IRenderStreamVtblFor, IRgbaImageAbi, IRendererAbi, ITextureAbi, RenderInfo};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -139,7 +136,7 @@ impl Storage {
 }
 
 #[com_object(interfaces(IRenderStream))]
-/// Stable bulk-copy object whose authority is limited by a per-submission invocation token.
+/// Stable block stream whose authority is limited by a per-submission invocation token.
 struct Stream {
     /// Storage remains valid if a hostile renderer retains this object beyond the call.
     storage: Rc<Storage>,
@@ -158,36 +155,6 @@ impl IRenderStream for Stream {
             .cloned()
             .ok_or(NC_E_INVALID_ARG)?;
         Ok(block.downgrade())
-    }
-
-    /// Copies a bounded vertex suffix only while the supplied invocation remains active.
-    fn vertices(&self, invocation: u64, mut output: NcOutputWriter<'_, RenderVertex>) -> Result<u32, NcStatus> {
-        self.storage.check(invocation)?;
-        if output.offset() != 0 {
-            return Err(NC_E_INVALID_ARG);
-        }
-        output.extend_from_slice(&[])?;
-        Ok(0)
-    }
-
-    /// Copies pointer-free batch records without invoking retained resources under a borrow.
-    fn batches(&self, invocation: u64, mut output: NcOutputWriter<'_, RenderBatch>) -> Result<u32, NcStatus> {
-        self.storage.check(invocation)?;
-        let first = usize::try_from(output.offset()).map_err(|_| NC_E_INVALID_ARG)?;
-        let batches = self.storage.blocks.try_borrow().map_err(|_| NC_E_BUSY)?;
-        let source = batches.get(first..).ok_or(NC_E_INVALID_ARG)?;
-        let count = source.len().min(output.capacity());
-        for _ in &source[..count] {
-            output.push(RenderBatch::View)?;
-        }
-        u32::try_from(count).map_err(|_| NC_E_OUT_OF_RANGE)
-    }
-
-    /// Retains the requested texture after releasing the frame-storage borrow.
-    fn texture(&self, invocation: u64, batch: u32) -> Result<ComPtr<ITextureAbi>, NcStatus> {
-        self.storage.check(invocation)?;
-        let _ = batch;
-        Err(NC_E_INVALID_ARG)
     }
 }
 
@@ -352,12 +319,12 @@ impl GfxCompositorObject {
         let count = u32::try_from(vertices.len()).map_err(|_| NC_E_OUT_OF_RANGE)?;
         let mut output = self.storage.vertices.borrow_mut();
         let first = u32::try_from(output.len()).map_err(|_| NC_E_OUT_OF_RANGE)?;
-        if first.checked_add(count).filter(|end| *end <= MAX_RENDER_VERTICES).is_none() {
+        if first.checked_add(count).filter(|end| *end <= MAX_UI_VERTICES).is_none() {
             return Err(NC_E_OUT_OF_RANGE);
         }
         let mut batches = self.storage.batches.borrow_mut();
         let can_merge = matches!(batches.last(), Some(Batch::Atlas { .. }));
-        if !can_merge && batches.len() >= MAX_RENDER_BATCHES as usize {
+        if !can_merge && batches.len() >= MAX_UI_BATCHES as usize {
             return Err(NC_E_OUT_OF_RANGE);
         }
         // Reserve both independently fallible destinations before changing either one. A failed
@@ -537,7 +504,7 @@ impl GfxCompositor for GfxCompositorObject {
         let reservation = (|| {
             self.charge(0, 0)?;
             let mut batches = self.storage.batches.try_borrow_mut().map_err(|_| NC_E_BUSY)?;
-            if batches.len() >= MAX_RENDER_BATCHES as usize {
+            if batches.len() >= MAX_UI_BATCHES as usize {
                 return Err(NC_E_OUT_OF_RANGE);
             }
             batches.try_reserve(1).map_err(|_| NC_E_OUT_OF_MEMORY)
@@ -726,7 +693,7 @@ impl GfxCompositor for GfxCompositorObject {
             return Ok(());
         };
         let first = u32::try_from(self.storage.vertices.borrow().len()).map_err(|_| NC_E_OUT_OF_RANGE)?;
-        if first.checked_add(4).filter(|end| *end <= MAX_RENDER_VERTICES).is_none() || self.storage.batches.borrow().len() >= MAX_RENDER_BATCHES as usize {
+        if first.checked_add(4).filter(|end| *end <= MAX_UI_VERTICES).is_none() || self.storage.batches.borrow().len() >= MAX_UI_BATCHES as usize {
             return Err(NC_E_OUT_OF_RANGE);
         }
         // Foreign retention executes before borrowing the recording buffers.
@@ -752,7 +719,7 @@ impl GfxCompositor for GfxCompositorObject {
             let invocation = self.next_invocation.checked_add(1).ok_or(NC_E_OUT_OF_RANGE)?;
             self.next_invocation = invocation;
             let blocks = self.graphics.as_ref().ok_or(NC_E_INVALID_ARG)?.lower(frame, &vertices, &batches)?;
-            let batch_count = u32::try_from(blocks.len()).map_err(|_| NC_E_OUT_OF_RANGE)?;
+            let block_count = u32::try_from(blocks.len()).map_err(|_| NC_E_OUT_OF_RANGE)?;
             *self.storage.blocks.borrow_mut() = blocks;
             self.storage.active.set(invocation);
             let _scope = ReadScope { storage: &self.storage };
@@ -761,10 +728,8 @@ impl GfxCompositor for GfxCompositorObject {
                     size: frame.size,
                     clear: frame.clear,
                     invocation,
-                    vertex_count: 0,
-                    batch_count,
+                    block_count,
                 },
-                self.resources.image.as_com_ref(),
                 self.stream.as_com_ref(),
             )
         })();

@@ -14,15 +14,14 @@ interfaces through the facade; native GPU objects never leave the plugin.
 
 Renderer-neutral ABI declarations live in the independent `neocogi.renderer`
 contract module under `crates/render/core`. The module owns `Size`, `Rect`,
-`Color`, `IRgbaImage`, texture/resource capabilities, and the bulk renderer stream.
+`Color`, `IRgbaImage`, texture/resource capabilities, and the sealed block stream.
 It has no widget, font, icon, skin, chrome, palette, or platform-window declarations.
 `neocogi.ui.core` imports the small set of renderer types needed by its public UI
 methods instead of owning duplicate declarations.
 
 Normalized input, native-window polling, and IME placement live in the separate
 `neocogi.platform` contract module under `crates/render/core`. Its factory
-accepts `IRgbaImage`, so a platform/renderer implementation does not link the UI
-core contract merely to create a window. The current backend artifacts implement
+creates windows from a title and size, without UI assets or a UI-core dependency. The current backend artifacts implement
 the platform and renderer projections on one object; this keeps native handles
 private while leaving their ABI ownership separate for the staged implementation split.
 
@@ -104,12 +103,9 @@ cover phase authority, callback reentrancy, lifecycle and geometry invalidation.
 Run `scripts/test-demo.sh BACKEND` for the full application and
 `scripts/test-extension.sh BACKEND` for a separately built widget/container plugin.
 
-GPU atlas input is a borrowed `ImageSource` containing positive dimensions and
-packed RGBA bytes. Backends validate it, upload a complete candidate texture and
-publish that texture only on success. They retain no native atlas, font/icon IDs
-or skin. `RendererBackend::replace_atlas` uses this raw input inside the selected backend;
-the GFX compositor owns final atlas geometry in both production and tests. The host queries
-`IRgbaImage` once through its initial bundle's `image()` accessor and gives that capability to the platform.
-Subsequent renderer preparation and frame
-submission accept only that projection, whose `size` and `pixels` methods cannot
-leak UI metadata into a renderer implementation.
+GFX owns UI shader sources, explicit vertex encoding and atlas selection. Its private
+`IRenderHost` imports authenticated immutable ordinary images into a UI-only domain
+and completes fallible native preparation before publishing resource changes. The
+platform creates windows without assets. Native executors accept generic blocks only;
+no backend has an implicit atlas, UI vertex stream or separate UI pipeline. Each GFX
+session reuses its atlas when the immutable image identity is unchanged.

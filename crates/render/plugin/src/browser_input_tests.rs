@@ -144,7 +144,7 @@ pub fn run_browser_input_tests() {
 /// Registers all provider descriptors in one linked runtime, then exercises real DOM input,
 /// inherited editing, committed IME placement and WebGL submission through their COM interfaces.
 fn static_com_editing_and_webgl() {
-    use neocogi_com::{ComPtr, Runtime};
+    use neocogi_com::ComPtr;
     let runtime = crate::host_runtime();
     // SAFETY: All descriptions and referenced code/data live in this statically linked wasm.
     unsafe {
@@ -157,13 +157,8 @@ fn static_com_editing_and_webgl() {
         .acquire_plugin_root::<PlatformAbi>(neocogi_com::guid_from_qualified_name("neocogi.render.webgl"))
         .unwrap();
     let assets = neocogi_demo_assets::load_bundle(crate::host_runtime()).unwrap();
-    let atlas = assets.image().unwrap();
     let native = platform
-        .create_window(
-            NcCopyFromBufferOffset::new(0, b"Browser COM regression"),
-            Size { width: 640, height: 400 },
-            atlas.as_com_ref(),
-        )
+        .create_window(NcCopyFromBufferOffset::new(0, b"Browser COM regression"), Size { width: 640, height: 400 })
         .unwrap();
     let document = web_sys::window().unwrap().document().unwrap();
     let canvas = document.query_selector("canvas").unwrap().unwrap().dyn_into::<HtmlCanvasElement>().unwrap();
@@ -175,7 +170,8 @@ fn static_com_editing_and_webgl() {
     let gfx = runtime
         .acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
         .unwrap();
-    let core = factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref()).unwrap();
+    let mut core = factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref()).unwrap();
+    core.set_render_host(native.graphics_host().unwrap().as_com_ref()).unwrap();
     let nodes = runtime
         .acquire_plugin_root::<NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))
         .unwrap();

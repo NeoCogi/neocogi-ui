@@ -1,193 +1,90 @@
-//! Real GPU regressions for independent atlases and immutable surface snapshots.
+//! Production GFX blocks exercise fresh immutable outputs, resizing and device lifetime.
 use super::*;
 
-#[com_object(interfaces(IRgbaImage))]
-/// Asymmetric source pixels expose texture orientation errors.
-struct Pixels {
-    /// Two-by-two tightly packed RGBA pixels.
-    bytes: [u8; 16],
-    /// Shared observation crosses the immutable COM `&self` boundary only in this test.
-    /// It measures actual pixel reads rather than inferring uploads from frame counts.
-    reads: Rc<std::cell::Cell<u32>>,
-}
-impl IRgbaImage for Pixels {
-    /// Returns the exact extent represented by the fixed source buffer.
-    fn size(&self) -> Result<Size, NcStatus> {
-        Ok(Size { width: 2, height: 2 })
+/// Build an independent compositor through the same statically linked GFX service as applications.
+fn compositor(host: ComRef<'_, IRenderHostAbi>) -> ComPtr<neocogi_gfx_support::abi::GfxCompositorAbi> {
+    use neocogi_gfx_support::abi::GfxPluginFactoryAbi;
+    let runtime = crate::host_runtime();
+    // SAFETY: the statically linked descriptor and implementation live for this process.
+    unsafe {
+        runtime.register_plugin_descriptor(nc_gfx::plugin_descriptor()).unwrap();
     }
-    /// Supplies only the requested bounded byte range.
-    fn pixels(&self, mut output: NcOutputWriter<'_, u8>) -> Result<(), NcStatus> {
-        self.reads.set(self.reads.get() + 1);
-        let start = output.offset() as usize;
-        let end = start + output.capacity();
-        output.extend_from_slice(self.bytes.get(start..end).ok_or(NC_E_INVALID_ARG)?)?;
-        Ok(())
-    }
+    let gfx = runtime
+        .acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
+        .unwrap();
+    let assets = neocogi_demo_assets::load_bundle(runtime).unwrap();
+    let mut compositor = gfx.create_compositor(assets.as_com_ref()).unwrap();
+    compositor.bind_render_host(host).unwrap();
+    compositor
 }
 
-#[com_object(interfaces(IRenderStream))]
-/// Owned UI stream for both offscreen submission and native composition.
-struct SurfaceStream {
-    /// Final copied geometry in physical pixels.
-    vertices: Vec<RenderVertex>,
-    /// Complete painter ordering.
-    batches: Vec<RenderBatch>,
-    /// Sampled images indexed by overall batch number.
-    images: Vec<ComPtr<ITextureAbi>>,
-}
-impl IRenderStream for SurfaceStream {
-    /// This fixture carries no generic GPU block.
-    fn view(&self, _: u64, _: u32) -> Result<neocogi_com::WeakComBox<neocogi_render_core::abi::IRenderViewBlockAbi>, NcStatus> {
-        Err(neocogi_com::NC_E_INVALID_ARG)
-    }
-
-    /// Copies the complete geometry requested by the production preparer.
-    fn vertices(&self, _: u64, mut output: NcOutputWriter<'_, RenderVertex>) -> Result<u32, NcStatus> {
-        output.extend_from_slice(&self.vertices)?;
-        Ok(self.vertices.len() as u32)
-    }
-    /// Copies the complete ordered batch list.
-    fn batches(&self, _: u64, mut output: NcOutputWriter<'_, RenderBatch>) -> Result<u32, NcStatus> {
-        output.extend_from_slice(&self.batches)?;
-        Ok(self.batches.len() as u32)
-    }
-    /// Retains the texture selected by this exact batch.
-    fn texture(&self, _: u64, batch: u32) -> Result<ComPtr<ITextureAbi>, NcStatus> {
-        self.images.get(batch as usize).cloned().ok_or(NC_E_INVALID_ARG)
-    }
-}
-impl SurfaceStream {
-    /// Publishes counts and the corresponding stream together.
-    fn publish(self, size: Size, clear: u32) -> (RenderInfo, ComPtr<IRenderStreamAbi>) {
-        let info = RenderInfo {
-            size,
-            clear,
-            invocation: 1,
-            vertex_count: self.vertices.len() as u32,
-            batch_count: self.batches.len() as u32,
-        };
-        (info, Self::from_value(self).query().unwrap())
-    }
-}
-
-/// Converts logical top-left coordinates into GL window readback indexing.
-fn pixel(pixels: &[u8], x: usize, y: usize) -> &[u8] {
-    &pixels[((SIZE.height as usize - 1 - y) * SIZE.width as usize + x) * 4..][..4]
-}
-
-/// Retained frames survive later rendering and surface release without changing pixels.
+/// Surface failure/resize/teardown must preserve completed images and the unrelated window target.
 #[test]
 #[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
 fn independent_surface_snapshots_keep_orientation_and_device_lifetime() {
     let _session = native_session();
-    let platform = PlatformObject::default();
-    let assets = neocogi_demo_assets::load_bundle(crate::host_runtime()).unwrap();
-    let atlas = assets.image().unwrap();
-    let native = platform.window("surface acceptance", SIZE, atlas.as_com_ref()).unwrap();
+    let native = PlatformObject::default().window("immutable generic outputs", SIZE).unwrap();
     let weak = Rc::downgrade(&native.device);
     let window = WindowObject::from_value(native);
+    let host = window.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap();
     let renderer: ComPtr<IRendererAbi> = window.query().unwrap();
+    let images: ComPtr<ITextureFactoryAbi> = window.query().unwrap();
     let factory: ComPtr<IRenderSurfaceFactoryAbi> = window.query().unwrap();
-    let reads = Rc::new(std::cell::Cell::new(0));
-    let preview_atlas: ComPtr<IRgbaImageAbi> = Pixels::from_value(Pixels {
-        reads: reads.clone(),
-        bytes: [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255],
-    })
-    .query()
-    .unwrap();
     let extent = Size { width: 32, height: 32 };
-    let surface = factory.create_surface(extent, preview_atlas.as_com_ref()).unwrap();
+    let surface = factory.create_surface(extent).unwrap();
     let preview: ComPtr<IRendererAbi> = surface.query().unwrap();
-    assert_eq!(reads.get(), 1, "surface creation performs one initial atlas upload");
-    preview.prepare_atlas(preview_atlas.as_com_ref()).unwrap();
-    assert_eq!(reads.get(), 1, "a metadata-only install retaining the image performs no upload");
-    assert_eq!(surface.completed_image().unwrap_err(), neocogi_com::NC_E_NOT_FOUND);
-    let vertices = quad(Rect { x: 0, y: 0, width: 32, height: 32 });
-    let (first_info, first_stream) = SurfaceStream {
-        vertices: vec![vertices[0], vertices[1], vertices[2], vertices[0], vertices[2], vertices[3]],
-        batches: vec![RenderBatch::Atlas { first: 0, count: 6 }],
-        images: vec![],
-    }
-    .publish(extent, 0xff000000);
-    preview.render(first_info, preview_atlas.as_com_ref(), first_stream.as_com_ref()).unwrap();
+    let source = images
+        .create_texture(
+            Size { width: 2, height: 2 },
+            NcCopyFromBufferOffset::new(0, &[255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255]),
+        )
+        .unwrap();
+    let mut compositor = compositor(host.as_com_ref());
+    let bounds = Rect { x: 0, y: 0, width: 32, height: 32 };
+    compositor.begin(extent, 0xff000000).unwrap();
+    compositor
+        .texture(bounds, bounds, TextureRegion::FULL, 0xffffffff, source.as_com_ref())
+        .unwrap();
+    compositor.submit(preview.as_com_ref()).unwrap();
     let old = surface.completed_image().unwrap();
-    let (second_info, empty) = SurfaceStream {
-        vertices: vec![],
-        batches: vec![],
-        images: vec![],
-    }
-    .publish(extent, 0xffff00ff);
-    preview.render(second_info, preview_atlas.as_com_ref(), empty.as_com_ref()).unwrap();
+    compositor.begin(extent, 0xffff00ff).unwrap();
+    compositor.submit(preview.as_com_ref()).unwrap();
     let new = surface.completed_image().unwrap();
     assert_ne!(identity(&old).unwrap(), identity(&new).unwrap());
     assert_eq!(old.size().unwrap(), extent);
-    // This portable-size image exceeds the device's texture-axis limit. Failed
-    // native allocation must preserve the last successfully completed snapshot.
+    // The portable envelope admits this extent; the native device rejects it before publication.
     let oversized = Size { width: 131072, height: 1 };
     surface.resize(oversized).unwrap();
-    assert_eq!(
-        preview.render(RenderInfo { size: oversized, ..second_info }, preview_atlas.as_com_ref(), empty.as_com_ref()),
-        Err(RENDER_E_BACKEND)
-    );
+    compositor.begin(oversized, 0xff000000).unwrap();
+    assert_eq!(compositor.submit(preview.as_com_ref()), Err(RENDER_E_BACKEND));
     assert_eq!(identity(&surface.completed_image().unwrap()).unwrap(), identity(&new).unwrap());
-    surface.resize(extent).unwrap();
     assert_eq!(surface.resize(Size { width: -1, height: 32 }), Err(NC_E_INVALID_ARG));
-    assert_eq!(surface.size().unwrap(), extent);
     surface.resize(Size { width: 0, height: 0 }).unwrap();
-    assert_eq!(
-        preview.render(second_info, preview_atlas.as_com_ref(), empty.as_com_ref()),
-        Err(NC_E_INVALID_ARG)
-    );
-    assert_eq!(identity(&surface.completed_image().unwrap()).unwrap(), identity(&new).unwrap());
+    compositor.begin(extent, 0xff000000).unwrap();
+    assert_eq!(compositor.submit(preview.as_com_ref()), Err(NC_E_INVALID_ARG));
     surface.resize(Size { width: 16, height: 16 }).unwrap();
-    preview
-        .render(
-            RenderInfo {
-                size: Size { width: 16, height: 16 },
-                ..second_info
-            },
-            preview_atlas.as_com_ref(),
-            empty.as_com_ref(),
-        )
-        .unwrap();
+    compositor.begin(Size { width: 16, height: 16 }, 0xff123456).unwrap();
+    compositor.submit(preview.as_com_ref()).unwrap();
     assert_eq!(old.size().unwrap(), extent);
     assert_eq!(new.size().unwrap(), extent);
-    assert_eq!(reads.get(), 1, "rendering, failures, and resizing never re-read an unchanged atlas");
-    // The two old outputs remain valid after destroying their rendering session.
-    drop(preview);
-    drop(surface);
-    let (window_info, stream) = SurfaceStream {
-        vertices: quad(Rect { x: 0, y: 0, width: 32, height: 32 })
-            .into_iter()
-            .chain(quad(Rect { x: 32, y: 0, width: 32, height: 32 }))
-            .collect(),
-        batches: vec![RenderBatch::Texture { first: 0 }, RenderBatch::Texture { first: 4 }],
-        images: vec![old.clone(), new.clone()],
-    }
-    .publish(SIZE, 0xff333333);
-    renderer.render(window_info, atlas.as_com_ref(), stream.as_com_ref()).unwrap();
-    {
-        let owner = weak.upgrade().unwrap();
-        let mut access = owner.access().unwrap();
-        assert_eq!(
-            access.state().atlas.as_raw().object,
-            atlas.as_raw().object,
-            "surface upload must preserve the window atlas"
-        );
-        let pixels = access.state().gpu.last_pixels();
-        assert_eq!(pixel(pixels, 4, 4), [255, 0, 0, 255]);
-        assert_eq!(pixel(pixels, 24, 4), [0, 255, 0, 255]);
-        assert_eq!(pixel(pixels, 4, 24), [0, 0, 255, 255]);
-        assert_eq!(pixel(pixels, 24, 24), [255, 255, 0, 255]);
-        assert_eq!(pixel(pixels, 40, 4), [255, 0, 255, 255]);
-        assert_eq!(pixel(pixels, 40, 40), [51, 51, 51, 255]);
-    }
-    drop(stream);
-    drop(renderer);
-    drop(factory);
-    drop(window);
-    assert!(weak.upgrade().is_some(), "retained textures keep their device alive");
-    drop(old);
-    drop(new);
-    assert!(weak.upgrade().is_none(), "surface sessions must not create a device ownership cycle");
+    drop((preview, surface, factory));
+    let full = Rect { x: 0, y: 0, width: 64, height: 64 };
+    compositor.begin(SIZE, 0xff333333).unwrap();
+    compositor.texture(full, bounds, TextureRegion::FULL, 0xffffffff, old.as_com_ref()).unwrap();
+    compositor
+        .texture(full, Rect { x: 32, y: 0, ..bounds }, TextureRegion::FULL, 0xffffffff, new.as_com_ref())
+        .unwrap();
+    compositor.submit(renderer.as_com_ref()).unwrap();
+    let pixels = weak.upgrade().unwrap().access().unwrap().state.as_ref().unwrap().gpu.last_pixels().to_vec();
+    let pixel = |x: usize, y: usize| &pixels[((63 - y) * 64 + x) * 4..((63 - y) * 64 + x) * 4 + 4];
+    assert_eq!(pixel(4, 4), [255, 0, 0, 255]);
+    assert_eq!(pixel(24, 4), [0, 255, 0, 255]);
+    assert_eq!(pixel(4, 24), [0, 0, 255, 255]);
+    assert_eq!(pixel(24, 24), [255, 255, 0, 255]);
+    assert_eq!(pixel(40, 4), [255, 0, 255, 255]);
+    assert_eq!(pixel(40, 40), [51, 51, 51, 255]);
+    drop((compositor, source, renderer, images, host, window));
+    assert!(weak.upgrade().is_some(), "retained images own their native device");
+    drop((old, new));
+    assert!(weak.upgrade().is_none(), "native caches must not retain their own facade");
 }

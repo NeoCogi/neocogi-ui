@@ -1,6 +1,5 @@
 //! Separately linked CPU benchmark of real COM trees; never part of an application binary.
 //! The recorder copies the ordinary bulk stream but deliberately performs no GPU work.
-mod output_bench;
 
 use neocogi_ui::*;
 use neocogi_com::{ComPtr, ComRef, NcStatus, com_object};
@@ -49,12 +48,8 @@ struct Recorder {
     buffers: RefCell<Option<Buffers>>,
 }
 impl IRenderer for Recorder {
-    /// CPU transport requires no device upload; the UI has already validated its atlas image.
-    fn prepare_atlas(&self, _atlas: ComRef<'_, IRgbaImageAbi>) -> Result<(), NcStatus> {
-        Ok(())
-    }
     /// Always restores capacity after an outward call, including failed stream reads.
-    fn render(&self, info: RenderInfo, _atlas: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
+    fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         let mut buffers = self.buffers.borrow_mut().take().ok_or(UI_E_BUSY)?;
         let result = buffers.copy(info, stream);
         *self.buffers.borrow_mut() = Some(buffers);
@@ -233,17 +228,6 @@ fn memory() -> Result<(), Box<dyn Error>> {
 fn main(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
     let mut arguments = std::env::args_os().skip(1);
     let library = arguments.next().ok_or("usage: neocogi-com-bench <UI-library> <single|deep|wide> [--counts]")?;
-    if library == "--buffers" {
-        let counts = match arguments.next() {
-            None => false,
-            Some(value) if value == "--counts" => true,
-            _ => return Err("usage: neocogi-com-bench --buffers [--counts]".into()),
-        };
-        if arguments.next().is_some() {
-            return Err("extra argument".into());
-        }
-        return output_bench::run(counts);
-    }
     let shape = arguments.next().ok_or("missing shape")?.into_string().map_err(|_| "invalid shape")?;
     if !matches!(shape.as_str(), "single" | "deep" | "wide") {
         return Err("invalid shape".into());

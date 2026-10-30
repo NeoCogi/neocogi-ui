@@ -288,7 +288,7 @@ interface IConstructionHost {
     fn host(&self) -> Result<ComPtr<IWidgetHost>>;
 }
 
-#[version(6)]
+#[version(7)]
 /// One constructible retained UI with input, rendering, and resource ownership.
 interface UiRuntime: IInputSink + IWindowManager + IMenus + IChoiceMenus {
     /// Prepares private compositor resources and installs the client's CPU recording broker.
@@ -305,12 +305,11 @@ interface UiRuntime: IInputSink + IWindowManager + IMenus + IChoiceMenus {
 
     /// Retains the currently installed immutable revision, suitable for restoration or another consumer.
     fn assets(&self) -> Result<ComPtr<IAssetBundle>>;
-    /// Validates compatible resources and prepares the renderer upload before publishing either UI
-    /// projection. The mutable receiver makes the authority to replace this runtime-wide value
-    /// explicit. Failure preserves the old bundle. Success requires update before rendering.
-    /// Callers install only after update or event dispatch returns; overlapping runtime calls reject
-    /// the exclusive receiver with BUSY. The renderer is borrowed only for this call.
-    fn install_assets(&mut self, assets: &IAssetBundle, renderer: &IRenderer) -> Result<()>;
+    /// Validates compatible resources and prepares GFX's private atlas before publishing
+    /// matching UI metadata. Failure preserves the complete old revision. Identical immutable
+    /// images are reused without upload. Success requires update before rendering.
+    /// Install after update or event dispatch returns; overlapping calls reject with Busy.
+    fn install_assets(&mut self, assets: &IAssetBundle) -> Result<()>;
     /// Drains queued input, or one eventless update, and synchronizes setters/resize without an application event owner.
     fn update(&self, size: Size) -> Result<()>;
     /// Borrows the persistent application owner at safe boundaries; handlers may edit topology before later input.

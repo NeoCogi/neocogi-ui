@@ -101,12 +101,8 @@ struct Renderer {
     calls: Rc<Cell<usize>>,
 }
 impl IRenderer for Renderer {
-    /// Accepts the valid test atlas.
-    fn prepare_atlas(&self, _: ComRef<'_, IRgbaImageAbi>) -> Result<(), NcStatus> {
-        Ok(())
-    }
     /// Records admitted frame submission.
-    fn render(&self, _: RenderInfo, _: ComRef<'_, IRgbaImageAbi>, _: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
+    fn render(&self, _: RenderInfo, _: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         self.calls.set(self.calls.get() + 1);
         Ok(())
     }

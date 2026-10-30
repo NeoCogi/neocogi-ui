@@ -1,8 +1,9 @@
 //! Fixtures assemble real UI and GFX objects; only the final GPU consumer is replaced.
 
+use neocogi_gfx_support::testing::UiBatch;
 use neocogi_com::{com_object, ComPtr, ComRef, NcStatus};
 use neocogi_render_core::abi::*;
-use neocogi_ui::{IAssetBundleAbi, Ui};
+use neocogi_ui::{IAssetBundleAbi, Ui, RenderVertex};
 use std::{cell::RefCell, rc::Rc};
 
 /// Owned stream observations remain readable after the compositor's invocation expires.
@@ -13,7 +14,7 @@ pub(crate) struct Frame {
     /// Final screen-space vertices copied during the latest call.
     pub(crate) vertices: Vec<RenderVertex>,
     /// Actual batch order; no fixture tessellation or clipping is performed.
-    pub(crate) batches: Vec<RenderBatch>,
+    pub(crate) batches: Vec<UiBatch>,
 }
 
 #[com_object(interfaces(IRenderer))]
@@ -23,13 +24,8 @@ struct CaptureRenderer {
     frame: Rc<RefCell<Frame>>,
 }
 impl IRenderer for CaptureRenderer {
-    /// Immutable CPU images require no native upload in this fixture.
-    fn prepare_atlas(&self, _image: ComRef<'_, IRgbaImageAbi>) -> Result<(), NcStatus> {
-        Ok(())
-    }
-
     /// Reads complete arrays while the token is live, then publishes copied observations.
-    fn render(&self, info: RenderInfo, _image: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
+    fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
         // No observation borrow survives a foreign stream call. This also permits deliberately
         // reentrant renderer fixtures to be added without changing the production path.

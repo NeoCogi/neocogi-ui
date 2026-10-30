@@ -185,8 +185,7 @@ impl Host {
     pub fn new(runtime: neocogi_com::Runtime, title: &str, size: Size, assets: ComPtr<IAssetBundleAbi>) -> Result<Self, HostError> {
         initialize(runtime)?;
         let platform = runtime.acquire_plugin_root::<PlatformAbi>(neocogi_com::guid_from_qualified_name(renderer_plugin_name()))?;
-        let atlas = assets.image()?;
-        let window = platform.create_window(NcCopyFromBufferOffset::new(0, title.as_bytes()), size, atlas.as_com_ref())?;
+        let window = platform.create_window(NcCopyFromBufferOffset::new(0, title.as_bytes()), size)?;
         let renderer = window.query()?;
         let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
         let runtime_factory = runtime.acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
