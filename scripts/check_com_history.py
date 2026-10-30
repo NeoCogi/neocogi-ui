@@ -9,7 +9,8 @@ registry releases and verifies their checksums; this audit does not fetch them.
 
 import argparse
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+import posixpath
 import re
 import subprocess
 import tomllib
@@ -17,6 +18,8 @@ import tomllib
 
 COM_URL = "ssh://git@github.com/NeoCogi/neocogi-com.git"
 COM_REPOSITORY = "git@github.com:NeoCogi/neocogi-com.git"
+HISTORICAL_BASELINE = "ec991e5f0918d936c12d77cb136c16a97623c294"
+"""Independent end of the complete initial ledger; never inferred from ledger input."""
 REVISION = re.compile(r"[0-9a-f]{40}")
 EXACT_VERSION = re.compile(r"=[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?")
 
@@ -106,7 +109,7 @@ def dependency_tables(manifest):
     yield from manifest.get("patch", {}).values()
 
 
-def manifest_links(manifest, expected):
+def manifest_links(manifest, expected, workspace=None):
     """Validate source selection and return the actual SDK packages requested.
 
     Workspace inheritance leaves the source with its owning root declaration.
@@ -114,12 +117,20 @@ def manifest_links(manifest, expected):
     stay independent of this source check.
     """
     requested = set()
+    workspace = manifest.get("workspace", {}).get("dependencies", {}) if workspace is None else workspace
     for table in dependency_tables(manifest):
         for alias, dependency in table.items():
+            if isinstance(dependency, dict) and dependency.get("workspace") is True:
+                # Resolve before classifying: an arbitrary alias may own an SDK package.
+                if alias not in workspace:
+                    raise ValueError(f"{alias}: inherited dependency has no owning workspace declaration")
+                if any(key in dependency for key in ("package", "git", "path", "rev", "version", "branch", "tag", "registry", "registry-index")):
+                    raise ValueError(f"{alias}: inherited dependency cannot override its workspace source")
+                dependency = workspace[alias]
+                if isinstance(dependency, dict) and dependency.get("workspace") is True:
+                    raise ValueError(f"{alias}: workspace declaration cannot itself inherit")
             package = dependency.get("package", alias) if isinstance(dependency, dict) else alias
             if not sdk_package(package):
-                continue
-            if isinstance(dependency, dict) and dependency.get("workspace") is True:
                 continue
             if expected is None:
                 raise ValueError(f"{alias}: SDK dependency has no recorded source")
@@ -169,6 +180,7 @@ class ObjectReader:
         """Associate the cache with one repository's object database."""
         self.repository = repository
         self.blobs = {}
+        self.manifests = {}
 
     def tree(self, revision):
         """Return filename-to-blob mappings from a complete committed snapshot."""
@@ -185,20 +197,71 @@ class ObjectReader:
             self.blobs[identifier] = git(self.repository, "cat-file", "blob", identifier)
         return self.blobs[identifier]
 
+    def manifest(self, identifier):
+        """Cache syntax only; resolved inheritance is checked with each owning-root context."""
+        if identifier not in self.manifests:
+            self.manifests[identifier] = tomllib.loads(self.blob(identifier).decode())
+        return self.manifests[identifier]
 
-def verify(ui, com, ledger):
+
+def workspace_context(path, tree, reader):
+    """Resolve only Cargo workspace inheritance, including explicit/nested workspace roots.
+
+    This does not resolve features, versions or local package graphs. The root blob
+    identifies the complete context needed by an inherited SDK source check.
+    """
+    parent = PurePosixPath(path).parent
+    explicit = reader.manifest(tree[path]).get("package", {}).get("workspace")
+    if explicit is not None:
+        candidate = posixpath.normpath(str(parent / explicit / "Cargo.toml"))
+        if candidate.startswith(("../", "/")) or candidate not in tree:
+            raise ValueError(f"{path}: explicit owning workspace is absent from its snapshot")
+        candidates = [candidate]
+    else:
+        candidates = [str(directory / "Cargo.toml") for directory in [parent, *parent.parents]]
+    for candidate in candidates:
+        blob = tree.get(candidate)
+        if blob is not None:
+            manifest = reader.manifest(blob)
+            if "workspace" in manifest:
+                return manifest["workspace"].get("dependencies", {}), blob
+    if explicit is not None:
+        raise ValueError(f"{path}: explicit owner has no workspace declaration")
+    return {}, None
+
+
+def verify(ui, com, ledger, *, baseline=HISTORICAL_BASELINE):
     """Check ledger coverage, every manifest source, package existence and progress."""
     links = read_ledger(ledger.read_text())
+    try:
+        if git(ui, "cat-file", "-t", baseline).strip() != b"commit":
+            raise ValueError("history baseline must name a commit")
+        git(ui, "merge-base", "--is-ancestor", baseline, "HEAD")
+    except subprocess.CalledProcessError as error:
+        raise ValueError("history baseline must exist and be an ancestor of HEAD") from error
+    anchored = git(ui, "rev-list", "--reverse", baseline).decode().splitlines()
+    if anchored != [link.ui for link in links] or links[-1].ui != baseline:
+        raise ValueError("COM ledger must cover the complete initial UI ancestry through the fixed baseline")
+    # Only this independently anchored initial chain promises monotonic companion progress.
+    previous = None
+    for link in links:
+        if link.com is None and previous is not None:
+            raise ValueError("COM linkage disappears inside the initial ledger")
+        if link.com is not None:
+            if previous is not None and previous != link.com:
+                git(com, "merge-base", "--is-ancestor", previous, link.com)
+            previous = link.com
+    introduced = next((link.ui for link in links if link.com), None)
+    required = set(git(ui, "rev-list", "--ancestry-path", f"{introduced}..HEAD").decode().splitlines()) if introduced else set()
+    if introduced:
+        required.add(introduced)
     commits = git(ui, "rev-list", "--reverse", "HEAD").decode().splitlines()
-    if commits[:len(links)] != [link.ui for link in links]:
-        raise ValueError("COM ledger must cover the complete initial UI ancestry in order")
     expected = {link.ui: link.com for link in links}
     ui_objects = ObjectReader(ui)
     com_objects = ObjectReader(com)
     packages = {}
     seen_manifest_checks = set()
     seen_com = set()
-    previous = None
     linked = 0
     for identifier in commits:
         tree = ui_objects.tree(identifier)
@@ -208,7 +271,7 @@ def verify(ui, com, ledger):
             raise ValueError(f"{identifier}: commit trailer disagrees with the COM ledger")
         source = SdkSource("git", trailer) if trailer else None
         if identifier not in expected:
-            root_source = declared_source(tomllib.loads(ui_objects.blob(tree["Cargo.toml"]).decode()))
+            root_source = declared_source(ui_objects.manifest(tree["Cargo.toml"])) if "Cargo.toml" in tree else None
             if trailer is not None and source != root_source:
                 raise ValueError(f"{identifier}: COM trailer disagrees with the root dependency pin")
             source = root_source
@@ -228,21 +291,20 @@ def verify(ui, com, ledger):
                         if name:
                             package_names.add(name)
                 packages[revision] = package_names
-            if identifier in expected and previous and source != previous:
-                git(com, "merge-base", "--is-ancestor", previous.pin, revision)
             seen_com.add(revision)
-        elif source is None and previous:
-            raise ValueError(f"{identifier}: COM linkage disappears after its introduction")
-        if source:
-            previous = source
+        elif source is None and identifier in required:
+            raise ValueError(f"{identifier}: COM linkage disappears in a descendant of its introduction")
         for path, blob in tree.items():
-            if not path.endswith("Cargo.toml") or (blob, source) in seen_manifest_checks:
+            if not path.endswith("Cargo.toml"):
                 continue
-            manifest = tomllib.loads(ui_objects.blob(blob).decode())
-            requested = manifest_links(manifest, source)
+            workspace, context = workspace_context(path, tree, ui_objects)
+            key = (blob, source, context)
+            if key in seen_manifest_checks:
+                continue
+            requested = manifest_links(ui_objects.manifest(blob), source, workspace)
             if source and source.kind == "git" and not requested <= packages[source.pin]:
                 raise ValueError(f"{identifier}:{path}: package absent from the selected COM revision")
-            seen_manifest_checks.add((blob, source))
+            seen_manifest_checks.add(key)
     return len(commits), linked, len(seen_com), len(seen_manifest_checks)
 
 

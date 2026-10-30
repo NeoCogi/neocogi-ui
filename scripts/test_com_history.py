@@ -152,6 +152,10 @@ class RepositoryAudit(unittest.TestCase):
         self.ledger = root / "history.tsv"
         self.ledger.write_text(f"ui_commit\tcom_commit\n{self.before}\t-\n{self.linked}\t{self.com_revision}\n")
 
+    def audit(self, *, baseline=None):
+        """Use an independently supplied fixture baseline, never the ledger's last row."""
+        return verify(self.ui, self.com, self.ledger, baseline=baseline or self.linked)
+
     def git(self, repository, *arguments):
         """Run an isolated fixture command without relying on caller identity."""
         return subprocess.check_output(
@@ -171,21 +175,81 @@ class RepositoryAudit(unittest.TestCase):
         return f"Use COM\n\nNeoCogi-Com-Repository: {COM_REPOSITORY}\nNeoCogi-Com-Commit: {revision}\n"
 
     def test_complete_history_and_later_ordinary_commit(self):
-        self.assertEqual(verify(self.ui, self.com, self.ledger), (2, 1, 1, 2))
+        self.assertEqual(self.audit(), (2, 1, 1, 2))
         (self.ui / "README.md").write_text("UI documentation\n")
         self.commit(self.ui, "Update UI documentation")
-        self.assertEqual(verify(self.ui, self.com, self.ledger), (3, 2, 1, 2))
+        self.assertEqual(self.audit(), (3, 2, 1, 2))
+
+    def test_fixed_baseline_rejects_every_ledger_truncation(self):
+        (self.ui / "third.txt").write_text("anchored final row\n")
+        final = self.commit(self.ui, self.message(self.com_revision))
+        self.ledger.write_text(self.ledger.read_text() + f"{final}\t{self.com_revision}\n")
+        rows = self.ledger.read_text().splitlines()
+        for removed in [1, 2, 3]:
+            self.ledger.write_text("\n".join(row for index, row in enumerate(rows) if index != removed) + "\n")
+            with self.assertRaisesRegex(ValueError, "complete initial UI ancestry"):
+                self.audit(baseline=final)
+        self.ledger.write_text("\n".join(rows) + "\n")
+        with self.assertRaisesRegex(ValueError, "baseline"):
+            self.audit(baseline="f" * 40)
+        foreign = self.git(self.com, "rev-parse", "HEAD")
+        with self.assertRaisesRegex(ValueError, "baseline"):
+            self.audit(baseline=foreign)
+
+    def test_pre_sdk_side_branch_and_merge_are_not_global_source_progress(self):
+        self.git(self.ui, "checkout", "-q", "-b", "side", self.before)
+        (self.ui / "side.txt").write_text("pre-SDK branch\n")
+        self.commit(self.ui, "Independent branch without SDK")
+        self.git(self.ui, "checkout", "-q", "master")
+        (self.ui / "main.txt").write_text("SDK branch\n")
+        self.commit(self.ui, "Independent linked branch")
+        self.git(self.ui, "merge", "-q", "--no-ff", "side", "-m", "Merge independent branch")
+        commits, linked, revisions, _ = self.audit()
+        self.assertEqual((commits, linked, revisions), (5, 3, 1))
+
+    def test_unchanged_child_cannot_cache_a_removed_inherited_sdk_alias(self):
+        root = self.manifest + 'sdk={package="neocogi-com",git="' + COM_URL + '",rev="' + self.com_revision + '"}\n'
+        (self.ui / "Cargo.toml").write_text(root)
+        child = self.ui / "app/Cargo.toml"
+        child.parent.mkdir()
+        child.write_text('[package]\nname="app"\nversion="0.0.0"\n[target.\'cfg(unix)\'.build-dependencies]\nsdk={workspace=true,artifact="cdylib",target="target"}\n')
+        self.commit(self.ui, "Inherit aliased build artifact")
+        self.audit()
+        (self.ui / "Cargo.toml").write_text(self.manifest) # Other SDK entry preserves identical selected source.
+        self.commit(self.ui, "Lose inherited alias while child blob stays unchanged")
+        with self.assertRaisesRegex(ValueError, "owning workspace"):
+            self.audit()
+
+    def test_nested_and_explicit_workspaces_resolve_their_own_aliases(self):
+        nested = self.ui / "isolated/Cargo.toml"
+        nested.parent.mkdir()
+        nested.write_text('[workspace.dependencies]\nsdk={package="neocogi-com",git="' + COM_URL + '",rev="' + self.com_revision + '"}\n')
+        child = nested.parent / "app/Cargo.toml"
+        child.parent.mkdir()
+        child.write_text('[package]\nname="app"\nversion="0.0.0"\nworkspace=".."\n[dev-dependencies]\nsdk.workspace=true\n')
+        self.commit(self.ui, "Nested explicitly owned SDK inheritance")
+        self.audit()
+        nested.write_text('[workspace]\n')
+        self.commit(self.ui, "Remove owning nested declaration")
+        with self.assertRaisesRegex(ValueError, "owning workspace"):
+            self.audit()
+
+    def test_later_sdk_descendant_cannot_remove_all_sources(self):
+        (self.ui / "Cargo.toml").write_text('[package]\nname="ui"\nversion="0.0.0"\n')
+        self.commit(self.ui, "Accidentally lose SDK selection")
+        with self.assertRaisesRegex(ValueError, "descendant"):
+            self.audit()
 
     def test_missing_initial_history_is_rejected(self):
         self.ledger.write_text(f"ui_commit\tcom_commit\n{self.linked}\t{self.com_revision}\n")
         with self.assertRaisesRegex(ValueError, "complete initial UI ancestry"):
-            verify(self.ui, self.com, self.ledger)
+            self.audit()
 
     def test_dependency_package_must_exist_at_the_selected_revision(self):
         (self.ui / "Cargo.toml").write_text(self.manifest.replace("neocogi-com=", "neocogi-idl="))
         self.commit(self.ui, "Request unavailable compiler")
         with self.assertRaisesRegex(ValueError, "package absent"):
-            verify(self.ui, self.com, self.ledger)
+            self.audit()
 
     def test_later_trailer_cannot_override_the_actual_dependency_pin(self):
         (self.com / "README.md").write_text("COM update\n")
@@ -193,7 +257,7 @@ class RepositoryAudit(unittest.TestCase):
         (self.ui / "README.md").write_text("UI update\n")
         self.commit(self.ui, self.message(other))
         with self.assertRaisesRegex(ValueError, "root dependency pin"):
-            verify(self.ui, self.com, self.ledger)
+            self.audit()
 
     def test_later_intentional_pin_rollback_is_authoritative(self):
         (self.com / "README.md").write_text("COM update\n")
@@ -202,7 +266,7 @@ class RepositoryAudit(unittest.TestCase):
         self.commit(self.ui, "Advance the SDK")
         (self.ui / "Cargo.toml").write_text(self.manifest)
         self.commit(self.ui, "Restore the prior SDK pin")
-        self.assertEqual(verify(self.ui, self.com, self.ledger), (4, 3, 2, 3))
+        self.assertEqual(self.audit(), (4, 3, 2, 3))
 
     def test_later_published_release_preserves_historical_git_validation(self):
         """Registry packages are validated by Cargo, not looked up in an old Git tree."""
@@ -211,11 +275,11 @@ class RepositoryAudit(unittest.TestCase):
             'neocogi-com-host={version="=0.1.0-alpha.1"}\nneocogi-idl={version="=0.1.0-alpha.1"}\n'
         )
         self.commit(self.ui, "Use the published SDK")
-        self.assertEqual(verify(self.ui, self.com, self.ledger), (3, 2, 1, 3))
+        self.assertEqual(self.audit(), (3, 2, 1, 3))
         # An ordinary later snapshot must keep validating its registry declaration.
         (self.ui / "README.md").write_text("Published SDK documentation\n")
         self.commit(self.ui, "Document registry usage")
-        self.assertEqual(verify(self.ui, self.com, self.ledger), (4, 3, 1, 3))
+        self.assertEqual(self.audit(), (4, 3, 1, 3))
 
     def test_published_snapshot_rejects_git_member(self):
         """A release cannot silently retain a second SDK source in a member."""
@@ -225,13 +289,13 @@ class RepositoryAudit(unittest.TestCase):
         member.write_text(self.manifest.replace("[workspace.dependencies]", "[dependencies]"))
         self.commit(self.ui, "Accidentally mix SDK sources")
         with self.assertRaisesRegex(ValueError, "source/pin"):
-            verify(self.ui, self.com, self.ledger)
+            self.audit()
     def test_published_snapshot_rejects_git_trailer(self):
         """A Git revision trailer cannot override a registry release selection."""
         (self.ui / "Cargo.toml").write_text('[workspace.dependencies]\nneocogi-com={version="=0.1.0-alpha.1"}\n')
         self.commit(self.ui, self.message(self.com_revision))
         with self.assertRaisesRegex(ValueError, "root dependency pin"):
-            verify(self.ui, self.com, self.ledger)
+            self.audit()
 
 
 if __name__ == "__main__":

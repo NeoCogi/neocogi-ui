@@ -5,7 +5,10 @@ through corresponding revisions. Each historical UI commit that uses COM pins
 its SDK/compiler dependencies to the matching commit in
 `git@github.com:NeoCogi/neocogi-com.git`.
 
-The [revision ledger](COM_HISTORY.tsv) covers the initial **1,413 UI commits**.
+The [revision ledger](COM_HISTORY.tsv) covers the complete **1,413-commit** ancestry
+through independently fixed baseline `ec991e5f0918d936c12d77cb136c16a97623c294`.
+The auditor requires that baseline to exist as a commit and remain an ancestor of
+HEAD; its coverage boundary cannot be inferred from an editable ledger tail.
 It records **570 UI-to-COM links across 268 COM revisions**. A `-` marks each of
 the 843 early UI commits before COM was introduced. Historical package names,
 versions, features, default-feature selections and artifact policies are retained;
@@ -40,8 +43,17 @@ With both repositories checked out as siblings, run:
 python3 scripts/check_com_history.py
 ```
 
-The read-only audit checks ledger coverage, commit trailers, every historical
-Cargo dependency source and COM ancestry. Historical Git selections also check
+The read-only audit checks exact initial coverage/trailers and monotonic companion
+ancestry on that anchored chain. Later snapshots validate their own root selection;
+a global traversal neighbor is not an ancestor. Pre-SDK side branches can merge
+without inheriting another branch's source, while descendants of SDK introduction
+must retain a declared selection. Explicit later SDK rollbacks remain valid.
+
+Inherited aliases resolve through their owning workspace before SDK classification,
+including nested/explicit workspaces and target/build/artifact edges. Syntax caches
+are context-free; resolved checks include the owning-root blob, so unchanged child
+manifests cannot hide removed or changed root declarations. Reported manifest counts
+are unique (manifest blob, SDK source, owning-workspace blob) checks, not file counts. Historical Git selections also check
 requested package existence; registry selections require one exact crates.io
 version across SDK/compiler declarations, with package availability and checksums
 validated by Cargo. The audit reads Git objects directly without building archived
@@ -53,7 +65,3 @@ Older COM revisions predate its standalone workspace manifest. Exact historical
 linkage and matching SDK contents are verified; independent buildability of every
 archived UI/COM pair is not claimed. Current UI builds use the packaged COM revision
 and the committed lockfile.
-
-The history retains the UI libraries, renderer/platform providers, resources,
-themes and UI examples. Standalone editor applications, reviews and plans remain
-outside this repository's history.
