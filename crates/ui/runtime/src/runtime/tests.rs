@@ -516,6 +516,9 @@ impl IWidget for RetainingWidget {
         assert_eq!(self.button.properties()?, before);
         for (old, expired) in self.probe.painters.borrow_mut().iter_mut() {
             assert_eq!(old.fill(*expired, state.rect, 0), Err(UI_E_EXPIRED_SCOPE));
+            // Even the later widget's valid token cannot grant authority to an older identity.
+            assert_eq!(old.fill(scope, state.rect, 0), Err(UI_E_EXPIRED_SCOPE));
+            assert_eq!(old.triangles(scope, NcCopyFromBufferOffset::new(0, &[])), Err(UI_E_EXPIRED_SCOPE));
             assert_eq!(old.triangles(*expired, NcCopyFromBufferOffset::new(0, &[])), Err(UI_E_EXPIRED_SCOPE));
             assert_eq!(old.colored_triangles(*expired, NcCopyFromBufferOffset::new(0, &[])), Err(UI_E_EXPIRED_SCOPE));
             assert_eq!(

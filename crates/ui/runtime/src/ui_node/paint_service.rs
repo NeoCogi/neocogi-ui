@@ -39,7 +39,7 @@ struct PaintContext {
 }
 
 #[com_object(interfaces(IPainter))]
-/// Runtime-owned mutable paint context exposed through one checked COM capability.
+/// One invocation's paint capability; its identity is never reused by another widget.
 struct Recorder {
     /// Zero means no caller currently has authority to record.
     active: u64,
@@ -286,40 +286,37 @@ impl IPainter for Recorder {
     }
 }
 
-/// Reusable driver; one instance serves sequential widget paint calls in a runtime.
+/// Runtime-owned allocator of permanently distinct paint capabilities.
 #[derive(Clone)]
 pub(crate) struct PaintService {
-    /// Checked capability whose concrete object owns the runtime's mutable paint state.
-    painter: ComPtr<IPainterAbi>,
+    /// Resource changes remain visible to newly created invocation objects.
+    resources: super::SharedAssets,
+    /// Shared by mounted widgets; exhaustion fails before taking their display list.
+    next: std::rc::Rc<std::cell::Cell<u64>>,
 }
 
 impl PaintService {
-    /// Allocates one service for the runtime, sharing its one installed resource value.
+    /// Shares resources and the checked sequence, never a reusable public painter identity.
     pub(crate) fn new(resources: super::SharedAssets) -> Self {
-        let painter = Recorder::from_value(Recorder::new(resources)).query().expect("Recorder declares IPainter");
-        Self { painter }
+        Self {
+            resources,
+            next: std::rc::Rc::new(std::cell::Cell::new(0)),
+        }
     }
 
-    /// Uses neocogi-com's object-wide exclusive gate to access the recorder implementation it created.
-    fn with_recorder_mut<T>(&self, call: impl FnOnce(&mut Recorder) -> T) -> Result<T, NcStatus> {
-        let object = self.painter.as_raw().object;
-        // SAFETY: `painter` was created exclusively by `Recorder::from_value` in `new` and keeps
-        // that allocation alive. Its generated interface header therefore carries the matching
-        // Recorder storage pointer. `borrow_abi_mut` applies the same exclusive call gate used by
-        // normal mutable COM dispatch and keeps it held for the complete closure invocation.
-        let mut recorder = unsafe { <Recorder as neocogi_com::ComObject>::borrow_abi_mut(object) }?;
-        Ok(call(&mut recorder))
-    }
-
-    /// Moves the frame list into the scoped context, calls a component, then restores the list.
+    /// Moves the existing buffers through one unique COM allocation and revokes it on return.
     pub(super) fn paint(&self, widget: &neocogi_com::ComBox<IWidgetAbi>, ctx: &mut crate::WidgetPaintCtx<'_>) -> Result<(), NcStatus> {
-        let invocation = self.with_recorder_mut(|recorder| {
-            recorder.begin(PaintContext {
-                display_list: ctx.take_display_list(),
-                content_rect: ctx.paint_content_rect(),
-                screen_clip: ctx.paint_screen_clip(),
-            })
-        })??;
+        let invocation = self.next.get().checked_add(1).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
+        self.next.set(invocation);
+        let mut value = Recorder::new(self.resources.clone());
+        value.next = invocation - 1;
+        value.begin(PaintContext {
+            display_list: ctx.take_display_list(),
+            content_rect: ctx.paint_content_rect(),
+            screen_clip: ctx.paint_screen_clip(),
+        })?;
+        let recorder = Recorder::into_local(value);
+        let painter: ComPtr<IPainterAbi> = recorder.query()?;
         let state = WidgetPaint {
             rect: copied_rect(ctx.local_rect()),
             clip: copied_rect(ctx.local_clip()),
@@ -331,8 +328,10 @@ impl PaintService {
             window_active: ctx.window_active(),
         };
         let mut widget = widget.as_com_ref();
-        let result = widget.paint(PaintScope { invocation, clip: state.clip }, state, self.painter.as_com_ref());
-        let context = self.with_recorder_mut(|recorder| recorder.finish(invocation))??;
+        let result = widget.paint(PaintScope { invocation, clip: state.clip }, state, painter.as_com_ref());
+        // Typed construction proves the implementation; local access uses the same gate as COM.
+        // No raw implementation cast or capability from a different invocation participates.
+        let context = recorder.try_borrow_mut()?.finish(invocation)?;
         ctx.restore_display_list(context.display_list);
         result
     }

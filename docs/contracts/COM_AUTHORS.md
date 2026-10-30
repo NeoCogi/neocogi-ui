@@ -426,6 +426,14 @@ reentrant access through another retained projection. The concrete recorder owns
 ordinary invocation and frame-context fields; it does not use interior-mutable
 slots to simulate mutation through `&self`.
 
+Each widget paint invocation receives a distinct painter COM identity. On return,
+that identity permanently loses its frame context. Retaining it and supplying a
+later widget's valid invocation number cannot restore authority. Display-list
+allocations move through these contexts and remain reusable across frames.
+Hosts obtain the platform clipboard with `IPlatformWindow::clipboard()` and
+delegate that separate identity to UI services. Its QueryInterface surface does
+not include the window, renderer or resource factories.
+
 `IPainter::triangles` remains available for custom widgets that already own a
 complete local atlas batch. The input offset is zero, its length is a multiple
 of three, and every position and UV component is finite. Built-in classes do not
