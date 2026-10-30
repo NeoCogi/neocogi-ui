@@ -55,6 +55,9 @@ jobs:
       - uses: actions/checkout@v6
       # Allocation failures run in their own executable, alongside every library feature selection.
       - run: cargo test --locked -p neocogi-gfx-impl --no-default-features --features '${{ matrix.features }}' --lib --test texture_reservation
+      - name: Execute target-profile source export and compiled COM consumers
+        if: matrix.features == 'builder,publisher,save-to-rust'
+        run: python3 scripts/test-asset-export.py
 
   # Example integration exercises the real renderer, assets and deployment boundaries.
   examples:

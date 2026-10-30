@@ -71,18 +71,19 @@ the theme-file format. Unknown and duplicate fields and
 [typed role keys](../../crates/skin/authoring/src/role_keys.rs) are rejected during decoding.
 
 Applications supply one `IAssetBundle` through the typed `UiRuntime` factory and
-pass `bundle.image()` to `Platform::create_window`. Neither implementation
-embeds demo assets. Version 4 of `IAssetBundle` returns a separate immutable
-`IRgbaImage` capability instead of inheriting the pixel interface. Appearance-only
-revisions retain exactly that image identity; resource rebuilds publish a new image.
-The image owns its bytes independently and retains no bundle or publication chain. The UI copies and validates
-`AssetTables` once, retains that exact generated snapshot, and samples only the required white-tile
-rows during validation. It never copies or retains the complete image. The platform
-receives `IRgbaImage`, reads only its dimensions and packed RGBA bytes, then uploads
-them without importing a native atlas or skin. GPU backends retain textures and the
-renderer retains only the image projection; temporary CPU upload bytes are released
-after the synchronous upload. Frames pass that cached projection, and the renderer
-skips import/upload when the same image is already current.
+bind the native window's `graphics_host()` to that runtime. `Platform::create_window`
+accepts title and size; atlas preparation belongs to GFX through the bound graphics
+host. Neither implementation embeds demo assets. Version 4 of `IAssetBundle`
+returns a separate immutable `IRgbaImage` capability instead of inheriting pixels.
+Appearance-only revisions retain exactly that image identity; resource rebuilds
+publish a new image with no bundle/publication back-reference.
+
+The UI imports and validates `AssetTables` once and samples only required white-tile
+rows during validation. GFX retains the narrow image projection and private generic
+texture capability, preparing a changed atlas through its graphics host before
+publishing a resource revision. Native backends own the corresponding image and
+device-free accounting; final rendering consumes sealed command blocks with no
+atlas argument or UI metadata. An unchanged image reuses native preparation.
 
 The generated font, glyph, icon, metric, chrome, and appearance records remain the sole UI resource
 model. `AtlasHandle` adds opaque catalog-scoped IDs in canonical table order, sorted font/icon name
@@ -502,3 +503,22 @@ target. The optional small inflater has an activation-time and owned-memory cost
 executable bytes, every shared library, external assets, startup and loaded memory
 all belong in deployment accounting. The full demo's separate sample PNG is decoded
 by its GFX plugin and is not part of the generated pixel-stream format.
+
+
+## Generated Rust and target profiles
+
+GFX source export encodes every table, tagged appearance and compressed pixel byte
+with explicit typed Rust constructors and numeric arrays. Diagnostic Debug is not
+an executable data format. Target min-size stripping therefore keeps the same
+metadata/pixel meaning as dev builds, without broad Debug exceptions. Existing
+Naga/naga-types exceptions remain specific to that upstream compiler's executable
+formatting. Export still validates data before creating its sibling temporary
+file and publishes only after flush, sync and atomic persist.
+
+Run `python3 scripts/test-asset-export.py` to execute the actual atlas CLI and an
+independent nondefault Image/Flat fixture under dev and min-size, compile all emitted
+sources in consumers under both profiles, compare every semantic field/pixel with
+pre-export observations, and copy the published bundles through real COM calls.
+All builds run sequentially in the selected Cargo target root; `--work-dir` retains
+sources and compiler logs outside it. Static generated metadata needs no runtime
+font, PNG, JSON or source parser.
