@@ -54,11 +54,7 @@
 
 // Only the compiler reads source paths; deployed resource lookup is app-relative.
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "embed-assets")))]
-const _: () = neocogi_native_layout::stage_resources!(
-    "../../assets" => "assets",
-    "../../themes" => "themes",
-    "../full/assets/FACEPALM.png" => "assets/FACEPALM.png",
-);
+include!(concat!(env!("OUT_DIR"), "/staged_resources.rs"));
 
 /// Native loading and host construction share one catalog recipe.
 #[cfg(any(not(feature = "embed-assets"), test))]

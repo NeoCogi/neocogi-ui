@@ -48,8 +48,9 @@ require neither SDL nor native plugin artifacts.
 
 ## What Cargo builds
 
-The implementation packages own real `rlib` and `cdylib` targets. Dynamic
-composition requests only their `cdylib` artifacts. Static composition uses normal
+Implementation packages own reusable `rlib` targets. Their minimal `dylib/`
+packages own final `cdylib` targets. Dynamic composition requests these final
+artifacts. Static composition uses normal
 Rust dependencies and registers their descriptor accessors.
 
 The existing `neocogi-demo-host` handles application startup. Its optional
@@ -159,9 +160,20 @@ target/<profile>/
   themes/                    # file-backed themes, unless embedded
 ```
 
-Copy these entries together to relocate an application. Do not copy the whole
-Cargo target directory: compiler caches and debug unremapping
-sidecars are compilation inputs, not distribution files. Workspace profiles use
+This profile directory is an additive development cache. Create a fresh exact
+distribution with the repository's packager:
+
+```sh
+python3 scripts/package-native.py --package neocogi-demo-full --bin neocogi-demo-full --profile min-size --no-default-features --features dynamic,vulkan --output /tmp/neocogi-app
+```
+
+The destination must not exist. Cargo exports the selected executable into private
+scratch while holding its build lock; the production macros stage selected DLLs
+and recipe resources there. The packager checks exact file membership, private
+paths and native loader metadata, then publishes the complete directory by rename.
+It requires `readelf` for ELF, `llvm-readobj` for PE or `otool` for Mach-O inspection.
+Move that directory as a unit to relocate the application. Compiler caches and debug
+unremapping sidecars stay on the build machine. Workspace profiles use
 Cargo's `trim-paths = "all"` so panic/debug/compiler source locations do not
 disclose checkout or Cargo-home paths. **`*.trim-paths.json` sidecars deliberately
 contain original paths for local debugging and must stay on the build machine.**
@@ -176,7 +188,17 @@ contents retain their timestamps; changed libraries are replaced atomically,
 without truncating a mapped Unix library. An in-use Windows DLL can reject
 replacement: stop the application before rebuilding. Removed optional providers
 or resources may leave unused files in a shared profile directory; registration
-loads only the compiled selection. Use a clean profile for distribution.
+loads only the compiled selection. The packager instead starts with empty private
+storage and admits only the file set reported by that Cargo invocation. Basic demos
+include recipe fonts/icons; full demos additionally include photo/mesh and the
+selected authored themes' JSON-relative resource closure. Smoke includes external
+themes without full-only photo/mesh. Embedded compositions stage no resource files.
+All adjacent recipe inputs require regular source components inside the checkout;
+theme resource references must also be relative. Absolute references and symlinks
+fail compilation. Copied theme
+JSON uses normalized relative references, so discarded `directory/..` prefixes do
+not require extra directories in the distribution. General theme-authoring APIs
+may still accept absolute user paths outside this adjacent-resource recipe.
 Restoring outputs during macro expansion can require one following compilation
 to settle Cargo's timestamp-based dep-info; subsequent unchanged builds are fresh.
 
@@ -187,6 +209,15 @@ build directory, set the absolute build-only `NEOCOGI_NATIVE_OUTPUT_DIR` to the
 actual executable directory. Unsupported layouts fail compilation explicitly.
 This private integration is tied to the pinned Cargo layout. Distribution
 installation, signing and platform SDL/Vulkan deployment remain separate tasks.
+
+Concurrent packagers may share Cargo's supported, locally locked cache, including
+separately configured target/intermediate directories. No wrapper build lock is
+used. Each invocation owns its exported executable and staged files. A destination
+name lock gives cooperating packagers one winner; existing destinations are never
+overwritten. The sibling `.NAME.lock` file deliberately persists so waiters share
+one lock identity. Arbitrary external edits and filesystems where Cargo or OS
+locking is unavailable (including unsupported NFS layouts) are outside this
+concurrency guarantee. Unsupported publication locking fails closed.
 
 ## Profiles and output
 
@@ -288,7 +319,11 @@ it does not build a second native Cargo graph.
 
 `scripts/test-demo.sh` and `scripts/test-extension.sh` execute normal Cargo
 builds and application tests.
-The build itself copies its selected files. `scripts/test-native-layout.py --cache
+The build itself copies its selected files. `python3 scripts/test_package_native.py
+--production /tmp/neocogi-packaging-tests` checks fresh composition membership and
+barrier-controlled concurrent capture/publication with actual applications and
+production macros. Use a new test output directory for each run.
+`scripts/test-native-layout.py --cache
 --run` checks actual Linux binaries, cached backend switches, deleted outputs and
 a renamed full application directory. The plugin regression also relocates its
 test host and calls a separately built DLL without loader environment overrides.

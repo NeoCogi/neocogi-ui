@@ -94,6 +94,13 @@ jobs:
       - name: Native staging destination policy
         if: matrix.backend == 'vulkan'
         run: cargo test --locked -p neocogi-native-layout
+      - name: Exact distributions and concurrent private artifact capture
+        if: matrix.backend == 'vulkan'
+        run: |
+          python3 scripts/test_package_native.py
+          python3 scripts/test_package_native.py --production "$RUNNER_TEMP/neocogi-exact-apps"
+          cargo test --locked -p neocogi-demo-assets --features external-themes --test paths
+          NEOCOGI_DEMO_FRAMES=2 xvfb-run -a "$RUNNER_TEMP/neocogi-exact-apps/full-b/neocogi-demo-full"
       - name: Native path privacy, cached renderer switches and relocated startup
         if: matrix.backend == 'vulkan'
         run: |

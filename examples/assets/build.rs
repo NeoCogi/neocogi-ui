@@ -29,20 +29,21 @@
 //
 //! Generates the embedded atlas through ordinary Cargo host build dependencies.
 
-#[cfg(feature = "embed-assets")]
 use std::{env, error::Error, path::PathBuf};
 #[cfg(feature = "embed-assets")]
 use neocogi_gfx_impl::{
     atlas::{self, Builder},
     export::write_rust,
 };
-#[cfg(feature = "embed-assets")]
+#[cfg(all(feature = "embed-assets", feature = "full-demo"))]
 use neocogi_skin_impl::theme;
-#[cfg(feature = "embed-assets")]
+#[cfg(all(feature = "embed-assets", feature = "full-demo"))]
 use neocogi_gfx_support::AssetData;
 
-/// Shared source paths are compiled only for explicitly embedded builds.
-#[cfg(feature = "embed-assets")]
+#[allow(dead_code, reason = "embedded recipes do not stage adjacent inputs")]
+mod build_paths;
+/// The file list and embedded generator consume the same authored recipe constants.
+#[allow(dead_code, reason = "some recipe constants are used only in one storage mode")]
 #[path = "src/recipe_data.rs"]
 mod recipe_data;
 
@@ -53,7 +54,7 @@ mod recipe;
 
 /// Tracks the recipe's actual inputs and writes validated embedded data only when requested.
 #[cfg(feature = "embed-assets")]
-fn main() -> Result<(), Box<dyn Error>> {
+fn build_embedded() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed=src/recipe.rs");
     println!("cargo:rerun-if-changed=src/recipe_data.rs");
     let config = recipe::atlas_config();
@@ -69,27 +70,111 @@ fn main() -> Result<(), Box<dyn Error>> {
     let bundle = Builder::from_config(&config)?.build()?;
     // One atomic generated artifact replaces the native atlas and COM alternative paths.
     write_rust(&bundle, &output)?;
-    if env::var_os("CARGO_FEATURE_FULL_DEMO").is_some() {
-        full_demo_assets(&bundle)?;
-    }
+    #[cfg(feature = "full-demo")]
+    full_demo_assets(&bundle)?;
     Ok(())
 }
 
 /// Compiles complete theme choices on Cargo's host, keeping target theme/font parsers out.
-#[cfg(feature = "embed-assets")]
+#[cfg(all(feature = "embed-assets", feature = "full-demo"))]
 fn full_demo_assets(base: &AssetData) -> Result<(), Box<dyn Error>> {
     let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let output = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo provides OUT_DIR"));
     // Tracking the complete authored directories includes every JSON-relative PNG/font dependency.
     println!("cargo:rerun-if-changed={}", workspace.join("themes").display());
     println!("cargo:rerun-if-changed={}", workspace.join("assets").display());
-    for (directory, generated) in [("windows-3.11", "windows_311"), ("windows-95", "windows_95"), ("mac-os-9", "mac_os_9")] {
-        let loaded = theme::load(&workspace.join("themes").join(directory).join("theme.json"), base)?;
+    for &(generated, definition) in recipe_data::THEMES {
+        let loaded = theme::load(&workspace.join(definition), base)?;
         write_rust(loaded.data(), &output.join(format!("{generated}.rs")))?;
     }
     Ok(())
 }
 
-/// File-based deployments generate no embedded resource code.
-#[cfg(not(feature = "embed-assets"))]
-fn main() {}
+/// Generates tracked staging code and publishes its relative file set through Cargo build metadata.
+/// Packaging reads that same build's JSON event; no persistent output ownership ledger is needed.
+fn stage_recipe() -> Result<(), Box<dyn Error>> {
+    use std::collections::BTreeMap;
+    println!("cargo:rerun-if-changed=src/recipe_data.rs");
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize()?;
+    let mut files = BTreeMap::<String, PathBuf>::new();
+    if !cfg!(feature = "embed-assets") && env::var("CARGO_CFG_TARGET_ARCH")? != "wasm32" {
+        for path in std::iter::once(recipe_data::WHITE)
+            .chain(recipe_data::ICONS.iter().map(|(_, path)| *path))
+            .chain(recipe_data::FONTS.iter().map(|(_, path, _)| *path))
+        {
+            files.insert(path.to_owned(), root.join(path));
+        }
+        #[cfg(feature = "full-demo")]
+        {
+            files.insert("assets/FACEPALM.png".into(), root.join("examples/full/assets/FACEPALM.png"));
+            files.insert("assets/suzanne.obj".into(), root.join("assets/suzanne.obj"));
+        }
+        #[cfg(feature = "external-themes")]
+        for &(name, relative) in recipe_data::THEMES {
+            let definition = build_paths::source(&root, std::path::Path::new("resources"), std::path::Path::new(relative))?;
+            println!("cargo:rerun-if-changed={}", definition.display());
+            let mut theme = neocogi_skin_authoring::theme::ThemeDocument::from_bytes(&definition, &std::fs::read(&definition)?)?;
+            let mut failure = None;
+            theme.visit_resource_paths_mut(|path| {
+                let result = (|| -> Result<(), Box<dyn Error>> {
+                    let destination = build_paths::destination(std::path::Path::new(relative), path)?;
+                    let authored = definition.parent().unwrap().join(&*path);
+                    println!("cargo:rerun-if-changed={}", authored.display());
+                    let source = build_paths::source(&root, std::path::Path::new(relative), path)?;
+                    let destination = destination.to_str().ok_or("theme resource path is not UTF-8")?.replace('\\', "/");
+                    files.insert(destination, source);
+                    *path = build_paths::reference(path);
+                    Ok(())
+                })();
+                if let Err(error) = result {
+                    failure.get_or_insert(error);
+                }
+            });
+            if let Some(error) = failure {
+                return Err(error);
+            }
+            let staged = PathBuf::from(env::var_os("OUT_DIR").ok_or("Cargo provides OUT_DIR")?).join(format!("{name}-adjacent.json"));
+            std::fs::write(&staged, theme.to_bytes()?)?;
+            files.insert(relative.into(), staged);
+        }
+    }
+    let mut code = String::from("const _: () = neocogi_native_layout::stage_resources!(\n");
+    for (destination, source) in &files {
+        let output = PathBuf::from(env::var_os("OUT_DIR").ok_or("Cargo provides OUT_DIR")?);
+        // Generated normalized JSON is trusted build output. Every authored input,
+        // including direct fonts/icons and the definition itself, shares admission.
+        let generated = source.starts_with(&output);
+        let source = if generated {
+            source.clone()
+        } else {
+            build_paths::source(&root, std::path::Path::new("resources"), source.strip_prefix(&root)?)?
+        };
+        if !source.is_file() {
+            return Err(format!("missing declared resource: {}", source.display()).into());
+        }
+        if !generated {
+            println!("cargo:rerun-if-changed={}", source.display());
+        }
+        code.push_str(&format!(
+            "    {:?} => {:?},\n",
+            source.to_str().ok_or("resource path is not UTF-8")?,
+            destination
+        ));
+    }
+    code.push_str(");\n");
+    std::fs::write(
+        PathBuf::from(env::var_os("OUT_DIR").ok_or("Cargo provides OUT_DIR")?).join("staged_resources.rs"),
+        code,
+    )?;
+    let paths: Vec<_> = files.keys().collect();
+    println!("cargo:rustc-env=NEOCOGI_RESOURCE_FILES={}", serde_json::to_string(&paths)?);
+    Ok(())
+}
+
+/// Tracks exact selected file inputs; embedded builds additionally generate their source bundle.
+fn main() -> Result<(), Box<dyn Error>> {
+    stage_recipe()?;
+    #[cfg(feature = "embed-assets")]
+    build_embedded()?;
+    Ok(())
+}

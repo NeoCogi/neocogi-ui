@@ -787,8 +787,10 @@ dependencies = [
  "neocogi-gfx-impl",
  "neocogi-gfx-support",
  "neocogi-native-layout",
+ "neocogi-skin-authoring",
  "neocogi-skin-impl",
  "neocogi-ui",
+ "serde_json",
 ]
 
 [[package]]

@@ -65,9 +65,9 @@ impl Theme {
         {
             use neocogi_ui::{GfxPluginFactoryAbi, NativePath, SkinPluginFactoryAbi};
             let path = match self {
-                Self::Windows311 => "themes/windows-3.11/theme.json",
-                Self::Windows95 => "themes/windows-95/theme.json",
-                Self::MacOs9 => "themes/mac-os-9/theme.json",
+                Self::Windows311 => super::recipe_data::THEMES[0].1,
+                Self::Windows95 => super::recipe_data::THEMES[1].1,
+                Self::MacOs9 => super::recipe_data::THEMES[2].1,
                 Self::Default => unreachable!(),
             };
             let path = super::files::asset_path(path).map_err(|_| neocogi_com::NC_E_LOAD_FAILED)?;

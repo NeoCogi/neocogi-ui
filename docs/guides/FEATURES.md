@@ -80,6 +80,10 @@ interface negotiation against one runtime authority.
 
 Native file-backed resources are copied beside the executable during compilation.
 Runtime paths use that application directory, independent of the source checkout.
+For a fresh distribution, use [`scripts/package-native.py`](../../scripts/package-native.py)
+with the selected package, binary, profile and features. Shared profile directories
+are development caches and may retain files from other selections; the packager
+publishes only the selected application's exact provider and resource set.
 `embed-assets` instead processes fonts, PNGs and JSON into generated Rust under
 `OUT_DIR`. Dynamic composition currently retains the GFX builder and selected
 Skin JSON support even with embedded resources; the former assembly-specific

@@ -24,3 +24,11 @@ pub const FONTS: &[(&str, &str, u32)] = &[
     ("mono", "assets/CONSOLE.ttf", 14),
     ("calculator-display", "assets/CONSOLE.ttf", 28),
 ];
+
+/// Generated module name and authored theme definition; both build modes share these source owners.
+#[allow(dead_code, reason = "shared recipe consumers without external themes do not open these files")]
+pub const THEMES: &[(&str, &str)] = &[
+    ("windows_311", "themes/windows-3.11/theme.json"),
+    ("windows_95", "themes/windows-95/theme.json"),
+    ("mac_os_9", "themes/mac-os-9/theme.json"),
+];
