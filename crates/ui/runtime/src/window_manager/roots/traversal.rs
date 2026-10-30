@@ -730,7 +730,7 @@ impl WindowManager {
     pub(super) fn keyboard_input_surface(&self) -> Option<SurfaceKey> {
         let modal = self.surfaces.active_modal_root();
         self.active_surface
-            .filter(|surface| self.surfaces.is_displayed(*surface) && self.surface_is_eligible(*surface, modal) && self.surface_accepts_input(*surface))
+            .filter(|surface| self.surface_can_receive_input(*surface))
             .or_else(|| self.captured_input_surface())
             .or_else(|| modal.map(SurfaceKey::Root).filter(|surface| self.surface_accepts_input(*surface)))
             .or_else(|| self.front_input_surface())

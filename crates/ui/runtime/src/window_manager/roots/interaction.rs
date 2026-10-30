@@ -39,7 +39,7 @@ impl WindowManager {
     /// Returns the exact active surface when it denotes a concrete menu container.
     pub(super) fn active_menu_surface(&self) -> Option<SurfaceKey> {
         let surface = self.active_surface?;
-        if !self.surface_accepts_input(surface) {
+        if !self.surface_can_receive_input(surface) {
             return None;
         }
         match surface {
@@ -92,16 +92,22 @@ impl WindowManager {
                 .is_some_and(|node| !node.surface.options.intersects(WindowOption::DISABLED))
     }
 
+    /// Returns current input eligibility without retaining a second focus projection.
+    /// Display, modal membership and enabled ancestry are one current-input policy.
+    pub(super) fn surface_can_receive_input(&self, surface: SurfaceKey) -> bool {
+        self.surfaces.is_displayed(surface)
+            && self.surface_is_eligible(surface, self.surfaces.active_modal_root())
+            && self.surface_accepts_input(surface)
+    }
+
     /// Repairs active-surface identity after visibility or ownership changes.
     pub(super) fn reconcile_active_surface(&mut self) {
         let modal = self.surfaces.active_modal_root();
-        let retained = self
-            .active_surface
-            .is_some_and(|surface| self.surfaces.is_displayed(surface) && self.surface_is_eligible(surface, modal) && self.surface_accepts_input(surface));
+        let retained = self.active_surface.is_some_and(|surface| self.surface_can_receive_input(surface));
         if !retained {
             // A modal root is the only mandatory fallback. Ordinary roots continue using the front
             // visible surface lazily until a pointer or window-cycle command selects one exactly.
-            self.active_surface = modal.map(SurfaceKey::Root).filter(|surface| self.surface_accepts_input(*surface));
+            self.active_surface = modal.map(SurfaceKey::Root).filter(|surface| self.surface_can_receive_input(*surface));
         }
     }
 

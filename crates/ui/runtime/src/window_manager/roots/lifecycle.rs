@@ -929,11 +929,11 @@ impl WindowManager {
     /// Removes the active path suffix after `keep`, notifying deepest popups first.
     pub(super) fn truncate_active_popup_path(&mut self, keep: usize) {
         let Some(mut current) = self.surfaces.active_popup else { return };
-        let restore_surface = match self.active_surface {
-            Some(SurfaceKey::Popup(active)) if self.surfaces.popup_depth(active).is_some_and(|depth| depth >= keep) => {
-                // The direct parent is the deterministic focus destination when the active popup
-                // leaves the visible branch. It is either the retained popup prefix or its root.
-                self.surfaces.popup_node(active).and_then(|node| node.parent)
+        let restore_owner = match self.active_surface {
+            Some(SurfaceKey::Popup(active)) if self.surfaces.popup_is_active(active)
+                && self.surfaces.popup_depth(active).is_some_and(|depth| depth >= keep) => {
+                // Save only the owning root. A direct parent may be removed by this same suffix.
+                self.surfaces.owning_root(SurfaceKey::Popup(active))
             }
             _ => None,
         };
@@ -956,9 +956,19 @@ impl WindowManager {
         }
         self.discard_pointer_capture_tail |= revoked_capture;
         self.surfaces.set_active_popup(retained_leaf);
-        if let Some(restore_surface) = restore_surface {
-            self.active_surface = Some(restore_surface);
+        if let Some(owner) = restore_owner {
+            // Visibility has been committed. Derive focus from the surviving path, skipping
+            // ineligible retained nodes; never replace an unrelated window's active surface.
+            let mut destination = retained_leaf.map(SurfaceKey::Popup).or(Some(SurfaceKey::Root(owner)));
+            self.active_surface = loop {
+                match destination {
+                    Some(surface) if self.surface_can_receive_input(surface) => break Some(surface),
+                    Some(SurfaceKey::Popup(popup)) => destination = self.surfaces.popup_node(popup).and_then(|node| node.parent),
+                    _ => break None,
+                }
+            };
         }
+        self.reconcile_active_surface();
         self.invalidate_ui_commit();
     }
 

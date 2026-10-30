@@ -2,6 +2,159 @@
 use super::*;
 use neocogi_ui_support::test_support::events::TestApp;
 
+/// Multi-level hides restore the first transition, while a retained menu keeps its text scope.
+#[test]
+fn hiding_nested_menu_suffix_routes_the_first_text_to_the_surviving_scope() {
+    for depth in 1..=3 {
+        let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+        let owner = ui.widgets().textbox_unobserved("").unwrap();
+        let editor = owner.handle();
+        let window = ui.window("nested focus", RECT, owner).unwrap();
+        key(&ui, KeyCode::Tab, 0);
+        ui.update(SIZE).unwrap();
+        let menus = ui.menus().unwrap();
+        let mut builders = vec![menus.create("Commands").unwrap()];
+        for index in 1..depth {
+            let child = builders.last().unwrap().submenu(&format!("Nested {index}")).unwrap();
+            builders.push(child);
+        }
+        builders.last().unwrap().item("Leaf").unwrap();
+        let mut popup = menus.popup(window.as_com_ref(), &builders[0]).unwrap();
+        drop(builders);
+        for partial in [false, true] {
+            popup.show_at(RECT).unwrap();
+            key(&ui, KeyCode::ArrowDown, 0);
+            for _ in 1..depth {
+                key(&ui, KeyCode::ArrowRight, 0);
+            }
+            ui.update(SIZE).unwrap();
+            if partial && depth > 1 {
+                key(&ui, KeyCode::ArrowLeft, 0);
+                ui.input(UiInput::Text, "CONSUMED").unwrap();
+                ui.update(SIZE).unwrap();
+                assert_eq!(editor.text().unwrap(), "FIRST");
+                for _ in 1..depth {
+                    key(&ui, KeyCode::Escape, 0);
+                }
+            } else {
+                popup.hide().unwrap();
+            }
+            ui.input(UiInput::Text, if partial { "SECOND" } else { "FIRST" }).unwrap();
+            ui.update(SIZE).unwrap();
+            assert_eq!(editor.text().unwrap(), if partial { "FIRSTSECOND" } else { "FIRST" }, "depth={depth}");
+        }
+        popup.close().unwrap();
+        window.close().unwrap();
+    }
+}
+
+/// An application callback hides a still-active popup before the next queued text.
+#[test]
+fn callback_hide_preserves_the_first_queued_text_after_popup_activation() {
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let owner = ui.widgets().textbox_unobserved("").unwrap();
+    let editor = owner.handle();
+    let window = ui.window("callback focus", RECT, owner).unwrap();
+    key(&ui, KeyCode::Tab, 0);
+    ui.update(SIZE).unwrap();
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let events = neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, (), sender, |_queue, _origin, event| {
+        event.query_ref::<neocogi_ui::IActivatedEventAbi>()?;
+        ()
+    })
+    .unwrap();
+    let button = ui.widgets().button_with_queue("Hide active popup", Some(events.as_com_ref())).unwrap();
+    let mut popup = ui.popup(window.as_com_ref(), "Actions", button).unwrap();
+    popup.show_at(RECT).unwrap();
+    ui.update(SIZE).unwrap();
+    let app = TestApp::new((popup, 0), receiver, |state, ()| {
+        assert_eq!(state.0.visibility()?, Visibility::Visible);
+        state.0.hide()?;
+        state.1 += 1;
+        Ok(())
+    });
+    key(&ui, KeyCode::Enter, 0);
+    ui.input(UiInput::Text, "FIRST").unwrap();
+    ui.update_with_events(SIZE, app.as_interface()).unwrap();
+    assert_eq!(app.state().1, 1);
+    assert_eq!(editor.text().unwrap(), "FIRST");
+}
+
+/// Popup ownership, frontmost order and each window's remembered editor are distinct facts.
+#[test]
+fn nested_hide_restores_its_owner_and_ineligible_owners_fall_back_on_the_first_text() {
+    for policy in ["front-other", "hidden", "disabled", "modal"] {
+        let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+        let owner = ui.widgets().textbox_unobserved("").unwrap();
+        let other_text = owner.handle();
+        let other = ui.window("other", Rect { x: 430, y: 20, width: 180, height: 200 }, owner).unwrap();
+        key(&ui, KeyCode::Tab, 0);
+        ui.update(SIZE).unwrap();
+        let owner = ui.widgets().textbox_unobserved("").unwrap();
+        let owner_text = owner.handle();
+        let window = ui.window("owner", RECT, owner).unwrap();
+        // Select the owner editor without replacing the other window's remembered focus.
+        for event in [
+            UiInput::Pointer(Point { x: 60, y: 100 }),
+            UiInput::Down {
+                position: Point { x: 60, y: 100 },
+                buttons: 1,
+            },
+            UiInput::Up {
+                position: Point { x: 60, y: 100 },
+                buttons: 1,
+            },
+        ] {
+            ui.input(event, "").unwrap();
+        }
+        ui.update(SIZE).unwrap();
+        let menus = ui.menus().unwrap();
+        let root = menus.create("Commands").unwrap();
+        let child = root.submenu("Nested").unwrap();
+        child.submenu("Deep").unwrap().item("Leaf").unwrap();
+        let mut popup = menus.popup(window.as_com_ref(), &root).unwrap();
+        popup.show_at(RECT).unwrap();
+        key(&ui, KeyCode::ArrowDown, 0);
+        key(&ui, KeyCode::ArrowRight, 0);
+        key(&ui, KeyCode::ArrowRight, 0);
+        ui.update(SIZE).unwrap();
+        other.raise().unwrap();
+        let mut modal_text = None;
+        let mut modal = None;
+        match policy {
+            "hidden" => window.set_visibility(Visibility::Hidden).unwrap(),
+            "disabled" => {
+                window.set_options(WindowOptions::DISABLED).unwrap();
+            }
+            "modal" => {
+                let owner = ui.widgets().textbox_unobserved("").unwrap();
+                modal_text = Some(owner.handle());
+                let dialog = ui
+                    .dialog(other.as_com_ref(), "modal", Rect { x: 430, y: 20, width: 180, height: 200 }, owner)
+                    .unwrap();
+                dialog.set_visibility(Visibility::Visible).unwrap();
+                key(&ui, KeyCode::Tab, 0);
+                ui.update(SIZE).unwrap();
+                modal = Some(dialog);
+            }
+            _ => (),
+        }
+        popup.hide().unwrap();
+        ui.input(UiInput::Text, "FIRST").unwrap();
+        ui.update(SIZE).unwrap();
+        assert_eq!(owner_text.text().unwrap(), if policy == "front-other" { "FIRST" } else { "" }, "{policy}");
+        assert_eq!(
+            other_text.text().unwrap(),
+            if matches!(policy, "hidden" | "disabled") { "FIRST" } else { "" },
+            "{policy}"
+        );
+        if let Some(text) = modal_text {
+            assert_eq!(text.text().unwrap(), "FIRST");
+        }
+        drop(modal);
+    }
+}
+
 /// Queues a concrete key including the function-key number carried by FUNCTION.
 fn key(ui: &neocogi_ui::Ui, key: KeyCode, value: u32) {
     ui.input(
