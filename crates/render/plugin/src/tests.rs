@@ -9,6 +9,8 @@ use neocogi_render_gpu::source::{Bytes, PipelineDesc};
 #[cfg(feature = "glow")]
 mod generic_gpu;
 #[cfg(feature = "glow")]
+pub(super) mod costs;
+#[cfg(feature = "glow")]
 mod surfaces;
 #[cfg(feature = "glow")]
 mod view_geometry;

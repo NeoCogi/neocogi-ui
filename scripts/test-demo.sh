@@ -15,5 +15,8 @@ cargo test -p neocogi-demo-full --lib --no-default-features --features "$feature
     -- --include-ignored --test-threads=1
 # Exercise shader inputs and actual pixels as well as the application's COM/UI integration.
 cargo test -p neocogi-shader-compiler -p neocogi-render-gpu --lib
+# Backend ownership, native surface resize and completion-failure fixtures live
+# with their implementation; plugin-only tests cannot qualify these paths.
+cargo test -p "neocogi-render-$backend" --lib -- --include-ignored --test-threads=1
 cargo test -p neocogi-render-plugin --lib --test compiler_activation --no-default-features --features "$backend" \
     -- --include-ignored --test-threads=1

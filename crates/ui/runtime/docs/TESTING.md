@@ -78,6 +78,25 @@ cache regression cannot hide behind a native node adapter. The deleted executor'
 allocation counters and ignored native benchmarks did not measure COM deployment
 cost and are not a production performance baseline.
 
+`SDL_VIDEODRIVER=offscreen cargo test --offline -p neocogi-render-plugin --lib
+measure_ui_and_mixed_client_costs -- --ignored --nocapture --test-threads=1`
+measures a real retained Button and the same scene with a procedural client block
+on the production GL executor. It reports setup/UI recording, cold preparation,
+and 100 warm preparation/completed-execution samples at 64 × 64. Immutable resource
+version counts describe the submitted workload. Separate typed test-only GL loader
+wrappers count actual `glBufferData`, `glTexImage2D` and `glLinkProgram` calls in
+setup/cold/warm phases; they do not count driver allocations. Native `glFinish`
+is included, readback/presentation are excluded. This
+small fixed scene is a reproducible qualification sample without timing thresholds.
+
+Use `scripts/measure-deployment.py <fresh-app> --executable <name>
+--configuration <profile-target-features-workload> --output <record.json>` to count
+the executable and actual `lib/` providers, including the shader compiler. The
+workspace-pinned compiler and exact hashes are recorded; assets/debug sidecars are
+excluded. Comparisons permit fresh paths and report added/removed providers while
+requiring a matching compiler and configuration key. Optional ELF section detail
+does not limit portable byte/hash measurements.
+
 ## Validation commands
 
 Run the isolated package tests first so workspace feature unification cannot hide
