@@ -24,7 +24,7 @@ fn visual(sequence: &mut u32) -> AssetVisual {
         },
         center_visible: (n % 2) as u8,
         content_color: 0xfedc0000 | n,
-        patch: if n % 2 == 0 {
+        patch: if n.is_multiple_of(2) {
             AssetPatch::Image {
                 icon: 1 + n % 8,
                 source: Insets { left: 1, top: 2, right: 3, bottom: 4 },
