@@ -6,14 +6,14 @@
 
 use super::Diagnostic;
 use neocogi_com::{
-    ComPtr, ComRef, INcStringAbi, NC_E_BUSY, NC_E_INVALID_ARG, NC_E_OUT_OF_MEMORY, NC_E_OUT_OF_RANGE, NcCopyFromBufferOffset, NcOutputWriter, NcStatus,
-    com_object,
+    ComBox, ComPtr, ComRef, WeakComBox, INcStringAbi, NC_E_BUSY, NC_E_INVALID_ARG, NC_E_OUT_OF_MEMORY, NC_E_OUT_OF_RANGE, NcCopyFromBufferOffset,
+    NcOutputWriter, NcStatus, com_object,
 };
 use neocogi_gfx_support::abi::*;
 use neocogi_gfx_support::{AssetTables, AsciiGlyphIndex};
 use neocogi_render_core::abi::{
-    IRenderItemAbi, IRenderStream, IRenderStreamAbi, IRenderStreamVtblFor, IRgbaImageAbi, IRendererAbi, ITextureAbi, MAX_RENDER_BATCHES, MAX_RENDER_VERTICES,
-    RenderBatch, RenderInfo, RenderVertex,
+    IRenderItemAbi, IRenderViewBlockAbi, IRenderStream, IRenderStreamAbi, IRenderStreamVtblFor, IRgbaImageAbi, IRendererAbi, ITextureAbi, MAX_RENDER_BATCHES,
+    MAX_RENDER_VERTICES, RenderBatch, RenderInfo, RenderVertex,
 };
 use std::{
     cell::{Cell, RefCell},
@@ -80,6 +80,8 @@ const MAX_NINE_PATCH_VERTICES: usize = 9 * 2 * 6;
 
 /// Owned painter-order record retained until the synchronous renderer call finishes.
 enum Batch {
+    /// Exclusive sealed owner retained at its exact painter-order position.
+    View(Rc<ComBox<IRenderViewBlockAbi>>),
     /// One contiguous sequence of complete atlas triangles.
     Atlas {
         /// First vertex in the frame's shared geometry storage.
@@ -109,6 +111,7 @@ impl Batch {
     /// Copies pointer-free metadata for the renderer's bulk stream traversal.
     fn record(&self) -> RenderBatch {
         match self {
+            Self::View(_) => RenderBatch::View,
             Self::Atlas { first, count } => RenderBatch::Atlas { first: *first, count: *count },
             Self::Texture { first, .. } => RenderBatch::Texture { first: *first },
             Self::Item { rect, clip, .. } => RenderBatch::Item { rect: *rect, clip: *clip },
@@ -158,6 +161,16 @@ struct Stream {
 }
 
 impl IRenderStream for Stream {
+    /// Releases the storage borrow before touching even a caller-provided block's weak protocol.
+    fn view(&self, invocation: u64, batch: u32) -> Result<WeakComBox<IRenderViewBlockAbi>, NcStatus> {
+        self.storage.check(invocation)?;
+        let block = match self.storage.batches.try_borrow().map_err(|_| NC_E_BUSY)?.get(batch as usize) {
+            Some(Batch::View(block)) => block.clone(),
+            _ => return Err(NC_E_INVALID_ARG),
+        };
+        Ok(block.downgrade())
+    }
+
     /// Copies a bounded vertex suffix only while the supplied invocation remains active.
     fn vertices(&self, invocation: u64, mut output: NcOutputWriter<'_, RenderVertex>) -> Result<u32, NcStatus> {
         self.storage.check(invocation)?;
@@ -532,6 +545,23 @@ impl GfxCompositorObject {
 }
 
 impl GfxCompositor for GfxCompositorObject {
+    /// Retains generic work without interpreting client shaders or resource semantics.
+    fn render_view(&mut self, block: ComBox<IRenderViewBlockAbi>) -> Result<(), (NcStatus, ComBox<IRenderViewBlockAbi>)> {
+        let reservation = (|| {
+            self.charge(0, 0)?;
+            let mut batches = self.storage.batches.try_borrow_mut().map_err(|_| NC_E_BUSY)?;
+            if batches.len() >= MAX_RENDER_BATCHES as usize {
+                return Err(NC_E_OUT_OF_RANGE);
+            }
+            batches.try_reserve(1).map_err(|_| NC_E_OUT_OF_MEMORY)
+        })();
+        if let Err(status) = reservation {
+            return Err((status, block));
+        }
+        self.storage.batches.borrow_mut().push(Batch::View(Rc::new(block)));
+        Ok(())
+    }
+
     /// Replaces resource metadata only with a validated revision from the original namespace.
     fn install_assets(&mut self, assets: ComRef<'_, IAssetBundleAbi>) -> Result<(), NcStatus> {
         if self.frame.is_some() {

@@ -239,6 +239,13 @@ impl IChoiceMenus for Runtime {
 }
 
 impl UiRuntime for Runtime {
+    /// Installs only a private CPU recording capability, with no public broker getter.
+    fn set_render_broker(&mut self, broker: ComRef<'_, IRenderViewBrokerAbi>) -> Result<(), NcStatus> {
+        self.storage.open()?;
+        let _context = self.storage.context()?;
+        self.storage.factory.painter.install_broker(broker)
+    }
+
     /// Publishes a platform service only through the runtime's exclusive mutation boundary.
     fn set_clipboard(&mut self, clipboard: ComRef<'_, neocogi_ui::abi::core::ITextClipboardAbi>) -> Result<(), NcStatus> {
         self.storage.factory.host.check_mutation()?;
@@ -331,11 +338,16 @@ impl UiRuntime for Runtime {
         // The complete submission is observational, including calls into the native renderer.
         let _phase = Observation::begin(&storage.factory.state);
         storage.factory.state.error.set(None);
+        let gpu_frame = storage.factory.painter.begin_frame()?;
         let painted = context.paint(size);
         let boundary_error = storage.factory.state.error.take();
         if let Err(error) = painted.and_then(|()| boundary_error.map_or(Ok(()), Err)) {
             // A foreign widget can fail after recording commands. Discard those owned commands
             // before entering GFX so a failed observational phase cannot publish a partial frame.
+            context.discard_paint();
+            return Err(error);
+        }
+        if let Err(error) = gpu_frame.finish() {
             context.discard_paint();
             return Err(error);
         }

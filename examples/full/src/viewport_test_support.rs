@@ -18,6 +18,15 @@ struct Recorder {
     output: Rc<RefCell<Output>>,
 }
 impl IPainter for Recorder {
+    /// This semantic-only fixture must never silently accept generic GPU output.
+    fn begin_render_view(
+        &mut self,
+        _: PaintScope,
+        _: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>,
+    ) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::IRenderViewAbi>, NcStatus> {
+        panic!("unexpected GPU view")
+    }
+
     /// Copies the full allocation without retaining a native or scene borrow.
     fn item(&mut self, _: PaintScope, rect: Rect, _: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
         self.output.borrow_mut().items.push(rect);

@@ -53,6 +53,9 @@ impl IRenderer for Recorder {
                 RenderBatch::Item { .. } => {
                     stream.item(info.invocation, index as u32)?;
                 }
+                RenderBatch::View => {
+                    stream.view(info.invocation, index as u32)?;
+                }
                 RenderBatch::Atlas { .. } => {}
             }
         }

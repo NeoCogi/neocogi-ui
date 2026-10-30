@@ -1272,6 +1272,15 @@ struct BuiltinPainter {
     probe: Rc<BuiltinPaintProbe>,
 }
 impl IPainter for BuiltinPainter {
+    /// This semantic-only fixture must never silently accept generic GPU output.
+    fn begin_render_view(
+        &mut self,
+        _: PaintScope,
+        _: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>,
+    ) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::IRenderViewAbi>, NcStatus> {
+        panic!("unexpected GPU view")
+    }
+
     /// Built-ins no longer resolve lines through this primitive.
     fn stroke_line(&mut self, _: PaintScope, _: PaintPoint, _: PaintPoint, _: f32, _: u32) -> Result<(), NcStatus> {
         panic!("expected atlas triangles")

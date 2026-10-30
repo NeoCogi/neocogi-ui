@@ -1,6 +1,11 @@
-#[version(2)]
+#[version(3)]
 /// Scoped facade which appends typed operations to the runtime's current frame paint context.
 interface IPainter {
+    /// Reserves an ordered graphics contribution rooted in the committed visible client area.
+    /// Finish or cancel the returned view before paint returns or another view begins. The root
+    /// uses trusted layout geometry; caller-supplied scope values cannot enlarge it. A retained
+    /// view expires on every paint return. Resource ownership remains with the granted domain.
+    fn begin_render_view(&mut self, scope: PaintScope, resources: &IRenderResources) -> Result<ComBox<IRenderView>>;
     /// Records a nonnegative-width solid line with finite local endpoints. Zero width draws nothing.
     fn stroke_line(&mut self, scope: PaintScope, from: PaintPoint, to: PaintPoint, width: f32, rgba: u32) -> Result<()>;
     /// Records finite local polygon points at offset zero; fewer than three points draw nothing.
@@ -286,9 +291,13 @@ interface IConstructionHost {
     fn host(&self) -> Result<ComPtr<IWidgetHost>>;
 }
 
-#[version(4)]
+#[version(5)]
 /// One constructible retained UI with input, rendering, and resource ownership.
 interface UiRuntime: IInputSink + IWindowManager + IMenus + IChoiceMenus {
+    /// Installs a trusted recording broker without exposing it through widget services. Hosts
+    /// install before rendering; replacement while a paint frame is active rejects with Busy.
+    /// Headless runtimes without a broker reject begin_render_view without recording a slot.
+    fn set_render_broker(&mut self, broker: &IRenderViewBroker) -> Result<()>;
 
     /// Returns the core construction authority without exposing a concrete nodes factory.
     fn construction_host(&self) -> Result<ComPtr<IConstructionHost>>;

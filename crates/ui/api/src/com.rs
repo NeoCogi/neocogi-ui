@@ -535,6 +535,14 @@ impl<'a> Painter<'a> {
             scope: PaintScope { invocation: self.scope.invocation, clip },
         })
     }
+    /// Begins generic graphics recording in this widget's committed visible client rectangle.
+    pub fn begin_render_view(
+        &mut self,
+        resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>,
+    ) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::IRenderViewAbi>, NcStatus> {
+        self.interface.begin_render_view(self.scope, resources)
+    }
+
     /// Records a finite solid line; the UI owns tessellation and the currently installed material.
     pub fn stroke_line(&mut self, from: PaintPoint, to: PaintPoint, width: f32, rgba: u32) -> Result<(), NcStatus> {
         self.interface.stroke_line(self.scope, from, to, width, rgba)

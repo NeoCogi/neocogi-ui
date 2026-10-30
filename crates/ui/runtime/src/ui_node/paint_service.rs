@@ -4,6 +4,18 @@ use neocogi_ui::abi::core::*;
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
 use crate::{FontRole, WidgetOption, ControlRole};
 use crate::math::RectExt;
+#[path = "paint_service/gpu.rs"]
+mod gpu;
+use neocogi_render_core::abi::{IRenderResourcesAbi, IRenderViewAbi, IRenderViewSessionAbi, IRenderViewBrokerAbi, RenderViewRoot, RenderViewState, RENDER_E_STATE};
+use neocogi_com::ComBox;
+
+/// One reserved list position and its private revocation/transfer controller.
+struct PendingView {
+    /// Index fixed before client recording starts.
+    slot: usize,
+    /// Kept by the runtime, never delegated to the widget.
+    session: ComBox<IRenderViewSessionAbi>,
+}
 
 #[com_object(interfaces(ITextMetrics))]
 /// Immutable text metrics for one installed resource bundle.
@@ -36,6 +48,10 @@ struct PaintContext {
     content_rect: crate::Recti,
     /// Traversal-derived screen clip which caller-provided scopes may only narrow.
     screen_clip: crate::Recti,
+    /// Unharvested contribution, if the widget began generic recording.
+    view: Option<PendingView>,
+    /// First unhandled view failure cannot be erased by attempting another begin.
+    gpu_error: Option<NcStatus>,
 }
 
 #[com_object(interfaces(IPainter))]
@@ -49,6 +65,8 @@ struct Recorder {
     context: Option<PaintContext>,
     /// Installed resources resolve the legacy convenience text operation without per-widget import.
     resources: super::SharedAssets,
+    /// Entire-traversal recording lifetime installed only by trusted runtime code.
+    frames: std::rc::Rc<gpu::Frames>,
 }
 
 impl Recorder {
@@ -59,7 +77,33 @@ impl Recorder {
             next: 0,
             context: None,
             resources,
+            frames: std::rc::Rc::default(),
         }
+    }
+
+    /// Transfers a completed view at its original slot or rejects unfinished/rejected work.
+    fn harvest(&mut self) -> Result<(), NcStatus> {
+        let context = self.context.as_mut().ok_or(UI_E_BUSY)?;
+        if let Some(error) = context.gpu_error {
+            return Err(error);
+        }
+        let Some(mut pending) = context.view.take() else {
+            return Ok(());
+        };
+        let result = (|| match pending.session.state()? {
+            RenderViewState::Committed => {
+                let block = pending.session.take_block()?;
+                context.display_list.complete_gpu_view(pending.slot, block)
+            }
+            RenderViewState::Cancelled => Ok(()),
+            _ => Err(RENDER_E_STATE),
+        })();
+        // Host return always revokes the facade, even if the widget retained its owner.
+        let _ = pending.session.expire();
+        if let Err(error) = result {
+            context.gpu_error = Some(error);
+        }
+        result
     }
 
     /// Validates authority before touching the active frame, including empty operations.
@@ -137,6 +181,23 @@ fn local_surface_state(state: WidgetVisualState) -> Result<crate::SurfaceState, 
 }
 
 impl IPainter for Recorder {
+    /// The root comes from committed visible geometry rather than a supplied rectangle/token.
+    fn begin_render_view(&mut self, scope: PaintScope, resources: ComRef<'_, IRenderResourcesAbi>) -> Result<ComBox<IRenderViewAbi>, NcStatus> {
+        self.check(scope)?;
+        self.harvest()?;
+        let context = self.context.as_mut().ok_or(UI_E_BUSY)?;
+        let visible = context.screen_clip.positive_intersection(context.content_rect).ok_or(NC_E_INVALID_ARG)?;
+        let local = visible.relative_to(crate::Vec2i::new(context.content_rect.x, context.content_rect.y));
+        let root = RenderViewRoot {
+            client: copied_rect(local),
+            target: copied_rect(visible),
+        };
+        let mut session = self.frames.view(root, resources)?;
+        let view = session.view()?;
+        let slot = context.display_list.reserve_gpu_view(visible)?;
+        context.view = Some(PendingView { slot, session });
+        Ok(view)
+    }
     /// Validates complete scalar geometry before appending anything to the frame.
     fn stroke_line(&mut self, scope: PaintScope, from: PaintPoint, to: PaintPoint, width: f32, rgba: u32) -> Result<(), NcStatus> {
         self.reserve(scope, 0, 6)?;
@@ -293,6 +354,8 @@ pub(crate) struct PaintService {
     resources: super::SharedAssets,
     /// Shared by mounted widgets; exhaustion fails before taking their display list.
     next: std::rc::Rc<std::cell::Cell<u64>>,
+    /// Private per-traversal GPU frame shared with invocation recorders.
+    frames: std::rc::Rc<gpu::Frames>,
 }
 
 impl PaintService {
@@ -301,7 +364,18 @@ impl PaintService {
         Self {
             resources,
             next: std::rc::Rc::new(std::cell::Cell::new(0)),
+            frames: std::rc::Rc::default(),
         }
+    }
+
+    /// Installs the trusted broker without returning its capability to widget services.
+    pub(crate) fn install_broker(&self, broker: ComRef<'_, IRenderViewBrokerAbi>) -> Result<(), NcStatus> {
+        self.frames.install(broker)
+    }
+
+    /// Opens one quota/accounting frame around all widget paint invocations.
+    pub(crate) fn begin_frame(&self) -> Result<gpu::Guard, NcStatus> {
+        self.frames.begin()
     }
 
     /// Moves the existing buffers through one unique COM allocation and revokes it on return.
@@ -310,10 +384,13 @@ impl PaintService {
         self.next.set(invocation);
         let mut value = Recorder::new(self.resources.clone());
         value.next = invocation - 1;
+        value.frames = self.frames.clone();
         value.begin(PaintContext {
             display_list: ctx.take_display_list(),
             content_rect: ctx.paint_content_rect(),
             screen_clip: ctx.paint_screen_clip(),
+            view: None,
+            gpu_error: None,
         })?;
         let recorder = Recorder::into_local(value);
         let painter: ComPtr<IPainterAbi> = recorder.query()?;
@@ -331,11 +408,16 @@ impl PaintService {
         let result = widget.paint(PaintScope { invocation, clip: state.clip }, state, painter.as_com_ref());
         // Typed construction proves the implementation; local access uses the same gate as COM.
         // No raw implementation cast or capability from a different invocation participates.
+        let harvested = recorder.try_borrow_mut()?.harvest();
         let context = recorder.try_borrow_mut()?.finish(invocation)?;
         ctx.restore_display_list(context.display_list);
-        result
+        result.and(harvested)
     }
 }
+
+#[cfg(test)]
+#[path = "paint_service/tests.rs"]
+mod gpu_tests;
 
 #[cfg(test)]
 mod intake_tests {
@@ -353,6 +435,8 @@ mod intake_tests {
             display_list: crate::render::DisplayList::new(),
             content_rect: crate::Recti::new(0, 0, 32, 32),
             screen_clip: crate::Recti::new(0, 0, 32, 32),
+            view: None,
+            gpu_error: None,
         };
         let invocation = recorder.begin(context).unwrap();
         let scope = PaintScope {

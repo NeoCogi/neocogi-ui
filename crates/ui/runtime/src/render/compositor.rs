@@ -50,6 +50,11 @@ fn submit_once(
     for operation in ops.drain(..) {
         let clip = copied_rect(operation.clip);
         match operation.kind {
+            super::display_list::DrawKind::GpuView { block } => {
+                if let Some(block) = block {
+                    compositor.render_view(block).map_err(|(status, _block)| status)?;
+                }
+            }
             super::display_list::DrawKind::AtlasTriangles { vertices } => {
                 let vertices = atlas_vertices.get(vertices).ok_or(NC_E_INVALID_ARG)?;
                 compositor.atlas_triangles(clip, NcCopyFromBufferOffset::new(0, vertices))?;

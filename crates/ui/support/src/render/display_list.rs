@@ -68,6 +68,11 @@ pub struct DrawOp {
 
 /// Private rendering operation payload.
 pub enum DrawKind {
+    /// Reserved painter-order position; None means explicitly cancelled or not yet harvested.
+    GpuView {
+        /// Exclusive sealed block owned through the synchronous GFX submission.
+        block: Option<neocogi_com::ComBox<neocogi_render_core::abi::IRenderViewBlockAbi>>,
+    },
     /// Atlas geometry already expanded by a COM widget's private UI algorithms.
     AtlasTriangles {
         /// Complete triples in this display list's screen-space atlas buffer.
@@ -179,6 +184,30 @@ impl DisplayList {
         }
         let bytes = points * (core::mem::size_of::<SolidTriangle>() + core::mem::size_of::<Vec2f>() + core::mem::size_of::<usize>());
         self.reserve_retained(bytes, points * points)
+    }
+
+    /// Reserves order before a client records any commands, including before later ordinary paint.
+    pub fn reserve_gpu_view(&mut self, clip: Recti) -> Result<usize, neocogi_com::NcStatus> {
+        self.reserve_retained(0, 0)?;
+        self.ops.try_reserve(1).map_err(|_| neocogi_com::NC_E_OUT_OF_MEMORY)?;
+        let slot = self.ops.len();
+        self.push(clip, DrawKind::GpuView { block: None });
+        Ok(slot)
+    }
+
+    /// Fills only a previously reserved position; no operation can reorder or replace it.
+    pub fn complete_gpu_view(
+        &mut self,
+        slot: usize,
+        block: neocogi_com::ComBox<neocogi_render_core::abi::IRenderViewBlockAbi>,
+    ) -> Result<(), neocogi_com::NcStatus> {
+        match self.ops.get_mut(slot).map(|operation| &mut operation.kind) {
+            Some(DrawKind::GpuView { block: output @ None }) => {
+                *output = Some(block);
+                Ok(())
+            }
+            _ => Err(neocogi_com::NC_E_INVALID_ARG),
+        }
     }
 
     /// Retains a complete atlas batch in painter order for final viewport clipping.

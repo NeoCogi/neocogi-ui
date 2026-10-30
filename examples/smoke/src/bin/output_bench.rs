@@ -14,6 +14,11 @@ struct Source {
 }
 
 impl IRenderStream for Source {
+    /// This fixture carries no generic GPU block.
+    fn view(&self, _: u64, _: u32) -> Result<neocogi_com::WeakComBox<neocogi_render_core::abi::IRenderViewBlockAbi>, NcStatus> {
+        Err(neocogi_com::NC_E_INVALID_ARG)
+    }
+
     /// Prevents LTO from replacing the measured provider's work with a constant result.
     #[inline(never)]
     fn batches(&self, _: u64, mut output: NcOutputWriter<'_, RenderBatch>) -> Result<u32, NcStatus> {

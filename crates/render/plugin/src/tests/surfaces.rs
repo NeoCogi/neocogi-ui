@@ -36,6 +36,11 @@ struct SurfaceStream {
     images: Vec<ComPtr<ITextureAbi>>,
 }
 impl IRenderStream for SurfaceStream {
+    /// This fixture carries no generic GPU block.
+    fn view(&self, _: u64, _: u32) -> Result<neocogi_com::WeakComBox<neocogi_render_core::abi::IRenderViewBlockAbi>, NcStatus> {
+        Err(neocogi_com::NC_E_INVALID_ARG)
+    }
+
     /// Copies the complete geometry requested by the production preparer.
     fn vertices(&self, _: u64, mut output: NcOutputWriter<'_, RenderVertex>) -> Result<u32, NcStatus> {
         output.extend_from_slice(&self.vertices)?;
