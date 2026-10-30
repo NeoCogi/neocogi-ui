@@ -55,10 +55,21 @@ class NativeBuildProfiles(unittest.TestCase):
             self.assertIn("-Cforce-unwind-tables=no", expected["rustflags"])
             self.assertIn("-Zlocation-detail=none", expected["rustflags"])
             self.assertIn("-Zfmt-debug=none", expected["rustflags"])
+            # Naga's emitted shader syntax and stage-derived symbol names are program data.
+            # Stripping Debug in either package produces invalid or colliding GLSL.
+            compilers = [u for u in units if u["target"]["name"] in {"naga", "naga_types"}]
+            self.assertEqual({u["target"]["name"] for u in compilers}, {"naga", "naga_types"})
+            compiler_packages = {unit["pkg_id"] for unit in compilers}
+            for unit in compilers:
+                with self.subTest(shader_compiler=unit["target"]["name"]):
+                    flags = unit["profile"].get("rustflags", [])
+                    self.assertIn("-Zfmt-debug=full", flags)
+                    self.assertNotIn("-Zfmt-debug=none", flags)
             for unit in units:
                 if unit["target"]["kind"] in (["proc-macro"], ["custom-build"]) and unit["mode"] == "build":
                     self.assertEqual(unit["profile"]["panic"], "unwind", unit["target"]["name"])
-                    self.assertEqual(unit["profile"].get("rustflags", []), [], unit["target"]["name"])
+                    flags = ["-Zfmt-debug=full"] if unit["pkg_id"] in compiler_packages else []
+                    self.assertEqual(unit["profile"].get("rustflags", []), flags, unit["target"]["name"])
 
     def test_release_artifacts_use_the_target_profile(self):
         """Artifact-only providers share release settings, never build overrides."""

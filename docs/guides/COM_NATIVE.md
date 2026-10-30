@@ -210,6 +210,11 @@ this nightly development workspace keep their normal prebuilt standard library.
 The `cargo build-min-size` alias is only shorthand for `cargo build --profile min-size`;
 there is no separate target, wrapper, output layout or hidden compiler policy.
 
+The min-size profile retains full `Debug` formatting inside `naga` and `naga-types`.
+Their GLSL generator uses it for executable float literals and stage-specific
+symbol names. Stripping it breaks shader syntax or merges independent bindings.
+Other target packages retain the profile's normal diagnostic-stripping policy.
+
 A dynamic artifact request builds only its requested cdylib target. A normal Rust
 dependency on a package advertising both rlib/cdylib may also emit an unused shared
 library during monolith/browser builds; removing that extra link would require
