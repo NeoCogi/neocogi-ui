@@ -29,6 +29,7 @@ bitflags.workspace = true
 rs-math3d.workspace = true
 
 [dev-dependencies]
+neocogi-shader-compiler.workspace = true
 neocogi-render-gpu.workspace = true
 neocogi-ui-document.workspace = true
 neocogi-ui-nodes.workspace = true

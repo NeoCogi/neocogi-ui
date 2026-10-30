@@ -26,6 +26,8 @@ pub enum HostError {
         operation: &'static str,
         /// Exact cause remains available through Error::source.
         status: NcStatus,
+        /// Bounded owned detail captured while a failing setup device is still alive.
+        detail: Option<String>,
     },
     /// Package validation or native renderer detail is available as owned text.
     Message(String),
@@ -48,7 +50,13 @@ impl fmt::Display for HostError {
         match self {
             Self::Io(error) => error.fmt(output),
             Self::Status(error) => error.fmt(output),
-            Self::Operation { operation, status } => write!(output, "{operation} failed: {status}"),
+            Self::Operation { operation, status, detail } => {
+                write!(output, "{operation} failed: {status}")?;
+                if let Some(detail) = detail {
+                    write!(output, ": {detail}")?;
+                }
+                Ok(())
+            }
             Self::Message(message) => output.write_str(message),
         }
     }
@@ -166,7 +174,7 @@ impl Host {
     /// retain their original error instead of acquiring a potentially stale renderer message.
     fn frame_error(&self, phase: &'static str, status: NcStatus) -> HostError {
         if status != UI_E_RENDER {
-            return HostError::Operation { operation: phase, status };
+            return HostError::Operation { operation: phase, status, detail: None };
         }
         let detail = self
             .renderer
@@ -192,7 +200,9 @@ impl Host {
         let mut ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
         ui_runtime.set_clipboard(window.clipboard()?.as_com_ref())?;
         let render_host = window.graphics_host()?;
-        ui_runtime.set_render_host(render_host.as_com_ref())?;
+        ui_runtime
+            .set_render_host(render_host.as_com_ref())
+            .map_err(|status| setup_error(&renderer, status))?;
         let node_provider = runtime.acquire_plugin_root::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
         let factory = node_provider.bind(ui_runtime.as_com_ref())?;
         let ui = Ui::from_interfaces(ui_runtime, factory)?;
@@ -477,6 +487,22 @@ fn register(_runtime: neocogi_com::Runtime) -> Result<(), HostError> {
     Err(HostError::Message("select dynamic or monolith for native execution".to_owned()))
 }
 
+/// Captures first-bind detail before the fresh renderer/window is destroyed.
+/// Later frame failures use their separate status-specific stale-text gate.
+fn setup_error(renderer: &ComPtr<IRendererAbi>, status: NcStatus) -> HostError {
+    let detail = renderer
+        .query::<IRenderDiagnosticsAbi>()
+        .and_then(|diagnostics| diagnostics.diagnostic())
+        .and_then(|text| neocogi_com::INcStringComPtrExt::to_string_bounded(&text, 4096))
+        .ok()
+        .filter(|text| !text.is_empty());
+    HostError::Operation {
+        operation: "UI renderer setup",
+        status,
+        detail,
+    }
+}
+
 /// Registers the process plugin catalog before loading assets or constructing windows.
 /// Repeated calls reuse the first result; Host::new also calls this for callers supplying their own bundle.
 pub fn initialize(runtime: neocogi_com::Runtime) -> Result<(), HostError> {
@@ -502,6 +528,7 @@ fn register(runtime: neocogi_com::Runtime) -> Result<(), HostError> {
     let descriptors = [
         nc_ui::plugin_descriptor(),
         nc_ui_nodes::plugin_descriptor(),
+        nc_shader_compiler::plugin_descriptor(),
         nc_render::plugin_descriptor(),
         #[cfg(feature = "monolith-extension")]
         nc_ui_extension::plugin_descriptor(),
@@ -570,3 +597,6 @@ pub fn monotonic_seconds() -> f64 {
     static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
     START.get_or_init(std::time::Instant::now).elapsed().as_secs_f64()
 }
+
+#[cfg(test)]
+mod tests;

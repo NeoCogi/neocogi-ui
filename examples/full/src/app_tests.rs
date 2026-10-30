@@ -180,7 +180,7 @@ fn packaged_full_host_preserves_rejecting_operation() {
             .run(Reject { state, failure }, events)
             .expect_err("the selected hook must reject this frame");
         assert!(
-            matches!(error, HostError::Operation { operation, status } if operation == failure.operation() && status == NC_E_INVALID_ARG),
+            matches!(error, HostError::Operation { operation, status, .. } if operation == failure.operation() && status == NC_E_INVALID_ARG),
             "{error}"
         );
         assert_eq!(error.to_string(), format!("{} failed: {NC_E_INVALID_ARG}", failure.operation()));

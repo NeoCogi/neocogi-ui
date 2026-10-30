@@ -18,24 +18,25 @@ monolith-extension = ["monolith", "dep:neocogi-example-ui-extension"]
 glow = ["neocogi-render-plugin?/glow", "neocogi-demo-plugins?/glow"]
 vulkan = ["neocogi-render-plugin?/vulkan", "neocogi-demo-plugins?/vulkan"]
 wgpu = ["neocogi-render-plugin?/wgpu", "neocogi-demo-plugins?/wgpu"]
-webgl = ["dep:neocogi-ui-runtime", "dep:neocogi-ui-nodes", "dep:neocogi-render-plugin", "dep:neocogi-gfx", "neocogi-render-plugin/webgl"]
+webgl = ["dep:neocogi-shader-compiler", "dep:neocogi-ui-runtime", "dep:neocogi-ui-nodes", "dep:neocogi-render-plugin", "dep:neocogi-gfx", "neocogi-render-plugin/webgl"]
 # Expose PNG upload through the GFX plugin selected by the owning application.
 png-assets = []
 # Link/register live appearance compilation without the native JSON theme loader.
 skin = ["dep:neocogi-skin"]
 # Native monoliths retain only the implementations selected by their assembly.
-monolith = ["neocogi-com/runtime", "dep:neocogi-ui-runtime", "dep:neocogi-ui-nodes", "dep:neocogi-render-plugin"]
+monolith = ["dep:neocogi-shader-compiler", "neocogi-com/runtime", "dep:neocogi-ui-runtime", "dep:neocogi-ui-nodes", "dep:neocogi-render-plugin"]
 monolith-gfx = ["monolith", "dep:neocogi-gfx", "neocogi-gfx/builder"]
 monolith-skin = ["monolith", "skin", "neocogi-skin/theme-json"]
 
 [dependencies]
+neocogi-shader-compiler = { workspace = true, optional = true }
 neocogi-render-core.workspace = true
 neocogi-demo-assets.workspace = true
 neocogi-ui.workspace = true
 neocogi-com = { workspace = true, features = ["std", "macros"] }
 neocogi-ui-runtime = { path = "../../crates/ui/runtime", optional = true }
 neocogi-ui-nodes = { workspace = true, optional = true }
-neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9eec958403f2de58bc660177b189ee3a2bf025d1", optional = true, default-features = false }
+neocogi-render-plugin = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "51ddfffa24d4a94c5f5e9a88174c12616858c636", optional = true, default-features = false }
 neocogi-gfx = { workspace = true, optional = true, default-features = false }
 neocogi-skin = { workspace = true, optional = true, default-features = false }
 neocogi-example-ui-extension = { path = "../../examples/ui-extension", optional = true }

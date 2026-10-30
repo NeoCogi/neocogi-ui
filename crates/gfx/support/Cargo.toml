@@ -12,9 +12,10 @@ publish = false
 default = []
 compiled-assets = ["dep:miniz_oxide"]
 # Headless integration fixtures execute the real graphics recorder without a native device.
-test-support = ["dep:neocogi-render-gpu"]
+test-support = ["dep:neocogi-render-gpu", "dep:neocogi-shader-compiler"]
 
 [dependencies]
+neocogi-shader-compiler = { workspace = true, optional = true }
 rs-math3d.workspace = true
 neocogi-render-core.workspace = true
 neocogi-render-gpu = { workspace = true, optional = true }

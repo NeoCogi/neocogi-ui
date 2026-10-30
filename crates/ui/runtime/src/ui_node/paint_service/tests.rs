@@ -37,7 +37,11 @@ fn scope(invocation: u64) -> PaintScope {
 /// Reserve order at begin, preserve trusted visible fitting, and revoke an escaped finished facade.
 #[test]
 fn committed_views_keep_their_original_position_and_visible_client_root() {
-    let device = GpuDevice::new();
+    let device = GpuDevice::new(
+        nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
+            .query()
+            .unwrap(),
+    );
     let domain = device.create_client(RenderClientLimits::default()).unwrap();
     let resources = domain.resources().unwrap();
     let frames = std::rc::Rc::new(gpu::Frames::default());
@@ -76,7 +80,11 @@ fn committed_views_keep_their_original_position_and_visible_client_root() {
 /// Unfinished work cannot disappear after a failed new begin; payload retires and error stays sticky.
 #[test]
 fn unhandled_view_failure_rejects_the_whole_invocation_even_if_the_widget_retries() {
-    let device = GpuDevice::new();
+    let device = GpuDevice::new(
+        nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
+            .query()
+            .unwrap(),
+    );
     let domain = device.create_client(RenderClientLimits::default()).unwrap();
     let resources = domain.resources().unwrap();
     let frames = std::rc::Rc::new(gpu::Frames::default());
@@ -97,7 +105,11 @@ fn unhandled_view_failure_rejects_the_whole_invocation_even_if_the_widget_retrie
 /// Cancel is explicit abandonment, while a later token never revives a previous painter identity.
 #[test]
 fn cancelled_views_are_empty_and_retained_painters_cannot_join_a_later_widget() {
-    let device = GpuDevice::new();
+    let device = GpuDevice::new(
+        nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
+            .query()
+            .unwrap(),
+    );
     let domain = device
         .create_client(RenderClientLimits {
             frame_draws: 2,

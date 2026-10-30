@@ -18,7 +18,7 @@ fn gfx_generic_blocks_preserve_window_order_and_immutable_surface_output() {
         .acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
         .unwrap();
     let assets = neocogi_demo_assets::load_bundle(runtime).unwrap();
-    let native = PlatformObject::default().window("GFX generic executor", SIZE).unwrap();
+    let native = PlatformObject::new(nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query().unwrap()).window("GFX generic executor", SIZE).unwrap();
     let weak = Rc::downgrade(&native.device);
     let window = WindowObject::from_value(native);
     let renderer: ComPtr<IRendererAbi> = window.query().unwrap();
@@ -131,7 +131,7 @@ impl IRenderStream for ClosingUiStream {
 #[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
 fn surfaces_recheck_ui_domains_and_exclude_resource_reentry_after_foreign_callbacks() {
     let _session = native_session();
-    let native = PlatformObject::default().window("surface admission", SIZE).unwrap();
+    let native = PlatformObject::new(nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query().unwrap()).window("surface admission", SIZE).unwrap();
     let window = WindowObject::from_value(native);
     let host = window.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap();
     let surface = window.query::<IRenderSurfaceFactoryAbi>().unwrap().create_surface(SIZE).unwrap();
@@ -216,7 +216,7 @@ fn rectangle(rect: Rect, color: u32) -> Vec<RenderVertex> {
 #[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
 fn private_ui_image_import_renders_without_a_native_cache_com_cycle() {
     let _session = native_session();
-    let platform = PlatformObject::default();
+    let platform = PlatformObject::new(nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query().unwrap());
     let native = platform.window("private UI image import", SIZE).unwrap();
     let device = Rc::downgrade(&native.device);
     let window = WindowObject::from_value(native);
@@ -327,7 +327,7 @@ fn private_ui_image_import_renders_without_a_native_cache_com_cycle() {
 #[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
 fn generic_pipeline_renders_in_its_root_and_preserves_surrounding_ui() {
     let _session = native_session();
-    let platform = PlatformObject::default();
+    let platform = PlatformObject::new(nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query().unwrap());
     let native = platform.window("generic graphics acceptance", SIZE).unwrap();
     let device = Rc::downgrade(&native.device);
     let unknown = WindowObject::from_value(native);
@@ -415,7 +415,7 @@ fn generic_pipeline_renders_in_its_root_and_preserves_surrounding_ui() {
 #[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
 fn generic_indexed_texture_and_uniform_snapshots_reach_the_native_pipeline() {
     let _session = native_session();
-    let platform = PlatformObject::default();
+    let platform = PlatformObject::new(nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query().unwrap());
     let native = platform.window("generic bindings acceptance", SIZE).unwrap();
     let device = Rc::downgrade(&native.device);
     let unknown = WindowObject::from_value(native);
@@ -592,7 +592,7 @@ fn generic_indexed_texture_and_uniform_snapshots_reach_the_native_pipeline() {
 #[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
 fn generic_depth_survives_draws_and_reset_with_independent_ordered_views() {
     let _session = native_session();
-    let native = PlatformObject::default().window("generic depth and clears", SIZE).unwrap();
+    let native = PlatformObject::new(nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query().unwrap()).window("generic depth and clears", SIZE).unwrap();
     let device = Rc::downgrade(&native.device);
     let window = WindowObject::from_value(native);
     let renderer: ComPtr<IRendererAbi> = window.query().unwrap();

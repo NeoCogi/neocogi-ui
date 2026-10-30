@@ -330,7 +330,11 @@ mod viewport_tests {
     /// Final paint uses a real scoped view and captures the late visible aspect as generic uniforms.
     #[test]
     fn paint_captures_the_final_visible_aspect_and_skips_empty_clients() {
-        let device = GpuDevice::new();
+        let device = GpuDevice::new(
+            nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
+                .query()
+                .unwrap(),
+        );
         let domain = device.create_client(RenderClientLimits::default()).unwrap();
         let resources = domain.resources().unwrap();
         let mut bytes = Vec::new();

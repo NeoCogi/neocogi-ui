@@ -23,7 +23,7 @@ fn compositor(host: ComRef<'_, IRenderHostAbi>) -> ComPtr<neocogi_gfx_support::a
 #[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
 fn independent_surface_snapshots_keep_orientation_and_device_lifetime() {
     let _session = native_session();
-    let native = PlatformObject::default().window("immutable generic outputs", SIZE).unwrap();
+    let native = PlatformObject::new(nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query().unwrap()).window("immutable generic outputs", SIZE).unwrap();
     let weak = Rc::downgrade(&native.device);
     let window = WindowObject::from_value(native);
     let host = window.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap();

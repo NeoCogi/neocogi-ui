@@ -151,6 +151,7 @@ fn static_com_editing_and_webgl() {
         runtime.register_plugin_descriptor(nc_ui::plugin_descriptor()).unwrap();
         runtime.register_plugin_descriptor(nc_ui_nodes::plugin_descriptor()).unwrap();
         runtime.register_plugin_descriptor(nc_gfx::plugin_descriptor()).unwrap();
+        runtime.register_plugin_descriptor(nc_shader_compiler::plugin_descriptor()).unwrap();
         runtime.register_plugin_descriptor(crate::plugin_descriptor()).unwrap();
     }
     let platform = runtime

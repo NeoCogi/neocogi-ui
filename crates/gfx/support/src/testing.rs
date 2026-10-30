@@ -38,7 +38,7 @@ pub enum UiBatch {
 
 thread_local! {
     /// Thread affinity matches COM objects and the production graphics recorder.
-    static DEVICE: GpuDevice = GpuDevice::new();
+    static DEVICE: GpuDevice = GpuDevice::new(nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query().unwrap());
     /// Keys are explicitly replaced at each fixture-image construction; no COM owner is retained.
     static IMAGES: RefCell<HashMap<usize, TextureId>> = RefCell::new(HashMap::new());
 }
