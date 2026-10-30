@@ -119,7 +119,8 @@ fn precommit_callback_errors_recover_without_provider_notification() {
         let atlas = neocogi_ui_support::test_support::test_atlas();
         let assets = neocogi_ui_support::test_support::assets::export_bundle(&neocogi_ui_support::SkinBundle::from_atlas(atlas)).unwrap();
         let gfx = neocogi_ui_support::test_support::gfx_factory(crate::test_support::host_runtime());
-        let runtime = crate::create_runtime_from_assets(assets.as_com_ref(), gfx.as_com_ref()).unwrap();
+        let mut runtime = crate::create_runtime_from_assets(assets.as_com_ref(), gfx.as_com_ref()).unwrap();
+        runtime.set_render_host(neocogi_gfx_support::testing::host().as_com_ref()).unwrap();
         let host = runtime.construction_host().unwrap().host().unwrap();
         let fail_update = Rc::new(Cell::new(false));
         let fail_properties = Rc::new(Cell::new(false));

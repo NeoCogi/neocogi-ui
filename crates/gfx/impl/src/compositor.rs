@@ -19,6 +19,7 @@ use std::{
     cell::{Cell, RefCell},
     rc::Rc,
 };
+mod gpu;
 
 /// One immutable resource projection installed atomically after complete bundle validation.
 struct Resources {
@@ -98,17 +99,6 @@ enum Batch {
     },
 }
 
-impl Batch {
-    /// Copies pointer-free metadata for the renderer's bulk stream traversal.
-    fn record(&self) -> RenderBatch {
-        match self {
-            Self::View(_) => RenderBatch::View,
-            Self::Atlas { first, count } => RenderBatch::Atlas { first: *first, count: *count },
-            Self::Texture { first, .. } => RenderBatch::Texture { first: *first },
-        }
-    }
-}
-
 /// Reusable frame storage shared only with the independently retainable stream object.
 #[derive(Default)]
 struct Storage {
@@ -122,6 +112,8 @@ struct Storage {
     vertices: RefCell<Vec<RenderVertex>>,
     /// Ordered batches and their retained resource capabilities.
     batches: RefCell<Vec<Batch>>,
+    /// Derived generic blocks are exposed only during one synchronous native submission.
+    blocks: RefCell<Vec<Rc<ComBox<IRenderViewBlockAbi>>>>,
 }
 
 impl Storage {
@@ -140,6 +132,9 @@ impl Storage {
         let mut batches = std::mem::take(&mut *self.batches.borrow_mut());
         batches.clear();
         *self.batches.borrow_mut() = batches;
+        let mut blocks = std::mem::take(&mut *self.blocks.borrow_mut());
+        blocks.clear();
+        *self.blocks.borrow_mut() = blocks;
     }
 }
 
@@ -154,33 +149,36 @@ impl IRenderStream for Stream {
     /// Releases the storage borrow before touching even a caller-provided block's weak protocol.
     fn view(&self, invocation: u64, batch: u32) -> Result<WeakComBox<IRenderViewBlockAbi>, NcStatus> {
         self.storage.check(invocation)?;
-        let block = match self.storage.batches.try_borrow().map_err(|_| NC_E_BUSY)?.get(batch as usize) {
-            Some(Batch::View(block)) => block.clone(),
-            _ => return Err(NC_E_INVALID_ARG),
-        };
+        let block = self
+            .storage
+            .blocks
+            .try_borrow()
+            .map_err(|_| NC_E_BUSY)?
+            .get(batch as usize)
+            .cloned()
+            .ok_or(NC_E_INVALID_ARG)?;
         Ok(block.downgrade())
     }
 
     /// Copies a bounded vertex suffix only while the supplied invocation remains active.
     fn vertices(&self, invocation: u64, mut output: NcOutputWriter<'_, RenderVertex>) -> Result<u32, NcStatus> {
         self.storage.check(invocation)?;
-        let first = usize::try_from(output.offset()).map_err(|_| NC_E_INVALID_ARG)?;
-        let vertices = self.storage.vertices.try_borrow().map_err(|_| NC_E_BUSY)?;
-        let source = vertices.get(first..).ok_or(NC_E_INVALID_ARG)?;
-        let count = source.len().min(output.capacity());
-        output.extend_from_slice(&source[..count])?;
-        u32::try_from(count).map_err(|_| NC_E_OUT_OF_RANGE)
+        if output.offset() != 0 {
+            return Err(NC_E_INVALID_ARG);
+        }
+        output.extend_from_slice(&[])?;
+        Ok(0)
     }
 
     /// Copies pointer-free batch records without invoking retained resources under a borrow.
     fn batches(&self, invocation: u64, mut output: NcOutputWriter<'_, RenderBatch>) -> Result<u32, NcStatus> {
         self.storage.check(invocation)?;
         let first = usize::try_from(output.offset()).map_err(|_| NC_E_INVALID_ARG)?;
-        let batches = self.storage.batches.try_borrow().map_err(|_| NC_E_BUSY)?;
+        let batches = self.storage.blocks.try_borrow().map_err(|_| NC_E_BUSY)?;
         let source = batches.get(first..).ok_or(NC_E_INVALID_ARG)?;
         let count = source.len().min(output.capacity());
-        for batch in &source[..count] {
-            output.push(batch.record())?;
+        for _ in &source[..count] {
+            output.push(RenderBatch::View)?;
         }
         u32::try_from(count).map_err(|_| NC_E_OUT_OF_RANGE)
     }
@@ -188,11 +186,8 @@ impl IRenderStream for Stream {
     /// Retains the requested texture after releasing the frame-storage borrow.
     fn texture(&self, invocation: u64, batch: u32) -> Result<ComPtr<ITextureAbi>, NcStatus> {
         self.storage.check(invocation)?;
-        let texture = match self.storage.batches.try_borrow().map_err(|_| NC_E_BUSY)?.get(batch as usize) {
-            Some(Batch::Texture { texture, .. }) => texture.clone(),
-            _ => return Err(NC_E_INVALID_ARG),
-        };
-        Ok(texture.as_ref().clone())
+        let _ = batch;
+        Err(NC_E_INVALID_ARG)
     }
 }
 
@@ -283,6 +278,8 @@ pub struct GfxCompositorObject {
     storage: Rc<Storage>,
     /// Independently retainable reader passed to each renderer submission.
     stream: ComPtr<IRenderStreamAbi>,
+    /// GFX owns UI shaders/layouts while the host supplies only common resource/recording authority.
+    graphics: Option<gpu::Graphics>,
     /// Present only between successful `begin` and `submit`/`cancel` calls.
     frame: Option<FrameState>,
     /// Last issued nonzero invocation, incremented only for actual submissions.
@@ -307,6 +304,7 @@ impl GfxCompositorObject {
             resources,
             storage,
             stream,
+            graphics: None,
             frame: None,
             next_invocation: 0,
             clip_input: Vec::with_capacity(10),
@@ -525,6 +523,15 @@ impl GfxCompositorObject {
 }
 
 impl GfxCompositor for GfxCompositorObject {
+    /// Complete construction/upload before replacing the old private GPU session.
+    fn bind_render_host(&mut self, host: ComRef<'_, neocogi_render_core::abi::IRenderHostAbi>) -> Result<(), NcStatus> {
+        if self.frame.is_some() {
+            return Err(NC_E_BUSY);
+        }
+        let graphics = gpu::Graphics::new(host, self.resources.image.as_com_ref())?;
+        self.graphics = Some(graphics);
+        Ok(())
+    }
     /// Retains generic work without interpreting client shaders or resource semantics.
     fn render_view(&mut self, block: ComBox<IRenderViewBlockAbi>) -> Result<(), (NcStatus, ComBox<IRenderViewBlockAbi>)> {
         let reservation = (|| {
@@ -552,6 +559,17 @@ impl GfxCompositor for GfxCompositorObject {
         })?;
         if resources.catalog.as_raw().object != self.resources.catalog.as_raw().object {
             return Err(self.diagnostic.failure("asset revision belongs to another catalog"));
+        }
+        let atlas = self
+            .graphics
+            .as_ref()
+            // Appearance revisions reuse the immutable atlas. Do not copy or prepare it again;
+            // only a changed image identity needs a candidate GPU texture before publication.
+            .filter(|_| resources.image.as_raw().object != self.resources.image.as_raw().object)
+            .map(|graphics| graphics.candidate_atlas(resources.image.as_com_ref()))
+            .transpose()?;
+        if let (Some(graphics), Some(atlas)) = (self.graphics.as_mut(), atlas) {
+            graphics.replace_atlas(atlas);
         }
         self.resources = resources;
         Ok(())
@@ -726,12 +744,16 @@ impl GfxCompositor for GfxCompositorObject {
 
     /// Performs the frame's only renderer call and expires all retained resource capabilities.
     fn submit(&mut self, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
+        // Native/foreign work runs over owned geometry, never while a storage cell is borrowed.
+        let mut vertices = std::mem::take(&mut *self.storage.vertices.borrow_mut());
+        let mut batches = std::mem::take(&mut *self.storage.batches.borrow_mut());
         let result = (|| {
             let frame = self.frame.take().ok_or(NC_E_INVALID_ARG)?;
             let invocation = self.next_invocation.checked_add(1).ok_or(NC_E_OUT_OF_RANGE)?;
             self.next_invocation = invocation;
-            let vertex_count = u32::try_from(self.storage.vertices.borrow().len()).map_err(|_| NC_E_OUT_OF_RANGE)?;
-            let batch_count = u32::try_from(self.storage.batches.borrow().len()).map_err(|_| NC_E_OUT_OF_RANGE)?;
+            let blocks = self.graphics.as_ref().ok_or(NC_E_INVALID_ARG)?.lower(frame, &vertices, &batches)?;
+            let batch_count = u32::try_from(blocks.len()).map_err(|_| NC_E_OUT_OF_RANGE)?;
+            *self.storage.blocks.borrow_mut() = blocks;
             self.storage.active.set(invocation);
             let _scope = ReadScope { storage: &self.storage };
             renderer.render(
@@ -739,16 +761,18 @@ impl GfxCompositor for GfxCompositorObject {
                     size: frame.size,
                     clear: frame.clear,
                     invocation,
-                    vertex_count,
+                    vertex_count: 0,
                     batch_count,
                 },
                 self.resources.image.as_com_ref(),
                 self.stream.as_com_ref(),
             )
         })();
-        // Submit owns cleanup even when validation fails before entering the renderer. Callers do
-        // not need a compensating cancellation merely to release retained textures or items.
         self.storage.clear();
+        vertices.clear();
+        batches.clear();
+        *self.storage.vertices.borrow_mut() = vertices;
+        *self.storage.batches.borrow_mut() = batches;
         result.inspect_err(|status| {
             self.diagnostic.failure(*status);
         })

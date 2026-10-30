@@ -4,6 +4,101 @@ use crate::test_support::{test_bundle, data};
 use neocogi_com::{com_object};
 use neocogi_render_core::abi::{IRenderer, IRendererVtblFor};
 
+/// Native preparation observations remain separate from immutable asset ownership.
+#[derive(Default)]
+struct UploadProbe {
+    /// Every attempted native preparation, including injected failures.
+    calls: std::cell::Cell<u32>,
+    /// Simulates a recoverable native allocation failure before candidate publication.
+    fail: std::cell::Cell<bool>,
+}
+
+#[com_object(interfaces(neocogi_render_core::abi::IRenderHost))]
+/// Count and reject native preparation while retaining the real CPU graphics contracts.
+struct UploadHost {
+    /// Shared fixture device supplies canonical resources and blocks.
+    inner: ComPtr<neocogi_render_core::abi::IRenderHostAbi>,
+    /// No callback or UI owner participates in this observation state.
+    probe: std::rc::Rc<UploadProbe>,
+}
+impl neocogi_render_core::abi::IRenderHost for UploadHost {
+    fn import_ui_texture(
+        &self,
+        resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>,
+        image: ComRef<'_, ITextureAbi>,
+    ) -> Result<ComBox<neocogi_render_core::abi::IGpuTextureAbi>, NcStatus> {
+        self.inner.import_ui_texture(resources, image)
+    }
+    fn prepare_ui_texture(
+        &self,
+        resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>,
+        texture: ComRef<'_, neocogi_render_core::abi::IGpuTextureAbi>,
+    ) -> Result<(), NcStatus> {
+        self.probe.calls.set(self.probe.calls.get() + 1);
+        if self.probe.fail.get() {
+            return Err(NC_E_OUT_OF_MEMORY);
+        }
+        self.inner.prepare_ui_texture(resources, texture)
+    }
+    fn create_ui_client(
+        &self,
+        limits: neocogi_render_core::abi::RenderClientLimits,
+    ) -> Result<ComBox<neocogi_render_core::abi::IRenderClientDomainAbi>, NcStatus> {
+        self.inner.create_ui_client(limits)
+    }
+    fn recording_broker(&self) -> Result<ComPtr<neocogi_render_core::abi::IRenderViewBrokerAbi>, NcStatus> {
+        self.inner.recording_broker()
+    }
+}
+
+/// Metadata edits reuse the atlas; failed image replacement preserves the matching old metadata.
+#[test]
+fn compositor_prepares_only_changed_atlases_and_publishes_revisions_atomically() {
+    let bundle = test_bundle();
+    let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
+    let probe = std::rc::Rc::new(UploadProbe::default());
+    let host: ComPtr<neocogi_render_core::abi::IRenderHostAbi> = UploadHost::from_value(UploadHost {
+        inner: neocogi_gfx_support::testing::host(),
+        probe: probe.clone(),
+    })
+    .query()
+    .unwrap();
+    compositor.bind_render_host(host.as_com_ref()).unwrap();
+    assert_eq!(probe.calls.get(), 1);
+    let mut tables = neocogi_gfx_support::AssetTables::read(bundle.as_com_ref()).unwrap();
+    tables.metrics.spacing += 1;
+    let same_image = tables.into_revision(bundle.as_com_ref()).unwrap();
+    assert_eq!(same_image.image().unwrap().as_raw().object, bundle.image().unwrap().as_raw().object);
+    compositor.install_assets(same_image.as_com_ref()).unwrap();
+    assert_eq!(probe.calls.get(), 1, "metadata edits retain the immutable prepared atlas");
+
+    let mut candidate = data(&same_image);
+    let line_size = candidate.tables.fonts[0].line_size;
+    candidate.tables.fonts.to_mut()[0].line_size += 5;
+    let changed_image = candidate.into_revision(same_image.as_com_ref()).unwrap();
+    let capture = std::rc::Rc::new(RenderCapture::default());
+    let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { capture: capture.clone() }).query().unwrap();
+    probe.fail.set(true);
+    assert_eq!(compositor.install_assets(changed_image.as_com_ref()), Err(NC_E_OUT_OF_MEMORY));
+    let clip = Rect { x: 0, y: 0, width: 80, height: 60 };
+    for expected in [line_size, line_size + 5] {
+        compositor.begin(Size { width: 80, height: 60 }, 0xff000000).unwrap();
+        compositor
+            .text(clip, 0, DrawPoint { x: 0, y: 0 }, 0xffffffff, NcCopyFromBufferOffset::new(0, b"A\nA"))
+            .unwrap();
+        compositor.submit(renderer.as_com_ref()).unwrap();
+        let vertices = capture.vertices.borrow();
+        assert_eq!(vertices.len(), 12);
+        assert_eq!(vertices[6].y - vertices[0].y, expected as f32);
+        drop(vertices);
+        if expected == line_size {
+            probe.fail.set(false);
+            compositor.install_assets(changed_image.as_com_ref()).unwrap();
+        }
+    }
+    assert_eq!(probe.calls.get(), 3, "initial upload, failed candidate, successful candidate");
+}
+
 /// Renderer observations shared with the concrete COM mock after object publication.
 #[derive(Default)]
 struct RenderCapture {
@@ -37,15 +132,9 @@ impl IRenderer for CaptureRenderer {
         _atlas: neocogi_com::ComRef<'_, IRgbaImageAbi>,
         stream: neocogi_com::ComRef<'_, IRenderStreamAbi>,
     ) -> Result<(), NcStatus> {
-        let mut vertices = neocogi_com::NcOutputBuffer::<RenderVertex>::new();
-        let mut batches = neocogi_com::NcOutputBuffer::<RenderBatch>::new();
-        assert_eq!(
-            stream.vertices(info.invocation, vertices.output(0, info.vertex_count as usize))?,
-            info.vertex_count
-        );
-        assert_eq!(stream.batches(info.invocation, batches.output(0, info.batch_count as usize))?, info.batch_count);
-        *self.capture.vertices.borrow_mut() = vertices.into_vec();
-        *self.capture.batches.borrow_mut() = batches.into_vec();
+        let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
+        *self.capture.vertices.borrow_mut() = vertices;
+        *self.capture.batches.borrow_mut() = batches;
         *self.capture.retained.borrow_mut() = Some((info.invocation, stream.try_add_ref()?));
         self.capture.calls.set(self.capture.calls.get() + 1);
         Ok(())
@@ -68,6 +157,7 @@ fn quad_bounds(vertices: &[RenderVertex]) -> (f32, f32, f32, f32) {
 fn compositor_extreme_patch_sides_cover_an_ordinary_destination() {
     let bundle = test_bundle();
     let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
+    compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref()).unwrap();
     let capture = std::rc::Rc::new(RenderCapture::default());
     let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { capture: capture.clone() }).query().unwrap();
     let destination = Rect { x: 5, y: 7, width: 100, height: 10 };
@@ -146,6 +236,7 @@ fn compositor_source_shrink_overlays_pink_and_preserves_valid_frame_work() {
     let stored_visual = imported.tables.surfaces[SurfaceRole::Panel.raw() as usize].normal;
     assert_eq!(stored_visual.patch, visual.patch);
     let mut compositor = GfxCompositorObject::create(source.as_com_ref()).unwrap();
+    compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref()).unwrap();
     let capture = std::rc::Rc::new(RenderCapture::default());
     let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { capture: capture.clone() }).query().unwrap();
     for visual in [visual, stored_visual] {
@@ -247,6 +338,7 @@ fn compositor_expands_typed_image_patch_and_rejects_invalid_payloads() {
     let source = tables.icons[close as usize].rect;
     assert!(source.width >= 2 && source.height >= 2, "the fixture must provide four nonempty source corners");
     let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
+    compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref()).unwrap();
     let clip = Rect { x: 0, y: 0, width: 32, height: 32 };
     let destination = Rect { x: 4, y: 4, width: 16, height: 16 };
     compositor.begin(Size { width: 32, height: 32 }, 0xff000000).unwrap();
@@ -319,6 +411,7 @@ fn compositor_expands_typed_image_patch_and_rejects_invalid_payloads() {
 fn compositor_clips_triangles_without_changing_visible_attributes() {
     let bundle = test_bundle();
     let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
+    compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref()).unwrap();
     let capture = std::rc::Rc::new(RenderCapture::default());
     let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { capture: capture.clone() }).query().unwrap();
     let clip = Rect { x: 0, y: 0, width: 10, height: 10 };
@@ -416,6 +509,7 @@ fn compositor_text_preserves_empty_run_validation_and_line_placement() {
         .unwrap();
     assert!(space.rect.width == 0 || space.rect.height == 0, "fixture space contributes no drawable area");
     let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
+    compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref()).unwrap();
     let origin = DrawPoint { x: 40, y: 40 };
     let full_clip = Rect {
         x: -100,
@@ -484,6 +578,7 @@ fn compositor_owns_final_geometry_batching_and_stream_scope() {
         .position(|icon| tables.name(icon.name) == Ok("close"))
         .expect("test bundle contains close") as u32;
     let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
+    compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref()).unwrap();
     compositor.begin(Size { width: 80, height: 60 }, 0xff000000).unwrap();
     compositor
         .solid_triangles(
@@ -571,6 +666,7 @@ fn compositor_intake_limits_apply_before_expansion_and_reset_with_frames() {
     use neocogi_render_core::abi::{MAX_DRAW_COMMANDS, MAX_DRAW_WORK};
     let bundle = test_bundle();
     let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
+    compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref()).unwrap();
     let size = Size { width: 32, height: 32 };
     let clip = Rect { x: 0, y: 0, width: 0, height: 0 };
     compositor.begin(size, 0).unwrap();
@@ -612,6 +708,7 @@ fn glyph_acceleration_preserves_unicode_fallback_and_revision_publication() {
     fixture.tables.glyphs.to_mut().reverse();
     let source = fixture.clone().into_bundle().unwrap();
     let mut compositor = GfxCompositorObject::create(source.as_com_ref()).unwrap();
+    compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref()).unwrap();
     let capture = std::rc::Rc::new(RenderCapture::default());
     let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { capture: capture.clone() }).query().unwrap();
     let size = Size { width: 128, height: 32 };

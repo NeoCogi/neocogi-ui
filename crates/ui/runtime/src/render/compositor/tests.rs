@@ -35,30 +35,10 @@ impl IRenderer for Recorder {
 
     /// Copies the live stream before borrowing assertion storage, keeping foreign calls reentrant.
     fn render(&self, info: RenderInfo, _: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        let mut vertices = neocogi_com::NcOutputBuffer::<RenderVertex>::new();
-        let mut records = neocogi_com::NcOutputBuffer::<RenderBatch>::new();
-        assert_eq!(
-            stream.vertices(info.invocation, vertices.output(0, info.vertex_count as usize))?,
-            info.vertex_count
-        );
-        assert_eq!(stream.batches(info.invocation, records.output(0, info.batch_count as usize))?, info.batch_count);
-        let batches = records.into_vec();
-        // Resolve every resource during the active scope. No resource-type registry or erased
-        // application payload participates in this renderer fixture.
-        for (index, batch) in batches.iter().enumerate() {
-            match batch {
-                RenderBatch::Texture { .. } => {
-                    stream.texture(info.invocation, index as u32)?;
-                }
-                RenderBatch::View => {
-                    stream.view(info.invocation, index as u32)?;
-                }
-                RenderBatch::Atlas { .. } => {}
-            }
-        }
+        let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
         let mut capture = self.capture.borrow_mut();
         capture.calls += 1;
-        capture.vertices = vertices.into_vec();
+        capture.vertices = vertices;
         capture.batches = batches;
         capture.stream = Some((stream.try_add_ref()?, info.invocation));
         if capture.fail { Err(NC_E_INVALID_ARG) } else { Ok(()) }
@@ -74,11 +54,6 @@ impl ITexture for Texture {
         Ok(Size { width: 1, height: 1 })
     }
 }
-
-#[com_object(interfaces(IRenderViewBlock), ownership = exclusive)]
-/// Opaque application work remains an owned capability in the real command stream.
-struct BlockMarker;
-impl IRenderViewBlock for BlockMarker {}
 
 /// Mutable fixture owns the production replay inputs and one independent GFX compositor.
 struct Composition {
@@ -97,7 +72,8 @@ impl Composition {
     /// Publishes one validated fixture bundle and binds both sides to the same resource tables.
     fn new(atlas: AtlasHandle) -> Self {
         let source = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(atlas.clone())).unwrap();
-        let compositor = neocogi_gfx_impl::GfxCompositorObject::create(source.as_com_ref()).unwrap();
+        let mut compositor = neocogi_gfx_impl::GfxCompositorObject::create(source.as_com_ref()).unwrap();
+        compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref()).unwrap();
         let capture = Rc::new(RefCell::new(Capture::default()));
         let renderer = Recorder::from_value(Recorder { capture: capture.clone() }).query().unwrap();
         Self {
@@ -211,7 +187,9 @@ fn atlas_rectangle_clipping_preserves_fractional_uvs() {
 fn external_texture_clipping_preserves_uv_mapping_and_stream_order() {
     let mut fixture = Composition::new(atlas());
     let texture: ComPtr<ITextureAbi> = Texture::from_value(Texture).query().unwrap();
-    let block = BlockMarker::into_box(BlockMarker).query::<IRenderViewBlockAbi>().unwrap();
+    neocogi_gfx_support::testing::register_image(texture.as_com_ref(), Size { width: 1, height: 1 });
+    let root = Rect { x: 10, y: 10, width: 20, height: 20 };
+    let (_client, block) = neocogi_gfx_support::testing::client_block(RenderViewRoot { client: root, target: root });
     let rect = Recti::new(0, 0, 100, 100);
     fixture
         .list
@@ -412,6 +390,7 @@ fn fully_clipped_operations_leave_existing_output_unchanged() {
     for clip in [Recti::new(0, 0, 0, 10), Recti::new(0, 0, 10, 0), Recti::new(0, 0, 10, 10)] {
         let mut fixture = Composition::new(atlas());
         let texture: ComPtr<ITextureAbi> = Texture::from_value(Texture).query().unwrap();
+        neocogi_gfx_support::testing::register_image(texture.as_com_ref(), Size { width: 1, height: 1 });
         fixture
             .list
             .push_icon(
@@ -448,6 +427,7 @@ fn fully_clipped_operations_leave_existing_output_unchanged() {
 fn extreme_integer_destinations_keep_texture_vertices_finite_and_inside_the_clip() {
     let mut fixture = Composition::new(atlas());
     let texture: ComPtr<ITextureAbi> = Texture::from_value(Texture).query().unwrap();
+    neocogi_gfx_support::testing::register_image(texture.as_com_ref(), Size { width: 1, height: 1 });
     fixture
         .list
         .push_com_texture(

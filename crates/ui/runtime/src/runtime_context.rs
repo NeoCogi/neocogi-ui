@@ -29,6 +29,11 @@ pub(crate) struct RuntimeContext {
 }
 
 impl RuntimeContext {
+    /// GFX privately retains its graphics authority only after the candidate session prepares.
+    pub(crate) fn bind_render_host(&mut self, host: ComRef<'_, neocogi_render_core::abi::IRenderHostAbi>) -> Result<(), NcStatus> {
+        self.compositor.bind_render_host(host)
+    }
+
     /// Adopts a fresh compositor and the exact resource revision used to construct it.
     /// Callers must move an independent session here, never clone another runtime's executor.
     pub(crate) fn new(compositor: ComPtr<GfxCompositorAbi>, bundle: SkinBundle) -> Self {

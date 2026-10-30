@@ -288,13 +288,13 @@ interface IConstructionHost {
     fn host(&self) -> Result<ComPtr<IWidgetHost>>;
 }
 
-#[version(5)]
+#[version(6)]
 /// One constructible retained UI with input, rendering, and resource ownership.
 interface UiRuntime: IInputSink + IWindowManager + IMenus + IChoiceMenus {
-    /// Installs a trusted recording broker without exposing it through widget services. Hosts
-    /// install before rendering; replacement while a paint frame is active rejects with Busy.
-    /// Headless runtimes without a broker reject begin_render_view without recording a slot.
-    fn set_render_broker(&mut self, broker: &IRenderViewBroker) -> Result<()>;
+    /// Prepares private compositor resources and installs the client's CPU recording broker.
+    /// Host authority is never exposed through widget services. Install before native rendering;
+    /// replacement during painting rejects with Busy. Failure preserves the previous binding.
+    fn set_render_host(&mut self, host: &IRenderHost) -> Result<()>;
 
     /// Returns the core construction authority without exposing a concrete nodes factory.
     fn construction_host(&self) -> Result<ComPtr<IConstructionHost>>;

@@ -30,6 +30,8 @@ fontdue = { workspace = true, optional = true }
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
 
 [dev-dependencies]
+neocogi-gfx-support = { workspace = true, features = ["test-support"] }
+neocogi-render-gpu.workspace = true
 # Every isolated test executable owns its process runtime, independently of workspace unification.
 neocogi-com = { workspace = true, features = ["runtime"] }
 neocogi-com-host.workspace = true

@@ -358,8 +358,13 @@ impl PaintService {
     }
 
     /// Installs the trusted broker without returning its capability to widget services.
-    pub(crate) fn install_broker(&self, broker: ComRef<'_, IRenderViewBrokerAbi>) -> Result<(), NcStatus> {
+    pub(crate) fn install_broker(&self, broker: ComPtr<IRenderViewBrokerAbi>) {
         self.frames.install(broker)
+    }
+
+    /// Check before preparing another GFX session; runtime context ownership keeps this true until commit.
+    pub(crate) fn can_install_broker(&self) -> Result<(), NcStatus> {
+        self.frames.can_install()
     }
 
     /// Opens one quota/accounting frame around all widget paint invocations.

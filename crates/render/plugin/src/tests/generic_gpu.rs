@@ -3,6 +3,230 @@ use super::*;
 use neocogi_com::{ComBox, WeakComBox};
 use neocogi_render_gpu::source::{Bytes, PipelineDesc};
 
+/// Production GFX owns the UI shader/layout; UI, images and a client share one native executor.
+#[test]
+#[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
+fn gfx_generic_blocks_preserve_window_order_and_immutable_surface_output() {
+    use neocogi_gfx_support::abi::{GfxPluginFactoryAbi, SolidVertex};
+    let _session = native_session();
+    let runtime = crate::host_runtime();
+    // SAFETY: this statically linked descriptor and its implementation live for this process.
+    unsafe {
+        runtime.register_plugin_descriptor(nc_gfx::plugin_descriptor()).unwrap();
+    }
+    let gfx = runtime
+        .acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
+        .unwrap();
+    let assets = neocogi_demo_assets::load_bundle(runtime).unwrap();
+    let atlas = assets.image().unwrap();
+    let native = PlatformObject::default().window("GFX generic executor", SIZE, atlas.as_com_ref()).unwrap();
+    let weak = Rc::downgrade(&native.device);
+    let window = WindowObject::from_value(native);
+    let renderer: ComPtr<IRendererAbi> = window.query().unwrap();
+    let host = window.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap();
+    let mut compositor = gfx.create_compositor(assets.as_com_ref()).unwrap();
+    compositor.bind_render_host(host.as_com_ref()).unwrap();
+    let images: ComPtr<ITextureFactoryAbi> = window.query().unwrap();
+    let image = images
+        .create_texture(
+            Size { width: 2, height: 2 },
+            NcCopyFromBufferOffset::new(0, &[255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255]),
+        )
+        .unwrap();
+    let clients: ComPtr<IRenderClientFactoryAbi> = window.query().unwrap();
+    let domain = clients.create_client(RenderClientLimits::default()).unwrap();
+    let resources = domain.resources().unwrap();
+    let broker = host.recording_broker().unwrap();
+    let root = Rect { x: 16, y: 16, width: 32, height: 32 };
+    let bounds = Rect { x: 0, y: 0, width: 64, height: 64 };
+    let fill = |compositor: &mut neocogi_com::ComPtr<neocogi_gfx_support::abi::GfxCompositorAbi>, rect: Rect, rgba| {
+        let v = rectangle(rect, rgba)
+            .into_iter()
+            .map(|v| SolidVertex { x: v.x, y: v.y, rgba: v.rgba })
+            .collect::<Vec<_>>();
+        compositor.solid_triangles(bounds, NcCopyFromBufferOffset::new(0, &v)).unwrap();
+    };
+    let unit = TextureRegion { u0: 0., v0: 0., u1: 1., v1: 1. };
+    compositor.begin(SIZE, 0xff000000).unwrap();
+    fill(&mut compositor, bounds, 0xff00ff00);
+    compositor
+        .texture(bounds, Rect { x: 0, y: 0, width: 16, height: 16 }, unit, 0xffffffff, image.as_com_ref())
+        .unwrap();
+    compositor
+        .render_view(graphics(
+            &resources,
+            &broker,
+            RenderViewRoot {
+                client: Rect { x: 0, y: 0, width: 32, height: 32 },
+                target: root,
+            },
+        ))
+        .unwrap();
+    fill(&mut compositor, Rect { x: 32, y: 32, width: 16, height: 16 }, 0xffff00ff);
+    compositor.submit(renderer.as_com_ref()).unwrap();
+    let pixels = weak.upgrade().unwrap().access().unwrap().state.as_ref().unwrap().gpu.last_pixels().to_vec();
+    let pixel = |x: usize, y: usize| &pixels[((63 - y) * 64 + x) * 4..((63 - y) * 64 + x) * 4 + 4];
+    assert_eq!(pixel(2, 2), [255, 0, 0, 255]);
+    assert_eq!(pixel(12, 2), [0, 255, 0, 255]);
+    assert_eq!(pixel(2, 12), [0, 0, 255, 255]);
+    assert_eq!(pixel(12, 12), [255, 255, 0, 255]);
+    assert_eq!(pixel(32, 24), [0, 0, 255, 255]);
+    assert_eq!(pixel(40, 40), [255, 0, 255, 255]);
+    assert_eq!(pixel(60, 60), [0, 255, 0, 255]);
+
+    let surfaces: ComPtr<IRenderSurfaceFactoryAbi> = window.query().unwrap();
+    let surface = surfaces.create_surface(SIZE, atlas.as_com_ref()).unwrap();
+    let preview: ComPtr<IRendererAbi> = surface.query().unwrap();
+    compositor.begin(SIZE, 0xff000000).unwrap();
+    compositor.texture(bounds, bounds, unit, 0xffffffff, image.as_com_ref()).unwrap();
+    compositor.submit(preview.as_com_ref()).unwrap();
+    let output = surface.completed_image().unwrap();
+    compositor.begin(SIZE, 0xff000000).unwrap();
+    compositor
+        .render_view(graphics(&resources, &broker, RenderViewRoot { client: root, target: root }))
+        .unwrap();
+    assert_eq!(compositor.submit(preview.as_com_ref()), Err(NC_E_INVALID_ARG));
+    assert_eq!(identity(&surface.completed_image().unwrap()).unwrap(), identity(&output).unwrap());
+    drop((preview, surface, surfaces));
+    compositor.begin(SIZE, 0xff000000).unwrap();
+    compositor.texture(bounds, bounds, unit, 0xffffffff, output.as_com_ref()).unwrap();
+    compositor.submit(renderer.as_com_ref()).unwrap();
+    let pixels = weak.upgrade().unwrap().access().unwrap().state.as_ref().unwrap().gpu.last_pixels().to_vec();
+    let pixel = |x: usize, y: usize| &pixels[((63 - y) * 64 + x) * 4..((63 - y) * 64 + x) * 4 + 4];
+    assert_eq!(pixel(8, 8), [255, 0, 0, 255]);
+    assert_eq!(pixel(56, 8), [0, 255, 0, 255]);
+    assert_eq!(pixel(8, 56), [0, 0, 255, 255]);
+    assert_eq!(pixel(56, 56), [255, 255, 0, 255]);
+    drop((compositor, image, output, resources, domain, clients, broker, images, host, renderer, window));
+    assert!(weak.upgrade().is_none(), "GFX/native image caches cannot retain their own assembly");
+}
+
+#[com_object(interfaces(IRenderStream))]
+/// Foreign callbacks close an already captured UI domain and attempt resource mutation.
+struct ClosingUiStream {
+    /// Canonical UI contributions remain owned throughout preparation.
+    blocks: Vec<ComBox<IRenderViewBlockAbi>>,
+    /// Dropping the controller is terminal even though the immutable block is retained.
+    close: Rc<RefCell<Option<ComBox<IRenderClientDomainAbi>>>>,
+    /// Select closure at the second block read, or leave it for the atlas pixel callback.
+    close_in_stream: bool,
+    /// A different still-open factory verifies the device-wide preparation gate.
+    editing: ComPtr<IRenderResourcesAbi>,
+}
+impl IRenderStream for ClosingUiStream {
+    fn view(&self, _: u64, index: u32) -> Result<WeakComBox<IRenderViewBlockAbi>, NcStatus> {
+        if index == 1 && self.close_in_stream {
+            drop(self.close.borrow_mut().take());
+        }
+        self.blocks.get(index as usize).map(ComBox::downgrade).ok_or(NC_E_INVALID_ARG)
+    }
+    fn vertices(&self, _: u64, _: NcOutputWriter<'_, RenderVertex>) -> Result<u32, NcStatus> {
+        assert!(
+            matches!(
+                self.editing.create_buffer(
+                    GpuBufferDesc { role: GpuBufferRole::Vertex, byte_len: 4 },
+                    Bytes::source(vec![0; 4]).as_com_ref(),
+                ),
+                Err(RENDER_E_BUSY)
+            ),
+            "surface preparation must exclude foreign resource edits"
+        );
+        Ok(0)
+    }
+    fn batches(&self, _: u64, mut output: NcOutputWriter<'_, RenderBatch>) -> Result<u32, NcStatus> {
+        for _ in &self.blocks {
+            output.push(RenderBatch::View)?;
+        }
+        Ok(self.blocks.len() as u32)
+    }
+    fn texture(&self, _: u64, _: u32) -> Result<ComPtr<ITextureAbi>, NcStatus> {
+        Err(NC_E_INVALID_ARG)
+    }
+}
+
+#[com_object(interfaces(IRgbaImage))]
+/// Atlas upload closes captured authority after the last stream read.
+struct ClosingAtlas {
+    /// No reference to the surface or runtime is retained by the foreign producer.
+    close: Rc<RefCell<Option<ComBox<IRenderClientDomainAbi>>>>,
+}
+impl IRgbaImage for ClosingAtlas {
+    fn size(&self) -> Result<Size, NcStatus> {
+        Ok(Size { width: 1, height: 1 })
+    }
+    fn pixels(&self, mut output: NcOutputWriter<'_, u8>) -> Result<(), NcStatus> {
+        drop(self.close.borrow_mut().take());
+        let first = output.offset() as usize;
+        let end = first + output.capacity();
+        output.extend_from_slice([255; 4].get(first..end).ok_or(NC_E_INVALID_ARG)?)
+    }
+}
+
+/// Both late stream and late image callbacks must revoke surface admission before target mutation.
+#[test]
+#[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
+fn surfaces_recheck_ui_domains_and_exclude_resource_reentry_after_foreign_callbacks() {
+    let _session = native_session();
+    let atlas: ComPtr<IRgbaImageAbi> = White::from_value(White).query().unwrap();
+    let native = PlatformObject::default().window("surface admission", SIZE, atlas.as_com_ref()).unwrap();
+    let window = WindowObject::from_value(native);
+    let host = window.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap();
+    let surface = window
+        .query::<IRenderSurfaceFactoryAbi>()
+        .unwrap()
+        .create_surface(SIZE, atlas.as_com_ref())
+        .unwrap();
+    let renderer: ComPtr<IRendererAbi> = surface.query().unwrap();
+    let empty: ComPtr<IRenderStreamAbi> = super::view_geometry::ViewStream::from_value(super::view_geometry::ViewStream { blocks: vec![] })
+        .query()
+        .unwrap();
+    let info = RenderInfo {
+        size: SIZE,
+        clear: 0xff112233,
+        invocation: 1,
+        vertex_count: 0,
+        batch_count: 0,
+    };
+    renderer.render(info, atlas.as_com_ref(), empty.as_com_ref()).unwrap();
+    let previous = surface.completed_image().unwrap();
+    for close_in_stream in [true, false] {
+        let first = host.create_ui_client(RenderClientLimits::default()).unwrap();
+        let second = host.create_ui_client(RenderClientLimits::default()).unwrap();
+        let first_resources = first.resources().unwrap();
+        let second_resources = second.resources().unwrap();
+        let broker = host.recording_broker().unwrap();
+        let mut frame = broker.begin_frame().unwrap();
+        let root = Rect { x: 0, y: 0, width: 64, height: 64 };
+        let mut blocks = Vec::new();
+        for resources in [&first_resources, &second_resources] {
+            let mut session = frame.begin_view(RenderViewRoot { client: root, target: root }, resources.as_com_ref()).unwrap();
+            session.view().unwrap().finish().unwrap();
+            blocks.push(session.take_block().unwrap());
+        }
+        frame.finish().unwrap();
+        let close = Rc::new(RefCell::new(Some(first)));
+        let stream: ComPtr<IRenderStreamAbi> = ClosingUiStream::from_value(ClosingUiStream {
+            blocks,
+            close: close.clone(),
+            close_in_stream,
+            editing: second_resources,
+        })
+        .query()
+        .unwrap();
+        let image = if close_in_stream {
+            atlas.clone()
+        } else {
+            ClosingAtlas::from_value(ClosingAtlas { close: close.clone() }).query().unwrap()
+        };
+        assert_eq!(
+            renderer.render(RenderInfo { batch_count: 2, ..info }, image.as_com_ref(), stream.as_com_ref()),
+            Err(neocogi_com::NC_E_DROPPED)
+        );
+        assert!(close.borrow().is_none());
+        assert_eq!(identity(&surface.completed_image().unwrap()).unwrap(), identity(&previous).unwrap());
+    }
+}
+
 #[com_object(interfaces(IRgbaImage))]
 /// Deterministic UI atlas; this GPU test needs an opaque white texel, without font metadata.
 struct White;
@@ -74,18 +298,24 @@ fn private_ui_image_import_renders_without_a_native_cache_com_cycle() {
     let renderer: ComPtr<IRendererAbi> = window.query().unwrap();
     let graphics = window.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap();
     let images: ComPtr<ITextureFactoryAbi> = window.query().unwrap();
-    let pixels = [255,0,0,255, 0,255,0,255, 0,0,255,255, 255,255,0,255];
-    let image = images.create_texture(Size { width: 2, height: 2 }, NcCopyFromBufferOffset::new(0, &pixels)).unwrap();
+    let pixels = [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255];
+    let image = images
+        .create_texture(Size { width: 2, height: 2 }, NcCopyFromBufferOffset::new(0, &pixels))
+        .unwrap();
     let image_key = identity(&image).unwrap();
     let clients: ComPtr<IRenderClientFactoryAbi> = window.query().unwrap();
     let client = clients.create_client(RenderClientLimits::default()).unwrap();
-    assert!(matches!(graphics.import_ui_texture(client.resources().unwrap().as_com_ref(), image.as_com_ref()), Err(RENDER_E_OWNER)));
+    assert!(matches!(
+        graphics.import_ui_texture(client.resources().unwrap().as_com_ref(), image.as_com_ref()),
+        Err(RENDER_E_OWNER)
+    ));
     let ui = graphics.create_ui_client(RenderClientLimits::default()).unwrap();
     let resources = ui.resources().unwrap();
     let imported = graphics.import_ui_texture(resources.as_com_ref(), image.as_com_ref()).unwrap();
     assert!(imported.query_ref::<ITextureAbi>().is_err());
     graphics.prepare_ui_texture(resources.as_com_ref(), imported.as_com_ref()).unwrap();
-    let code = Bytes::source(br#"
+    let code = Bytes::source(
+        br#"
         @group(2) @binding(0) var image:texture_2d<f32>;
         @group(2) @binding(1) var image_sampler:sampler;
         struct V { @builtin(position) p:vec4<f32>, @location(0) uv:vec2<f32> }
@@ -94,38 +324,77 @@ fn private_ui_image_import_renders_without_a_native_cache_com_cycle() {
             return V(vec4(p[i],0.,1.),p[i]*vec2(0.5,-0.5)+vec2(0.5));
         }
         @fragment fn fs(v:V) -> @location(0) vec4<f32> { return textureSample(image,image_sampler,v.uv); }
-    "#.to_vec());
-    let vs = resources.create_shader(GpuShaderStage::Vertex, code.as_com_ref(), NcCopyFromBufferOffset::new(0,b"vs")).unwrap();
-    let fs = resources.create_shader(GpuShaderStage::Fragment, code.as_com_ref(), NcCopyFromBufferOffset::new(0,b"fs")).unwrap();
-    let desc = PipelineDesc { bindings:vec![GpuShaderBinding { stage:GpuShaderStage::Fragment, slot:0, kind:GpuBindingKind::SampledTexture, byte_len:0 }], ..Default::default() }.source().unwrap();
+    "#
+        .to_vec(),
+    );
+    let vs = resources
+        .create_shader(GpuShaderStage::Vertex, code.as_com_ref(), NcCopyFromBufferOffset::new(0, b"vs"))
+        .unwrap();
+    let fs = resources
+        .create_shader(GpuShaderStage::Fragment, code.as_com_ref(), NcCopyFromBufferOffset::new(0, b"fs"))
+        .unwrap();
+    let desc = PipelineDesc {
+        bindings: vec![GpuShaderBinding {
+            stage: GpuShaderStage::Fragment,
+            slot: 0,
+            kind: GpuBindingKind::SampledTexture,
+            byte_len: 0,
+        }],
+        ..Default::default()
+    }
+    .source()
+    .unwrap();
     let pipeline = resources.create_pipeline(desc.as_com_ref(), vs.as_com_ref(), fs.as_com_ref()).unwrap();
     let sampler = resources.create_sampler(GpuSamplerDesc::default()).unwrap();
     let mut frame = graphics.recording_broker().unwrap().begin_frame().unwrap();
-    let root = Rect { x:0, y:0, width:SIZE.width, height:SIZE.height };
-    let mut session = frame.begin_view(RenderViewRoot { client:root, target:root }, resources.as_com_ref()).unwrap();
+    let root = Rect {
+        x: 0,
+        y: 0,
+        width: SIZE.width,
+        height: SIZE.height,
+    };
+    let mut session = frame.begin_view(RenderViewRoot { client: root, target: root }, resources.as_com_ref()).unwrap();
     let mut view = session.view().unwrap();
     view.bind_pipeline(pipeline.as_com_ref()).unwrap();
-    view.bind_texture(GpuShaderStage::Fragment,0,imported.as_com_ref(),sampler.as_com_ref()).unwrap();
-    view.draw(3,1,0).unwrap();
+    view.bind_texture(GpuShaderStage::Fragment, 0, imported.as_com_ref(), sampler.as_com_ref())
+        .unwrap();
+    view.draw(3, 1, 0).unwrap();
     view.finish().unwrap();
     let block = session.take_block().unwrap();
     frame.finish().unwrap();
     drop((view, session, frame, image, imported, pipeline, sampler, vs, fs));
-    let source: ComPtr<IRenderStreamAbi> = super::view_geometry::ViewStream::from_value(super::view_geometry::ViewStream { blocks:vec![block] }).query().unwrap();
-    renderer.render(RenderInfo { size:SIZE, clear:0xff000000, invocation:1, vertex_count:0, batch_count:1 }, atlas.as_com_ref(), source.as_com_ref()).unwrap();
+    let source: ComPtr<IRenderStreamAbi> = super::view_geometry::ViewStream::from_value(super::view_geometry::ViewStream { blocks: vec![block] })
+        .query()
+        .unwrap();
+    renderer
+        .render(
+            RenderInfo {
+                size: SIZE,
+                clear: 0xff000000,
+                invocation: 1,
+                vertex_count: 0,
+                batch_count: 1,
+            },
+            atlas.as_com_ref(),
+            source.as_com_ref(),
+        )
+        .unwrap();
     let pixels = {
         let native = device.upgrade().unwrap();
         let access = native.access().unwrap();
         access.state.as_ref().unwrap().gpu.last_pixels().to_vec()
     };
     // GL readback is bottom-up; imported immutable images retain their top-left source convention.
-    let pixel = |x:usize,y:usize| &pixels[((63-y)*64+x)*4..((63-y)*64+x)*4+4];
-    assert_eq!(pixel(8,8), [255,0,0,255]);
-    assert_eq!(pixel(56,8), [0,255,0,255]);
-    assert_eq!(pixel(8,56), [0,0,255,255]);
-    assert_eq!(pixel(56,56), [255,255,0,255]);
+    let pixel = |x: usize, y: usize| &pixels[((63 - y) * 64 + x) * 4..((63 - y) * 64 + x) * 4 + 4];
+    assert_eq!(pixel(8, 8), [255, 0, 0, 255]);
+    assert_eq!(pixel(56, 8), [0, 255, 0, 255]);
+    assert_eq!(pixel(8, 56), [0, 0, 255, 255]);
+    assert_eq!(pixel(56, 56), [255, 255, 0, 255]);
     drop(source);
-    assert!(!device.upgrade().unwrap().textures.borrow().contains_key(&image_key), "native caches must not keep imported COM leases alive");
+    assert!(
+        !device.upgrade().unwrap().textures.borrow().contains_key(&image_key),
+        "native caches must not keep imported COM leases alive"
+    );
     drop((resources, ui, client, clients, images, graphics, renderer, window));
     assert!(device.upgrade().is_none(), "an idle native cache must not retain its own device facade");
 }
@@ -166,7 +435,13 @@ fn generic_pipeline_renders_in_its_root_and_preserves_surrounding_ui() {
         .unwrap();
     let description = PipelineDesc::default().source().unwrap();
     let pipeline = resources.create_pipeline(description.as_com_ref(), vs.as_com_ref(), fs.as_com_ref()).unwrap();
-    let broker = unknown.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap().recording_broker().unwrap();
+    let broker = unknown
+        .query::<IPlatformWindowAbi>()
+        .unwrap()
+        .graphics_host()
+        .unwrap()
+        .recording_broker()
+        .unwrap();
     let mut frame = broker.begin_frame().unwrap();
     let root = Rect { x: 16, y: 16, width: 32, height: 32 };
     let mut session = frame
@@ -331,7 +606,13 @@ fn generic_indexed_texture_and_uniform_snapshots_reach_the_native_pipeline() {
         )
         .unwrap();
     let sampler = resources.create_sampler(GpuSamplerDesc::default()).unwrap();
-    let broker = unknown.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap().recording_broker().unwrap();
+    let broker = unknown
+        .query::<IPlatformWindowAbi>()
+        .unwrap()
+        .graphics_host()
+        .unwrap()
+        .recording_broker()
+        .unwrap();
     let mut frame = broker.begin_frame().unwrap();
     let mut session = frame
         .begin_view(
@@ -463,7 +744,13 @@ fn generic_depth_survives_draws_and_reset_with_independent_ordered_views() {
         view.push_uniforms(GpuShaderStage::Vertex, 0, NcCopyFromBufferOffset::new(0, &bytes)).unwrap();
         view.draw(3, 1, 0).unwrap();
     };
-    let broker = window.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap().recording_broker().unwrap();
+    let broker = window
+        .query::<IPlatformWindowAbi>()
+        .unwrap()
+        .graphics_host()
+        .unwrap()
+        .recording_broker()
+        .unwrap();
     let mut frame = broker.begin_frame().unwrap();
     let begin = |frame: &mut ComBox<IRenderRecordingFrameAbi>, target: Rect| {
         let mut session = frame

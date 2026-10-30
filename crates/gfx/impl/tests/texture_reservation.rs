@@ -1,5 +1,5 @@
 //! Real CPU allocation failures cross generated texture calls and the production frame importer.
-use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcOutputBuffer, NcStatus, NC_E_BUSY, NC_E_INVALID_ARG, NC_E_OUT_OF_MEMORY, com_object};
+use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, NC_E_BUSY, NC_E_OUT_OF_MEMORY, com_object};
 use neocogi_gfx_support::abi::{GfxCompositorAbi, SolidVertex};
 use neocogi_gfx_impl::GfxCompositorObject;
 use neocogi_render_support::com::{Batch, PreparedFrame, Resources};
@@ -39,13 +39,17 @@ impl Drop for Texture {
 /// Creates a real shared COM texture and an observer that cannot extend its lifetime.
 fn texture() -> (ComPtr<ITextureAbi>, Rc<Cell<u32>>) {
     let drops = Rc::new(Cell::new(0));
-    let value = Texture::from_value(Texture { drops: drops.clone() }).query().unwrap();
+    let value: ComPtr<ITextureAbi> = Texture::from_value(Texture { drops: drops.clone() }).query().unwrap();
+    neocogi_gfx_support::testing::register_image(value.as_com_ref(), Size { width: 1, height: 1 });
     (value, drops)
 }
 
 /// CPU import retains concrete texture owners; this fixture does not model device authentication.
 struct OwnedTextures;
 impl Resources for OwnedTextures {
+    fn view(&self, view: neocogi_com::WeakComBox<IRenderViewBlockAbi>) -> Result<Rc<neocogi_render_gpu::record::Block>, NcStatus> {
+        neocogi_gfx_support::testing::snapshot(view.as_com_ref())
+    }
     /// Imported batches own the real COM texture until CPU preparation is cleared.
     type Texture = ComPtr<ITextureAbi>;
     /// Retains the actual capability until imported-frame cleanup.
@@ -83,18 +87,25 @@ impl IRenderer for Renderer {
     fn render(&self, info: RenderInfo, _: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         let mut frame = PreparedFrame::<ComPtr<ITextureAbi>>::default();
         frame.read(info, stream, &OwnedTextures)?;
-        let mut records = NcOutputBuffer::new();
-        if stream.batches(info.invocation, records.output(0, info.batch_count as usize))? != info.batch_count {
-            return Err(NC_E_INVALID_ARG);
-        }
-        *self.capture.vertices.borrow_mut() = frame.vertices().to_vec();
-        *self.capture.batches.borrow_mut() = records.into_vec();
+        let (vertices, records) = neocogi_gfx_support::testing::read(info, stream)?;
+        *self.capture.vertices.borrow_mut() = vertices;
+        *self.capture.batches.borrow_mut() = records;
         *self.capture.textures.borrow_mut() = frame
             .batches()
             .iter()
-            .filter_map(|batch| match batch {
-                Batch::Texture { texture, .. } => Some(texture.as_raw().object as usize),
-                _ => None,
+            .flat_map(|batch| {
+                let Batch::View(block) = batch else {
+                    panic!("expected only generic graphics blocks")
+                };
+                block.commands.iter().filter_map(|command| {
+                    let neocogi_render_gpu::command::Command::Draw(draw) = command else {
+                        return None;
+                    };
+                    draw.textures[0]
+                        .texture
+                        .imported_id()
+                        .map(|id| neocogi_gfx_support::testing::image_identity(id).unwrap())
+                })
             })
             .collect();
         self.capture.calls.set(self.capture.calls.get() + 1);
@@ -149,6 +160,7 @@ const CLIP: Rect = Rect { x: 0, y: 0, width: 16, height: 16 };
 fn recording(failure: Failure) -> Recording {
     let bundle = fixture::test_bundle();
     let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
+    compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref()).unwrap();
     compositor.begin(Size { width: 16, height: 16 }, 0xff000000).unwrap();
     let solid = [
         SolidVertex { x: 0., y: 0., rgba: 0xff0000ff },

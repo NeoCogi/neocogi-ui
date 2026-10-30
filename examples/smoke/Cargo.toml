@@ -23,10 +23,11 @@ extension = []
 dynamic-extension = ["extension", "dynamic", "neocogi-demo-host/dynamic-extension"]
 monolith-extension = ["extension", "monolith", "neocogi-demo-host/monolith-extension"]
 # Standalone development benchmark; no counters or recorder enter the normal demo executable.
-benchmark = ["embed-assets", "monolith", "dep:neocogi-ui-nodes", "dep:neocogi-gfx"]
+benchmark = ["embed-assets", "monolith", "dep:neocogi-ui-nodes", "dep:neocogi-gfx", "dep:neocogi-gfx-support"]
 embed-assets = ["neocogi-demo-assets/embed-assets"]
 
 [dependencies]
+neocogi-gfx-support = { workspace = true, features = ["test-support"], optional = true }
 neocogi-com-host.workspace = true
 neocogi-demo-host.workspace = true
 neocogi-ui-samples.workspace = true

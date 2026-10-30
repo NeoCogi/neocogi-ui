@@ -2,7 +2,7 @@
 
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, NC_E_OUT_OF_MEMORY, com_object};
 use neocogi_gfx_support::abi::{AssetAppearanceRevision, AssetPublisherAbi, GfxPluginFactoryAbi, IAssetBundleAbi};
-use neocogi_render_core::abi::{IRenderStreamAbi, IRenderer, IRendererAbi, IRendererVtblFor, IRgbaImageAbi, RenderBatch, RenderInfo, RenderVertex};
+use neocogi_render_core::abi::{IRenderStreamAbi, IRenderer, IRendererAbi, IRendererVtblFor, IRgbaImageAbi, RenderInfo};
 use neocogi_ui::{Rect, Size, TextWrapping, Ui, UI_E_OWNER};
 use std::{cell::Cell, rc::Rc};
 
@@ -37,12 +37,9 @@ impl IRenderer for CaptureRenderer {
 
     /// Copies both bounded arrays while the invocation token is valid.
     fn render(&self, info: RenderInfo, atlas: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        let mut vertices = neocogi_com::NcOutputBuffer::<RenderVertex>::new();
-        let mut batches = neocogi_com::NcOutputBuffer::<RenderBatch>::new();
-        let vertex_count = stream.vertices(info.invocation, vertices.output(0, info.vertex_count as usize))?;
-        let batch_count = stream.batches(info.invocation, batches.output(0, info.batch_count as usize))?;
-        self.observation.vertices.set(vertex_count);
-        self.observation.batches.set(batch_count);
+        let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
+        self.observation.vertices.set(vertices.len() as u32);
+        self.observation.batches.set(batches.len() as u32);
         self.observation.calls.set(self.observation.calls.get() + 1);
         self.observation.atlas.set(atlas.as_raw().object as usize);
         Ok(())
@@ -67,7 +64,8 @@ impl IRenderer for RejectingRenderer {
 
 /// Constructs and mounts an ordinary UI through the public production entrypoint.
 fn create_ui(assets: ComRef<'_, IAssetBundleAbi>, gfx: ComRef<'_, GfxPluginFactoryAbi>) -> Ui {
-    let runtime = nc_ui::create_runtime_from_assets(assets, gfx).unwrap();
+    let mut runtime = nc_ui::create_runtime_from_assets(assets, gfx).unwrap();
+    runtime.set_render_host(neocogi_gfx_support::testing::host().as_com_ref()).unwrap();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
     let text = ui.widgets().text_block("Independent UI", TextWrapping::None).unwrap();
     ui.window("Independent UI", Rect { x: 4, y: 4, width: 160, height: 80 }, text).unwrap();
@@ -181,6 +179,7 @@ fn standalone_compositor_frame_does_not_block_runtime_construction_or_rendering(
     let assets = neocogi_demo_assets::load_bundle(host_runtime()).unwrap();
     let gfx = neocogi_ui_support::test_support::gfx_factory(host_runtime());
     let mut standalone = gfx.create_compositor(assets.as_com_ref()).unwrap();
+    standalone.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref()).unwrap();
     standalone.begin(SIZE, 0).unwrap();
     // An active standalone frame must remain active while the UI creates and submits its own.
     let ui = create_ui(assets.as_com_ref(), gfx.as_com_ref());
@@ -199,7 +198,8 @@ fn standalone_compositor_frame_does_not_block_runtime_construction_or_rendering(
 fn production_runtime_uses_the_gfx_compositor() {
     let assets = neocogi_demo_assets::load_bundle(host_runtime()).expect("embedded test assets must load");
     let gfx = neocogi_ui_support::test_support::gfx_factory(host_runtime());
-    let runtime = nc_ui::create_runtime_from_assets(assets.as_com_ref(), gfx.as_com_ref()).expect("matching UI and GFX resources must create a runtime");
+    let mut runtime = nc_ui::create_runtime_from_assets(assets.as_com_ref(), gfx.as_com_ref()).expect("matching UI and GFX resources must create a runtime");
+    runtime.set_render_host(neocogi_gfx_support::testing::host().as_com_ref()).unwrap();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime).expect("the object must expose every UI capability");
     let text = ui
         .widgets()

@@ -30,19 +30,12 @@ impl IRenderer for CaptureRenderer {
 
     /// Reads complete arrays while the token is live, then publishes copied observations.
     fn render(&self, info: RenderInfo, _image: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        let mut vertices = neocogi_com::NcOutputBuffer::<RenderVertex>::new();
-        let mut records = neocogi_com::NcOutputBuffer::<RenderBatch>::new();
-        assert_eq!(
-            stream.vertices(info.invocation, vertices.output(0, info.vertex_count as usize))?,
-            info.vertex_count
-        );
-        assert_eq!(stream.batches(info.invocation, records.output(0, info.batch_count as usize))?, info.batch_count);
-        let batches = records.into_vec();
+        let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
         // No observation borrow survives a foreign stream call. This also permits deliberately
         // reentrant renderer fixtures to be added without changing the production path.
         let mut frame = self.frame.borrow_mut();
         frame.calls += 1;
-        frame.vertices = vertices.into_vec();
+        frame.vertices = vertices;
         frame.batches = batches;
         Ok(())
     }

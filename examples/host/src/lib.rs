@@ -193,7 +193,7 @@ impl Host {
         let mut ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
         ui_runtime.set_clipboard(window.clipboard()?.as_com_ref())?;
         let render_host = window.graphics_host()?;
-        ui_runtime.set_render_broker(render_host.recording_broker()?.as_com_ref())?;
+        ui_runtime.set_render_host(render_host.as_com_ref())?;
         let node_provider = runtime.acquire_plugin_root::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
         let factory = node_provider.bind(ui_runtime.as_com_ref())?;
         let ui = Ui::from_interfaces(ui_runtime, factory)?;

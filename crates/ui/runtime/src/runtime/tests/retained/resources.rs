@@ -49,6 +49,7 @@ impl LeafContent for PartialPaint {
         let texture: ComPtr<ITextureAbi> = TemporaryTexture::from_value(TemporaryTexture { attempt: self.attempt.clone() })
             .query()
             .unwrap();
+        neocogi_gfx_support::testing::register_image(texture.as_com_ref(), Size { width: 8, height: 8 });
         painter.texture(state.rect, 0xffffffff, texture.as_com_ref())?;
         if self.attempt.borrow().reject {
             Err(neocogi_com::NC_E_INVALID_ARG)

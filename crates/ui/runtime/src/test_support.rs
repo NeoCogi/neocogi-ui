@@ -144,7 +144,9 @@ pub(crate) fn runtime_from_assets(
     source: neocogi_com::ComRef<'_, neocogi_ui::abi::core::IAssetBundleAbi>,
 ) -> Result<neocogi_com::ComPtr<neocogi_ui::abi::core::UiRuntimeAbi>, neocogi_com::NcStatus> {
     let gfx = neocogi_ui_support::test_support::gfx_factory(crate::test_support::host_runtime());
-    crate::create_runtime_from_assets(source, gfx.as_com_ref())
+    let mut runtime = crate::create_runtime_from_assets(source, gfx.as_com_ref())?;
+    runtime.set_render_host(neocogi_gfx_support::testing::host().as_com_ref())?;
+    Ok(runtime)
 }
 
 /// Exports an algorithm fixture once before constructing the production runtime and compositor.

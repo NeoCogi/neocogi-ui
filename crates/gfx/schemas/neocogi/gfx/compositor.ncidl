@@ -1,4 +1,4 @@
-use neocogi.renderer::{IRenderViewBlock, IRenderer, ITexture, Rect, RenderVertex, Size, TextureRegion};
+use neocogi.renderer::{IRenderHost, IRenderViewBlock, IRenderer, ITexture, Rect, RenderVertex, Size, TextureRegion};
 
 #[version(1)]
 /// One solid-color vertex in final drawable coordinates before rectangular clipping.
@@ -36,7 +36,7 @@ struct NinePatchDraw {
     patch: AssetPatch,
 }
 
-#[version(3)]
+#[version(4)]
 /// Renderer-neutral display-list executor owned by the GFX plugin.
 ///
 /// UI code supplies semantic operations in painter order. The compositor owns
@@ -54,6 +54,9 @@ struct NinePatchDraw {
 /// the caller may continue or submit them, or cancel. Attempted draws keep their budget
 /// charges. begin requires the previous frame to end through submit or cancel.
 interface GfxCompositor: IGfxDiagnostics {
+    /// Bind private graphics authority and prepare the current atlas before replacing this session.
+    /// The host and all resulting factories remain private to this compositor.
+    fn bind_render_host(&mut self, host: &IRenderHost) -> Result<()>;
     /// Takes a sealed generic graphics contribution at its reserved painter-order position.
     /// The renderer authenticates its private provenance before acquiring the native frame.
     fn render_view(&mut self, block: ComBox<IRenderViewBlock>) -> Result<()>;

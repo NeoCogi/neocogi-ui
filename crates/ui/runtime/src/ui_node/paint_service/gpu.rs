@@ -13,15 +13,19 @@ pub(super) struct Frames {
 }
 
 impl Frames {
-    /// Retains first, replaces outside borrows, and never exposes the host broker to clients.
-    pub(super) fn install(&self, broker: ComRef<'_, IRenderViewBrokerAbi>) -> Result<(), NcStatus> {
+    /// Runtime binding preflight occurs before any fallible foreign graphics preparation.
+    pub(super) fn can_install(&self) -> Result<(), NcStatus> {
         if self.frame.borrow().is_some() {
             return Err(NC_E_BUSY);
         }
-        let replacement = broker.try_add_ref()?;
-        let old = self.broker.replace(Some(replacement));
-        drop(old);
         Ok(())
+    }
+
+    /// The runtime owns the context throughout preparation, so no paint frame can start after preflight.
+    pub(super) fn install(&self, broker: ComPtr<IRenderViewBrokerAbi>) {
+        debug_assert!(self.frame.borrow().is_none());
+        let old = self.broker.replace(Some(broker));
+        drop(old);
     }
 
     /// Begins exactly once for the entire UI traversal; headless painting remains supported.

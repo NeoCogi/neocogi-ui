@@ -30,17 +30,15 @@ pub extern "C" fn neocogi_bench_end() {
 /// Reusable receiver storage represents an ordinary renderer's bounded bulk-copy cost.
 #[derive(Default)]
 struct Buffers {
-    /// Copied geometry remains observable after the stream scope expires.
-    vertices: neocogi_com::NcOutputBuffer<RenderVertex>,
-    /// Copied ordered batch records, using the canonical ABI representation.
-    batches: neocogi_com::NcOutputBuffer<RenderBatch>,
+    /// Authenticated immutable blocks retain the same captured resources as native preparation.
+    blocks: Vec<std::rc::Rc<neocogi_render_gpu::record::Block>>,
 }
 impl Buffers {
-    /// Copies both complete tables; warmed capacity is retained between frames.
+    /// Reads real generic capabilities; no obsolete UI vertex transport is measured.
     fn copy(&mut self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        stream.vertices(info.invocation, self.vertices.output(0, info.vertex_count as usize))?;
-        stream.batches(info.invocation, self.batches.output(0, info.batch_count as usize))?;
-        black_box((self.vertices.as_slice(), self.batches.as_slice()));
+        self.blocks.clear();
+        self.blocks = neocogi_gfx_support::testing::blocks(info, stream)?;
+        black_box(&self.blocks);
         Ok(())
     }
 }
@@ -73,7 +71,7 @@ enum Operation {
     Edit,
     /// Changes both drawable and window allocation before updating the scene.
     Resize,
-    /// Records geometry and copies both bulk tables into retained receiver buffers.
+    /// Records and authenticates immutable generic blocks without native driver calls.
     Render,
 }
 impl Operation {
@@ -276,7 +274,8 @@ fn main(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
     let start = Instant::now();
     let runtime_factory = runtime.acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
     let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
-    let ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
+    let mut ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
+    ui_runtime.set_render_host(neocogi_gfx_support::testing::host().as_com_ref())?;
     let node_provider = runtime.acquire_plugin_root::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
     let node_factory = node_provider.bind(ui_runtime.as_com_ref())?;
     let ui = Ui::from_interfaces(ui_runtime, node_factory)?;

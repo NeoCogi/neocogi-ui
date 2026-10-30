@@ -41,7 +41,7 @@ fn committed_views_keep_their_original_position_and_visible_client_root() {
     let domain = device.create_client(RenderClientLimits::default()).unwrap();
     let resources = domain.resources().unwrap();
     let frames = std::rc::Rc::new(gpu::Frames::default());
-    frames.install(device.broker().as_com_ref()).unwrap();
+    frames.install(device.broker());
     let frame = frames.begin().unwrap();
     let local = recorder(frames, 1);
     let mut painter: ComPtr<IPainterAbi> = local.query().unwrap();
@@ -80,7 +80,7 @@ fn unhandled_view_failure_rejects_the_whole_invocation_even_if_the_widget_retrie
     let domain = device.create_client(RenderClientLimits::default()).unwrap();
     let resources = domain.resources().unwrap();
     let frames = std::rc::Rc::new(gpu::Frames::default());
-    frames.install(device.broker().as_com_ref()).unwrap();
+    frames.install(device.broker());
     let frame = frames.begin().unwrap();
     let local = recorder(frames, 1);
     let mut painter: ComPtr<IPainterAbi> = local.query().unwrap();
@@ -106,7 +106,7 @@ fn cancelled_views_are_empty_and_retained_painters_cannot_join_a_later_widget() 
         .unwrap();
     let resources = domain.resources().unwrap();
     let frames = std::rc::Rc::new(gpu::Frames::default());
-    frames.install(device.broker().as_com_ref()).unwrap();
+    frames.install(device.broker());
     let frame = frames.begin().unwrap();
     let first = recorder(frames.clone(), 1);
     let mut old: ComPtr<IPainterAbi> = first.query().unwrap();

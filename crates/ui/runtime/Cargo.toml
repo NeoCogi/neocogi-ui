@@ -38,7 +38,7 @@ neocogi-com-host.workspace = true
 neocogi-demo-assets = { workspace = true, features = ["embed-assets"] }
 neocogi-gfx-impl = { workspace = true, features = ["publisher"] }
 neocogi-skin-impl.workspace = true
-neocogi-gfx-support.workspace = true
+neocogi-gfx-support = { workspace = true, features = ["test-support"] }
 neocogi-appearance.workspace = true
 neocogi-ui.workspace = true
 tempfile.workspace = true

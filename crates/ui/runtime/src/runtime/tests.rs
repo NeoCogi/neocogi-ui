@@ -283,21 +283,12 @@ impl IRenderer for Renderer {
     }
     /// Copies bulk geometry during its valid scope and retains authority for later rejection tests.
     fn render(&self, info: RenderInfo, _atlas: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        let mut vertices = neocogi_com::NcOutputBuffer::<RenderVertex>::new();
-        assert_eq!(
-            stream.vertices(info.invocation, vertices.output(0, info.vertex_count as usize))?,
-            info.vertex_count
-        );
-        let mut batches = neocogi_com::NcOutputBuffer::<RenderBatch>::new();
-        assert_eq!(stream.batches(info.invocation, batches.output(0, info.batch_count as usize))?, info.batch_count);
-        // These built-in fixtures use one coalesced atlas range regardless of glyph/primitive count.
+        let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
         assert_eq!(batches.len(), 1);
-        assert!(matches!(batches[0], RenderBatch::Atlas { first: 0, count } if count == info.vertex_count));
-        assert_eq!(stream.texture(info.invocation, 0).unwrap_err(), NC_E_INVALID_ARG);
-        assert_eq!(stream.view(info.invocation, 0).unwrap_err(), NC_E_INVALID_ARG);
+        assert!(matches!(batches[0], RenderBatch::Atlas { first: 0, count } if count as usize == vertices.len()));
         assert!(vertices.len() >= 6);
         assert!(vertices.iter().all(|v| v.x.is_finite() && v.y.is_finite()));
-        *self.probe.vertices.borrow_mut() = vertices.into_vec();
+        *self.probe.vertices.borrow_mut() = vertices;
         self.probe.calls.set(self.probe.calls.get() + 1);
         self.probe.streams.borrow_mut().push((stream.try_add_ref()?, info.invocation));
         if self.probe.fail.get() { Err(UI_E_RENDER) } else { Ok(()) }

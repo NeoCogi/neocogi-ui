@@ -135,17 +135,17 @@ impl IRenderer for ImageFrameRenderer {
     }
     /// Resolves each texture only during the active stream, then immediately releases the projection.
     fn render(&self, info: RenderInfo, _: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        let mut batches = neocogi_com::NcOutputBuffer::<RenderBatch>::new();
-        assert_eq!(stream.batches(info.invocation, batches.output(0, info.batch_count as usize))?, info.batch_count);
-        let mut quads = Vec::new();
-        for (index, batch) in batches.into_vec().into_iter().enumerate() {
-            if let RenderBatch::Texture { first } = batch {
-                let _texture = stream.texture(info.invocation, index as u32)?;
-                let mut vertices = neocogi_com::NcOutputBuffer::<RenderVertex>::new();
-                assert_eq!(stream.vertices(info.invocation, vertices.output(first as u64, 4))?, 4);
-                quads.push(vertices.into_vec().try_into().unwrap());
-            }
-        }
+        let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
+        let quads = batches
+            .into_iter()
+            .filter_map(|batch| {
+                if let RenderBatch::Texture { first } = batch {
+                    Some(vertices[first as usize..first as usize + 4].try_into().unwrap())
+                } else {
+                    None
+                }
+            })
+            .collect();
         *self.quads.borrow_mut() = quads;
         Ok(())
     }
@@ -160,6 +160,7 @@ fn image_buttons_survive_both_builtin_and_runtime_clipping_in_a_complete_frame()
     button.replace_flags(WidgetOptions::NONE).unwrap();
     let image_probe = Rc::new(ImageProbe::default());
     let image: ComPtr<ITextureAbi> = ImageTexture::from_value(ImageTexture { probe: image_probe.clone() }).query().unwrap();
+    neocogi_gfx_support::testing::register_image(image.as_com_ref(), Size { width: 64, height: 32 });
     button.set_image(image.as_com_ref(), false).unwrap();
     drop(image);
     let background = ui.widgets().text_block("", TextWrapping::None).unwrap();

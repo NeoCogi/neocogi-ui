@@ -284,11 +284,7 @@ impl IRenderer for UploadRenderer {
     /// Final geometry must use the exact bundle prepared by the successful upload.
     fn render(&self, info: RenderInfo, source: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         assert_eq!(source.as_raw().object, self.0.current.borrow().as_raw().object);
-        let mut vertices = neocogi_com::NcOutputBuffer::<RenderVertex>::new();
-        assert_eq!(
-            stream.vertices(info.invocation, vertices.output(0, info.vertex_count as usize))?,
-            info.vertex_count
-        );
+        let (vertices, _) = neocogi_gfx_support::testing::read(info, stream)?;
         assert!(!vertices.is_empty());
         Ok(())
     }

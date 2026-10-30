@@ -239,11 +239,15 @@ impl IChoiceMenus for Runtime {
 }
 
 impl UiRuntime for Runtime {
-    /// Installs only a private CPU recording capability, with no public broker getter.
-    fn set_render_broker(&mut self, broker: ComRef<'_, IRenderViewBrokerAbi>) -> Result<(), NcStatus> {
+    /// Publish private compositor authority and client recording only after both candidates are owned.
+    fn set_render_host(&mut self, host: ComRef<'_, IRenderHostAbi>) -> Result<(), NcStatus> {
         self.storage.open()?;
-        let _context = self.storage.context()?;
-        self.storage.factory.painter.install_broker(broker)
+        let mut context = self.storage.context()?;
+        self.storage.factory.painter.can_install_broker()?;
+        let broker = host.recording_broker()?;
+        context.bind_render_host(host)?;
+        self.storage.factory.painter.install_broker(broker);
+        Ok(())
     }
 
     /// Publishes a platform service only through the runtime's exclusive mutation boundary.
