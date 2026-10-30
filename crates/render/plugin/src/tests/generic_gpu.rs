@@ -97,7 +97,7 @@ fn generic_pipeline_renders_in_its_root_and_preserves_surrounding_ui() {
         .unwrap();
     let description = PipelineDesc::default().source().unwrap();
     let pipeline = resources.create_pipeline(description.as_com_ref(), vs.as_com_ref(), fs.as_com_ref()).unwrap();
-    let broker = unknown.query::<IRenderHostAbi>().unwrap().recording_broker().unwrap();
+    let broker = unknown.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap().recording_broker().unwrap();
     let mut frame = broker.begin_frame().unwrap();
     let root = Rect { x: 16, y: 16, width: 32, height: 32 };
     let mut session = frame
@@ -262,7 +262,7 @@ fn generic_indexed_texture_and_uniform_snapshots_reach_the_native_pipeline() {
         )
         .unwrap();
     let sampler = resources.create_sampler(GpuSamplerDesc::default()).unwrap();
-    let broker = unknown.query::<IRenderHostAbi>().unwrap().recording_broker().unwrap();
+    let broker = unknown.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap().recording_broker().unwrap();
     let mut frame = broker.begin_frame().unwrap();
     let mut session = frame
         .begin_view(
@@ -394,7 +394,7 @@ fn generic_depth_survives_draws_and_reset_with_independent_ordered_views() {
         view.push_uniforms(GpuShaderStage::Vertex, 0, NcCopyFromBufferOffset::new(0, &bytes)).unwrap();
         view.draw(3, 1, 0).unwrap();
     };
-    let broker = window.query::<IRenderHostAbi>().unwrap().recording_broker().unwrap();
+    let broker = window.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap().recording_broker().unwrap();
     let mut frame = broker.begin_frame().unwrap();
     let begin = |frame: &mut ComBox<IRenderRecordingFrameAbi>, target: Rect| {
         let mut session = frame
