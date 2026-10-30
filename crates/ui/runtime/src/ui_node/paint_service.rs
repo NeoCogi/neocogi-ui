@@ -57,11 +57,9 @@ struct PaintContext {
 #[com_object(interfaces(IPainter))]
 /// One invocation's paint capability; its identity is never reused by another widget.
 struct Recorder {
-    /// Zero means no caller currently has authority to record.
-    active: u64,
-    /// Never wraps: exhaustion rejects the next invocation.
-    next: u64,
-    /// The active frame state exists only between this recorder's begin and finish operations.
+    /// Issued exactly once by PaintService; the public COM identity never reactivates.
+    invocation: std::num::NonZeroU64,
+    /// Present only during this one invocation; finish takes it and permanently revokes the identity.
     context: Option<PaintContext>,
     /// Installed resources resolve the legacy convenience text operation without per-widget import.
     resources: super::SharedAssets,
@@ -70,15 +68,10 @@ struct Recorder {
 }
 
 impl Recorder {
-    /// Creates an idle runtime paint context over the runtime's one installed asset value.
-    fn new(resources: super::SharedAssets) -> Self {
-        Self {
-            active: 0,
-            next: 0,
-            context: None,
-            resources,
-            frames: std::rc::Rc::default(),
-        }
+    /// Starts one trusted invocation using the traversal's existing frames and moved buffers.
+    /// Context presence is the sole liveness fact; construction cannot fail after taking buffers.
+    fn new(resources: super::SharedAssets, frames: std::rc::Rc<gpu::Frames>, invocation: std::num::NonZeroU64, context: PaintContext) -> Self {
+        Self { invocation, context: Some(context), resources, frames }
     }
 
     /// Transfers a completed view at its original slot or rejects unfinished/rejected work.
@@ -108,7 +101,7 @@ impl Recorder {
 
     /// Validates authority before touching the active frame, including empty operations.
     fn check(&self, scope: PaintScope) -> Result<(), NcStatus> {
-        if scope.invocation == 0 || self.active != scope.invocation {
+        if self.context.is_none() || self.invocation.get() != scope.invocation {
             Err(UI_E_EXPIRED_SCOPE)
         } else if scope.clip.width < 0 || scope.clip.height < 0 {
             Err(NC_E_INVALID_ARG)
@@ -135,26 +128,12 @@ impl Recorder {
         draw(&mut painter)
     }
 
-    /// Installs the runtime's existing frame buffers and opens one unique invocation.
-    fn begin(&mut self, context: PaintContext) -> Result<u64, NcStatus> {
-        if self.active != 0 || self.context.is_some() {
-            return Err(UI_E_BUSY);
-        }
-        let invocation = self.next.checked_add(1).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
-        self.next = invocation;
-        self.context = Some(context);
-        self.active = invocation;
-        Ok(invocation)
+    /// Permanently expires this identity and returns its frame buffers to traversal.
+    fn finish(&mut self, invocation: u64) -> Result<PaintContext, NcStatus> {
+        if self.invocation.get() != invocation { return Err(UI_E_EXPIRED_SCOPE); }
+        self.context.take().ok_or(UI_E_EXPIRED_SCOPE)
     }
 
-    /// Expires the matching invocation and returns the runtime's frame buffers to traversal.
-    fn finish(&mut self, invocation: u64) -> Result<PaintContext, NcStatus> {
-        if invocation == 0 || self.active != invocation {
-            return Err(UI_E_EXPIRED_SCOPE);
-        }
-        self.active = 0;
-        self.context.take().ok_or(UI_E_BUSY)
-    }
 }
 
 /// Decodes one exhaustive contract state for a control appearance lookup.
@@ -374,18 +353,15 @@ impl PaintService {
 
     /// Moves the existing buffers through one unique COM allocation and revokes it on return.
     pub(super) fn paint(&self, widget: &neocogi_com::ComBox<IWidgetAbi>, ctx: &mut crate::WidgetPaintCtx<'_>) -> Result<(), NcStatus> {
-        let invocation = self.next.get().checked_add(1).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
-        self.next.set(invocation);
-        let mut value = Recorder::new(self.resources.clone());
-        value.next = invocation - 1;
-        value.frames = self.frames.clone();
-        value.begin(PaintContext {
+        let invocation = self.next.get().checked_add(1).and_then(std::num::NonZeroU64::new).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
+        self.next.set(invocation.get());
+        let value = Recorder::new(self.resources.clone(), self.frames.clone(), invocation, PaintContext {
             display_list: ctx.take_display_list(),
             content_rect: ctx.paint_content_rect(),
             screen_clip: ctx.paint_screen_clip(),
             view: None,
             gpu_error: None,
-        })?;
+        });
         let recorder = Recorder::into_local(value);
         let painter: ComPtr<IPainterAbi> = recorder.query()?;
         let state = WidgetPaint {
@@ -399,11 +375,11 @@ impl PaintService {
             window_active: ctx.window_active(),
         };
         let mut widget = widget.as_com_ref();
-        let result = widget.paint(PaintScope { invocation, clip: state.clip }, state, painter.as_com_ref());
+        let result = widget.paint(PaintScope { invocation: invocation.get(), clip: state.clip }, state, painter.as_com_ref());
         // Typed construction proves the implementation; local access uses the same gate as COM.
         // No raw implementation cast or capability from a different invocation participates.
         let harvested = recorder.try_borrow_mut()?.harvest();
-        let context = recorder.try_borrow_mut()?.finish(invocation)?;
+        let context = recorder.try_borrow_mut()?.finish(invocation.get())?;
         ctx.restore_display_list(context.display_list);
         result.and(harvested)
     }
@@ -424,7 +400,8 @@ mod intake_tests {
         let bundle = crate::SkinBundle::from_atlas(crate::test_support::test_atlas());
         let source = crate::test_support::assets::export_bundle(&bundle).unwrap();
         let resources = crate::assets::ImportedAssets::read(source.as_com_ref(), None).unwrap();
-        let mut recorder = Recorder::new(std::rc::Rc::new(std::cell::RefCell::new(std::rc::Rc::new(resources))));
+        let resources = std::rc::Rc::new(std::cell::RefCell::new(std::rc::Rc::new(resources)));
+        let frames: std::rc::Rc<gpu::Frames> = std::rc::Rc::default();
         let context = PaintContext {
             display_list: crate::render::DisplayList::new(),
             content_rect: crate::Recti::new(0, 0, 32, 32),
@@ -432,7 +409,8 @@ mod intake_tests {
             view: None,
             gpu_error: None,
         };
-        let invocation = recorder.begin(context).unwrap();
+        let invocation = 1;
+        let mut recorder = Recorder::new(resources.clone(), frames.clone(), std::num::NonZeroU64::new(invocation).unwrap(), context);
         let scope = PaintScope {
             invocation,
             clip: Rect { x: 0, y: 0, width: 32, height: 32 },
@@ -450,7 +428,9 @@ mod intake_tests {
         );
         let context = recorder.finish(invocation).unwrap();
         assert!(context.display_list.is_empty());
-        let invocation = recorder.begin(context).unwrap();
+        assert_eq!(recorder.check(scope), Err(UI_E_EXPIRED_SCOPE));
+        let invocation = 2;
+        let mut recorder = Recorder::new(resources.clone(), frames.clone(), std::num::NonZeroU64::new(invocation).unwrap(), context);
         let next = PaintScope { invocation, ..scope };
         assert_eq!(
             recorder.text(next, next.clip, NcCopyFromBufferOffset::new(0, b"x")),
@@ -458,7 +438,8 @@ mod intake_tests {
         );
         let mut context = recorder.finish(invocation).unwrap();
         context.display_list.clear();
-        let invocation = recorder.begin(context).unwrap();
+        let invocation = 3;
+        let mut recorder = Recorder::new(resources, frames, std::num::NonZeroU64::new(invocation).unwrap(), context);
         let next = PaintScope { invocation, ..scope };
         recorder.text(next, next.clip, NcCopyFromBufferOffset::new(0, b"x")).unwrap();
         assert!(!recorder.finish(invocation).unwrap().display_list.is_empty());
