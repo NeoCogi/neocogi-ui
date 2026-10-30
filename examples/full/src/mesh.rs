@@ -370,11 +370,11 @@ mod viewport_tests {
         let owner = session.take_block().unwrap();
         output.borrow_mut().views.push(session);
         let block = device.block_snapshot(owner.as_com_ref()).unwrap();
-        let Command::Draw(draw) = &block.commands[1] else {
+        let Command::Draw(draw) = &block.commands()[1] else {
             panic!("missing generic draw");
         };
-        assert_eq!(block.root.client, visible);
-        assert_eq!(draw.uniforms[0].data.bytes, camera_bytes(&reference.pvm(), &reference.view_matrix()));
+        assert_eq!(block.root().client, visible);
+        assert_eq!(draw.uniforms[0].data.bytes(), camera_bytes(&reference.pvm(), &reference.view_matrix()));
         widget
             .paint(
                 WidgetPaint {

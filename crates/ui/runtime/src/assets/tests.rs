@@ -306,7 +306,7 @@ impl neocogi_render_core::abi::IRenderHost for UploadHost {
                 return Err(UI_E_RENDER);
             }
         }
-        self.probe.prepared.set(version.id);
+        self.probe.prepared.set(version.id());
         Ok(())
     }
 }
@@ -319,9 +319,9 @@ impl IRenderer for UploadRenderer {
         let blocks = neocogi_gfx_support::testing::blocks(info, stream)?;
         let mut draws = 0;
         for block in blocks {
-            for command in &block.commands {
+            for command in block.commands() {
                 if let neocogi_render_gpu::command::Command::Draw(draw) = command {
-                    assert_eq!(draw.textures[0].texture.id, self.0.prepared.get());
+                    assert_eq!(draw.textures[0].texture.id(), self.0.prepared.get());
                     draws += 1;
                 }
             }

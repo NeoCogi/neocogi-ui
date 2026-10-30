@@ -42,7 +42,7 @@ impl IRenderer for CaptureRenderer {
         self.observation.batches.set(batches.len() as u32);
         self.observation.calls.set(self.observation.calls.get() + 1);
         let blocks = neocogi_gfx_support::testing::blocks(info, stream)?;
-        let atlas = blocks.iter().flat_map(|block| &block.commands).find_map(|command| {
+        let atlas = blocks.iter().flat_map(|block| block.commands()).find_map(|command| {
             if let neocogi_render_gpu::command::Command::Draw(draw) = command {
                 Some(draw.textures[0].texture.clone())
             } else {
@@ -50,7 +50,7 @@ impl IRenderer for CaptureRenderer {
             }
         });
         if let Some(atlas) = atlas {
-            self.observation.size.set(Some(atlas.desc.size));
+            self.observation.size.set(Some(atlas.desc().size));
             *self.observation.pixels.borrow_mut() = atlas.pixels().unwrap().to_vec();
         }
         Ok(())

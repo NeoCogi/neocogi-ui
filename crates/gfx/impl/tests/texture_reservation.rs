@@ -85,7 +85,7 @@ impl IRenderer for Renderer {
             .blocks()
             .iter()
             .flat_map(|block| {
-                block.commands.iter().filter_map(|command| {
+                block.commands().iter().filter_map(|command| {
                     let neocogi_render_gpu::command::Command::Draw(draw) = command else {
                         return None;
                     };

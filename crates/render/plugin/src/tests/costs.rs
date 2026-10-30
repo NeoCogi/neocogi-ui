@@ -121,19 +121,19 @@ fn measure_ui_and_mixed_client_costs() {
         let mut textures = std::collections::HashSet::new();
         let mut pipelines = std::collections::HashSet::new();
         for block in &blocks {
-            commands += block.commands.len();
-            for command in &block.commands {
+            commands += block.commands().len();
+            for command in block.commands() {
                 if let neocogi_render_gpu::command::Command::Draw(draw) = command {
                     draws += 1;
-                    pipelines.insert(draw.pipeline.id);
+                    pipelines.insert(draw.pipeline.id());
                     for vertex in &draw.vertex_buffers {
-                        buffers.insert(vertex.buffer.id);
+                        buffers.insert(vertex.buffer.id());
                     }
                     if let Some(index) = &draw.index {
-                        buffers.insert(index.buffer.id);
+                        buffers.insert(index.buffer.id());
                     }
                     for image in &draw.textures {
-                        textures.insert(image.texture.id);
+                        textures.insert(image.texture.id());
                     }
                 }
             }

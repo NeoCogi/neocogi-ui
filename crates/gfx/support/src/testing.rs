@@ -155,7 +155,7 @@ pub fn read(info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(V
             batches.push(UiBatch::View);
             continue;
         }
-        for command in &block.commands {
+        for command in block.commands() {
             let Command::Draw(draw) = command else {
                 panic!("UI does not emit attachment clears")
             };
@@ -165,7 +165,7 @@ pub fn read(info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(V
             let binding = &draw.vertex_buffers[0];
             assert_eq!(binding.slot, 0);
             let first_byte = binding.offset as usize + first as usize * 20;
-            let bytes = &binding.buffer.bytes[first_byte..first_byte + count as usize * 20];
+            let bytes = &binding.buffer.bytes()[first_byte..first_byte + count as usize * 20];
             let decoded = bytes
                 .chunks_exact(20)
                 .map(|v| RenderVertex {

@@ -12,13 +12,18 @@ fn assets() -> super::super::SharedAssets {
 
 /// A wide allocation has only its right 30-by-40 area visible in the committed client.
 fn recorder(frames: std::rc::Rc<gpu::Frames>, invocation: u64) -> neocogi_com::LocalCom<Recorder> {
-    let value = Recorder::new(assets(), frames, std::num::NonZeroU64::new(invocation).unwrap(), PaintContext {
-        display_list: crate::render::DisplayList::new(),
-        content_rect: crate::Recti::new(100, 200, 80, 60),
-        screen_clip: crate::Recti::new(150, 220, 30, 40),
-        view: None,
-        gpu_error: None,
-    });
+    let value = Recorder::new(
+        assets(),
+        frames,
+        std::num::NonZeroU64::new(invocation).unwrap(),
+        PaintContext {
+            display_list: crate::render::DisplayList::new(),
+            content_rect: crate::Recti::new(100, 200, 80, 60),
+            screen_clip: crate::Recti::new(150, 220, 30, 40),
+            view: None,
+            gpu_error: None,
+        },
+    );
     Recorder::into_local(value)
 }
 /// Caller-provided broad geometry cannot redefine the visible-client root.
@@ -59,9 +64,9 @@ fn committed_views_keep_their_original_position_and_visible_client_root() {
         panic!("view reordered");
     };
     let block = device.block_snapshot(owner.as_com_ref()).unwrap();
-    assert_eq!(block.root.target, Rect { x: 150, y: 220, width: 30, height: 40 });
+    assert_eq!(block.root().target, Rect { x: 150, y: 220, width: 30, height: 40 });
     assert!(matches!(
-        block.commands[1],
+        block.commands()[1],
         Command::ClearColor {
             rgba: 0xff556677,
             clip: Rect { x: 150, y: 220, width: 30, height: 40 },
