@@ -9,13 +9,12 @@ description = "Independent NeoCogi leaf widget and container plugin example"
 publish = false
 
 [lib]
-# The Rust target also defines the deployed shared-library name on each platform.
+# Reusable implementation; the dylib subpackage alone owns the native loader export.
 name = "nc_ui_extension"
-crate-type = ["rlib", "cdylib"]
+crate-type = ["rlib"]
 
 [features]
 default = []
-dynamic-plugin = []
 
 [dependencies]
 neocogi-ui-samples.workspace = true

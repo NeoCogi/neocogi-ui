@@ -88,8 +88,8 @@ cargo test -p neocogi-ui-runtime --offline
 cargo test -p neocogi-ui-nodes --offline
 cargo test -p neocogi-ui-support --offline
 cargo clippy -p neocogi-ui-runtime -p neocogi-ui-nodes -p neocogi-ui-support --offline --lib --tests --no-deps -- -D warnings
-cargo check -p neocogi-ui-runtime --lib --offline --no-default-features --features dynamic-plugin
-cargo check -p neocogi-ui-nodes --lib --offline --no-default-features --features dynamic-plugin
+cargo check -p neocogi-ui-runtime-dylib --lib --locked --offline
+cargo check -p neocogi-ui-nodes-dylib --lib --locked --offline
 ```
 
 `--offline` assumes dependencies are already cached. Core retains headless runtime tests,

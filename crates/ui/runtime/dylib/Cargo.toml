@@ -1,0 +1,19 @@
+[package]
+name = "neocogi-ui-runtime-dylib"
+version = "0.0.0"
+publish = false
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Final dynamic entrypoint for neocogi-ui-runtime"
+
+[lib]
+name = "nc_ui"
+crate-type = ["cdylib"]
+
+[features]
+default = []
+
+[dependencies]
+provider = { package = "neocogi-ui-runtime", path = "..", default-features = false }
+neocogi-com = { workspace = true, default-features = false, features = ["std"] }

@@ -19,18 +19,19 @@ extension = ["dep:extension-library"]
 [dependencies]
 neocogi-native-layout.workspace = true
 neocogi-com = { workspace = true, features = ["runtime"] }
-ui-library = { package = "neocogi-ui-runtime", path = "../../crates/ui/runtime", artifact = "cdylib", features = ["dynamic-plugin"] }
-nodes-library = { package = "neocogi-ui-nodes", path = "../../crates/ui/nodes", artifact = "cdylib", features = ["dynamic-plugin"] }
-shader-library = { package = "neocogi-shader-compiler", git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "619405d5b7d17c110d9378e58490b7ed30ba609a", artifact = "cdylib", features = ["dynamic-plugin"] }
-render-library = { package = "neocogi-render-plugin", git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "619405d5b7d17c110d9378e58490b7ed30ba609a", artifact = "cdylib", default-features = false, features = ["dynamic-plugin"] }
-gfx-library = { package = "neocogi-gfx", path = "../../crates/gfx/plugin", artifact = "cdylib", default-features = false, features = ["dynamic-plugin", "builder"] }
-skin-library = { package = "neocogi-skin", path = "../../crates/skin/plugin", artifact = "cdylib", default-features = false, features = ["dynamic-plugin", "theme-json"], optional = true }
-extension-library = { package = "neocogi-example-ui-extension", path = "../../examples/ui-extension", artifact = "cdylib", features = ["dynamic-plugin"], optional = true }
+ui-library = { package = "neocogi-ui-runtime-dylib", path = "../../crates/ui/runtime/dylib", artifact = "cdylib" }
+nodes-library = { package = "neocogi-ui-nodes-dylib", path = "../../crates/ui/nodes/dylib", artifact = "cdylib" }
+shader-library = { package = "neocogi-shader-compiler-dylib", git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9be1c778da91f6df47b2e7176da37d9691c66af7", artifact = "cdylib" }
+render-library = { package = "neocogi-render-plugin-dylib", git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "9be1c778da91f6df47b2e7176da37d9691c66af7", artifact = "cdylib", default-features = false }
+gfx-library = { package = "neocogi-gfx-dylib", path = "../../crates/gfx/plugin/dylib", artifact = "cdylib", default-features = false, features = ["builder"] }
+skin-library = { package = "neocogi-skin-dylib", path = "../../crates/skin/plugin/dylib", artifact = "cdylib", default-features = false, features = ["theme-json"], optional = true }
+extension-library = { package = "neocogi-example-ui-extension-dylib", path = "../../examples/ui-extension/dylib", artifact = "cdylib", optional = true }
 
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 neocogi-com-host.workspace = true
 tempfile.workspace = true
+libloading = "0.8"
 runtime-probe = { package = "neocogi-cargo-runtime-probe", path = "tests/runtime-probe", artifact = "cdylib", features = ["dynamic-plugin"] }
 
 [build-dependencies]

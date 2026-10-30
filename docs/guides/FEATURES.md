@@ -19,15 +19,15 @@ retained UI imports resources and submits composed frames. Applications opt into
 | `neocogi-ui` | `skin` | Re-export the optional Skin plugin's typed authoring contracts. |
 | `neocogi-ui-support` | none | Non-plugin resource and presentation helpers; owns no runtime or concrete nodes. |
 | `neocogi-ui-support` | `test-support` | Deterministic canonical resources and phase snapshots; never replaces runtime behavior. |
-| `neocogi-ui-runtime` | `dynamic-plugin` | Export the core runtime provider entrypoint in an assembled shared object. |
-| `neocogi-ui-nodes` | `dynamic-plugin` | Export the built-in nodes provider entrypoint in a separate assembled shared object. |
+| `neocogi-ui-runtime-dylib` | none | Final DLL entrypoint; the reusable `neocogi-ui-runtime` exports no discovery symbol. |
+| `neocogi-ui-nodes-dylib` | none | Final DLL entrypoint; the reusable nodes library has no dynamic export feature. |
 | `neocogi-gfx` | none | PNG decoding, resource publication, and renderer-neutral frame composition. |
 | `neocogi-gfx` | `builder` | Font rasterization and PNG atlas construction into portable tables. |
 | `neocogi-skin` | none | Live typed metric/palette compilation through the always-available GFX publisher. |
 | `neocogi-skin` | `theme-json` | Strict external JSON and appearance compilation; resource baking uses an explicit GFX loader. |
 | `neocogi-gfx-impl` | `save-to-rust` | Build-tool-only atomic source export from validated portable tables. |
 | `neocogi-skin-impl` | `builder` | Offline JSON-theme generation through the GFX implementation; never selected by the Skin plugin. |
-| `neocogi-shader-compiler` | `dynamic-plugin` | Export the CPU-only compiler provider entrypoint; statically registered for monolith/WebGL. |
+| `neocogi-shader-compiler-dylib` | none | Final CPU compiler DLL; monolith/WebGL links `neocogi-shader-compiler` directly. |
 | `neocogi-render-plugin` | `glow` / `vulkan` / `wgpu` / `webgl` | Build exactly one renderer plugin identity; WebGL is the browser choice. |
 | `neocogi-demo-host` | `png-assets` | Expose the host PNG-upload client for applications that select the GFX plugin. |
 | `neocogi-demo-host` | `skin` | Link/register the live appearance compiler for browser or monolithic startup; does not enable JSON parsing. |
@@ -112,3 +112,10 @@ CI tests the UI and each compiler feature independently: no features, `builder`,
 `theme-json` and `save-to-rust`. It checks native backends separately and runs browser
 DOM/input regressions. A workspace-wide feature union can hide a broken minimal
 configuration; `--all-features` also does not replace the three native backend runs.
+
+Dynamic compositions select the seven providers' `*-dylib` packages as normal
+Cargo artifacts. These fixed final targets alone own the discovery symbol; they
+forward backend/builder/theme features to the same reusable implementations. The
+implementation packages have no `dynamic-plugin` feature. This preserves target
+release/min-size settings without duplicating descriptors or linking provider
+implementations into a dynamic executable.

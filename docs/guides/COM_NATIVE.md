@@ -57,7 +57,7 @@ The existing `neocogi-demo-host` handles application startup. Its optional
 
 ```toml
 [dependencies]
-ui-library = { package = "neocogi-ui-runtime", path = "../../crates/ui/runtime", artifact = "cdylib", features = ["dynamic-plugin"] }
+ui-library = { package = "neocogi-ui-runtime-dylib", path = "../../crates/ui/runtime/dylib", artifact = "cdylib" }
 ```
 
 That dependency has `lib = false`, Cargo's artifact default. It builds a DLL
@@ -91,9 +91,12 @@ application libraries accept that handle. Each plugin's typed acquisition accept
 one supplied handle, with the generated C bootstrap forwarding the immutable
 host service graph. Callbacks execute in that host; plugin code owns no registry.
 
-Native providers need the facade and contracts only. `dynamic-plugin` enables
-their descriptor export without selecting any implementation. Static/browser
-composition registers the same linked descriptors with supplied access. There
+Reusable providers need the facade and contracts only. They are rlib-only packages
+without a `dynamic-plugin` feature. Each `*-dylib` subpackage is a minimal final
+link root exporting discovery through the published SDK's `return_plugin_descriptor`
+helper and the implementation's existing static descriptor. Static/browser
+composition registers that same descriptor directly. Additive Cargo features cannot
+introduce DLL exports into reusable libraries or their peer test dependencies. There
 is no COM runtime DLL, import library, native-link bridge or runtime-specific
 RPATH. Generic Cargo artifact staging still copies selected provider libraries
 and assets beside the executable. Platform/system dependencies remain ordinary
@@ -121,8 +124,9 @@ fn acquire_root(_runtime: neocogi_com::Runtime) -> Result<neocogi_com::ComPtr<ap
 
 The return interface supplies root identity and threading. Version defaults to
 Cargo package version; `dependencies = [PLUGIN_ID]` declares hard providers.
-The macro generates `plugin_descriptor()` for static registration and the native
-`nc_get_plugin_descriptor_v1` export under `dynamic-plugin`. No `class`/`factory`
+The macro generates `plugin_descriptor()` for static registration. These reusable
+packages leave its optional dynamic export gate undeclared; the final `*-dylib`
+package alone exports `nc_get_plugin_descriptor_v1` and delegates to that descriptor. No `class`/`factory`
 IDL roles or factory bootstrap traits are required. A finished service is also a
 valid plugin root. See [IDL modules](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/docs/contracts/IDL_MODULES.md) and the
 [macro reference](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/crates/macros/README.md).
@@ -177,7 +181,7 @@ Restoring outputs during macro expansion can require one following compilation
 to settle Cargo's timestamp-based dep-info; subsequent unchanged builds are fresh.
 
 The pinned Cargo version marks each profile output directory with `.cargo-lock`.
-Staging locates that marker among ancestors of Cargo's artifact or `OUT_DIR` path;
+Staging locates that marker among ancestors of the consuming package's `OUT_DIR`;
 it never reconstructs hashes or infers a second graph. With a separate Cargo
 build directory, set the absolute build-only `NEOCOGI_NATIVE_OUTPUT_DIR` to the
 actual executable directory. Unsupported layouts fail compilation explicitly.
@@ -215,10 +219,13 @@ Their GLSL generator uses it for executable float literals and stage-specific
 symbol names. Stripping it breaks shader syntax or merges independent bindings.
 Other target packages retain the profile's normal diagnostic-stripping policy.
 
-A dynamic artifact request builds only its requested cdylib target. A normal Rust
-dependency on a package advertising both rlib/cdylib may also emit an unused shared
-library during monolith/browser builds; removing that extra link would require
-separate static/dynamic target packages or another crate-type selection mechanism.
+A dynamic artifact request builds a final cdylib-only package with its ordinary
+implementation dependencies. Static/monolith/browser consumers link rlib-only
+implementation packages and do not emit unused DLLs. Keep deployment artifacts as
+normal dependencies: build dependencies receive host-tool profiles even with
+`target = "target"`, losing application optimization/panic/size flags. The final
+packages add only symbol ownership, with no duplicate metadata, factories, runtime,
+generated workspace or dependency resolver.
 
 The host implementation Rust target is `neocogi_com_host`. Native provider names remain `nc_ui`, `nc_ui_nodes`, `nc_shader_compiler`, `nc_render`,
 `nc_gfx`, `nc_skin` and optional `nc_ui_extension`. The executable is in the usual

@@ -13,6 +13,65 @@ mod profile;
 /// Compiler-only artifact copying leaves only this platform filename in the test host.
 const PROBE: &str = neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_RUNTIME_PROBE_nc_cargo_runtime_probe");
 
+/// Calls discovery in the actual separately linked DLLs, including the null-output contract.
+/// No implementation Rust dependency or copied fixture descriptor can satisfy this regression.
+#[test]
+fn final_libraries_export_their_real_descriptors() {
+    let executable = std::env::current_exe().unwrap();
+    let root = profile::output_root(&executable, std::env::var_os("NEOCOGI_NATIVE_OUTPUT_DIR").map(Into::into)).unwrap();
+    let renderer = if cfg!(feature = "vulkan") {
+        "neocogi.render.vulkan"
+    } else if cfg!(feature = "wgpu") {
+        "neocogi.render.wgpu"
+    } else {
+        "neocogi.render.glow"
+    };
+    let providers = [
+        (
+            neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_UI_LIBRARY_nc_ui"),
+            "neocogi.ui.runtime",
+        ),
+        (
+            neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_NODES_LIBRARY_nc_ui_nodes"),
+            "neocogi.ui.nodes.runtime",
+        ),
+        (
+            neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_SHADER_LIBRARY_nc_shader_compiler"),
+            "neocogi.shader.compiler",
+        ),
+        (neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_RENDER_LIBRARY_nc_render"), renderer),
+        (
+            neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_GFX_LIBRARY_nc_gfx"),
+            "neocogi.gfx.runtime",
+        ),
+        #[cfg(feature = "skin")]
+        (
+            neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_SKIN_LIBRARY_nc_skin"),
+            "neocogi.skin.runtime",
+        ),
+        #[cfg(feature = "extension")]
+        (
+            neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_EXTENSION_LIBRARY_nc_ui_extension"),
+            "neocogi.example.ui-extension",
+        ),
+    ];
+    for (filename, name) in providers {
+        // SAFETY: trusted Cargo-built final roots; the library remains mapped until every
+        // borrowed descriptor field has been inspected and no COM objects are acquired here.
+        unsafe {
+            let library = libloading::Library::new(root.join("lib").join(filename)).unwrap();
+            let discovery = library
+                .get::<neocogi_com::NcGetPluginDescriptor>(neocogi_com::NC_GET_PLUGIN_DESCRIPTOR_SYMBOL.as_bytes())
+                .unwrap();
+            assert_eq!(discovery(std::ptr::null_mut()), neocogi_com::NC_E_POINTER);
+            let mut descriptor = std::ptr::null();
+            assert_eq!(discovery(&mut descriptor), neocogi_com::NC_OK);
+            assert!(!descriptor.is_null());
+            assert_eq!((*descriptor).plugin_id, guid_from_qualified_name(name), "{filename}");
+        }
+    }
+}
+
 /// Registration observed/changed inside the DLL must be the host's same process catalog.
 #[test]
 fn cargo_host_and_plugin_share_one_runtime_catalog() {

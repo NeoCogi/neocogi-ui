@@ -1,0 +1,20 @@
+[package]
+name = "neocogi-gfx-dylib"
+version = "0.0.0"
+publish = false
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Final dynamic entrypoint for neocogi-gfx"
+
+[lib]
+name = "nc_gfx"
+crate-type = ["cdylib"]
+
+[features]
+default = []
+builder = ["provider/builder"]
+
+[dependencies]
+provider = { package = "neocogi-gfx", path = "..", default-features = false }
+neocogi-com = { workspace = true, default-features = false, features = ["std"] }

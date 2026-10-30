@@ -20,7 +20,7 @@ class NativeBuildProfiles(unittest.TestCase):
     def check_profile(self, profile, panic):
         """Compare every deployed artifact and rebuilt std with the target root."""
         result = subprocess.run(
-            ["cargo", "build", "-p", "neocogi-demo-full", "--profile", profile,
+            ["cargo", "build", "--locked", "--offline", "-p", "neocogi-demo-full", "--profile", profile,
              "--no-default-features", "--features", "dynamic,vulkan",
              "-Zunstable-options", "--unit-graph"],
             cwd=ROOT, capture_output=True, text=True, check=False,
@@ -36,12 +36,32 @@ class NativeBuildProfiles(unittest.TestCase):
         self.assertEqual(expected["codegen_units"], 1)
         self.assertEqual(expected["strip"], {"resolved": {"Named": "symbols"}})
         self.assertEqual(expected["trim_paths"], "all")
-        artifacts = [u for u in units if u["target"]["name"] in PROVIDERS]
+        artifacts = [u for u in units if u["target"]["name"] in PROVIDERS and u["target"]["kind"] == ["cdylib"]]
         self.assertEqual({u["target"]["name"] for u in artifacts}, PROVIDERS)
         self.assertEqual(len(artifacts), len(PROVIDERS), "one provider artifact per target graph")
+        implementations = []
         for unit in artifacts:
+            self.assertIn("-dylib@", unit["pkg_id"], "only a final package owns a discovery export")
+            implementation = units[next(edge["index"] for edge in unit["dependencies"] if edge["extern_crate_name"] == "provider")]
+            self.assertEqual(implementation["target"]["crate_types"], ["rlib"])
+            self.assertNotIn("dynamic-plugin", implementation["features"])
+            implementations.append(implementation)
+        # Follow ordinary Rust edges from the app, stopping at independently linked DLLs.
+        # Their implementation rlibs belong inside the DLL, never the dynamic executable.
+        visited = set()
+        pending = [units.index(application)]
+        while pending:
+            index = pending.pop()
+            if index in visited:
+                continue
+            visited.add(index)
+            unit = units[index]
+            if unit["target"]["kind"] == ["cdylib"]:
+                continue
+            self.assertNotIn(unit["target"]["name"], PROVIDERS, "dynamic host must not link implementation providers")
+            pending.extend(edge["index"] for edge in unit["dependencies"])
+        for unit in artifacts + implementations:
             with self.subTest(provider=unit["target"]["name"]):
-                self.assertEqual(unit["target"]["kind"], ["cdylib"], "implementation rlibs must not enter the host")
                 for key in ("opt_level", "panic", "lto", "codegen_units", "strip", "trim_paths"):
                     self.assertEqual(unit["profile"][key], expected[key], key)
                 self.assertEqual(unit["profile"].get("rustflags", []), expected.get("rustflags", []))

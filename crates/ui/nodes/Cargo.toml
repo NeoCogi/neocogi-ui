@@ -8,14 +8,12 @@ repository.workspace = true
 description = "Deployable built-in NeoCogi UI node implementations and standard compositions"
 
 [lib]
-# Keep direct Cargo builds and packaged shared libraries under the same short name.
+# Static consumers and the final DLL use the same implementation; this target exports no loader symbol.
 name = "nc_ui_nodes"
-crate-type = ["rlib", "cdylib"]
+crate-type = ["rlib"]
 
 [features]
 default = []
-# Only deployable dynamic libraries publish the stable plugin descriptor entrypoint.
-dynamic-plugin = []
 
 [dependencies]
 neocogi-ui-support.workspace = true

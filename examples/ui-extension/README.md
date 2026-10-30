@@ -11,11 +11,12 @@ cargo run -p neocogi-demo-smoke --no-default-features --features dynamic-extensi
 The extension itself also builds with ordinary Cargo:
 
 ```sh
-cargo rustc -p neocogi-example-ui-extension --lib --crate-type cdylib --features dynamic-plugin
+cargo build -p neocogi-example-ui-extension-dylib --locked
 cargo rustc -p neocogi-example-ui-extension --lib --crate-type staticlib
 ```
 
-Rust monoliths link its `rlib`; the second command additionally produces a native
+The final DLL package delegates discovery to the implementation descriptor.
+Rust monoliths link the implementation `rlib`; the second command additionally produces a native
 static archive. The same event path runs in a monolith with embedded resources:
 
 ```sh

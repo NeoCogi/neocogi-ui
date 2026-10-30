@@ -39,7 +39,7 @@ neocogi-com = { workspace = true, default-features = false, features = ["runtime
 neocogi-demo-assets.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-# Dynamic assembly roots add `dynamic-plugin`; monoliths call descriptors directly.
+# Dynamic assemblies select final DLL packages; monoliths call implementation descriptors directly.
 neocogi-ui-nodes = { workspace = true, optional = true }
 neocogi-gfx = { workspace = true, features = ["builder"], optional = true }
 

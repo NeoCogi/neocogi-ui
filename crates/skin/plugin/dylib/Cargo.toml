@@ -1,0 +1,20 @@
+[package]
+name = "neocogi-skin-dylib"
+version = "0.0.0"
+publish = false
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Final dynamic entrypoint for neocogi-skin"
+
+[lib]
+name = "nc_skin"
+crate-type = ["cdylib"]
+
+[features]
+default = []
+theme-json = ["provider/theme-json"]
+
+[dependencies]
+provider = { package = "neocogi-skin", path = "..", default-features = false }
+neocogi-com = { workspace = true, default-features = false, features = ["std"] }

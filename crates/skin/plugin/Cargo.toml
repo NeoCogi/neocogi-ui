@@ -9,14 +9,13 @@ description = "NeoCogi appearance and external-theme plugin"
 publish = false
 
 [lib]
-# The Rust target also defines the deployed shared-library name on each platform.
+# Reusable implementation; the dylib subpackage alone owns the native loader export.
 name = "nc_skin"
-crate-type = ["rlib", "cdylib"]
+crate-type = ["rlib"]
 
 [features]
 default = []
 theme-json = ["neocogi-skin-impl/theme-json"]
-dynamic-plugin = []
 
 [dependencies]
 neocogi-skin-impl.workspace = true

@@ -15,9 +15,9 @@ neocogi-render-core.workspace = true
 neocogi-idl.workspace = true
 
 [lib]
-# Keep direct Cargo builds and packaged shared libraries under the same short name.
+# Static consumers and the final DLL use the same implementation; this target exports no loader symbol.
 name = "nc_ui"
-crate-type = ["rlib", "cdylib"]
+crate-type = ["rlib"]
 
 [dependencies]
 neocogi-ui-support.workspace = true
@@ -49,8 +49,6 @@ trybuild.workspace = true
 default = []
 # Typed owner driver for native algorithm tests; no scope control is exported over COM.
 test-support = []
-# A final dynamic artifact owns the loader entrypoint; static clients use the descriptor directly.
-dynamic-plugin = []
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Native target code and its shared runtime use the same Cargo profile.
