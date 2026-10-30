@@ -1091,6 +1091,10 @@ dependencies = [
  "neocogi-demo-host",
  "neocogi-ui",
  "neocogi-ui-document",
+ "neocogi-ui-nodes",
+ "neocogi-ui-runtime",
+ "neocogi-ui-support",
+ "tempfile",
 ]
 
 [[package]]

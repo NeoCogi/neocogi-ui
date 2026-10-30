@@ -28,3 +28,9 @@ neocogi-demo-assets.workspace = true
 [[bin]]
 name = "neocogi-example-ui"
 path = "src/main.rs"
+
+[dev-dependencies]
+neocogi-ui-runtime.workspace = true
+neocogi-ui-nodes.workspace = true
+neocogi-ui-support = { workspace = true, features = ["test-support"] }
+tempfile.workspace = true
