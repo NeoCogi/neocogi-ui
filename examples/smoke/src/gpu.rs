@@ -168,10 +168,7 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
         Bytes::source([0u16, 1, 3].into_iter().flat_map(u16::to_le_bytes).collect()).as_com_ref(),
     )?;
     // Raw bytes have no semantic meaning until draw consumption validates the complete footprint.
-    let host = renderer
-        .try_add_ref()?
-        .query::<IPlatformWindowAbi>()?
-        .graphics_host()?;
+    let host = renderer.try_add_ref()?.query::<IPlatformWindowAbi>()?.graphics_host()?;
     let mut frame = host.recording_broker()?.begin_frame()?;
     let bounds = Rect { x: 0, y: 0, width: 16, height: 16 };
     let mut session = frame.begin_view(RenderViewRoot { client: bounds, target: bounds }, resources.as_com_ref())?;

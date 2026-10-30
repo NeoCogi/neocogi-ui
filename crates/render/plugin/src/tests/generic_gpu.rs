@@ -61,6 +61,75 @@ fn rectangle(rect: Rect, color: u32) -> Vec<RenderVertex> {
     vec![q[0], q[1], q[2], q[0], q[2], q[3]]
 }
 
+/// Real immutable-image import samples native pixels while native retention strips all COM leases.
+#[test]
+#[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
+fn private_ui_image_import_renders_without_a_native_cache_com_cycle() {
+    let _session = native_session();
+    let platform = PlatformObject::default();
+    let atlas: ComPtr<IRgbaImageAbi> = White::from_value(White).query().unwrap();
+    let native = platform.window("private UI image import", SIZE, atlas.as_com_ref()).unwrap();
+    let device = Rc::downgrade(&native.device);
+    let window = WindowObject::from_value(native);
+    let renderer: ComPtr<IRendererAbi> = window.query().unwrap();
+    let graphics = window.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap();
+    let images: ComPtr<ITextureFactoryAbi> = window.query().unwrap();
+    let pixels = [255,0,0,255, 0,255,0,255, 0,0,255,255, 255,255,0,255];
+    let image = images.create_texture(Size { width: 2, height: 2 }, NcCopyFromBufferOffset::new(0, &pixels)).unwrap();
+    let image_key = identity(&image).unwrap();
+    let clients: ComPtr<IRenderClientFactoryAbi> = window.query().unwrap();
+    let client = clients.create_client(RenderClientLimits::default()).unwrap();
+    assert!(matches!(graphics.import_ui_texture(client.resources().unwrap().as_com_ref(), image.as_com_ref()), Err(RENDER_E_OWNER)));
+    let ui = graphics.create_ui_client(RenderClientLimits::default()).unwrap();
+    let resources = ui.resources().unwrap();
+    let imported = graphics.import_ui_texture(resources.as_com_ref(), image.as_com_ref()).unwrap();
+    assert!(imported.query_ref::<ITextureAbi>().is_err());
+    graphics.prepare_ui_texture(resources.as_com_ref(), imported.as_com_ref()).unwrap();
+    let code = Bytes::source(br#"
+        @group(2) @binding(0) var image:texture_2d<f32>;
+        @group(2) @binding(1) var image_sampler:sampler;
+        struct V { @builtin(position) p:vec4<f32>, @location(0) uv:vec2<f32> }
+        @vertex fn vs(@builtin(vertex_index) i:u32) -> V {
+            let p=array<vec2<f32>,3>(vec2(-1.,-1.),vec2(3.,-1.),vec2(-1.,3.));
+            return V(vec4(p[i],0.,1.),p[i]*vec2(0.5,-0.5)+vec2(0.5));
+        }
+        @fragment fn fs(v:V) -> @location(0) vec4<f32> { return textureSample(image,image_sampler,v.uv); }
+    "#.to_vec());
+    let vs = resources.create_shader(GpuShaderStage::Vertex, code.as_com_ref(), NcCopyFromBufferOffset::new(0,b"vs")).unwrap();
+    let fs = resources.create_shader(GpuShaderStage::Fragment, code.as_com_ref(), NcCopyFromBufferOffset::new(0,b"fs")).unwrap();
+    let desc = PipelineDesc { bindings:vec![GpuShaderBinding { stage:GpuShaderStage::Fragment, slot:0, kind:GpuBindingKind::SampledTexture, byte_len:0 }], ..Default::default() }.source().unwrap();
+    let pipeline = resources.create_pipeline(desc.as_com_ref(), vs.as_com_ref(), fs.as_com_ref()).unwrap();
+    let sampler = resources.create_sampler(GpuSamplerDesc::default()).unwrap();
+    let mut frame = graphics.recording_broker().unwrap().begin_frame().unwrap();
+    let root = Rect { x:0, y:0, width:SIZE.width, height:SIZE.height };
+    let mut session = frame.begin_view(RenderViewRoot { client:root, target:root }, resources.as_com_ref()).unwrap();
+    let mut view = session.view().unwrap();
+    view.bind_pipeline(pipeline.as_com_ref()).unwrap();
+    view.bind_texture(GpuShaderStage::Fragment,0,imported.as_com_ref(),sampler.as_com_ref()).unwrap();
+    view.draw(3,1,0).unwrap();
+    view.finish().unwrap();
+    let block = session.take_block().unwrap();
+    frame.finish().unwrap();
+    drop((view, session, frame, image, imported, pipeline, sampler, vs, fs));
+    let source: ComPtr<IRenderStreamAbi> = super::view_geometry::ViewStream::from_value(super::view_geometry::ViewStream { blocks:vec![block] }).query().unwrap();
+    renderer.render(RenderInfo { size:SIZE, clear:0xff000000, invocation:1, vertex_count:0, batch_count:1 }, atlas.as_com_ref(), source.as_com_ref()).unwrap();
+    let pixels = {
+        let native = device.upgrade().unwrap();
+        let access = native.access().unwrap();
+        access.state.as_ref().unwrap().gpu.last_pixels().to_vec()
+    };
+    // GL readback is bottom-up; imported immutable images retain their top-left source convention.
+    let pixel = |x:usize,y:usize| &pixels[((63-y)*64+x)*4..((63-y)*64+x)*4+4];
+    assert_eq!(pixel(8,8), [255,0,0,255]);
+    assert_eq!(pixel(56,8), [0,255,0,255]);
+    assert_eq!(pixel(8,56), [0,0,255,255]);
+    assert_eq!(pixel(56,56), [255,255,0,255]);
+    drop(source);
+    assert!(!device.upgrade().unwrap().textures.borrow().contains_key(&image_key), "native caches must not keep imported COM leases alive");
+    drop((resources, ui, client, clients, images, graphics, renderer, window));
+    assert!(device.upgrade().is_none(), "an idle native cache must not retain its own device facade");
+}
+
 /// Asymmetry proves normalized position orientation; color clear and later UI prove confinement/order.
 #[test]
 #[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
