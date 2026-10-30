@@ -976,3 +976,134 @@ fn caption_intent_cancels_current_request_without_destroying_or_crossing_reopen(
     fixture.handle.close().unwrap();
     assert!(!fixture.handle.as_interface().is_alive());
 }
+
+#[com_object(interfaces(INativePath))]
+/// A foreign path canary proves invalid titles reject before either decoder calls out.
+struct TitlePathCanary {
+    /// All path operations increment the same test-owned observation.
+    calls: Rc<std::cell::Cell<usize>>,
+}
+impl TitlePathCanary {
+    /// A normal provider error is distinguishable from title admission by its count.
+    fn called(&self) -> NcStatus {
+        self.calls.set(self.calls.get() + 1);
+        NC_E_INVALID_ARG
+    }
+}
+impl INativePath for TitlePathCanary {
+    /// Decoder metadata must remain untouched for rejected title input.
+    fn encoding(&self) -> Result<PathEncoding, NcStatus> {
+        Err(self.called())
+    }
+    /// Rejects a unit count if the decoder unexpectedly proceeds.
+    fn unit_count(&self) -> Result<u64, NcStatus> {
+        Err(self.called())
+    }
+    /// Never fabricates native bytes for this ordering probe.
+    fn unix_bytes(&self, _: neocogi_com::NcOutputWriter<'_, u8>) -> Result<(), NcStatus> {
+        Err(self.called())
+    }
+    /// Never fabricates native units for this ordering probe.
+    fn windows_units(&self, _: neocogi_com::NcOutputWriter<'_, u16>) -> Result<(), NcStatus> {
+        Err(self.called())
+    }
+    /// Display is also foreign work and must not run during title rejection.
+    fn display(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+        Err(self.called())
+    }
+}
+
+/// Title errors preserve an earlier completed request and reject before foreign work/publication.
+#[test]
+fn rejected_titles_preserve_modal_rows_selection_and_both_queues_before_path_calls() {
+    let mut fixture = Fixture::new();
+    let directory = tempfile::tempdir().unwrap();
+    std::fs::write(directory.path().join("present"), "file").unwrap();
+    let completions = session(&mut fixture);
+    let mut previous = neocogi_ui::FileDialogRequest::new(directory.path());
+    previous.title = "retained title".into();
+    previous.mode = FileDialogMode::Save;
+    previous.filename = PathBuf::from("suggested.txt");
+    fixture.handle.open(&previous).unwrap();
+    assert_eq!(fixture.handle.cancel(), Ok(true));
+    // Drain only setup's private lifecycle facts. The completed application result
+    // remains queued throughout the rejected opens below.
+    fixture.widget.with(|dialog| while dialog.messages.try_recv().is_ok() {}).unwrap();
+    let window = fixture.handle.window().unwrap();
+    let before = window.snapshot().unwrap();
+    let title = window.title().unwrap().to_string().unwrap();
+    let root = fixture.file_root();
+    let selected = fixture.widget.with(|dialog| dialog.model.selected.clone()).unwrap();
+    let calls = Rc::new(std::cell::Cell::new(0));
+    let path: ComPtr<INativePathAbi> = TitlePathCanary::from_value(TitlePathCanary { calls: calls.clone() }).query().unwrap();
+    let mut interface = fixture.handle.as_interface().clone();
+    let exact = "é".repeat(neocogi_ui::MAX_WINDOW_TITLE_BYTES / 2);
+    let cases = [
+        (0, vec![b'x'; neocogi_ui::MAX_WINDOW_TITLE_BYTES + 1], neocogi_com::NC_E_OUT_OF_RANGE),
+        (0, format!("{exact}x").into_bytes(), neocogi_com::NC_E_OUT_OF_RANGE),
+        (0, vec![255; neocogi_ui::MAX_WINDOW_TITLE_BYTES + 1], neocogi_com::NC_E_OUT_OF_RANGE),
+        (1, vec![255; neocogi_ui::MAX_WINDOW_TITLE_BYTES + 1], NC_E_INVALID_ARG),
+        (0, vec![255], NC_E_INVALID_ARG),
+        (1, b"valid".to_vec(), NC_E_INVALID_ARG),
+    ];
+    let mut queue = fixture
+        .widget
+        .with(|dialog| dialog.model.nodes.queue.query::<neocogi_ui::events::IEventReceiverAbi>())
+        .unwrap()
+        .unwrap();
+    for (offset, bytes, expected) in cases {
+        queue
+            .post(
+                NcValueRef::new(&EventOrigin::Service(window.downgrade().unwrap().into_unknown())).unwrap(),
+                neocogi_ui::events::window_close_requested().unwrap(),
+            )
+            .unwrap();
+        assert_eq!(
+            interface.open(
+                NcCopyFromBufferOffset::new(offset, &bytes),
+                previous.rect,
+                path.as_com_ref(),
+                FileDialogMode::Open,
+                path.as_com_ref()
+            ),
+            Err(expected)
+        );
+        assert_eq!(calls.get(), 0, "neither native-path decoder may run for an invalid title");
+        let after = window.snapshot().unwrap();
+        assert_eq!(after.visibility, Visibility::Hidden);
+        assert_eq!(
+            (after.rect.x, after.rect.y, after.rect.width, after.rect.height),
+            (before.rect.x, before.rect.y, before.rect.width, before.rect.height)
+        );
+        assert_eq!(window.title().unwrap().to_string().unwrap(), title);
+        assert_eq!(fixture.file_root().as_raw().object, root.as_raw().object);
+        assert_eq!(fixture.widget.with(|dialog| dialog.model.selected.clone()).unwrap(), selected);
+        assert_eq!(fixture.handle.active(), Ok(false));
+        assert_eq!(fixture.handle.cancel(), Ok(false));
+        assert!(
+            fixture.widget.with(|dialog| dialog.messages.try_recv().is_ok()).unwrap(),
+            "failed open drained the private inbox"
+        );
+        assert!(fixture.widget.with(|dialog| dialog.messages.try_recv().is_err()).unwrap());
+    }
+    assert_eq!(completions.try_recv().unwrap(), None, "the prior completed request remains observable");
+    assert!(completions.try_recv().is_err(), "rejected opens and Idle cancel create no completion");
+    assert_eq!(
+        interface.open(
+            NcCopyFromBufferOffset::new(0, b"valid"),
+            previous.rect,
+            path.as_com_ref(),
+            FileDialogMode::Open,
+            path.as_com_ref()
+        ),
+        Err(NC_E_INVALID_ARG)
+    );
+    assert_eq!(calls.get(), 1, "the canary really observes a decoder after valid title admission");
+    let mut corrected = neocogi_ui::FileDialogRequest::new(directory.path());
+    corrected.title = exact;
+    fixture.handle.open(&corrected).unwrap();
+    assert_eq!(window.title().unwrap().byte_len().unwrap(), neocogi_ui::MAX_WINDOW_TITLE_BYTES as u64);
+    assert_eq!(fixture.handle.active(), Ok(true));
+    assert_eq!(window.snapshot().unwrap().visibility, Visibility::Visible);
+    assert_eq!(fixture.handle.cancel(), Ok(true));
+}

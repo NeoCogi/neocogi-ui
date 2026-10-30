@@ -11,7 +11,6 @@ use std::{
     path::{Path, PathBuf},
     rc::Rc,
 };
-use crate::boundary::text;
 use neocogi_ui::OwnedWidget;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
@@ -837,13 +836,11 @@ impl IFileDialog for FileDialog {
         mode: FileDialogMode,
         filename: ComRef<'_, INativePathAbi>,
     ) -> Result<(), NcStatus> {
-        self.model.open(
-            text(title)?,
-            rect,
-            neocogi_ui::path::decode(directory)?,
-            mode,
-            neocogi_ui::path::decode(filename)?,
-        )?;
+        // Deterministic title admission precedes either foreign path decoder and every
+        // visible/request mutation. A rejected title leaves the private inbox intact too.
+        let title = validate_window_title(title)?;
+        self.model
+            .open(title, rect, neocogi_ui::path::decode(directory)?, mode, neocogi_ui::path::decode(filename)?)?;
         // A successful new request supersedes pending interaction from the old
         // one, including a queued caption intent. Clear only this private inbox;
         // completed results already posted to the application remain untouched.

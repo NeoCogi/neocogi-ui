@@ -50,13 +50,7 @@ pub(super) fn status(error: SurfaceMutationError) -> NcStatus {
 
 /// Checks a title before either UTF-8 scanning or copying it into retained chrome state.
 fn checked_title(title: NcCopyFromBufferOffset<'_, u8>) -> Result<String, NcStatus> {
-    if title.offset() != 0 {
-        return Err(NC_E_INVALID_ARG);
-    }
-    if title.as_slice().len() > MAX_WINDOW_TITLE_BYTES {
-        return Err(neocogi_com::NC_E_OUT_OF_RANGE);
-    }
-    Ok(text(title)?.to_owned())
+    Ok(validate_window_title(title)?.to_owned())
 }
 
 /// Ordinary window placement is data so all three policies share one COM initializer.

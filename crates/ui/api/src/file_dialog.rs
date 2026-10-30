@@ -11,6 +11,11 @@
 //! }
 //! ```
 //!
+//! Title admission uses the same zero-offset, 4096-byte UTF-8 policy as windows,
+//! before foreign path decoding, directory reads, visibility or request publication.
+//! Rejected title inputs preserve the prior modal, rows, selection and queues;
+//! Idle cancellation remains silent and does not repair an unpublished request.
+//!
 //! Directory reads validate the complete candidate before publishing new rows; failure
 //! preserves the prior request/listing. Paths keep native bytes or UTF-16 units,
 //! independently of display labels. Save filenames must be a single component.

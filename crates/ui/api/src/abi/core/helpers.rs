@@ -55,6 +55,19 @@ impl Default for ColoredVertex {
 /// recorded. Bounding source text at mutation prevents uncharged glyph walks in those phases.
 pub const MAX_WINDOW_TITLE_BYTES: usize = 4096;
 
+/// Borrows a complete title after offset, byte-bound and UTF-8 admission, in that order.
+/// The caller retains the original storage; this helper neither allocates nor changes UI state.
+/// Window setters and composite requests share this policy before any publication or callback.
+pub fn validate_window_title<'a>(title: neocogi_com::NcCopyFromBufferOffset<'a, u8>) -> Result<&'a str, NcStatus> {
+    if title.offset() != 0 {
+        return Err(NC_E_INVALID_ARG);
+    }
+    if title.as_slice().len() > MAX_WINDOW_TITLE_BYTES {
+        return Err(neocogi_com::NC_E_OUT_OF_RANGE);
+    }
+    core::str::from_utf8(title.as_slice()).map_err(|_| NC_E_INVALID_ARG)
+}
+
 /// A runtime, window, collection or transport service has closed.
 /// Its COM capability may still exist. Calls through a widget observer whose
 /// exclusive owner was dropped instead report `neocogi_com::NC_E_DROPPED`.
@@ -197,5 +210,27 @@ impl WidgetPaint {
             return Err(NC_E_INVALID_ARG);
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod title_tests {
+    use super::*;
+    use neocogi_com::NcCopyFromBufferOffset;
+
+    /// Length admission counts UTF-8 bytes, not characters, and precedes scanning.
+    #[test]
+    fn title_byte_bound_and_error_precedence_are_shared() {
+        let exact = "é".repeat(MAX_WINDOW_TITLE_BYTES / 2);
+        assert_eq!(validate_window_title(NcCopyFromBufferOffset::new(0, exact.as_bytes())), Ok(exact.as_str()));
+        assert_eq!(validate_window_title(NcCopyFromBufferOffset::new(0, b"")), Ok(""));
+        for bytes in [vec![b'x'; MAX_WINDOW_TITLE_BYTES + 1], vec![255; MAX_WINDOW_TITLE_BYTES + 1]] {
+            assert_eq!(
+                validate_window_title(NcCopyFromBufferOffset::new(0, &bytes)),
+                Err(neocogi_com::NC_E_OUT_OF_RANGE)
+            );
+            assert_eq!(validate_window_title(NcCopyFromBufferOffset::new(1, &bytes)), Err(NC_E_INVALID_ARG));
+        }
+        assert_eq!(validate_window_title(NcCopyFromBufferOffset::new(0, &[255])), Err(NC_E_INVALID_ARG));
     }
 }
