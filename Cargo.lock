@@ -930,7 +930,7 @@ dependencies = [
 [[package]]
 name = "neocogi-native-layout"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=e3f9e8732dca07a5c563299e542a4f9bd815a388#e3f9e8732dca07a5c563299e542a4f9bd815a388"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=44e6172994be5887a59cdfd5a08a32368d707ee0#44e6172994be5887a59cdfd5a08a32368d707ee0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -941,7 +941,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-core"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=e3f9e8732dca07a5c563299e542a4f9bd815a388#e3f9e8732dca07a5c563299e542a4f9bd815a388"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=44e6172994be5887a59cdfd5a08a32368d707ee0#44e6172994be5887a59cdfd5a08a32368d707ee0"
 dependencies = [
  "neocogi-com",
  "neocogi-idl",
@@ -951,7 +951,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-glow"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=e3f9e8732dca07a5c563299e542a4f9bd815a388#e3f9e8732dca07a5c563299e542a4f9bd815a388"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=44e6172994be5887a59cdfd5a08a32368d707ee0#44e6172994be5887a59cdfd5a08a32368d707ee0"
 dependencies = [
  "glow 0.18.0",
  "neocogi-render-core",
@@ -962,7 +962,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-gpu"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=e3f9e8732dca07a5c563299e542a4f9bd815a388#e3f9e8732dca07a5c563299e542a4f9bd815a388"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=44e6172994be5887a59cdfd5a08a32368d707ee0#44e6172994be5887a59cdfd5a08a32368d707ee0"
 dependencies = [
  "naga",
  "neocogi-com",
@@ -972,7 +972,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-plugin"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=e3f9e8732dca07a5c563299e542a4f9bd815a388#e3f9e8732dca07a5c563299e542a4f9bd815a388"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=44e6172994be5887a59cdfd5a08a32368d707ee0#44e6172994be5887a59cdfd5a08a32368d707ee0"
 dependencies = [
  "glow 0.18.0",
  "js-sys",
@@ -994,7 +994,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-support"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=e3f9e8732dca07a5c563299e542a4f9bd815a388#e3f9e8732dca07a5c563299e542a4f9bd815a388"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=44e6172994be5887a59cdfd5a08a32368d707ee0#44e6172994be5887a59cdfd5a08a32368d707ee0"
 dependencies = [
  "neocogi-com",
  "neocogi-render-core",
@@ -1004,7 +1004,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-vulkan"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=e3f9e8732dca07a5c563299e542a4f9bd815a388#e3f9e8732dca07a5c563299e542a4f9bd815a388"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=44e6172994be5887a59cdfd5a08a32368d707ee0#44e6172994be5887a59cdfd5a08a32368d707ee0"
 dependencies = [
  "ash",
  "ash-window",
@@ -1017,7 +1017,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-webgl"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=e3f9e8732dca07a5c563299e542a4f9bd815a388#e3f9e8732dca07a5c563299e542a4f9bd815a388"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=44e6172994be5887a59cdfd5a08a32368d707ee0#44e6172994be5887a59cdfd5a08a32368d707ee0"
 dependencies = [
  "glow 0.18.0",
  "neocogi-render-core",
@@ -1028,9 +1028,10 @@ dependencies = [
 [[package]]
 name = "neocogi-render-wgpu"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=e3f9e8732dca07a5c563299e542a4f9bd815a388#e3f9e8732dca07a5c563299e542a4f9bd815a388"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=44e6172994be5887a59cdfd5a08a32368d707ee0#44e6172994be5887a59cdfd5a08a32368d707ee0"
 dependencies = [
  "neocogi-render-core",
+ "neocogi-render-gpu",
  "pollster",
  "raw-window-handle",
  "sdl2",
