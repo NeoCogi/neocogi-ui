@@ -241,7 +241,7 @@ struct Loaded {
     /// Real tree root, attached only when the host commits the candidate.
     root: Widget<IWidgetAbi>,
     /// Authored widget keys cache weak projections for checked application queries.
-    nodes: BTreeMap<String, Widget<IWidgetAbi>>,
+    nodes: BTreeMap<String, crate::build::LoadedNode>,
 }
 impl contracts::IUiComponentMetadata for Loaded {
     /// Complete validation precedes the single source assignment and never edits the live tree.
@@ -254,6 +254,8 @@ impl contracts::IUiComponentMetadata for Loaded {
         if document.version != self.document.version || document.root != self.document.root {
             return Err(NC_E_INVALID_ARG);
         }
+        document.validate_output_eligibility(|key| self.nodes.get(key).map(|node| node.eventful)
+            .ok_or_else(|| format!("Missing constructed node {key}"))).map_err(|_| NC_E_INVALID_ARG)?;
         self.document = document;
         Ok(())
     }
@@ -269,7 +271,7 @@ impl contracts::IUiComponent for Loaded {
             return Err(NC_E_INVALID_ARG);
         }
         let name = std::str::from_utf8(name.as_slice()).map_err(|_| NC_E_INVALID_ARG)?;
-        self.nodes.get(name).ok_or(NC_E_NOT_FOUND)?.node_interface()
+        self.nodes.get(name).ok_or(NC_E_NOT_FOUND)?.widget.node_interface()
     }
 }
 impl IPersistable for Loaded {

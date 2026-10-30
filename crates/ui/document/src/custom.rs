@@ -87,7 +87,19 @@ impl CustomWidgetRegistry {
     /// call; local and independently loaded factories follow the same policy.
     pub fn validate_document(&self, document: &Document) -> Result<(), String> {
         document.validate_binary()?;
-        self.validate_node(&document.root)
+        self.validate_node(&document.root)?;
+        document.validate_output_eligibility(|key| {
+            let node = document.root.find(key).ok_or_else(|| format!("Missing display node {key}"))?;
+            self.has_events(&node.widget)
+        })
+    }
+
+    /// Resolves immutable event eligibility from the admitted kind, without constructing/probing it.
+    pub(crate) fn has_events(&self, widget: &WidgetSpec) -> Result<bool, String> {
+        match widget {
+            WidgetSpec::Custom { kind, .. } => Ok(!self.interface(kind)?.events.is_empty()),
+            builtin => Ok(!builtin.event_interfaces().is_empty()),
+        }
     }
 
     /// Validates one subtree without rebuilding the document name index.

@@ -29,8 +29,11 @@ explicit diagnostics while avoiding their retention by ordinary projections.
 ## What crosses COM
 
 `IDesignWidgetCatalog` revision 3 supplies `describe`, `create_widget` and
-`create_editor`. Descriptor schema 10 carries bounded opaque NCB defaults plus
-the existing logical event graph. UI document revision 7 stores:
+`create_editor`. The descriptor uses the
+[authoritative design schema](../../crates/ui/design/src/lib.rs), including bounded
+opaque NCB defaults and the logical event graph. Field expressions admit at most
+32 logical nodes including the leaf, so every event/struct/enum envelope fits
+the guarded JSON decoder. UI document revision 7 stores:
 
 ```rust
 WidgetSpec::Custom {

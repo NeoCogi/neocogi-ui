@@ -1,5 +1,5 @@
 //! Application-owned receivers supplied before any authored widget is constructed.
-use crate::{CustomWidgetRegistry, Document, WidgetSpec};
+use crate::{CustomWidgetRegistry, Document};
 use neocogi_com::{ComPtr, NcStatus, NC_E_INVALID_ARG};
 use neocogi_ui::events::IEventReceiverAbi;
 use std::collections::BTreeMap;
@@ -36,18 +36,8 @@ impl EventBindings {
     pub(crate) fn validate(&self, document: &Document, custom: &CustomWidgetRegistry) -> Result<(), NcStatus> {
         for key in self.receivers.keys() {
             let node = document.root.find(key).ok_or(NC_E_INVALID_ARG)?;
-            match &node.widget {
-                WidgetSpec::Custom { kind, .. } => {
-                    let interface = custom.interface(kind).map_err(|_| NC_E_INVALID_ARG)?;
-                    if interface.events.is_empty() {
-                        return Err(NC_E_INVALID_ARG);
-                    }
-                }
-                widget => {
-                    if widget.event_interfaces().is_empty() {
-                        return Err(NC_E_INVALID_ARG);
-                    }
-                }
+            if !custom.has_events(&node.widget).map_err(|_| NC_E_INVALID_ARG)? {
+                return Err(NC_E_INVALID_ARG);
             }
         }
         Ok(())
@@ -67,10 +57,7 @@ impl EventBindings {
         let mut bindings = Self::new();
         let mut pending = vec![&document.root];
         while let Some(node) = pending.pop() {
-            let emits = match &node.widget {
-                WidgetSpec::Custom { kind, .. } => !custom.interface(kind).map_err(|_| NC_E_INVALID_ARG)?.events.is_empty(),
-                widget => !widget.event_interfaces().is_empty(),
-            };
+            let emits = custom.has_events(&node.widget).map_err(|_| NC_E_INVALID_ARG)?;
             if emits {
                 bindings.insert_queue(&node.key, queue)?;
             }

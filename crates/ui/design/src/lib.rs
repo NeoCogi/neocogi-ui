@@ -52,6 +52,11 @@ pub fn decode_settings<T: ComDeserialize>(bytes: &[u8]) -> Result<T, String> {
 /// Provider-owned NCB settings retain their independent schema.
 pub const DESIGN_DESCRIPTOR_VERSION: u32 = 12;
 
+/// Maximum logical expression nodes along a field path, including its leaf.
+/// Array's tagged tuple encoding uses two JSON containers per wrapper; 32 nodes
+/// leave every complete event/struct/enum envelope inside the guarded JSON parser.
+pub const MAX_DESIGN_EXPRESSION_NODES: usize = 32;
+
 /// Owned structural field expression copied through the COM design catalog.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -436,7 +441,7 @@ fn validate_value_graph(values: &[DesignType], events: &[DesignEvent]) -> Result
             if (!tuple && !identifier(&value.name)) || !names.insert(&value.name) {
                 return Err("Invalid or duplicate field name".into());
             }
-            field(&value.ty, definitions, true, edges, 64)?;
+            field(&value.ty, definitions, true, edges, MAX_DESIGN_EXPRESSION_NODES)?;
         }
         Ok(())
     }
@@ -507,6 +512,39 @@ fn identifier(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every admitted shape fits the entire wire envelope; named graph traversal stays separate.
+    #[test]
+    fn expression_admission_round_trips_complete_envelopes_through_the_guarded_codec() {
+        for nodes in 1..=70 {
+            for form in 0..3 {
+                let mut expression = DesignValueType::Scalar("u32".into());
+                for index in 1..nodes {
+                    expression = if form == 0 || (form == 2 && index % 2 == 0) {
+                        DesignValueType::Array(Box::new(expression), 1)
+                    } else { DesignValueType::Sequence(Box::new(expression)) };
+                }
+                for envelope in 0..3 {
+                    let mut manifest = counter_manifest();
+                    let field = DesignField { name: "value".into(), ty: expression.clone() };
+                    match envelope {
+                        0 => manifest.interface.events[0].fields = vec![field],
+                        1 => manifest.interface.values[0].shape = DesignShape::Struct(vec![field]),
+                        2 => manifest.interface.values[0].shape = DesignShape::Enum(vec![DesignVariant { name: "Value".into(), tag: 0, fields: vec![field] }]),
+                        _ => unreachable!(),
+                    }
+                    let unguarded = serde_json::to_vec(&manifest).unwrap();
+                    if nodes <= MAX_DESIGN_EXPRESSION_NODES {
+                        let bytes = manifest.encode().unwrap();
+                        assert_eq!(DesignWidgetManifest::decode(&bytes).unwrap(), manifest, "nodes={nodes} form={form} envelope={envelope}");
+                    } else {
+                        assert!(manifest.encode().is_err());
+                        assert!(DesignWidgetManifest::decode(&unguarded).is_err());
+                    }
+                }
+            }
+        }
+    }
 
     /// Transport, display and catalog validation must retain weak field ownership.
     #[test]

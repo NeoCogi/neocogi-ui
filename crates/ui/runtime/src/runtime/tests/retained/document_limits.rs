@@ -7,6 +7,279 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
+/// Concrete products let admission facts be tested against actual constructed widget interfaces.
+#[derive(Clone, Copy)]
+enum CatalogProduct {
+    /// Advertises ordinary activation events.
+    Button,
+    /// Intentionally silent, yet constructible without a display alias or receiver.
+    Text,
+}
+
+/// Independently returned descriptor bytes and the concrete constructor they describe.
+struct CatalogEntry {
+    /// Raw initialized transport can deliberately bypass the producer's encode validator.
+    bytes: Vec<u8>,
+    /// Real product, never a second fake widget implementation.
+    product: CatalogProduct,
+}
+
+#[neocogi_com::com_object(interfaces(neocogi_ui_document::contracts::IDesignWidgetCatalog))]
+/// Multi-kind transport exercises whole-catalog publication and whole-document preflight.
+struct ContractCatalog {
+    /// Deliberately independent of the initialized output prefix for protocol admission tests.
+    extra_count: u32,
+    /// Production factory/client pair for all constructed products.
+    ui: Ui,
+    /// Ordered source records returned independently through generated describe thunks.
+    entries: Vec<CatalogEntry>,
+    /// Counts every constructor entry, including one that would later reject its arguments.
+    calls: Arc<AtomicUsize>,
+}
+impl neocogi_ui_document::contracts::IDesignWidgetCatalog for ContractCatalog {
+    fn widget_count(&self) -> Result<u32, NcStatus> {
+        Ok(self.entries.len() as u32)
+    }
+    fn describe(&self, index: u32, mut output: neocogi_com::NcOutputWriter<'_, u8>) -> Result<u32, NcStatus> {
+        if output.offset() != 0 {
+            return Err(neocogi_com::NC_E_INVALID_ARG);
+        }
+        let entry = self.entries.get(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
+        if output.capacity() >= entry.bytes.len() {
+            output.extend_from_slice(&entry.bytes)?;
+        }
+        Ok(entry.bytes.len() as u32 + self.extra_count)
+    }
+    fn create_editor(
+        &self,
+        _: u32,
+        _: neocogi_com::ComRef<'_, UiFactoryAbi>,
+        _: neocogi_com::NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<neocogi_com::ComBox<neocogi_ui_document::contracts::IDesignSettingsEditorAbi>, NcStatus> {
+        Err(neocogi_com::NC_E_NOINTERFACE)
+    }
+    fn create_widget(
+        &self,
+        index: u32,
+        _: neocogi_com::ComRef<'_, IWidgetHostAbi>,
+        settings: neocogi_com::NcCopyFromBufferOffset<'_, u8>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventBinding>,
+    ) -> Result<neocogi_com::ComBox<IWidgetAbi>, NcStatus> {
+        self.calls.fetch_add(1, Ordering::Relaxed);
+        if settings.offset() != 0 {
+            return Err(neocogi_com::NC_E_INVALID_ARG);
+        }
+        let entry = self.entries.get(index as usize).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
+        let text: String = design::decode_settings(settings.as_slice()).map_err(|_| neocogi_com::NC_E_INVALID_ARG)?;
+        let receiver = match events.to_owned()? {
+            neocogi_ui::events::EventBinding::Unobserved => None,
+            neocogi_ui::events::EventBinding::Observed(receiver) => Some(receiver),
+        };
+        match entry.product {
+            CatalogProduct::Button => self
+                .ui
+                .widgets()
+                .button_with_queue(&text, receiver.as_ref().map(ComPtr::as_com_ref))?
+                .into_interface()
+                .query()
+                .map_err(|(status, _owner)| status),
+            CatalogProduct::Text if receiver.is_none() => self
+                .ui
+                .widgets()
+                .text_block(&text, TextWrapping::None)?
+                .into_interface()
+                .query()
+                .map_err(|(status, _owner)| status),
+            CatalogProduct::Text => Err(neocogi_com::NC_E_INVALID_ARG),
+        }
+    }
+}
+
+/// A repeated required count must agree with the independently initialized output prefix.
+#[test]
+fn catalog_description_count_must_match_the_initialized_bytes() {
+    let fixture = Headless::standard();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut registry = CustomWidgetRegistry::new();
+    for (extra_count, accepted) in [(0, true), (1, false)] {
+        let catalog = ContractCatalog::from_value(ContractCatalog {
+            extra_count,
+            ui: fixture.ui.clone(),
+            calls: calls.clone(),
+            entries: vec![CatalogEntry {
+                bytes: contract_manifest(if accepted { "count.valid" } else { "count.invalid" }, CatalogProduct::Button)
+                    .encode()
+                    .unwrap(),
+                product: CatalogProduct::Button,
+            }],
+        });
+        assert_eq!(registry.register_catalog(catalog.query().unwrap()).is_ok(), accepted);
+    }
+    assert_eq!(registry.kinds().collect::<Vec<_>>(), vec!["count.valid"]);
+    assert_eq!(calls.load(Ordering::Relaxed), 0);
+}
+
+/// Derives ordinary kind metadata before adding any deliberately hostile transport shape.
+fn contract_manifest(kind: &str, product: CatalogProduct) -> DesignWidgetManifest {
+    let source = match product {
+        CatalogProduct::Button => &ButtonAbi::EVENT_SOURCE,
+        CatalogProduct::Text => &TextBlockAbi::EVENT_SOURCE,
+    };
+    DesignWidgetManifest::from_source(kind, design::encode_settings("initial").unwrap(), source).unwrap()
+}
+
+/// Real COM catalog registration must preserve the entire old registry on a later invalid record.
+#[test]
+fn deepest_catalog_metadata_round_trips_and_failed_later_describe_publishes_nothing() {
+    use design::{DesignField, DesignShape, DesignType, DesignValueType};
+    let fixture = Headless::standard();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut registry = CustomWidgetRegistry::new();
+    let original = contract_manifest("contract.original", CatalogProduct::Button);
+    let catalog = ContractCatalog::from_value(ContractCatalog {
+        extra_count: 0,
+        ui: fixture.ui.clone(),
+        calls: calls.clone(),
+        entries: vec![CatalogEntry {
+            bytes: original.encode().unwrap(),
+            product: CatalogProduct::Button,
+        }],
+    });
+    registry.register_catalog(catalog.query().unwrap()).unwrap();
+    let before: Vec<_> = registry.kinds().map(str::to_owned).collect();
+    let mut deepest = contract_manifest("contract.deep", CatalogProduct::Button);
+    let mut ty = DesignValueType::Scalar("u32".into());
+    for _ in 1..design::MAX_DESIGN_EXPRESSION_NODES {
+        ty = DesignValueType::Array(Box::new(ty), 1);
+    }
+    deepest.interface.values.push(DesignType {
+        qualified_name: "contract.Deep".into(),
+        rust_type: "contract_types::Deep".into(),
+        shape: DesignShape::Struct(vec![DesignField { name: "value".into(), ty: ty.clone() }]),
+    });
+    let mut invalid = deepest.clone();
+    invalid.kind = "contract.invalid".into();
+    let DesignShape::Struct(fields) = &mut invalid.interface.values.last_mut().unwrap().shape else {
+        unreachable!()
+    };
+    fields[0].ty = DesignValueType::Array(Box::new(ty), 1);
+    assert!(invalid.encode().is_err());
+    let failing = ContractCatalog::from_value(ContractCatalog {
+        extra_count: 0,
+        ui: fixture.ui.clone(),
+        calls: calls.clone(),
+        entries: vec![
+            CatalogEntry {
+                bytes: deepest.encode().unwrap(),
+                product: CatalogProduct::Button,
+            },
+            CatalogEntry {
+                bytes: design::bounded_json::to_vec(&invalid, design::MAX_DESIGN_DESCRIPTOR_BYTES, design::bounded_json::Format::Compact).unwrap(),
+                product: CatalogProduct::Button,
+            },
+        ],
+    });
+    assert!(registry.register_catalog(failing.query().unwrap()).is_err());
+    assert_eq!(registry.kinds().collect::<Vec<_>>(), before.iter().map(String::as_str).collect::<Vec<_>>());
+    assert_eq!(registry.interface("contract.original").unwrap(), &original.interface);
+    let valid = ContractCatalog::from_value(ContractCatalog {
+        extra_count: 0,
+        ui: fixture.ui.clone(),
+        calls: calls.clone(),
+        entries: vec![CatalogEntry {
+            bytes: deepest.encode().unwrap(),
+            product: CatalogProduct::Button,
+        }],
+    });
+    registry.register_catalog(valid.query().unwrap()).unwrap();
+    assert_eq!(registry.interface("contract.deep").unwrap(), &deepest.interface);
+    assert_eq!(calls.load(Ordering::Relaxed), 0);
+}
+
+/// Labels are portable presentation metadata; construction and fixed-tree edits resolve kind facts.
+#[test]
+fn custom_display_aliases_share_kind_admission_and_metadata_publication() {
+    let fixture = Headless::standard();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut registry = CustomWidgetRegistry::new();
+    let catalog = ContractCatalog::from_value(ContractCatalog {
+        extra_count: 0,
+        ui: fixture.ui.clone(),
+        calls: calls.clone(),
+        entries: vec![
+            CatalogEntry {
+                bytes: contract_manifest("contract.button", CatalogProduct::Button).encode().unwrap(),
+                product: CatalogProduct::Button,
+            },
+            CatalogEntry {
+                bytes: contract_manifest("contract.silent", CatalogProduct::Text).encode().unwrap(),
+                product: CatalogProduct::Text,
+            },
+        ],
+    });
+    registry.register_catalog(catalog.query().unwrap()).unwrap();
+    let mut document = Document::new("custom labels");
+    for (key, kind) in [("save", "contract.button"), ("title", "contract.silent")] {
+        document.root.find_mut(key).unwrap().widget = registry.default_spec(kind).unwrap();
+    }
+    document.root.children.reverse(); // Counting Button precedes the silent Custom.
+    document.outputs[0].name = "title".into(); // A label may equal another node's key.
+    assert_eq!(Document::from_json(&document.to_json().unwrap()).unwrap(), document);
+    assert_eq!(Document::from_binary(&document.to_binary().unwrap()).unwrap(), document);
+    document.rust_bindings_with(&registry).unwrap();
+    let (queue, _inbox) = neocogi_ui::events::channel();
+    EventBindings::all(&document, &registry, queue.as_com_ref()).unwrap();
+    let loader = Loader::new_with_custom(
+        fixture.ui.clone(),
+        None,
+        Resources::new(),
+        registry.clone(),
+        GridLimits { max_columns: 64, max_rows: 256 },
+    )
+    .unwrap();
+    let mut component = loader.compile(&document).unwrap();
+    let root = component.root().unwrap();
+    let mut save = component.widget::<ButtonAbi>("save").unwrap();
+    save.set_label("live state").unwrap();
+    let mut valid = document.clone();
+    valid.name = "new presentation".into();
+    valid.outputs[0].name = "another label".into();
+    component.replace_metadata(&valid).unwrap();
+    let published = component.save(&crate::test_support::host_runtime()).unwrap();
+    let mut invalid = valid.clone();
+    invalid.outputs[0].node = "title".into();
+    assert!(
+        Document::from_binary(&invalid.to_binary().unwrap()).is_ok(),
+        "pure persistence cannot resolve custom kind events"
+    );
+    assert!(component.replace_metadata(&invalid).is_err());
+    assert_eq!(component.save(&crate::test_support::host_runtime()).unwrap(), published);
+    assert!(root.as_interface().same_object(component.root().unwrap().as_interface()));
+    assert_eq!(save.label().unwrap(), "live state");
+    calls.store(0, Ordering::Relaxed);
+    assert!(loader.compile(&invalid).is_err());
+    assert!(loader.load(&invalid.to_binary().unwrap()).is_err());
+    assert!(invalid.rust_bindings_with(&registry).is_err());
+    assert!(EventBindings::all(&invalid, &registry, queue.as_com_ref()).is_err());
+    assert_eq!(
+        calls.load(Ordering::Relaxed),
+        0,
+        "a later silent alias must reject before the earlier Button constructor"
+    );
+    let mut unknown = document.clone();
+    unknown.root.find_mut("save").unwrap().widget = WidgetSpec::Custom {
+        kind: "contract.missing".into(),
+        settings: vec![],
+    };
+    assert!(loader.compile(&unknown).is_err());
+    assert!(unknown.rust_bindings_with(&registry).is_err());
+    assert!(EventBindings::all(&unknown, &registry, queue.as_com_ref()).is_err());
+    assert_eq!(calls.load(Ordering::Relaxed), 0);
+    invalid.outputs.clear();
+    loader.compile(&invalid).unwrap(); // Silent Custom remains legal without an alias.
+    assert_eq!(calls.load(Ordering::Relaxed), 2);
+}
+
 /// A real COM catalog whose constructor calls can be observed independently of
 /// factory lifetime. Atomics are test instrumentation shared with a COM receiver.
 #[neocogi_com::com_object(interfaces(neocogi_ui_document::contracts::IDesignWidgetCatalog))]

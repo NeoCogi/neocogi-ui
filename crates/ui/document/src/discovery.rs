@@ -87,7 +87,7 @@ impl CustomWidgetRegistry {
             let written = catalog
                 .describe(index, bytes.output(0, required))
                 .map_err(|status| format!("Widget catalog description failed: {status}"))? as usize;
-            if written != required {
+            if written != required || bytes.len() != required {
                 return Err("Widget catalog changed a description during discovery".into());
             }
             let manifest = DesignWidgetManifest::decode(&bytes)?;

@@ -5,6 +5,14 @@ use neocogi_com::{ComPtr, ComInterface, NcStatus, NcCopyFromBufferOffset, NC_E_I
 use neocogi_ui::*;
 use std::collections::BTreeMap;
 
+/// Fixed-tree lookup entry with the one admitted kind fact needed by metadata-only edits.
+pub(crate) struct LoadedNode {
+    /// Weak widget observation; retaining metadata does not prolong live widget ownership.
+    pub widget: Widget<IWidgetAbi>,
+    /// Immutable advertised event eligibility, independent of installed receivers or current events.
+    pub eventful: bool,
+}
+
 /// Owns all created nodes until construction transfers them to the loaded component.
 /// Rejected candidates are created by this builder and cannot own its call receiver;
 /// discarding their returned owners abandons unpublished construction safely.
@@ -20,7 +28,7 @@ pub(crate) struct Construction<'a> {
     /// Explicit logical image directory supplied by the caller.
     pub resources: &'a Resources,
     /// Name-to-capability index exists only inside the component implementation.
-    pub nodes: BTreeMap<String, Widget<IWidgetAbi>>,
+    pub nodes: BTreeMap<String, LoadedNode>,
     /// Receivers are consumed exactly once before each node is published.
     pub events: crate::EventBindings,
 }
@@ -153,7 +161,9 @@ impl Construction<'_> {
             }
             WidgetSpec::Custom { kind, settings, .. } => self.custom.create(kind, self.ui, settings, queue)?,
         };
-        self.nodes.insert(node.key.clone(), widget.handle());
+        self.nodes.insert(node.key.clone(), LoadedNode {
+            widget: widget.handle(), eventful: self.custom.has_events(&node.widget).map_err(|_| NC_E_INVALID_ARG)?,
+        });
         for (index, (child, relationship)) in children.into_iter().zip(&node.children).enumerate() {
             let index = index as u32;
             match (&node.widget, &relationship.edge) {

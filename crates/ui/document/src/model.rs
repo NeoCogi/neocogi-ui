@@ -428,7 +428,8 @@ impl Document {
             }],
         }
     }
-    /// Rejects invalid shape, names, arithmetic and event aliases before construction.
+    /// Rejects invalid shape, names, arithmetic and structural display metadata.
+    /// Custom event eligibility is resolved by the registry before construction.
     pub fn validate(&self) -> Result<(), String> {
         if self.version != VERSION {
             return Err(format!("Unsupported UI document revision {}", self.version));
@@ -445,18 +446,21 @@ impl Document {
                 .get(output.node.as_str())
                 .ok_or_else(|| format!("Output {} refers to missing node {}", output.name, output.node))?;
             if !exported_nodes.insert(&output.node) {
-                return Err(format!("Widget {} exports its event stream twice", output.node));
+                return Err(format!("Widget {} has more than one display label", output.node));
             }
-            if node.widget.event_interfaces().is_empty() {
+            if !matches!(node.widget, WidgetSpec::Custom { .. }) && node.widget.event_interfaces().is_empty() {
                 return Err(format!("{} has no event stream", output.node));
             }
-            if nodes.contains_key(output.name.as_str()) && output.name != output.node {
-                return Err(format!("Output {} conflicts with a widget event name", output.name));
-            }
         }
-        for node in nodes.values() {
-            if !node.widget.event_interfaces().is_empty() && !exported_nodes.contains(&node.key) && names.contains(&node.key) {
-                return Err(format!("Widget event name {} conflicts with an exported alias", node.key));
+        Ok(())
+    }
+
+    /// Checks display labels against resolved kind facts, never lookup or dispatch endpoints.
+    /// Construction uses registry facts; fixed-tree metadata replacement uses retained node facts.
+    pub(crate) fn validate_output_eligibility(&self, mut eventful: impl FnMut(&str) -> Result<bool, String>) -> Result<(), String> {
+        for output in &self.outputs {
+            if !eventful(&output.node)? {
+                return Err(format!("{} has no declared events for display metadata", output.node));
             }
         }
         Ok(())

@@ -94,6 +94,15 @@ root owner. `take_root()` moves that owner once; `root()` only observes it.
 Mounting consumes the same root. Dropping metadata after transfer cannot remove
 the mounted tree, and keeping metadata cannot prolong a removed tree. An optional
 output alias is a display name, not a second endpoint or receiver replacement API.
+
+Display labels may equal another widget's lookup key. They remain unique/nonempty,
+refer to existing nodes, and occur at most once per node. Persistence admits Custom
+labels structurally; compile/load/binding generation resolves event eligibility from
+registered kind metadata before constructing any widget. Silent Custom widgets
+remain legal without labels. Metadata-only replacement uses the immutable kind
+facts retained beside existing weak widget lookups, so it needs no registry/factory
+owner and cannot approve a new label on an eventless Custom node. Rejection preserves
+the published recipe and live widget identities/state.
 Generated bindings resolve widgets by node key.
 
 ## Optional typed fields and common event handling
@@ -156,7 +165,7 @@ can supply `events::channel()` directly. No generated Rust is required for eithe
 The [walkthrough regression](../runtime/src/runtime/tests/documentation.rs)
 compiles these exact blocks with fresh generated fields and executes activation,
 source-based commands, replacement and stale-event rejection. Run it with
-`cargo test --offline -p neocogi-ui-runtime --lib documented_form_reload`.
+`cargo test --offline -p neocogi-ui-runtime --lib documented_onboarding_reload_and_event_dispatch_execute`.
 
 ## Reload, ownership, and authored state
 
