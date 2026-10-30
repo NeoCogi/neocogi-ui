@@ -11,7 +11,7 @@ import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-PROVIDERS = {"nc_ui", "nc_ui_nodes", "nc_render", "nc_gfx", "nc_skin"}
+PROVIDERS = {"nc_ui", "nc_ui_nodes", "nc_render", "nc_shader_compiler", "nc_gfx", "nc_skin"}
 
 
 class NativeBuildProfiles(unittest.TestCase):

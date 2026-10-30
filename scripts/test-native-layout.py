@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-LIBRARIES = tuple(f"libnc_{name}.so" for name in ("ui", "ui_nodes", "render", "gfx", "skin"))
+LIBRARIES = tuple(f"libnc_{name}.so" for name in ("ui", "ui_nodes", "shader_compiler", "render", "gfx", "skin"))
 
 
 def build(profile, renderer="vulkan"):
@@ -111,7 +111,7 @@ def relocate(executable):
 
         result = run()
         assert result.returncode == 0, result.stdout + result.stderr
-        for relative in ("lib/libnc_ui.so", "assets/NORMAL.ttf"):
+        for relative in ("lib/libnc_ui.so", "lib/libnc_shader_compiler.so", "assets/NORMAL.ttf"):
             required = after / relative
             saved = required.with_name(required.name + ".hidden")
             required.rename(saved)

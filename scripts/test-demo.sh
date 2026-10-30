@@ -14,6 +14,6 @@ cargo test -p neocogi-demo-full --lib --no-default-features --features "$feature
     --config "target.'cfg(any(unix, windows))'.runner = ['python3', '$PWD/scripts/run-native-test.py']" \
     -- --include-ignored --test-threads=1
 # Exercise shader inputs and actual pixels as well as the application's COM/UI integration.
-cargo test -p neocogi-render-gpu --lib
-cargo test -p neocogi-render-plugin --lib --no-default-features --features "$backend" \
+cargo test -p neocogi-shader-compiler -p neocogi-render-gpu --lib
+cargo test -p neocogi-render-plugin --lib --test compiler_activation --no-default-features --features "$backend" \
     -- --include-ignored --test-threads=1

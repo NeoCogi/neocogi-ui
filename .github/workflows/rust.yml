@@ -41,6 +41,7 @@ jobs:
         run: rustup component add rust-analyzer
       - name: Actual editor definitions and exact authored IDL origins
         run: python3 scripts/check-idl-navigation.py
+      - run: cargo test --locked -p neocogi-shader-compiler -p neocogi-render-gpu
       - run: cargo test --locked -p neocogi-ui-runtime -p neocogi-ui-nodes -p neocogi-ui-support
       - run: cargo test --locked -p neocogi-ui -p neocogi-ui-document --features neocogi-com/runtime
 
@@ -100,7 +101,7 @@ jobs:
           xvfb-run -a python3 scripts/test-native-layout.py --profile release --run
           cargo test --locked -p neocogi-demo-plugins --profile min-size --features vulkan,skin,extension
       - name: Backend-specific frame/resource checks
-        run: xvfb-run -a cargo test --locked -p neocogi-render-plugin --lib --no-default-features --features ${{ matrix.backend }} -- --include-ignored
+        run: xvfb-run -a cargo test --locked -p neocogi-render-plugin --lib --test compiler_activation --no-default-features --features ${{ matrix.backend }} -- --include-ignored
       - name: Check demo and platform warnings for this backend
         run: cargo clippy --locked -p neocogi-demo-full -p neocogi-demo-basic -p neocogi-render-plugin --all-targets --no-default-features --features dynamic,${{ matrix.backend }} -- -D warnings
 

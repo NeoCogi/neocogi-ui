@@ -220,7 +220,7 @@ dependency on a package advertising both rlib/cdylib may also emit an unused sha
 library during monolith/browser builds; removing that extra link would require
 separate static/dynamic target packages or another crate-type selection mechanism.
 
-The host implementation Rust target is `neocogi_com_host`. Native provider names remain `nc_ui`, `nc_ui_nodes`, `nc_render`,
+The host implementation Rust target is `neocogi_com_host`. Native provider names remain `nc_ui`, `nc_ui_nodes`, `nc_shader_compiler`, `nc_render`,
 `nc_gfx`, `nc_skin` and optional `nc_ui_extension`. The executable is in the usual
 `target/<profile>` directory when no explicit target is selected. Dependency DLLs
 remain in Cargo's artifact directories as compiler inputs, with deployment copies
@@ -292,3 +292,9 @@ runner never builds; production startup always uses adjacent files directly.
 SDK cross-compiler and ABI qualification belong to the upstream COM workspace.
 The [current native validation guide](../../crates/ui/runtime/docs/TESTING.md)
 lists maintained entrypoints and platform limitations.
+
+The required CPU shader provider is staged and registered before the renderer.
+Native dynamic hosts reference its cdylib as a Cargo artifact; native monoliths
+and WebGL assemblies register its statically linked descriptor before activating
+the selected renderer. The renderer uses the SDK runtime client API without
+linking a host implementation or a fallback compiler.

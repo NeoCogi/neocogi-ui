@@ -9,7 +9,7 @@ retained UI imports resources and submits composed frames. Applications opt into
 | Crate | Feature | Effect |
 | --- | --- | --- |
 | Native demos | `dynamic` (default) | Build and load Cargo cdylib providers with access supplied by the host runtime. |
-| Native demos | `monolith` | Link the runtime plus only the UI, renderer, GFX, and Skin implementations selected by that assembly. |
+| Native demos | `monolith` | Link the runtime plus only the UI, required shader compiler, renderer, GFX, and Skin implementations selected by that assembly. |
 | `neocogi-com` | defaults: `std`, `macros` | Typed object/data helpers and procedural macros without linking a runtime. |
 | `neocogi-com` | `macros` | Rust object/plugin and persistence procedural macros; callable contracts come from the IDL build dependency. |
 | `neocogi-com` | `std` | Standard-library data/error support; implies `alloc`. No event transport or runtime implementation is selected. |
@@ -27,6 +27,7 @@ retained UI imports resources and submits composed frames. Applications opt into
 | `neocogi-skin` | `theme-json` | Strict external JSON and appearance compilation; resource baking uses an explicit GFX loader. |
 | `neocogi-gfx-impl` | `save-to-rust` | Build-tool-only atomic source export from validated portable tables. |
 | `neocogi-skin-impl` | `builder` | Offline JSON-theme generation through the GFX implementation; never selected by the Skin plugin. |
+| `neocogi-shader-compiler` | `dynamic-plugin` | Export the CPU-only compiler provider entrypoint; statically registered for monolith/WebGL. |
 | `neocogi-render-plugin` | `glow` / `vulkan` / `wgpu` / `webgl` | Build exactly one renderer plugin identity; WebGL is the browser choice. |
 | `neocogi-demo-host` | `png-assets` | Expose the host PNG-upload client for applications that select the GFX plugin. |
 | `neocogi-demo-host` | `skin` | Link/register the live appearance compiler for browser or monolithic startup; does not enable JSON parsing. |

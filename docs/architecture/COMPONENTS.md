@@ -1,10 +1,11 @@
 # Component and plugin boundaries
 
-NeoCogi uses five public responsibilities without turning every COM class into
+NeoCogi separates public responsibilities without turning every COM class into
 its own deployment unit:
 
 | Responsibility | Contract | Deployable implementation |
 | --- | --- | --- |
+| Shader compilation | `neocogi.shader` | CPU-only `neocogi-shader-compiler` |
 | Renderer | `neocogi.renderer` | Selected Glow, Vulkan, WGPU, or WebGL backend |
 | Platform | `neocogi.platform` | Currently co-owned by the selected backend artifact |
 | GFX resources | `neocogi.gfx` | `neocogi-gfx` |
@@ -42,7 +43,7 @@ records, and the completed `IAssetBundle` cross the boundary in coarse calls;
 JSON syntax trees, parser callbacks, atlas drafts, pixels, and decoder state
 remain private to their owners.
 
-`neocogi-gfx-support` is an ordinary Rust support crate, not a sixth plugin. It
+`neocogi-gfx-support` is an ordinary Rust support crate, not a plugin. It
 publishes and validates concrete `IAssetBundle` objects for the GFX builder,
 embedded resources, and the UI importer. Keeping this code below the UI facade
 prevents a GFX plugin from linking the UI core contract merely to return its own
@@ -158,3 +159,24 @@ Their application feature graphs omit the Skin contract descriptor and their
 packages omit the corresponding authored theme directories as well.
 Embedded applications keep the compact GFX compositor but can omit its builder and the
 Skin plugin when their generated bundle is sufficient.
+
+## Portable shader compilation
+
+`neocogi-shader-core` owns generated contracts, plain reflection and bounded
+artifact readers. Its only contract dependency is render-core's graphics stage;
+render-core does not import shader-core. `neocogi-shader-compiler` privately owns
+Naga admission, validation and guarded emission. Every renderer plugin requires
+`neocogi.shader.compiler` and acquires its root before native construction.
+
+Shader creation imports owned COM outputs into the existing immutable artifact
+snapshot. Vulkan consumes guarded SPIR-V, Glow/WebGL ES300 and native names,
+and WGPU returned validated WGSL. Native realization, target adaptation and
+completion retention remain renderer responsibilities. Neither GPU resource
+management nor Glow/Vulkan normally links Naga or the compiler implementation;
+WGPU's checked native translator legitimately has its own Naga dependency.
+
+Compiler reflection calls occur only during creation. No compiler object is
+retained in pipeline snapshots or called during drawing/completion. See the
+[shader contract](../contracts/SHADER_COMPILATION.md) for ownership, quota,
+coordinate semantics and diagnostic behavior. Artifact and timing improvements
+must be measured; extracting the provider alone establishes no size/speed claim.

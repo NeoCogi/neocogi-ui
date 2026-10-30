@@ -48,3 +48,5 @@ application channels and whole-module IDL identity are deliberate policies.
 - [Plugin-owned designer settings](PLUGIN_DESIGNER_SETTINGS.md).
 
 Contracts describe accepted behavior and its ownership and failure boundaries.
+
+- [Portable shader compilation](SHADER_COMPILATION.md): owned code/reflection, compiler activation, bounded import and renderer handoff.

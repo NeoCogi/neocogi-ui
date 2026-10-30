@@ -17,6 +17,7 @@ revisions throughout the commit history.
 | `crates/ui/nodes` | Built-in widgets, containers and file dialogs |
 | `crates/ui/support` | Presentation algorithms and drawing helpers |
 | `crates/ui/document`, `crates/ui/design` | Runtime document loading, serialization and extension manifests |
+| `crates/shader` | CPU shader compiler provider and owned portable shader contracts |
 | `crates/render`, `crates/platform` | Renderer providers, platform contracts and native/browser input |
 | `crates/gfx`, `crates/skin`, `crates/appearance` | Images, fonts, resource bundles, themes and appearance |
 | `examples` | Full/basic/smoke applications, runtime loading and an independent UI extension |
