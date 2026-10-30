@@ -65,8 +65,9 @@ The [painter](../../examples/full/src/painter_demo.rs),
 [grid](../../examples/full/src/grid.rs) and
 [Suzanne viewport](../../examples/full/src/mesh.rs) implement `LeafContent` directly.
 There is one COM widget allocation for each. Solid drawing uses the shared UI
-painter; Suzanne edits one renderer-owned `IMeshScene: IRenderItem` object, whose
-backend-specific GPU implementation stays in the renderer plugin.
+painter; Suzanne owns its buffers, shaders, pipeline and camera uniform encoding.
+It receives a restricted resource factory and records generic indexed draws in a
+runtime-bounded view. The renderer has no semantic mesh or scene service.
 
 ## Keyboard and text
 

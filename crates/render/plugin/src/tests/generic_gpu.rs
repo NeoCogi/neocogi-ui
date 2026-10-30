@@ -53,10 +53,6 @@ impl IRenderStream for Source {
     fn texture(&self, _: u64, _: u32) -> Result<ComPtr<ITextureAbi>, NcStatus> {
         Err(NC_E_INVALID_ARG)
     }
-    /// Generic work never falls back to the semantic scene path.
-    fn item(&self, _: u64, _: u32) -> Result<ComPtr<IRenderItemAbi>, NcStatus> {
-        panic!("generic block requested as semantic scene")
-    }
 }
 
 /// Encodes an ordinary white-atlas rectangle using the actual renderer wire values.
@@ -334,4 +330,137 @@ fn generic_indexed_texture_and_uniform_snapshots_reach_the_native_pipeline() {
     assert_eq!(pixel(48, 50), [255, 0, 255, 255]);
     assert_eq!(pixel(31, 31), [255, 255, 255, 255]);
     assert_eq!(pixel(2, 2), [0, 255, 0, 255]);
+}
+
+/// Draws in one view share depth; nested clears and later views affect their authorized regions.
+#[test]
+#[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
+fn generic_depth_survives_draws_and_reset_with_independent_ordered_views() {
+    let _session = native_session();
+    let atlas: ComPtr<IRgbaImageAbi> = White::from_value(White).query().unwrap();
+    let native = PlatformObject::default().window("generic depth and clears", SIZE, atlas.as_com_ref()).unwrap();
+    let device = Rc::downgrade(&native.device);
+    let window = WindowObject::from_value(native);
+    let renderer: ComPtr<IRendererAbi> = window.query().unwrap();
+    let controller = window
+        .query::<IRenderClientFactoryAbi>()
+        .unwrap()
+        .create_client(RenderClientLimits::default())
+        .unwrap();
+    let resources = controller.resources().unwrap();
+    let code = Bytes::source(
+        br#"
+        struct Values { color:vec4<f32>, params:vec4<f32> }
+        @group(1) @binding(0) var<uniform> values:Values;
+        struct V { @builtin(position) p:vec4<f32>, @location(0) color:vec4<f32> }
+        @vertex fn vs(@builtin(vertex_index) i:u32) -> V {
+            let p = array<vec2<f32>,3>(vec2(-1.0,-1.0),vec2(3.0,-1.0),vec2(-1.0,3.0));
+            return V(vec4(p[i],values.params.x,1.0),values.color);
+        }
+        @fragment fn fs(v:V) -> @location(0) vec4<f32> { return v.color; }
+    "#
+        .to_vec(),
+    );
+    let vs = resources
+        .create_shader(GpuShaderStage::Vertex, code.as_com_ref(), NcCopyFromBufferOffset::new(0, b"vs"))
+        .unwrap();
+    let fs = resources
+        .create_shader(GpuShaderStage::Fragment, code.as_com_ref(), NcCopyFromBufferOffset::new(0, b"fs"))
+        .unwrap();
+    let pipeline = |color_write| {
+        let desc = PipelineDesc {
+            state: GpuPipelineInfo {
+                color_write,
+                depth_write: true,
+                depth_compare: GpuCompare::LessEqual,
+                ..GpuPipelineInfo::default()
+            },
+            bindings: vec![GpuShaderBinding {
+                stage: GpuShaderStage::Vertex,
+                slot: 0,
+                kind: GpuBindingKind::Uniform,
+                byte_len: 32,
+            }],
+            ..PipelineDesc::default()
+        }
+        .source()
+        .unwrap();
+        resources.create_pipeline(desc.as_com_ref(), vs.as_com_ref(), fs.as_com_ref()).unwrap()
+    };
+    let visible = pipeline(15);
+    let masked = pipeline(0);
+    let draw = |view: &mut ComBox<IRenderViewAbi>, color: [f32; 4], depth: f32| {
+        let bytes: Vec<_> = color.into_iter().chain([depth, 0., 0., 0.]).flat_map(f32::to_le_bytes).collect();
+        view.push_uniforms(GpuShaderStage::Vertex, 0, NcCopyFromBufferOffset::new(0, &bytes)).unwrap();
+        view.draw(3, 1, 0).unwrap();
+    };
+    let broker = window.query::<IRenderHostAbi>().unwrap().recording_broker().unwrap();
+    let mut frame = broker.begin_frame().unwrap();
+    let begin = |frame: &mut ComBox<IRenderRecordingFrameAbi>, target: Rect| {
+        let mut session = frame
+            .begin_view(
+                RenderViewRoot {
+                    client: Rect {
+                        x: 0,
+                        y: 0,
+                        width: target.width,
+                        height: target.height,
+                    },
+                    target,
+                },
+                resources.as_com_ref(),
+            )
+            .unwrap();
+        let view = session.view().unwrap();
+        (session, view)
+    };
+    let (mut first, mut a) = begin(&mut frame, Rect { x: 4, y: 4, width: 56, height: 56 });
+    a.bind_pipeline(visible.as_com_ref()).unwrap();
+    draw(&mut a, [1., 0., 0., 1.], 0.25);
+    a.push_clip(Rect { x: 28, y: 0, width: 28, height: 56 }).unwrap();
+    a.clear_depth(1.0).unwrap();
+    draw(&mut a, [0., 0., 1., 1.], 0.75);
+    a.pop().unwrap();
+    a.reset().unwrap();
+    draw(&mut a, [1., 1., 0., 1.], 0.9); // Fails existing red/blue depth; reset must not clear it.
+    a.finish().unwrap();
+    let first = first.take_block().unwrap();
+    let (mut second, mut b) = begin(&mut frame, Rect { x: 20, y: 20, width: 24, height: 24 });
+    b.bind_pipeline(visible.as_com_ref()).unwrap();
+    draw(&mut b, [0., 1., 0., 1.], 0.75); // Fresh bounded depth overrides earlier nearer red.
+    b.finish().unwrap();
+    let second = second.take_block().unwrap();
+    let (mut third, mut c) = begin(&mut frame, Rect { x: 1, y: 1, width: 2, height: 2 });
+    c.bind_pipeline(masked.as_com_ref()).unwrap();
+    draw(&mut c, [1., 0., 0., 1.], 0.5);
+    c.clear_color(0xffffffff).unwrap(); // Clear ignores the preceding pipeline's zero write mask.
+    c.finish().unwrap();
+    let third = third.take_block().unwrap();
+    frame.finish().unwrap();
+    let source = super::view_geometry::ViewStream::from_value(super::view_geometry::ViewStream { blocks: vec![first, second, third] })
+        .query::<IRenderStreamAbi>()
+        .unwrap();
+    renderer
+        .render(
+            RenderInfo {
+                size: SIZE,
+                clear: 0xff13110f,
+                invocation: 3,
+                vertex_count: 0,
+                batch_count: 3,
+            },
+            atlas.as_com_ref(),
+            source.as_com_ref(),
+        )
+        .unwrap();
+    let device = device.upgrade().unwrap();
+    let access = device.access().unwrap();
+    let pixels = access.state.as_ref().unwrap().gpu.last_pixels();
+    let pixel = |x: usize, y: usize| &pixels[((63 - y) * 64 + x) * 4..((63 - y) * 64 + x) * 4 + 4];
+    assert_eq!(pixel(6, 6), [255, 0, 0, 255]);
+    assert_eq!(pixel(54, 6), [0, 0, 255, 255]);
+    assert_eq!(pixel(24, 24), [0, 255, 0, 255]);
+    assert_eq!(pixel(40, 40), [0, 255, 0, 255]);
+    assert_eq!(pixel(1, 1), [255, 255, 255, 255]);
+    assert_eq!(pixel(0, 0), [15, 17, 19, 255]);
 }

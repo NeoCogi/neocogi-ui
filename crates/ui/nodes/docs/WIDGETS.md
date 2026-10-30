@@ -169,8 +169,9 @@ constructible `Counter: IWidget + ILeafLayout`, standard activation events, and 
 The host activates the extension factory and calls its typed `counter` method
 with an `IWidgetHost` constructor argument. Neither widget imports the UI implementation,
 native atlas IDs, tree borrows, GPU contexts or backend callbacks.
-Custom drawing uses the painter's solid geometry/image methods or an owned
-`IRenderItem` implemented by the renderer assembly.
+Custom drawing uses the painter's solid geometry/image methods or a scoped generic
+GPU view. Clients own their encoded streams, shaders and pipeline descriptions;
+[GPU rendering](../../../../docs/contracts/GPU_RENDERING.md) defines the bounds and lifetime rules.
 
 External controls use the same constructor contract: one
 `EventBinding`, with emitted interfaces advertised through `ui_event_sources!`.

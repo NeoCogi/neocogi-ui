@@ -1,6 +1,5 @@
 //! Real generated painter calls prove the runtime's private slot/revocation boundary.
 use super::*;
-use neocogi_render_core::abi::*;
 use neocogi_render_gpu::{command::Command, GpuDevice};
 
 /// Installs ordinary imported UI assets, identical to the non-GPU painter tests.

@@ -1,7 +1,6 @@
 //! Generated application-specific contracts for the independent widget extension.
 //!
-//! Mesh rendering belongs to the separate `neocogi.render.mesh` module so a
-//! renderer plugin never imports the UI widget contract graph.
+//! Custom graphics use the common renderer's resource and scoped-command contracts.
 
 #![deny(missing_docs)]
 

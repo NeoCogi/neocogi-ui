@@ -15,7 +15,7 @@ struct Source {
 
 impl IRenderStream for Source {
     /// This fixture carries no generic GPU block.
-    fn view(&self, _: u64, _: u32) -> Result<neocogi_com::WeakComBox<neocogi_render_core::abi::IRenderViewBlockAbi>, NcStatus> {
+    fn view(&self, _: u64, _: u32) -> Result<neocogi_com::WeakComBox<IRenderViewBlockAbi>, NcStatus> {
         Err(neocogi_com::NC_E_INVALID_ARG)
     }
 
@@ -37,10 +37,6 @@ impl IRenderStream for Source {
     fn texture(&self, _: u64, _: u32) -> Result<ComPtr<ITextureAbi>, NcStatus> {
         Err(NC_E_INVALID_ARG)
     }
-    /// Custom records are structural fixtures and have no renderer-specific object.
-    fn item(&self, _: u64, _: u32) -> Result<ComPtr<IRenderItemAbi>, NcStatus> {
-        Err(NC_E_INVALID_ARG)
-    }
 }
 
 /// Makes every alternative observable without loading a renderer or GPU driver.
@@ -48,15 +44,7 @@ fn record(index: usize) -> RenderBatch {
     match index % 3 {
         0 => RenderBatch::Atlas { first: index as u32, count: 3 },
         1 => RenderBatch::Texture { first: index as u32 },
-        _ => RenderBatch::Item {
-            rect: Rect {
-                x: index as i32,
-                y: 2,
-                width: 3,
-                height: 4,
-            },
-            clip: Rect { x: 0, y: 0, width: 1000, height: 1000 },
-        },
+        _ => RenderBatch::View,
     }
 }
 

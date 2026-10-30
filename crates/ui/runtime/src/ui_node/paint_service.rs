@@ -248,17 +248,6 @@ impl IPainter for Recorder {
             painter.com_texture_region(local_rect(rect), source, crate::render::contract_color(rgba), texture)
         })
     }
-    /// Records a capability rather than a callback lending mutable GPU state across COM.
-    fn item(&mut self, scope: PaintScope, rect: Rect, item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
-        self.reserve(scope, 0, 0)?;
-        if rect.width < 0 || rect.height < 0 {
-            return Err(NC_E_INVALID_ARG);
-        }
-        self.check(scope)?;
-        // AddRef can execute foreign code, so retain the item before taking the paint context.
-        let item = item.try_add_ref()?;
-        self.with_painter(scope, |painter| painter.com_item(local_rect(rect), item))
-    }
     /// Validates the whole batch before publishing any geometry to this scope.
     fn triangles(&mut self, scope: PaintScope, input: NcCopyFromBufferOffset<'_, RenderVertex>) -> Result<(), NcStatus> {
         self.reserve(scope, core::mem::size_of_val(input.as_slice()), input.len())?;

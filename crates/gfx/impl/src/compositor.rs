@@ -12,7 +12,7 @@ use neocogi_com::{
 use neocogi_gfx_support::abi::*;
 use neocogi_gfx_support::{AssetTables, AsciiGlyphIndex};
 use neocogi_render_core::abi::{
-    IRenderItemAbi, IRenderViewBlockAbi, IRenderStream, IRenderStreamAbi, IRenderStreamVtblFor, IRgbaImageAbi, IRendererAbi, ITextureAbi, MAX_RENDER_BATCHES,
+    IRenderViewBlockAbi, IRenderStream, IRenderStreamAbi, IRenderStreamVtblFor, IRgbaImageAbi, IRendererAbi, ITextureAbi, MAX_RENDER_BATCHES,
     MAX_RENDER_VERTICES, RenderBatch, RenderInfo, RenderVertex,
 };
 use std::{
@@ -96,15 +96,6 @@ enum Batch {
         /// Local Rc cloning avoids invoking foreign AddRef while batch storage is borrowed.
         texture: Rc<ComPtr<ITextureAbi>>,
     },
-    /// One backend-specific item at an exact painter-order boundary.
-    Item {
-        /// Complete application content bounds in drawable coordinates.
-        rect: Rect,
-        /// Positive intersection of content, operation clip, and viewport.
-        clip: Rect,
-        /// Local Rc cloning avoids invoking foreign AddRef while batch storage is borrowed.
-        item: Rc<ComPtr<IRenderItemAbi>>,
-    },
 }
 
 impl Batch {
@@ -114,7 +105,6 @@ impl Batch {
             Self::View(_) => RenderBatch::View,
             Self::Atlas { first, count } => RenderBatch::Atlas { first: *first, count: *count },
             Self::Texture { first, .. } => RenderBatch::Texture { first: *first },
-            Self::Item { rect, clip, .. } => RenderBatch::Item { rect: *rect, clip: *clip },
         }
     }
 }
@@ -203,16 +193,6 @@ impl IRenderStream for Stream {
             _ => return Err(NC_E_INVALID_ARG),
         };
         Ok(texture.as_ref().clone())
-    }
-
-    /// Retains the requested custom item after releasing the frame-storage borrow.
-    fn item(&self, invocation: u64, batch: u32) -> Result<ComPtr<IRenderItemAbi>, NcStatus> {
-        self.storage.check(invocation)?;
-        let item = match self.storage.batches.try_borrow().map_err(|_| NC_E_BUSY)?.get(batch as usize) {
-            Some(Batch::Item { item, .. }) => item.clone(),
-            _ => return Err(NC_E_INVALID_ARG),
-        };
-        Ok(item.as_ref().clone())
     }
 }
 
@@ -741,29 +721,6 @@ impl GfxCompositor for GfxCompositorObject {
         // Commit the complete quad and its owner together, after both fallible reservations.
         output.extend_from_slice(&vertices);
         batches.push(Batch::Texture { first, texture: retained });
-        Ok(())
-    }
-
-    /// Retains one renderer-specific item with its final positive visible rectangle.
-    fn item(&mut self, clip: Rect, content: Rect, item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
-        self.charge(0, 0)?;
-        if content.width <= 0 || content.height <= 0 {
-            return if content.width == 0 || content.height == 0 {
-                Ok(())
-            } else {
-                Err(NC_E_INVALID_ARG)
-            };
-        }
-        let Some(clip) = self.effective_clip(clip)?.and_then(|clip| intersection(clip, content)) else {
-            return Ok(());
-        };
-        if self.storage.batches.borrow().len() >= MAX_RENDER_BATCHES as usize {
-            return Err(NC_E_OUT_OF_RANGE);
-        }
-        let retained = Rc::new(item.try_add_ref()?);
-        let mut batches = self.storage.batches.borrow_mut();
-        batches.try_reserve(1).map_err(|_| NC_E_OUT_OF_MEMORY)?;
-        batches.push(Batch::Item { rect: content, clip, item: retained });
         Ok(())
     }
 

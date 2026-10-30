@@ -48,15 +48,9 @@ struct OwnedTextures;
 impl Resources for OwnedTextures {
     /// Imported batches own the real COM texture until CPU preparation is cleared.
     type Texture = ComPtr<ITextureAbi>;
-    /// Application work is unsupported by this texture-only fixture.
-    type Item = ();
     /// Retains the actual capability until imported-frame cleanup.
     fn texture(&self, texture: ComPtr<ITextureAbi>) -> Result<Self::Texture, NcStatus> {
         Ok(texture)
-    }
-    /// These tests record no application items.
-    fn item(&self, _: ComPtr<IRenderItemAbi>) -> Result<Self::Item, NcStatus> {
-        Err(NC_E_INVALID_ARG)
     }
 }
 
@@ -87,7 +81,7 @@ impl IRenderer for Renderer {
     }
     /// The shared production importer rejects orphan vertices before resolving any texture.
     fn render(&self, info: RenderInfo, _: ComRef<'_, IRgbaImageAbi>, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        let mut frame = PreparedFrame::<ComPtr<ITextureAbi>, ()>::default();
+        let mut frame = PreparedFrame::<ComPtr<ITextureAbi>>::default();
         frame.read(info, stream, &OwnedTextures)?;
         let mut records = NcOutputBuffer::new();
         if stream.batches(info.invocation, records.output(0, info.batch_count as usize))? != info.batch_count {

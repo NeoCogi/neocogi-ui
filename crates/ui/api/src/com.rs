@@ -6,9 +6,9 @@
 //! object support.
 
 pub use neocogi_render_core::abi::{
-    Color, IRenderDiagnostics, IRenderDiagnosticsAbi, IRenderItem, IRenderItemAbi, IRenderStream, IRenderStreamAbi, IRenderer, IRendererAbi, IRgbaImage,
-    IRgbaImageAbi, ITexture, ITextureAbi, ITextureFactory, ITextureFactoryAbi, MAX_IMAGE_BYTES, MAX_RENDER_BATCHES, MAX_RENDER_VERTICES, Rect, RenderBatch,
-    RenderInfo, RenderVertex, Size, TextureRegion, color, rgba_bytes,
+    Color, IRenderDiagnostics, IRenderDiagnosticsAbi, IRenderStream, IRenderStreamAbi, IRenderer, IRendererAbi, IRgbaImage, IRgbaImageAbi, ITexture,
+    ITextureAbi, ITextureFactory, ITextureFactoryAbi, MAX_IMAGE_BYTES, MAX_RENDER_BATCHES, MAX_RENDER_VERTICES, Rect, RenderBatch, RenderInfo, RenderVertex,
+    Size, TextureRegion, color, rgba_bytes,
 };
 pub use neocogi_render_core::platform::{
     IInputSink, IInputSinkAbi, IPlatformWindow, IPlatformWindowAbi, KeyCode, KeyStroke, Platform, PlatformAbi, Point, PollStatus, TextInputArea, UiInput,
@@ -575,11 +575,6 @@ impl<'a> Painter<'a> {
     pub fn texture_region(&mut self, rect: Rect, source: TextureRegion, rgba: u32, texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
         self.interface.texture(self.scope, rect, source, rgba, texture)
     }
-    /// Inserts renderer-owned application GPU work at this point in painter order.
-    pub fn item(&mut self, rect: Rect, item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
-        self.interface.item(self.scope, rect, item)
-    }
-
     /// Records a local rectangle within this invocation.
     pub fn fill(&mut self, rect: Rect, rgba: u32) -> Result<(), NcStatus> {
         self.interface.fill(self.scope, rect, rgba)

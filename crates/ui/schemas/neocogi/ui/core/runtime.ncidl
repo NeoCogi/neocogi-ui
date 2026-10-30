@@ -1,4 +1,4 @@
-#[version(3)]
+#[version(4)]
 /// Scoped facade which appends typed operations to the runtime's current frame paint context.
 interface IPainter {
     /// Reserves an ordered graphics contribution rooted in the committed visible client area.
@@ -21,9 +21,6 @@ interface IPainter {
     /// Retains an immutable renderer-owned RGBA texture and draws its normalized source region in local coordinates.
     /// Negative extents are invalid; zero extents draw nothing. Ownership is validated before GPU execution.
     fn texture(&mut self, scope: PaintScope, rect: Rect, source: TextureRegion, rgba: u32, texture: &ITexture) -> Result<()>;
-    /// Retains a renderer-owned custom item at this exact painter-order position.
-    /// The UI translates the rectangle and intersects its clip before submission.
-    fn item(&mut self, scope: PaintScope, rect: Rect, item: &IRenderItem) -> Result<()>;
     /// Records a fill only while this exact invocation remains active.
     fn fill(&mut self, scope: PaintScope, rect: Rect, rgba: u32) -> Result<()>;
     /// Records UTF-8 text with the current body font and button content style.

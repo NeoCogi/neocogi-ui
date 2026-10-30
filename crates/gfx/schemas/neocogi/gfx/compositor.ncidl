@@ -1,4 +1,4 @@
-use neocogi.renderer::{IRenderItem, IRenderViewBlock, IRenderer, ITexture, Rect, RenderVertex, Size, TextureRegion};
+use neocogi.renderer::{IRenderViewBlock, IRenderer, ITexture, Rect, RenderVertex, Size, TextureRegion};
 
 #[version(1)]
 /// One solid-color vertex in final drawable coordinates before rectangular clipping.
@@ -75,8 +75,6 @@ interface GfxCompositor: IGfxDiagnostics {
     /// Retains and appends one renderer-owned texture with normalized source coordinates.
     /// CPU reservation failure appends neither its quad nor its batch and retains no additional texture owner.
     fn texture(&mut self, clip: Rect, destination: Rect, source: TextureRegion, rgba: u32, texture: &ITexture) -> Result<()>;
-    /// Retains backend-specific work at this exact painter-order position.
-    fn item(&mut self, clip: Rect, content: Rect, item: &IRenderItem) -> Result<()>;
     /// Submits the complete frame once and clears retained resource capabilities on every result.
     fn submit(&mut self, renderer: &IRenderer) -> Result<()>;
     /// Abandons an incomplete frame while retaining reusable allocations.

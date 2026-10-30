@@ -50,9 +50,6 @@ impl IRenderer for Recorder {
                 RenderBatch::Texture { .. } => {
                     stream.texture(info.invocation, index as u32)?;
                 }
-                RenderBatch::Item { .. } => {
-                    stream.item(info.invocation, index as u32)?;
-                }
                 RenderBatch::View => {
                     stream.view(info.invocation, index as u32)?;
                 }
@@ -78,10 +75,10 @@ impl ITexture for Texture {
     }
 }
 
-#[com_object(interfaces(IRenderItem))]
+#[com_object(interfaces(IRenderViewBlock), ownership = exclusive)]
 /// Opaque application work remains an owned capability in the real command stream.
-struct Item;
-impl IRenderItem for Item {}
+struct BlockMarker;
+impl IRenderViewBlock for BlockMarker {}
 
 /// Mutable fixture owns the production replay inputs and one independent GFX compositor.
 struct Composition {
@@ -214,7 +211,7 @@ fn atlas_rectangle_clipping_preserves_fractional_uvs() {
 fn external_texture_clipping_preserves_uv_mapping_and_stream_order() {
     let mut fixture = Composition::new(atlas());
     let texture: ComPtr<ITextureAbi> = Texture::from_value(Texture).query().unwrap();
-    let item: ComPtr<IRenderItemAbi> = Item::from_value(Item).query().unwrap();
+    let block = BlockMarker::into_box(BlockMarker).query::<IRenderViewBlockAbi>().unwrap();
     let rect = Recti::new(0, 0, 100, 100);
     fixture
         .list
@@ -230,7 +227,8 @@ fn external_texture_clipping_preserves_uv_mapping_and_stream_order() {
             texture,
         )
         .unwrap();
-    fixture.list.push_com_item(Recti::new(10, 10, 20, 20), rect, item).unwrap();
+    let slot = fixture.list.reserve_gpu_view(Recti::new(10, 10, 20, 20)).unwrap();
+    fixture.list.complete_gpu_view(slot, block).unwrap();
     fixture
         .list
         .push_icon(rect, fixture.atlas.white_icon(), Recti::new(20, 0, 1, 1), color(255, 255, 255, 255))
@@ -242,19 +240,13 @@ fn external_texture_clipping_preserves_uv_mapping_and_stream_order() {
         [
             RenderBatch::Atlas { .. },
             RenderBatch::Texture { first: 6 },
-            RenderBatch::Item { .. },
+            RenderBatch::View,
             RenderBatch::Atlas { .. }
         ]
     ));
     vertex(capture.vertices[6], [20., 20.], [0.2, 0.2]);
     vertex(capture.vertices[8], [60., 60.], [0.6, 0.6]);
-    match capture.batches[2] {
-        RenderBatch::Item { rect, clip } => {
-            assert_eq!(rect.width, 100);
-            assert_eq!((clip.x, clip.y, clip.width, clip.height), (10, 10, 20, 20));
-        }
-        _ => unreachable!("batch kind was checked"),
-    }
+    assert!(matches!(capture.batches[2], RenderBatch::View));
 }
 
 /// Nine-patch source slicing is observed through GFX's actual final triangles.
@@ -420,7 +412,6 @@ fn fully_clipped_operations_leave_existing_output_unchanged() {
     for clip in [Recti::new(0, 0, 0, 10), Recti::new(0, 0, 10, 0), Recti::new(0, 0, 10, 10)] {
         let mut fixture = Composition::new(atlas());
         let texture: ComPtr<ITextureAbi> = Texture::from_value(Texture).query().unwrap();
-        let item: ComPtr<IRenderItemAbi> = Item::from_value(Item).query().unwrap();
         fixture
             .list
             .push_icon(
@@ -441,7 +432,6 @@ fn fully_clipped_operations_leave_existing_output_unchanged() {
                 texture,
             )
             .unwrap();
-        fixture.list.push_com_item(clip, destination, item).unwrap();
         fixture
             .list
             .push_icon(clip, fixture.atlas.white_icon(), destination, color(255, 255, 255, 255))

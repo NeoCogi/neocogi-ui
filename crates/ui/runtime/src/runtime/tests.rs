@@ -294,7 +294,7 @@ impl IRenderer for Renderer {
         assert_eq!(batches.len(), 1);
         assert!(matches!(batches[0], RenderBatch::Atlas { first: 0, count } if count == info.vertex_count));
         assert_eq!(stream.texture(info.invocation, 0).unwrap_err(), NC_E_INVALID_ARG);
-        assert_eq!(stream.item(info.invocation, 0).unwrap_err(), NC_E_INVALID_ARG);
+        assert_eq!(stream.view(info.invocation, 0).unwrap_err(), NC_E_INVALID_ARG);
         assert!(vertices.len() >= 6);
         assert!(vertices.iter().all(|v| v.x.is_finite() && v.y.is_finite()));
         *self.probe.vertices.borrow_mut() = vertices.into_vec();
@@ -362,7 +362,7 @@ fn rendering_requires_synchronized_geometry_and_streams_expire_after_success_and
         assert_eq!(stream.vertices(*scope, neocogi_com::NcOutputBuffer::new().output(0, 0)), Err(NC_E_INVALID_ARG));
         assert_eq!(stream.batches(*scope, neocogi_com::NcOutputBuffer::new().output(0, 0)), Err(NC_E_INVALID_ARG));
         assert_eq!(stream.texture(*scope, 0).unwrap_err(), NC_E_INVALID_ARG);
-        assert_eq!(stream.item(*scope, 0).unwrap_err(), NC_E_INVALID_ARG);
+        assert_eq!(stream.view(*scope, 0).unwrap_err(), NC_E_INVALID_ARG);
     }
 }
 
@@ -1302,10 +1302,7 @@ impl IPainter for BuiltinPainter {
         self.probe.order.borrow_mut().push(true);
         if self.probe.fail_image.replace(false) { Err(UI_E_RENDER) } else { Ok(()) }
     }
-    /// The complete button algorithm cannot emit application GPU work.
-    fn item(&mut self, _scope: PaintScope, _rect: Rect, _item: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
-        panic!("unexpected custom item in button paint")
-    }
+
     /// Built-ins leave atlas expansion to the runtime instead of sending final triangle batches.
     fn triangles(&mut self, _scope: PaintScope, _vertices: NcCopyFromBufferOffset<'_, RenderVertex>) -> Result<(), NcStatus> {
         panic!("unexpected final triangle batch in semantic built-in paint")

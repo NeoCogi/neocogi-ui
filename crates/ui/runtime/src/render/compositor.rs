@@ -62,9 +62,6 @@ fn submit_once(
             super::display_list::DrawKind::ComTexture { texture, rect, source, color } => {
                 compositor.texture(clip, copied_rect(rect), source, packed(color), texture.as_com_ref())?
             }
-            super::display_list::DrawKind::ComItem { item, rect } => {
-                compositor.item(clip, copied_rect(rect), item.as_com_ref())?;
-            }
             super::display_list::DrawKind::NinePatch { rect, patch } => {
                 // UI crosses the boundary once with the semantic value it recorded. GFX resolves
                 // all nine destination/source cells and owns their final clipping and batching.

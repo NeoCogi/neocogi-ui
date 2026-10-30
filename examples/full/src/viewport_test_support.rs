@@ -32,10 +32,7 @@ impl IPainter for Recorder {
         self.output.borrow_mut().views.push(session);
         Ok(view)
     }
-    /// Semantic renderer items are outside this generic viewport fixture.
-    fn item(&mut self, _: PaintScope, _: Rect, _: ComRef<'_, IRenderItemAbi>) -> Result<(), NcStatus> {
-        panic!("obsolete item");
-    }
+
     /// Copies grid output while the generated ABI input slice is live.
     fn colored_triangles(&mut self, _: PaintScope, vertices: NcCopyFromBufferOffset<'_, ColoredVertex>) -> Result<(), NcStatus> {
         self.output.borrow_mut().vertices.extend_from_slice(vertices.as_slice());

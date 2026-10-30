@@ -55,10 +55,6 @@ impl IRenderStream for SurfaceStream {
     fn texture(&self, _: u64, batch: u32) -> Result<ComPtr<ITextureAbi>, NcStatus> {
         self.images.get(batch as usize).cloned().ok_or(NC_E_INVALID_ARG)
     }
-    /// UI-only fixtures contain no application commands.
-    fn item(&self, _: u64, _: u32) -> Result<ComPtr<IRenderItemAbi>, NcStatus> {
-        Err(NC_E_INVALID_ARG)
-    }
 }
 impl SurfaceStream {
     /// Publishes counts and the corresponding stream together.

@@ -162,8 +162,10 @@ when measurement or placement inputs change. Resize invalidation is independent.
 External shared state, hidden/skipped updates and observational painting remain
 explicit widget/app responsibilities. Read [COM_AUTHORS.md](docs/contracts/COM_AUTHORS.md)
 for the complete requirements and examples. Local custom leaves implement
-`LeafContent`; GPU scenes expose concrete interfaces such as `IMeshScene: IRenderItem`.
-Backend-owned Rust GPU types stay inside their renderer plugin.
+`LeafContent`; custom graphics use restricted GPU resource factories and scoped
+render views. Clients define their own vertex layouts, shaders and uniform bytes.
+[GPU rendering contracts](docs/contracts/GPU_RENDERING.md) describe lifetime,
+validation and viewport authority. Native GPU types stay inside their renderer plugin.
 
 The [documentation index](docs/README.md) links authoring, assets, deployment and
 implementation references. [Examples](docs/guides/EXAMPLES.md) maps each feature to working

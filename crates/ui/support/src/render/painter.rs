@@ -131,12 +131,6 @@ impl<'a> Painter<'a> {
         Ok(())
     }
 
-    /// Records application GPU work in the same list as every ordinary widget primitive.
-    pub fn com_item(&mut self, rect: Recti, item: neocogi_com::ComPtr<neocogi_ui::abi::core::IRenderItemAbi>) -> Result<(), neocogi_com::NcStatus> {
-        self.list.push_com_item(self.clip, self.screen_rect(rect), item)?;
-        Ok(())
-    }
-
     /// Appends solid COM geometry directly to the reusable arena; the executor supplies the current
     /// atlas material later, so theme replacement cannot invalidate application-side UV caches.
     pub fn colored_triangles(&mut self, vertices: &[neocogi_ui::abi::core::ColoredVertex]) -> Result<(), neocogi_com::NcStatus> {

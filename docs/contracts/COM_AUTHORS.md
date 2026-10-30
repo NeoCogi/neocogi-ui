@@ -933,7 +933,7 @@ frames. Keeping a copied frame's vertices does not keep the image alive.
 Resources belong to one native window/renderer instance, even when two instances
 use the same GPU API. The native plugin authenticates canonical COM identity against
 its own weak registry; a matching ABI or a claimed numeric owner does not prove
-membership. Foreign images and scenes report `UI_E_OWNER` directly from the renderer.
+membership. Foreign images, factories and graphics blocks fail device authentication.
 The UI's frame API reports backend failures as `UI_E_RENDER`; query
 `IRenderDiagnostics::diagnostic` on the renderer for the underlying preparation or
 native-driver detail. Returned diagnostic strings are immutable snapshots.
@@ -947,47 +947,37 @@ GL context, and destructors never submit or present. Idle frame storage retains 
 resource references, so it cannot form a device/resource cycle. Plugins remain loaded
 for the process lifetime; hot unloading is unsupported.
 
-The renderer platform exposes `IMeshScenes::create_scene` and `IMeshScene: IRenderItem`.
-The scene is one COM object. It accepts complete finite mesh records and triangle
-indices, plus atomically replaced column-major projection/view/model transforms.
-Offsets are zero; limits are 4M vertices and 12M indices, every index must name a
-vertex, and two empty buffers clear the mesh. Invalid mesh or transform edits leave
-the prior scene intact. The native renderer snapshots shared immutable mesh buffers
-before preparing actual depth-tested GPU work; it does not substitute CPU UI
-triangles for application rendering.
+The trusted host creates a client domain through `IRenderClientFactory::create_client`.
+It keeps the exclusive controller and delegates only `domain.resources()` to widgets.
+Factories and GPU resources have separate COM identities from the native window,
+renderer and host controls. Cloning a factory shares the domain and its budgets.
+Controller close/drop gates subsequent creation and recording without invalidating
+already admitted native work.
 
-`MeshVertex` is a generated application value with ordinary Rust layout, not a GPU
-byte format. The COM wire representation and GPU vertex representation have separate
-owners. For each new immutable mesh upload, the renderer copies the named position,
-normal and UV fields into its private dense float record. All mesh backends derive
-their attribute offsets and stride from that record; they never reinterpret the
-generated application record as GPU bytes. The temporary encoding is discarded
-after upload. Cache identity still follows the original shared mesh allocation, so
-camera edits reuse the existing GPU buffers without encoding the geometry again.
+GPU resources use exclusive `ComBox` owners and weak renderer observations. Public
+owner expiry prevents a later draw from capturing that resource; earlier draws retain
+private immutable versions through execution/completion. A weak lifetime check is
+neither a callback nor a GPU completion signal. Pipelines retain their shader artifacts
+independently of public shader owners.
 
-The reusable Vulkan mesh renderer uploads each immutable mesh once and shares its native
-vertex/index buffers across draws and frame slots. Camera updates, draw reordering,
-temporary hiding and swapchain resizing do not replace the geometry. A replacement
-mesh receives its own upload; each submitted slot retains the previous upload until
-that slot's fence completes. Unreferenced CPU meshes leave the upload cache during
-the next preparation, and outstanding slots keep their GPU buffers alive. These
-owners remain private to the renderer and do not retain the COM scene or window.
+`Painter::begin_render_view(resources)` reserves an exact painter-order position and
+returns a temporary exclusive command view. Its copied client information comes from
+committed visible geometry. Bind pipelines, explicit byte streams, sampled textures
+and copied uniform inputs, then issue primitive draws and call `finish`. Explicit
+cancel contributes nothing. Unfinished or rejected work fails the paint invocation;
+paint return permanently revokes retained facades. Nested viewports and clips remain
+inside the private root, and reset cannot recover broader target authority.
 
-Use `Painter::texture(rect, rgba, image)` and `Painter::item(rect, scene)` at the
-intended source position. The full example is `examples/smoke/src/gpu.rs`. Scene edits
-normally change paint only: render again; a UI update is needed if widget geometry or
-other retained inputs also changed. Perform scene edits before painting. The GPU
-owner can detect its own active preparation/execution, but cannot detect a separate
-UI plugin's earlier paint phase. Widget/application authors must uphold observational
-paint and synchronize externally shared scene/model changes; no automatic dependency
-tracking is implied by `GeometryChange::NoChange`.
+Vertex/index buffers and uniforms use explicitly encoded bytes with declared layouts.
+The renderer defines no mesh vertex, material or camera model. Suzanne's matrices and
+lighting belong to the [example](../../examples/full/src/mesh.rs); the
+[smoke widget](../../examples/smoke/src/gpu.rs) uses a separate programmable pipeline.
+Graphics resource changes affect paint; measurement or routing changes still require
+conservative invalidation and the ordinary widget update contract.
 
-Backend-specific application renderers are compiled into the selected GPU plugin.
-Their concrete command enums, GL context, Vulkan command buffers, WGPU encoders and
-render passes remain private Rust values inside that binary. An independently
-loaded GPU extension cannot borrow these native Rust objects through the generic
-COM API. Such an extension would need a separately designed backend-specific ABI;
-this migration intentionally provides typed scene/resource capabilities instead.
+[GPU_RENDERING.md](GPU_RENDERING.md) specifies the shader profile, typed source helpers,
+version capture, resource/work quotas and native admission boundary. No COM graphics
+method lends an active GL context, Vulkan command buffer, WGPU encoder or render pass.
 
 ## Platform input and native composition
 

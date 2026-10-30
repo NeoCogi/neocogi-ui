@@ -6,11 +6,10 @@ produces exactly one of those identities and links its concrete renderer. Browse
 builds statically register the WebGL descriptor; native assemblies dynamically load
 one of the other three.
 
-The selected plugin also owns its native window, event pump, images, meshes, and
-backend-specific application drawing. Those are implementation details of a rendering
+The selected plugin also owns its native window, event pump, images and generic graphics resources. Those are implementation details of a rendering
 device, not separate deployment units. Keeping them together avoids exposing native
 window/graphics handles and avoids another dynamic dispatch boundary during every
-frame. Applications retain `IPlatformWindow`, `IRenderer`, `ITexture`, and `IRenderItem`
+frame. Applications retain `IPlatformWindow`, `IRenderer`, `ITexture` and scoped GPU
 interfaces through the facade; native GPU objects never leave the plugin.
 
 Renderer-neutral ABI declarations live in the independent `neocogi.renderer`
@@ -45,7 +44,7 @@ are not additional runtime boundaries.
 | [crates/render/plugin](../../../render/plugin) | Plugin descriptor plus window, input, and device ownership |
 | [crates/render/core](../../../render/core) | Backend-neutral frame, texture, color, and validated upload SPI used by renderer implementations and native test fixtures |
 | [crates/render/glow](../../../render/glow) | Glow rendering shared by native OpenGL and WebGL |
-| [crates/render/vulkan](../../../render/vulkan) | Vulkan rendering and UI shaders |
+| [crates/render/vulkan](../../../render/vulkan) | Vulkan target and command execution |
 | [crates/render/wgpu](../../../render/wgpu) | WGPU rendering |
 | [crates/render/webgl](../../../render/webgl) | Browser canvas backend using the Glow renderer |
 | [crates/render/support](../../../render/support) | Shared frame preparation and resource validation |
@@ -57,16 +56,18 @@ GFX-to-renderer boundaries use generated contracts and one complete COM frame.
 
 ## Ordered application drawing
 
-A widget records an owned `IRenderItem` in its paint stream. After preceding UI batches
-have flushed, the renderer invokes the item with copied content, final clip and frame
-dimensions. The item issues validated mesh commands against the active draw context.
-The platform then resumes ordinary UI drawing in painter order.
+A widget owns buffers, sampled textures, samplers, shaders and pipelines created
+through its restricted factory. It begins a render view through the current
+painter and records bindings, copied uniforms, primitive draws and bounded clears.
+Finish seals its contribution; the runtime preserves the position reserved at
+begin. No native callback, mesh or camera object crosses the graphics ABI.
 
-The generic application renderer types in the native backend crates are statically
-linked implementation helpers. Their Rust command values, frame borrows and GPU
-objects never cross the COM ABI. See [the mesh renderer](../../../render/mesh/src)
-for concrete backend implementations and [the application mesh component](../../../../examples/full/src/mesh.rs)
-for owned COM rendering.
+Preparation authenticates every sealed block, snapshots exact immutable versions
+and realizes native allocations before acquiring a frame. Final domain checks
+follow the last foreign callback. Every draw and clear retains its immutable
+client root; viewport mapping and raster clipping are independent. See the
+[GPU contract](../../../../docs/contracts/GPU_RENDERING.md) and
+[Suzanne's client-owned pipeline](../../../../examples/full/src/mesh.rs).
 
 ## Resource lifetime and thread rules
 
@@ -74,8 +75,9 @@ All window, renderer and UI operations run on their creating thread. Cross-threa
 workers deliver owned data to that thread before an update. COM retention does not
 make GPU contexts or widgets thread-safe.
 
-Images and meshes are immutable objects authenticated to their creating window's
-render device. Foreign-device resources are rejected before native work. Resource
+Ordinary images are immutable. GPU buffer/texture updates publish complete immutable
+versions; each draw captures the version it actually consumes. All capabilities
+are authenticated to their creating device and client domain. Foreign-device resources are rejected before native work. Resource
 references retain the device owner until release; retirement queues defer destruction
 until the backend can safely perform it. Renderer destruction precedes native surface
 and GL context destruction. GL context ownership uses `Rc` on the window thread.
@@ -85,11 +87,10 @@ scissor, write mask, blending, depth/stencil policy, rasterization enables, prog
 texture unit, sampler and private vertex objects. Uploads reset unpack state; browser
 uploads additionally disable implicit flipping, premultiplication and color conversion.
 
-Application GPU implementations must own their GPU objects, establish every setting
-their commands consume, finish scoped operations such as queries or transform feedback,
-and restore extension-specific state outside that baseline. They must not modify or
-delete backend-owned resources. The backend cannot infer unfinished application work.
-GFX-composed UI drawing does not promise to restore the application's previous GPU state.
+The common executor establishes complete fixed-function, layout and resource state
+for each draw. Client commands select no framebuffer, native state object, encoder
+or queue. The read-only shader profile and immutable raster root bound attachment
+writes; this in-process API does not bound arbitrary shader time or isolate device faults.
 
 WebGL context loss invalidates the current device. Recreate the window/device and its
 resources after loss; retained COM pointers do not restore native resources automatically.

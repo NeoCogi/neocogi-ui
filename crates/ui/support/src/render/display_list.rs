@@ -89,13 +89,6 @@ pub enum DrawKind {
         /// Multiplicative tint.
         color: Color,
     },
-    /// Concrete application scene capability consumed by its co-packaged renderer.
-    ComItem {
-        /// No native frame or stack borrow is retained by the display list.
-        item: neocogi_com::ComPtr<neocogi_ui::abi::core::IRenderItemAbi>,
-        /// Unclipped destination in screen coordinates.
-        rect: Recti,
-    },
     /// Draws one semantic three-by-three patch.
     NinePatch {
         /// Complete destination rectangle in screen space.
@@ -268,18 +261,6 @@ impl DisplayList {
     ) -> Result<(), neocogi_com::NcStatus> {
         self.reserve_retained(0, 4)?;
         self.push(clip, DrawKind::ComTexture { texture, rect, source, color });
-        Ok(())
-    }
-
-    /// Retains application GPU work without creating a callback registry entry.
-    pub fn push_com_item(
-        &mut self,
-        clip: Recti,
-        rect: Recti,
-        item: neocogi_com::ComPtr<neocogi_ui::abi::core::IRenderItemAbi>,
-    ) -> Result<(), neocogi_com::NcStatus> {
-        self.reserve_retained(0, 0)?;
-        self.push(clip, DrawKind::ComItem { item, rect });
         Ok(())
     }
 

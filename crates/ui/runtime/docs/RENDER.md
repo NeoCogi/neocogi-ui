@@ -86,18 +86,20 @@ Widget/app authors own that coordinate constraint. Positive-size validation does
 promise that larger drawables or arbitrary i32 edge sums work on every backend. Empty
 and negative-extent rectangles emit no geometry.
 
-## Images and render items
+## Images and scoped graphics
 
 `IImage` owns immutable pixels uploaded through the window's texture factory. Widgets
 retain the actual image interface and use explicit source UVs and tint. A same-sized
 image replacement can be paint-only; a change to intrinsic image dimensions must dirty
 measurement. Resource capabilities belong to the device that created them.
 
-Backend-specific rendering uses an owned `IRenderItem`, such as the full demo's mesh
-scene. The platform invokes it after flushing preceding UI geometry and before later
-commands. Native contexts, command encoders and render passes stay within that plugin.
-`RenderItemArgs` is copied implementation geometry, with frame dimensions, full content
-rectangle and final visible region. Render items are owned COM capabilities; no native callback registry participates in UI execution.
+Custom graphics use `Painter::begin_render_view` with a restricted resource factory.
+The widget defines its own encoded streams, shader inputs and primitive draws;
+the runtime supplies its committed visible client root and ordered contribution.
+Finish seals the contribution, while paint return revokes escaped views. Native
+contexts, command encoders and render passes remain inside the renderer plugin.
+See [GPU rendering](../../../../docs/contracts/GPU_RENDERING.md) for the complete
+ownership, validation, viewport and work-budget rules.
 
 ## Implementation boundaries
 
