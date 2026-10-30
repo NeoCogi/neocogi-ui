@@ -41,6 +41,88 @@ use crate::{
 
 use super::{ContainerLayoutCtx};
 
+/// The complete finite candidate space for responsive scrollbar presence.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+enum BarPresence {
+    /// Neither axis consumes viewport space.
+    None = 0,
+    /// Only the horizontal track consumes space.
+    Horizontal = 1,
+    /// Only the vertical track consumes space.
+    Vertical = 2,
+    /// Both tracks consume space.
+    Both = 3,
+}
+impl BarPresence {
+    /// Converts two independently admitted overflow decisions into a finite state.
+    fn axes(horizontal: bool, vertical: bool) -> Self {
+        match (horizontal, vertical) {
+            (false, false) => Self::None,
+            (true, false) => Self::Horizontal,
+            (false, true) => Self::Vertical,
+            (true, true) => Self::Both,
+        }
+    }
+    /// Reads horizontal occupancy without relying on a mutable layout summary.
+    fn horizontal(self) -> bool {
+        matches!(self, Self::Horizontal | Self::Both)
+    }
+    /// Reads vertical occupancy without relying on a mutable layout summary.
+    fn vertical(self) -> bool {
+        matches!(self, Self::Vertical | Self::Both)
+    }
+    /// Keeps every axis required by members of an actual repeated cycle.
+    fn union(self, other: Self) -> Self {
+        Self::axes(self.horizontal() || other.horizontal(), self.vertical() || other.vertical())
+    }
+}
+
+/// Candidate geometry is observational data, never a speculative child placement.
+#[derive(Clone, Copy)]
+struct BarLayout {
+    /// Surface after subtracting occupied scrollbar tracks.
+    body: Recti,
+    /// Skin-padded viewport offered to the scrolling surface.
+    view: Recti,
+    /// Filled preferred content extent associated with exactly this viewport.
+    extent: Dimensioni,
+}
+
+/// Follow the retained start to a fixed point or commit the union of the actual
+/// repeated cycle. Four states bound distinct measurements; a new cycle union is
+/// necessarily Both and consumes one of those four slots. No monotonicity is assumed.
+fn resolve_bars(
+    initial: BarPresence,
+    mut measure: impl FnMut(BarPresence) -> Result<(BarPresence, BarLayout), NcStatus>,
+) -> Result<(BarPresence, BarLayout), NcStatus> {
+    let mut state = initial;
+    let mut path = [initial; 4];
+    let mut length = 0;
+    let mut measured = [None; 4];
+    loop {
+        let (next, layout) = measure(state)?;
+        measured[state as usize] = Some(layout);
+        // Each continuation adds a previously unseen state. A repeat returns below,
+        // so length cannot exceed the four variants before indexing this array.
+        path[length] = state;
+        length += 1;
+        if next == state {
+            return Ok((state, layout));
+        }
+        if let Some(cycle_start) = path[..length].iter().position(|candidate| *candidate == next) {
+            let union = path[cycle_start..length].iter().copied().fold(BarPresence::None, BarPresence::union);
+            let final_layout = match measured[union as usize] {
+                Some(layout) => layout,
+                None => measure(union)?.1,
+            };
+            // The cycle policy is terminal, even if responsive content would remove a bar.
+            return Ok((union, final_layout));
+        }
+        state = next;
+    }
+}
+
 /// Returns the child allocation for one scrollbar adjacent to the resolved content body.
 fn scrollbar_track(axis: ScrollbarAxis, body: Recti, scrollbar_size: i32) -> Recti {
     // Start with the body so the track preserves its cross-axis origin and extent.
@@ -461,62 +543,31 @@ impl<T: ScrollComposition> ContainerWidget for T {
         let enabled = model.enabled.get();
         let requested = model.offset();
         let bars_usable = enabled && bar_size > 0 && surface.width > 0 && surface.height > 0;
-        let mut has_horizontal = bars_usable && model.geometry.get().horizontal.is_some();
-        let mut has_vertical = bars_usable && model.geometry.get().vertical.is_some();
-        let mut visited_states = 0_u8;
-
-        // Start from the last committed state so an unchanged retained tree keeps the same width
-        // constraint and reuses its child-measurement cache. Candidate states measure the surface;
-        // no child is placed until the final scrollbar presence has converged. There are only four
-        // states; if perpendicular induction creates a two-state cycle, commit their union.
-        let mut resolved = None;
-        for _ in 0..5 {
-            let state_bit = 1_u8 << ((has_horizontal as u8) | ((has_vertical as u8) << 1));
-            visited_states |= state_bit;
-            let vertical_width = if has_vertical { bar_size.min(surface.width) } else { 0 };
-            let horizontal_height = if has_horizontal { bar_size.min(surface.height) } else { 0 };
-            // body_extent = surface_extent - occupied_scrollbar_extent.
+        let initial = BarPresence::axes(
+            bars_usable && model.geometry.get().horizontal.is_some(),
+            bars_usable && model.geometry.get().vertical.is_some(),
+        );
+        // Measurement preserves the runtime's exact-key cache and has no placement effects.
+        let (presence, BarLayout { body, view, extent }) = resolve_bars(initial, |presence| {
+            let vertical_width = if presence.vertical() { bar_size.min(surface.width) } else { 0 };
+            let horizontal_height = if presence.horizontal() { bar_size.min(surface.height) } else { 0 };
             let body = Recti::new(
                 0,
                 0,
                 surface.width.saturating_sub(vertical_width).max(0),
                 surface.height.saturating_sub(horizontal_height).max(0),
             );
-            // Inset content by the global Skin padding while keeping scrollbar tracks adjacent to
-            // the complete body.
             let view = inset_rect(body, padding);
             let preferred = ctx.measure_child(
                 Self::SURFACE,
                 crate::Constraints::new(crate::AvailableSpace::bounded(view.width), crate::AvailableSpace::Unbounded),
             )?;
-            // Fill the viewport on both axes while preserving larger desired extents. Comparing this
-            // filled extent with the view still detects overflow exactly when preferred content is
-            // larger, and it matches ScrollSurface's final allocation contract.
             let extent = Dimensioni::new(view.width.max(preferred.width).max(0), view.height.max(preferred.height).max(0));
-
-            let next_vertical = bars_usable && extent.height > view.height;
-            let next_horizontal = bars_usable && extent.width > view.width;
-            if next_vertical != has_vertical || next_horizontal != has_horizontal {
-                let next_bit = 1_u8 << ((next_horizontal as u8) | ((next_vertical as u8) << 1));
-                if visited_states & next_bit != 0 {
-                    let previous = (has_horizontal, has_vertical);
-                    has_horizontal |= next_horizontal;
-                    has_vertical |= next_vertical;
-                    if (has_horizontal, has_vertical) != previous {
-                        continue;
-                    }
-                } else {
-                    has_horizontal = next_horizontal;
-                    has_vertical = next_vertical;
-                    continue;
-                }
-            }
-
-            resolved = Some((body, view, extent));
-            break;
-        }
-
-        let (body, view, extent) = resolved.expect("ScrollArea scrollbar presence must converge across four possible states");
+            let required = BarPresence::axes(bars_usable && extent.width > view.width, bars_usable && extent.height > view.height);
+            Ok((required, BarLayout { body, view, extent }))
+        })?;
+        let has_horizontal = presence.horizontal();
+        let has_vertical = presence.vertical();
         let vertical_width = if has_vertical { bar_size.min(surface.width) } else { 0 };
         let horizontal_height = if has_horizontal { bar_size.min(surface.height) } else { 0 };
         let vertical_track = scrollbar_track(ScrollbarAxis::Vertical, body, vertical_width);
@@ -732,5 +783,62 @@ impl neocogi_ui::abi::nodes::ScrollArea for ScrollArea {
             return Err((status, content));
         }
         self.content.replace(0, content)
+    }
+}
+
+#[cfg(test)]
+mod resolution_tests {
+    use super::*;
+
+    /// Distinguishable candidate records detect accidentally reusing the last probe's geometry.
+    fn geometry(state: BarPresence) -> BarLayout {
+        BarLayout {
+            body: Recti::new(0, 0, state as i32, 0),
+            view: Recti::default(),
+            extent: Dimensioni::new(0, 0),
+        }
+    }
+
+    /// Exhaust every valid finite transition function and retained initial state.
+    #[test]
+    fn all_responsive_maps_terminate_with_a_covering_mask_and_at_most_four_probes() {
+        let states = [BarPresence::None, BarPresence::Horizontal, BarPresence::Vertical, BarPresence::Both];
+        for encoded in 0..256 {
+            let mapping = std::array::from_fn::<_, 4, _>(|index| states[(encoded >> (index * 2)) & 3]);
+            for initial in states {
+                let mut probes = [0; 4];
+                let (chosen, layout) = resolve_bars(initial, |state| {
+                    probes[state as usize] += 1;
+                    Ok((mapping[state as usize], geometry(state)))
+                })
+                .unwrap();
+                assert!(probes.iter().all(|count| *count <= 1));
+                assert!(probes.iter().sum::<usize>() <= 4);
+                assert_eq!(chosen.union(mapping[chosen as usize]), chosen, "a required axis was omitted");
+                assert_eq!(layout.body.width, chosen as i32);
+                if mapping[initial as usize] == initial {
+                    assert_eq!(chosen, initial);
+                }
+            }
+        }
+    }
+
+    /// A transient H does not belong to the smaller V/none cycle's union.
+    #[test]
+    fn cycle_resolution_excludes_transient_prefix_and_propagates_measure_errors() {
+        let (chosen, _) = resolve_bars(BarPresence::Horizontal, |state| {
+            Ok((
+                match state {
+                    BarPresence::Horizontal | BarPresence::None => BarPresence::Vertical,
+                    BarPresence::Vertical => BarPresence::None,
+                    BarPresence::Both => BarPresence::Both,
+                },
+                geometry(state),
+            ))
+        })
+        .unwrap();
+        assert_eq!(chosen, BarPresence::Vertical);
+        let error = resolve_bars(BarPresence::None, |_| Err(neocogi_com::NC_E_OUT_OF_RANGE));
+        assert_eq!(error.err(), Some(neocogi_com::NC_E_OUT_OF_RANGE));
     }
 }

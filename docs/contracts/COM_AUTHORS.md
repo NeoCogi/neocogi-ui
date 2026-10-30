@@ -1103,3 +1103,17 @@ operation or return. This updates the inline wrapper's sticky marker and notifie
 its host in one operation. A later `LeafContent::update` result is too late to
 repair hit testing for the next already queued input. Failed helper callbacks
 also retain conservative invalidation; passive leaves advertise no dispatcher.
+
+
+## Responsive ScrollArea content
+
+Leaf/container measurements may respond to offered width and need not be monotone.
+ScrollArea starts with retained scrollbar presence to reuse the ordinary exact-key
+measurement cache. It follows the four possible presence states to a fixed point,
+or commits the union of every state in the actual repeated cycle. Cycle resolution
+is terminal: extra bars can remain for responsive content without a fixed point.
+A transient prefix does not add axes to that union. At most four distinct masks
+are probed; candidate measurements never place children. Final chosen geometry
+still passes through normal runtime placement/cache rules exactly once, with
+clamped ranges/offsets. An unchanged retained fast path may skip foreign placement
+callbacks. Failed measurements propagate normally and leave layout retryable.

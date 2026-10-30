@@ -956,3 +956,102 @@ fn forwarded_cycle_rejection_returns_a_reusable_complete_tree() {
     assert!(!a_observer.as_interface().is_alive());
     assert!(!b_observer.as_interface().is_alive());
 }
+
+/// Deterministic responsive leaf observed only through public COM authoring contracts.
+struct ResponsiveScrollLeaf {
+    /// Committed content height changes only during the ordinary update phase.
+    height: i32,
+    /// Test-owned next height permits truthful GeometryChange notification.
+    requested: Rc<Cell<i32>>,
+    /// Actual foreign measurement callbacks, independent of cached resolver probes.
+    measures: Rc<Cell<usize>>,
+    /// A normal failed query must leave the runtime able to retry.
+    fail: Rc<Cell<bool>>,
+}
+impl neocogi_ui::LeafContent for ResponsiveScrollLeaf {
+    /// Narrow responsive content fits its width; wide content has intrinsic overflow.
+    fn measure(&self, limits: LayoutLimits, _: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
+        self.measures.set(self.measures.get() + 1);
+        if self.fail.get() {
+            return Err(neocogi_com::NC_E_OUT_OF_RANGE);
+        }
+        Ok(Size {
+            width: if limits.width.kind == LimitKind::Finite && limits.width.extent < 100 {
+                limits.width.extent
+            } else {
+                110
+            },
+            height: self.height,
+        })
+    }
+    /// Layout invalidation follows the same production content-update boundary.
+    fn update(&mut self, _: WidgetUpdate, _: WidgetEvent, _: &str) -> Result<GeometryChange, NcStatus> {
+        if self.height != self.requested.get() {
+            self.height = self.requested.get();
+            Ok(GeometryChange::Changed)
+        } else {
+            Ok(GeometryChange::NoChange)
+        }
+    }
+    /// Geometry-only regression has no draw operations.
+    fn paint(&mut self, _: WidgetPaint, _: &mut neocogi_ui::Painter<'_>) -> Result<(), NcStatus> {
+        Ok(())
+    }
+}
+
+/// The actual retained H/both/V/none cycle commits Both without aborting across COM.
+#[test]
+fn responsive_scroll_cycle_uses_chosen_geometry_and_retained_measurement_cache() {
+    let mut data = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 10)]);
+    data.tables.metrics.padding = 0;
+    data.tables.metrics.scrollbar_size = 10;
+    let source = data.into_bundle().unwrap();
+    let gfx = neocogi_ui_support::test_support::gfx_factory(crate::test_support::host_runtime());
+    let runtime = crate::create_runtime_from_assets(source.as_com_ref(), gfx.as_com_ref()).unwrap();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
+    let requested = Rc::new(Cell::new(80));
+    let measures = Rc::new(Cell::new(0));
+    let fail = Rc::new(Cell::new(false));
+    let content = ui
+        .widgets()
+        .leaf(
+            ResponsiveScrollLeaf {
+                height: 80,
+                requested: requested.clone(),
+                measures: measures.clone(),
+                fail: fail.clone(),
+            },
+            WidgetOptions::NONE,
+        )
+        .unwrap();
+    let mut scroll = ui.widgets().scroll_area(content, true).unwrap();
+    scroll.clear_flags(WidgetOptions::FRAME).unwrap();
+    let mut observed = scroll.handle();
+    let window = ui.window("responsive", Rect { x: 0, y: 0, width: 100, height: 100 }, scroll).unwrap();
+    window
+        .set_options(WindowOptions::NO_PADDING | WindowOptions::NO_TITLE | WindowOptions::NO_RESIZE)
+        .unwrap();
+    let size = Size { width: 100, height: 100 };
+    ui.update(size).unwrap();
+    let before = observed.info().unwrap();
+    assert_eq!((before.viewport.width, before.viewport.height), (100, 90));
+    assert_eq!((before.maximum.x, before.maximum.y), (10, 0));
+    requested.set(95);
+    ui.update(size).unwrap();
+    let after = observed.info().unwrap();
+    assert_eq!((after.viewport.width, after.viewport.height), (90, 90));
+    assert_eq!((after.maximum.x, after.maximum.y), (0, 5));
+    let warmed = measures.get();
+    ui.update(size).unwrap();
+    observed.scroll_to_end().unwrap();
+    ui.update(size).unwrap();
+    assert_eq!(measures.get(), warmed, "unchanged and offset-only passes reuse the authoritative cache");
+    assert_eq!(observed.info().unwrap().requested.y, 5);
+    requested.set(120);
+    fail.set(true);
+    assert_eq!(ui.update(size), Err(neocogi_com::NC_E_OUT_OF_RANGE));
+    fail.set(false);
+    ui.update(size).unwrap();
+    assert!(observed.info().unwrap().maximum.y > 5);
+    window.close().unwrap();
+}
