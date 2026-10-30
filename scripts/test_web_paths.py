@@ -51,10 +51,11 @@ elif name == 'wasm-bindgen':
         destination.mkdir(parents=True, exist_ok=True)
         (destination / 'fixture.js').write_text('')
 elif name == 'python3':
-    if args[:2] == ['-m', 'http.server']: signal.pause()
+    if len(args) == 4 and args[0] == '-':
+        # This matrix qualifies paths only; lifecycle tests run the real server.
+        Path(args[3]).write_text('ready\n')
+        signal.pause()
     else: os.execv(sys.executable, [sys.executable, *args])
-elif name == 'curl':
-    print('ready')
 elif name == 'probe-browser':
     print('<pre id="result">PASS</pre>')
 else: raise SystemExit('unexpected canary executable')
@@ -85,7 +86,7 @@ class BrowserPathTests(unittest.TestCase):
             self.environment.pop(key, None)
         self.environment.update(PATH=str(self.bin) + os.pathsep + self.environment['PATH'], WEB_PATH_TRACE=str(self.trace), CHROME_BIN=str(self.bin / 'probe-browser'))
         self.stub = f'#!{sys.executable}\n' + STUB
-        for name in ['rustup', 'cargo', 'python3', 'curl', 'probe-browser']:
+        for name in ['rustup', 'cargo', 'python3', 'probe-browser']:
             executable = self.bin / name
             executable.write_text(self.stub)
             executable.chmod(0o755)

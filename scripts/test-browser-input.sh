@@ -14,9 +14,25 @@ esac
 target_dir="${CARGO_TARGET_DIR:-$workspace_root/target}"
 if [[ "$target_dir" != /* ]]; then target_dir="$workspace_root/$target_dir"; fi
 site_dir="$target_dir/browser-$suite-tests"
-build_log="$(mktemp)"
+# Build diagnostics and the readiness signal belong to this invocation, even when
+# another suite uses the same target directory or port.
+session_dir="$(mktemp -d)"
+build_log="$session_dir/build.json"
+ready_file="$session_dir/server-ready"
 server_pid=""
-trap 'if [[ -n "$server_pid" ]]; then kill "$server_pid" 2>/dev/null || true; fi; rm -f "$build_log"' EXIT
+# Reap our child before removing its private publication directory. A failed bind
+# must never cause cleanup to signal the unrelated process that owns the port.
+cleanup() {
+  if [[ -n "$server_pid" ]]; then
+    kill "$server_pid" 2>/dev/null || true
+    wait "$server_pid" 2>/dev/null || true
+  fi
+  rm -rf "$session_dir"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 port="${NEOCOGI_BROWSER_TEST_PORT:-8118}"
 wasm_bindgen="${NEOCOGI_WASM_BINDGEN:-$target_dir/web-tools/bin/wasm-bindgen}"
 if [[ ! -x "$wasm_bindgen" ]]; then
@@ -46,10 +62,31 @@ PY
 mkdir -p "$site_dir"
 "$wasm_bindgen" --target web --out-dir "$site_dir" --out-name input-test "$artifact"
 cp "$fixture" "$site_dir/index.html"
-python3 -m http.server "$port" --bind 127.0.0.1 --directory "$site_dir" > "$site_dir/server.log" 2>&1 &
+python3 - "$site_dir" "$port" "$ready_file" > "$site_dir/server.log" 2>&1 <<'PY' &
+import functools
+import http.server
+from pathlib import Path
+import sys
+
+site, port, ready = sys.argv[1:]
+handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=site)
+# Construction owns bind/listen. Only this child can publish readiness, after it
+# has acquired the selected endpoint; another server's response is not evidence.
+with http.server.ThreadingHTTPServer(('127.0.0.1', int(port)), handler) as server:
+    Path(ready).write_text('ready\n')
+    server.serve_forever()
+PY
 server_pid=$!
-curl --retry-connrefused --retry 10 --retry-delay 1 --fail --silent "http://127.0.0.1:$port" > /dev/null
-kill -0 "$server_pid" # Fail if another process already owned the requested port.
+# Bound startup to ten seconds and retain the child's diagnostics on failure.
+for ((attempt = 0; attempt < 100; attempt++)); do
+  if [[ -f "$ready_file" ]] || ! kill -0 "$server_pid" 2>/dev/null; then break; fi
+  sleep 0.1
+done
+if [[ ! -f "$ready_file" ]] || ! kill -0 "$server_pid" 2>/dev/null; then
+  echo "Browser $suite server did not become ready on 127.0.0.1:$port." >&2
+  cat "$site_dir/server.log" >&2
+  exit 1
+fi
 # This isolated fixture serves only repository tests. Disabling the browser sandbox supports
 # container CI runners; the browser process exits after dumping the completed DOM. Piping stdout
 # also supports Snap Chromium, whose launcher does not preserve a regular-file output descriptor.
