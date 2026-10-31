@@ -58,10 +58,10 @@ impl Construction<'_> {
     pub fn build(&mut self, node: &Node) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
         // Reject excessive explicit tracks before mapping them into ABI buffers or
         // constructing descendants. Placement itself remains the Grid provider's job.
-        if let WidgetSpec::Grid { columns, rows } = &node.widget {
-            if columns.len() > self.grid_limits.max_columns as usize || rows.len() > self.grid_limits.max_rows as usize {
-                return Err(neocogi_com::NC_E_OUT_OF_RANGE);
-            }
+        if let WidgetSpec::Grid { columns, rows } = &node.widget
+            && (columns.len() > self.grid_limits.max_columns as usize || rows.len() > self.grid_limits.max_rows as usize)
+        {
+            return Err(neocogi_com::NC_E_OUT_OF_RANGE);
         }
         let mut children = node.children.iter().map(|child| self.build(&child.node)).collect::<Result<Vec<_>, _>>()?;
         let factory = self.ui.widgets();
@@ -161,9 +161,13 @@ impl Construction<'_> {
             }
             WidgetSpec::Custom { kind, settings, .. } => self.custom.create(kind, self.ui, settings, queue)?,
         };
-        self.nodes.insert(node.key.clone(), LoadedNode {
-            widget: widget.handle(), eventful: self.custom.has_events(&node.widget).map_err(|_| NC_E_INVALID_ARG)?,
-        });
+        self.nodes.insert(
+            node.key.clone(),
+            LoadedNode {
+                widget: widget.handle(),
+                eventful: self.custom.has_events(&node.widget).map_err(|_| NC_E_INVALID_ARG)?,
+            },
+        );
         for (index, (child, relationship)) in children.into_iter().zip(&node.children).enumerate() {
             let index = index as u32;
             match (&node.widget, &relationship.edge) {
@@ -173,12 +177,11 @@ impl Construction<'_> {
                         _ => widget.as_interface().observe::<LinearAbi>()?,
                     };
                     let edge = LinearEdge {
-                        main: main.layout().into(),
+                        main: main.layout(),
                         cross: match cross {
                             Some(extent) => ChildCrossSize::Fixed { extent: *extent },
                             None => ChildCrossSize::Stretch,
-                        }
-                        .into(),
+                        },
                     };
                     parent.insert(index, child.into_interface(), edge).map_err(|(status, _unpublished)| status)?;
                 }
@@ -212,9 +215,8 @@ impl Construction<'_> {
         }
         // Absence preserves the concrete provider's configuration, including
         // custom widgets. Explicit zero is still an intentional full replacement.
-        match node.style.options {
-            Some(bits) => widget.replace_flags(WidgetOptions::from_raw(bits))?,
-            None => {}
+        if let Some(bits) = node.style.options {
+            widget.replace_flags(WidgetOptions::from_raw(bits))?;
         }
         apply_style(&widget, node, self.resources)?;
         Ok(widget)

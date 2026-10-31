@@ -690,7 +690,7 @@ fn closed_picker_preserves_all_completed_requests_during_manual_handler_runtime_
     }
     fixture.handle.close().unwrap();
     for message in events.try_iter() {
-        assert!(matches!(message, None));
+        assert!(message.is_none());
         completions += 1;
         ui.update(SIZE).unwrap();
     }
@@ -1040,7 +1040,7 @@ fn close_retries_refused_removal_without_reposting_the_completed_request() {
     assert_eq!(fixture.handle.close(), Err(UI_E_BUSY));
     assert_eq!(fixture.handle.active(), Ok(false));
     assert!(fixture.handle.as_interface().is_alive());
-    assert!(matches!(events.try_recv().unwrap(), None));
+    assert!(events.try_recv().unwrap().is_none());
     assert_eq!(fixture.handle.close(), Ok(()));
     assert!(!fixture.handle.as_interface().is_alive());
     assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 2);

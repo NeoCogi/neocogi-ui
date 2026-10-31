@@ -676,8 +676,8 @@ mod tests {
                 Slider::into_local_box(value)
             }))
         });
-        slider.dispatch(|mut slider| {
-            run_slider_once(&mut slider, rect(0, 0, 100, 20), Vec::new(), true, false, false, Some(vec2(0, 1)));
+        slider.dispatch(|slider| {
+            run_slider_once(slider, rect(0, 0, 100, 20), Vec::new(), true, false, false, Some(vec2(0, 1)));
 
             assert_real_close(slider.value(), 1.4);
             let mut values = Vec::new();
@@ -833,13 +833,13 @@ mod tests {
             })?;
             Ok(number.map(|value| value.into_observed(receiver)))
         });
-        number.dispatch(|mut number| {
+        number.dispatch(|number| {
             let mut values = Vec::new();
             number.set_value(4.0);
             assert!(!dispatcher(&mut values));
 
             run_number_once(
-                &mut number,
+                number,
                 vec![UiInputEvent::MouseDrag {
                     pos: vec2(10, 10),
                     delta: vec2(3, 0),
@@ -944,11 +944,11 @@ mod tests {
                 Slider::into_local_box(value)
             }))
         });
-        slider.dispatch(|mut slider| {
+        slider.dispatch(|slider| {
             slider.edit.editing = true;
             // Enter through the editing contract instead of reaching into the private numeric buffer.
             run_slider_once(
-                &mut slider,
+                slider,
                 rect(0, 0, 100, 20),
                 vec![UiInputEvent::Text { text: "4.4".to_owned() }],
                 true,

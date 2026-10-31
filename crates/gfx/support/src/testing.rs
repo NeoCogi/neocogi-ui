@@ -182,7 +182,9 @@ pub fn read(info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(V
             let first_byte = binding.offset as usize + first as usize * 20;
             let bytes = &binding.buffer.bytes().as_slice().ok_or(NC_E_INVALID_ARG)?[first_byte..first_byte + count as usize * 20];
             let decoded = bytes
-                .chunks_exact(20)
+                .as_chunks::<20>()
+                .0
+                .iter()
                 .map(|v| RenderVertex {
                     x: f32::from_le_bytes(v[0..4].try_into().unwrap()),
                     y: f32::from_le_bytes(v[4..8].try_into().unwrap()),

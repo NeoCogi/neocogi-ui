@@ -540,9 +540,9 @@ mod tests {
     fn text_events_preserve_complete_snapshots_and_consumer_fifo() {
         let textbox = crate::test_support::algorithm::Algorithm::<Textbox>::from(TextboxParameters::new(""));
         let (mut textbox, mut dispatcher) = text_dispatcher(textbox);
-        textbox.dispatch(|mut textbox| {
+        textbox.dispatch(|textbox| {
             update_textbox(
-                &mut textbox,
+                textbox,
                 true,
                 vec![
                     UiInputEvent::Text { text: "ab".into() },
@@ -552,7 +552,7 @@ mod tests {
                     },
                 ],
             );
-            update_textbox(&mut textbox, true, vec![UiInputEvent::Text { text: "e".into() }]);
+            update_textbox(textbox, true, vec![UiInputEvent::Text { text: "e".into() }]);
 
             assert_eq!(textbox.text(), "abcde");
             let mut events = Vec::new();

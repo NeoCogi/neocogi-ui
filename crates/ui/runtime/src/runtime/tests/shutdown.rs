@@ -21,23 +21,19 @@ impl neocogi_ui::events::IEventReceiver for WindowQueue {
         _: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventOrigin>,
         event_owner: neocogi_com::ComBox<neocogi_ui::events::IEventAbi>,
     ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui::events::IEventAbi>)> {
-        let result = (|| -> Result<(), NcStatus> {
-            let event = if event_owner.query_weak::<neocogi_ui::IWindowDestroyedEventAbi>().is_ok() {
-                "destroyed"
-            } else if event_owner.query_weak::<neocogi_ui::IWindowHiddenEventAbi>().is_ok() {
-                "hidden"
-            } else {
-                "other"
-            };
-            let result = if event == "destroyed" && self.reject_destroyed {
-                Err(NC_E_INVALID_ARG)
-            } else {
-                Ok(())
-            };
-            self.events.send(event).unwrap();
-            result
-        })();
-        result.map_err(|status| (status, event_owner))
+        let event = if event_owner.query_weak::<neocogi_ui::IWindowDestroyedEventAbi>().is_ok() {
+            "destroyed"
+        } else if event_owner.query_weak::<neocogi_ui::IWindowHiddenEventAbi>().is_ok() {
+            "hidden"
+        } else {
+            "other"
+        };
+        self.events.send(event).unwrap();
+        if event == "destroyed" && self.reject_destroyed {
+            Err((NC_E_INVALID_ARG, event_owner))
+        } else {
+            Ok(())
+        }
     }
 }
 impl Drop for WindowQueue {
@@ -110,7 +106,6 @@ fn runtime_shutdown_is_silent_and_preserves_already_queued_facts() {
         let (popup_send, popup_events) = mpsc::channel();
         let popup_queue = neocogi_ui::test_event_queue!(neocogi_ui::IPopupAbi, (), popup_send, |_queue, _origin, event| {
             event.query_weak::<neocogi_ui::IPopupDismissedEventAbi>()?;
-            ()
         })
         .unwrap();
         let owner = ui.widgets().button_unobserved("popup").unwrap();

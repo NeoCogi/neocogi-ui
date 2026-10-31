@@ -879,6 +879,14 @@ impl neocogi_ui::abi::nodes::TextArea for TextArea {
     }
 }
 
+/// The private editor never publishes itself as the application-facing control.
+impl neocogi_ui::abi::core::IWidgetDispatcher for TextArea {
+    /// Promotes one already captured editor snapshot under the text-area origin.
+    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
+        self.events.dispatch_next(&mut self.runtime.state)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -891,13 +899,11 @@ mod tests {
         Submitted(String),
     }
 
+    /// Owns the actual composite and observes its private editor through the checked local weak handle.
+    type TextAreaFixture = crate::test_support::algorithm::Algorithm<(neocogi_com::ComBox<TextAreaAbi>, neocogi_com::WeakLocalBox<TextEditor>)>;
+
     /// Maps both enum variants into one ordinary consumer FIFO, preserving their actual post order.
-    fn text_dispatcher(
-        text_area: crate::test_support::algorithm::Algorithm<TextEditor>,
-    ) -> (
-        crate::test_support::algorithm::Algorithm<(neocogi_com::ComBox<TextAreaAbi>, neocogi_com::WeakLocalBox<TextEditor>)>,
-        impl FnMut(&mut Vec<RecordedEvent>) -> bool,
-    ) {
+    fn text_dispatcher(text_area: crate::test_support::algorithm::Algorithm<TextEditor>) -> (TextAreaFixture, impl FnMut(&mut Vec<RecordedEvent>) -> bool) {
         let (events_tx, events) = std::sync::mpsc::channel();
         let queue = neocogi_ui::test_event_queue!(neocogi_ui::TextAreaAbi, RecordedEvent, events_tx, |_queue, _origin, event| {
             match event.query_weak::<neocogi_ui::ITextChangedEventAbi>() {
@@ -1204,13 +1210,5 @@ mod tests {
 
         assert_eq!(text_area.text(), "\ntext");
         assert_eq!(text_area.cursor(), 0);
-    }
-}
-
-/// The private editor never publishes itself as the application-facing control.
-impl neocogi_ui::abi::core::IWidgetDispatcher for TextArea {
-    /// Promotes one already captured editor snapshot under the text-area origin.
-    fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
-        self.events.dispatch_next(&mut self.runtime.state)
     }
 }

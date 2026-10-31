@@ -683,7 +683,7 @@ fn application_handles_real_click_and_closed_form_retires() {
     button.set_label("After").unwrap();
     assert_eq!(button.label().unwrap(), "After");
     assert_eq!(slot.component().unwrap().save(&crate::test_support::host_runtime()).unwrap(), bytes);
-    assert_eq!(root.properties().is_ok(), true);
+    assert!(root.properties().is_ok());
     slot.reload(&document, Resources::new(), |_| Ok(EventBindings::new()), |_, _| Ok(())).unwrap();
     // Container closure queues retirement until the next safe runtime boundary.
     fixture.frame(VIEW).unwrap();

@@ -30,7 +30,7 @@ fn overhanging_text_block_measures_and_paints_one_row() {
         let frame = fixture.snapshot();
         // Identify the three glyph quads independently of the window background. A second
         // row or fictitious interword spacing cannot pass these actual screen-origin checks.
-        let glyphs: Vec<_> = frame.vertices.chunks_exact(6).filter(|quad| quad[0].rgba == TEXT_COLOR).collect();
+        let glyphs: Vec<_> = frame.vertices.as_chunks::<6>().0.iter().filter(|quad| quad[0].rgba == TEXT_COLOR).collect();
         assert_eq!(glyphs.len(), 3);
         let origins: Vec<_> = glyphs.iter().map(|quad| (quad[0].x, quad[0].y)).collect();
         assert_eq!(origins.iter().map(|point| point.0).collect::<Vec<_>>(), [12.0, 16.0, 20.0]);

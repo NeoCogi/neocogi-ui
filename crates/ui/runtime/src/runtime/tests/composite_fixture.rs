@@ -40,8 +40,6 @@ impl<Processor: MessageProcessor> IWidget for Composite<Processor> {
     fn mount(&mut self) -> Result<(), NcStatus> {
         self.shell.node_interface()?.mount()
     }
-    /// Attempts one message with the same mutable COM gate used by editing.
-
     /// Geometry policy remains the production layout's policy.
     fn properties(&self) -> Result<WidgetProperties, NcStatus> {
         self.shell.node_interface()?.properties()

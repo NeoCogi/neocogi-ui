@@ -55,20 +55,17 @@ impl Write for Writer<'_> {
         if bytes.len() > self.limit.saturating_sub(self.length) {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "JSON byte limit exceeded"));
         }
-        match &mut self.output {
-            Some(output) => {
-                let required = self.length + bytes.len();
-                if required > output.capacity() {
-                    // Retain geometric growth without requesting capacity beyond
-                    // the selected policy. A failed reservation is recoverable.
-                    let capacity = required.max(output.capacity().saturating_mul(2)).min(self.limit);
-                    output
-                        .try_reserve_exact(capacity - output.len())
-                        .map_err(|_| io::Error::new(io::ErrorKind::OutOfMemory, "JSON output allocation failed"))?;
-                }
-                output.extend_from_slice(bytes);
+        if let Some(output) = &mut self.output {
+            let required = self.length + bytes.len();
+            if required > output.capacity() {
+                // Retain geometric growth without requesting capacity beyond
+                // the selected policy. A failed reservation is recoverable.
+                let capacity = required.max(output.capacity().saturating_mul(2)).min(self.limit);
+                output
+                    .try_reserve_exact(capacity - output.len())
+                    .map_err(|_| io::Error::new(io::ErrorKind::OutOfMemory, "JSON output allocation failed"))?;
             }
-            None => {}
+            output.extend_from_slice(bytes);
         }
         self.length += bytes.len();
         Ok(bytes.len())

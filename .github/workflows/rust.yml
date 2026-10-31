@@ -43,6 +43,8 @@ jobs:
         run: python3 scripts/check-idl-navigation.py
       - run: cargo test --locked -p neocogi-shader-compiler -p neocogi-render-gpu
       - run: cargo test --locked -p neocogi-ui-runtime -p neocogi-ui-nodes -p neocogi-ui-support
+      - name: Check UI libraries and tests for warnings
+        run: cargo clippy --locked -p neocogi-ui-runtime -p neocogi-ui-nodes -p neocogi-ui-support --all-targets -- -D warnings
       - run: cargo test --locked -p neocogi-ui -p neocogi-ui-document --features neocogi-com/runtime
 
   assets:

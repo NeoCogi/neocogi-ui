@@ -438,8 +438,6 @@ impl Drop for RetainingWidget {
     }
 }
 impl IWidget for RetainingWidget {
-    /// This widget forwards outputs and has no private inbox.
-
     /// Returns the shared owner without exposing runtime storage.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
         self.button.host()
@@ -822,7 +820,7 @@ fn com_nodes_update_without_activation_and_collect_hidden_widget_changes() {
         repeat: false,
         modifiers: 0,
     });
-    runtime.input(tab.into(), NcCopyFromBufferOffset::new(0, &[])).unwrap();
+    runtime.input(tab, NcCopyFromBufferOffset::new(0, &[])).unwrap();
     runtime.update(SIZE).unwrap();
     let measured = probe.measures.get();
     runtime.input(UiInput::Text, NcCopyFromBufferOffset::new(0, "hello ☃".as_bytes())).unwrap();
@@ -871,7 +869,7 @@ fn input_validation_and_explicit_teardown_preserve_their_error_boundaries() {
         repeat: false,
         modifiers: 0,
     });
-    assert_eq!(runtime.input(bad_key.into(), NcCopyFromBufferOffset::new(0, &[])), Err(NC_E_INVALID_ARG));
+    assert_eq!(runtime.input(bad_key, NcCopyFromBufferOffset::new(0, &[])), Err(NC_E_INVALID_ARG));
     assert_eq!(runtime.input(UiInput::Text, NcCopyFromBufferOffset::new(1, b"bad")), Err(NC_E_INVALID_ARG));
     assert_eq!(runtime.input(UiInput::Text, NcCopyFromBufferOffset::new(0, &[0xff])), Err(NC_E_INVALID_ARG));
     assert_eq!(

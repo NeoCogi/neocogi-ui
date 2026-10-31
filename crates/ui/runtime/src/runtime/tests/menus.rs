@@ -60,7 +60,6 @@ fn callback_hide_preserves_the_first_queued_text_after_popup_activation() {
     let (sender, receiver) = std::sync::mpsc::channel();
     let events = neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, (), sender, |_queue, _origin, event| {
         event.query_ref::<neocogi_ui::IActivatedEventAbi>()?;
-        ()
     })
     .unwrap();
     let button = ui.widgets().button_with_queue("Hide active popup", Some(events.as_com_ref())).unwrap();

@@ -58,8 +58,6 @@ impl TestContainer {
     }
 }
 impl IWidget for TestContainer {
-    /// This widget forwards outputs and has no private inbox.
-
     /// Common authority carries no runtime tree pointer.
     fn host(&self) -> Result<ComPtr<IWidgetHostAbi>, NcStatus> {
         self.state.host().try_add_ref()
@@ -498,8 +496,7 @@ fn builtin_container_replacement_preserves_metadata_and_rejects_reentry() {
     runtime.update(SIZE).unwrap();
     let (second, replacement) = recorded_leaf(&runtime);
     *replacement.clear_on_mount.borrow_mut() = Some(row.node_interface().unwrap());
-    let outcome = row.replace(0, second, LinearEdge::new(LayoutTrack::Fixed { extent: 90 })).unwrap();
-    assert_eq!(outcome, ());
+    row.replace(0, second, LinearEdge::new(LayoutTrack::Fixed { extent: 90 })).unwrap();
     assert_eq!(replacement.clear_mount_result.get(), Some(Err(NC_E_BUSY)));
     assert_eq!(row.edge(0).unwrap().main, LayoutTrack::Fixed { extent: 90 });
     runtime.update(SIZE).unwrap();
