@@ -523,10 +523,7 @@ impl<T: ScrollComposition> ContainerWidget for T {
         let padding = ctx.skin().metrics().padding.max(0);
         // inset = leading_padding + trailing_padding = padding * 2.
         let inset = padding.saturating_mul(2);
-        let content_width = match constraints.width {
-            crate::AvailableSpace::Bounded(width) => crate::AvailableSpace::bounded(width.saturating_sub(inset)),
-            crate::AvailableSpace::Unbounded => crate::AvailableSpace::Unbounded,
-        };
+        let content_width = constraints.width.shrink(inset);
         let content = ctx.measure_child(Self::SURFACE, crate::Constraints::new(content_width, crate::AvailableSpace::Unbounded))?;
         // preferred_extent = content_extent + leading_padding + trailing_padding.
         Ok(Dimensioni::new(content.width.saturating_add(inset), content.height.saturating_add(inset)))

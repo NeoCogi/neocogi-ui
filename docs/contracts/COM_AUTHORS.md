@@ -566,6 +566,12 @@ from an unbounded constraint. Preferred child sizes include each child's own
 frame. The container resolves tracks and relationships before passing an exact
 rectangle to `place_child`; the runtime does not reinterpret that policy.
 
+Subtracting structural insets from finite space clamps the remaining extent to
+zero; it never creates a negative or unbounded constraint. A disclosure body may
+therefore receive zero width or height while still expanded. Its header, indent,
+spacing and child participation retain their ordinary meaning. The runtime still
+rejects malformed negative rectangles and propagates genuine child layout errors.
+
 Nested child containers receive a fresh token. Their parent's token returns
 `UI_E_EXPIRED_SCOPE` while the child token is active, then becomes valid again
 when the child call returns. Direct reentry while a service method temporarily

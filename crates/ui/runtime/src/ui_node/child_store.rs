@@ -31,6 +31,13 @@ pub(crate) struct ChildStore {
 }
 
 impl ChildStore {
+    /// Reads committed geometry after a real COM traversal, including zero-clipped children
+    /// whose update callbacks intentionally do not run. No runtime authority is exported.
+    #[cfg(test)]
+    pub(crate) fn committed_allocations(self: &Rc<Self>) -> Vec<crate::Recti> {
+        self.take().unwrap().iter().map(|node| node.state.layout.allocation).collect()
+    }
+
     /// Checks the actual owned descendants without entering any COM method.
     /// A checked-out traversal is busy: it must return ownership before removal.
     pub(super) fn ensure_idle(&self) -> Result<(), NcStatus> {

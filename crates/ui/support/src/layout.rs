@@ -32,12 +32,13 @@ impl AvailableSpace {
         }
     }
 
-    /// Removes a non-negative parent-owned inset while preserving an unbounded axis.
+    /// Removes a parent-owned inset, clamping exhausted finite space to zero.
+    /// Negative insets remove nothing; an unbounded axis remains unbounded.
     pub const fn shrink(self, inset: i32) -> Self {
         let inset = if inset < 0 { 0 } else { inset };
         match self {
             Self::Unbounded => Self::Unbounded,
-            Self::Bounded(extent) => Self::Bounded(extent.saturating_sub(inset)),
+            Self::Bounded(extent) => Self::bounded(extent.saturating_sub(inset)),
         }
     }
 }
@@ -259,6 +260,20 @@ fn axis_limit(space: AvailableSpace) -> AxisLimit {
 #[cfg(test)]
 mod explicit_constraint_tests {
     use super::*;
+
+    /// Finite insets consume space, including the last pixel, without creating a sentinel.
+    #[test]
+    fn shrinking_finite_space_never_produces_negative_or_unbounded_limits() {
+        for extent in [0, 1, 2, 3, 4, i32::MAX] {
+            for inset in [i32::MIN, -1, 0, 1, 3, i32::MAX] {
+                let expected = (i64::from(extent) - i64::from(inset.max(0))).max(0) as i32;
+                let shrunk = AvailableSpace::bounded(extent).shrink(inset);
+                assert_eq!(shrunk, AvailableSpace::Bounded(expected), "{extent} - {inset}");
+                assert_eq!(available(axis_limit(shrunk)), Ok(shrunk));
+                assert_eq!(AvailableSpace::Unbounded.shrink(inset), AvailableSpace::Unbounded);
+            }
+        }
+    }
 
     #[test]
     fn bounded_constructor_preserves_zero_and_normalizes_negative_extents() {

@@ -312,9 +312,9 @@ impl ContainerWidget for Disclosure {
             // body_origin = container_origin + (indent, header_height + spacing).
             let body_x = rect.x.saturating_add(indent);
             let body_y = rect.y.saturating_add(header_height).saturating_add(spacing);
-            // body_extent = container_extent - (indent, header_height + spacing).
-            let body_width = rect.width.saturating_sub(indent);
-            let body_height = rect.height.saturating_sub(header_height).saturating_sub(spacing);
+            // Exhausted finite space stays zero; signed saturation alone can still be negative.
+            let body_width = rect.width.saturating_sub(indent).max(0);
+            let body_height = rect.height.saturating_sub(header_height).saturating_sub(spacing).max(0);
             let body = Recti::new(body_x, body_y, body_width, body_height);
             ctx.layout_child(Self::BODY, body)?;
         }

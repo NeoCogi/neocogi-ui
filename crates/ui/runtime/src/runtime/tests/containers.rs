@@ -3,6 +3,99 @@ use super::*;
 mod grid;
 use neocogi_ui::com::widget::WidgetState;
 
+/// Disclosure placement must remain finite even when its structural header consumes the panel.
+#[test]
+fn disclosure_tiny_allocations_survive_initial_layout_resize_and_keyboard_expansion() {
+    for style in [DisclosureStyle::Header, DisclosureStyle::Tree] {
+        for populated in [false, true] {
+            for initially_expanded in [false, true] {
+                let mut data = crate::test_support::test_asset_data_with_font_sizes(&[("body", 10)]);
+                data.tables.metrics.spacing = 3;
+                data.tables.metrics.indent = 20;
+                let source = data.into_bundle().unwrap();
+                let gfx = crate::test_support::gfx_factory(crate::test_support::host_runtime());
+                let value = create_runtime_value(source.as_com_ref(), gfx.as_com_ref()).unwrap();
+                let storage = value.storage.clone();
+                let mut runtime: ComPtr<UiRuntimeAbi> = Runtime::from_value(value).query().unwrap();
+                runtime.set_render_host(neocogi_gfx_support::testing::host().as_com_ref()).unwrap();
+                let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
+                let owner = ui.widgets().disclosure("ab", style, initially_expanded).unwrap();
+                let mut disclosure = owner.handle();
+                let mut body = disclosure.body().unwrap();
+                if populated {
+                    let (leaf, _) = recorded_leaf(&runtime);
+                    body.insert(0, leaf, LinearEdge::new(LayoutTrack::Fixed { extent: 33 })).unwrap();
+                }
+                let view = disclosure.node_interface().unwrap().query::<IContainerLayoutAbi>().unwrap().children().unwrap();
+                let identity = view.query::<IUnknown>().unwrap().as_raw().object as usize;
+                let children = storage.factory.children.borrow().get(&identity).unwrap().upgrade().unwrap();
+                let window = ui.window("tiny", Rect { x: 20, y: 20, width: 1, height: 1 }, owner).unwrap();
+                window
+                    .set_options(WindowOptions::NO_TITLE | WindowOptions::NO_PADDING | WindowOptions::NO_RESIZE)
+                    .unwrap();
+                runtime.update(SIZE).unwrap();
+
+                // Expand the real interactive header while it has only one drawable pixel.
+                if !initially_expanded {
+                    for key in [KeyCode::Tab, KeyCode::ArrowRight] {
+                        runtime
+                            .input(
+                                UiInput::Key(KeyStroke {
+                                    key,
+                                    value: 0,
+                                    pressed: true,
+                                    repeat: false,
+                                    modifiers: 0,
+                                }),
+                                NcCopyFromBufferOffset::new(0, &[]),
+                            )
+                            .unwrap();
+                        runtime.update(SIZE).unwrap();
+                    }
+                    assert!(disclosure.expanded().unwrap());
+                }
+                window.set_rect(Rect { x: 20, y: 20, width: 100, height: 100 }).unwrap();
+                runtime.update(SIZE).unwrap();
+                let header_height = children.committed_allocations()[0].height;
+                assert!(header_height > 1);
+                let indent = if style == DisclosureStyle::Tree { 20 } else { 0 };
+                let render_fixture = crate::test_support::headless::Headless::standard();
+                for expanded in [true, false, true] {
+                    disclosure.set_expanded(expanded).unwrap();
+                    for (width, height) in [
+                        (100, 100),
+                        (1, 1),
+                        (0, 0),
+                        (19, header_height + 2),
+                        (20, header_height + 3),
+                        (21, header_height + 4),
+                        (100, 100),
+                    ] {
+                        window.set_rect(Rect { x: 20, y: 20, width, height }).unwrap();
+                        runtime.update(SIZE).unwrap();
+                        let allocations = children.committed_allocations();
+                        let rect = allocations[0];
+                        assert_eq!((rect.x, rect.y, rect.width, rect.height), (0, 0, width, header_height.min(height)));
+                        if expanded {
+                            let rect = allocations[1];
+                            assert_eq!(
+                                (rect.x, rect.y, rect.width, rect.height),
+                                (
+                                    indent,
+                                    header_height.min(height) + 3,
+                                    (width - indent).max(0),
+                                    (height - header_height.min(height) - 3).max(0)
+                                )
+                            );
+                        }
+                        runtime.render(SIZE, render_fixture.renderer.as_com_ref()).unwrap();
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Deliberately retained service/token pairs probe expiry after their real nested invocation.
 type RetainedScopes = Rc<RefCell<Vec<(ComPtr<ILayoutServiceAbi>, LayoutScope)>>>;
 

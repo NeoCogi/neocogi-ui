@@ -30,7 +30,7 @@
 
 //! Pure frame geometry and scoped recording, with no retained node or root ownership.
 use crate::render::Painter;
-use crate::{AvailableSpace, Constraints, ControlState, Dimensioni, FrameRole, NinePatch, Recti, SliceInsets, Skin, SurfaceState, Visual};
+use crate::{Constraints, ControlState, Dimensioni, FrameRole, NinePatch, Recti, SliceInsets, Skin, SurfaceState, Visual};
 
 /// Geometry derived from one authoritative outer allocation.
 #[derive(Copy, Clone, Debug)]
@@ -111,8 +111,8 @@ pub fn content_constraints(constraints: Constraints, insets: SliceInsets) -> Con
     // Each axis removes its independently configured pair of patch cells. Unbounded space stays
     // unbounded because a finite frame cannot constrain an intrinsically open measurement axis.
     Constraints::new(
-        inset_available(constraints.width, insets.horizontal_extent()),
-        inset_available(constraints.height, insets.vertical_extent()),
+        constraints.width.shrink(insets.horizontal_extent()),
+        constraints.height.shrink(insets.vertical_extent()),
     )
 }
 
@@ -162,14 +162,6 @@ fn checked_inset(outer: Recti, insets: SliceInsets) -> Option<Recti> {
     let content_width = outer.width.checked_sub(horizontal)?;
     let content_height = outer.height.checked_sub(vertical)?;
     Some(Recti::new(x, y, content_width, content_height))
-}
-
-/// Removes a non-negative inset without conflating a bounded zero with unbounded space.
-fn inset_available(space: AvailableSpace, inset: i32) -> AvailableSpace {
-    match space {
-        AvailableSpace::Unbounded => AvailableSpace::Unbounded,
-        AvailableSpace::Bounded(value) => AvailableSpace::bounded(value.saturating_sub(inset.max(0))),
-    }
 }
 
 fn expand_positive_axis(value: i32, inset_extent: i32) -> i32 {
@@ -267,6 +259,7 @@ pub fn local_frame(role: neocogi_ui::abi::core::WidgetFrame) -> Result<crate::Fr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::AvailableSpace;
     use crate::SurfaceRole;
     use crate::{Color, color};
     use crate::render::DisplayList;
