@@ -31,6 +31,11 @@ struct Capture {
     /// Only a synchronous COM receiver needs interior mutability; no outward borrow is retained.
     blocks: Rc<RefCell<Vec<Rc<neocogi_render_gpu::record::Block>>>>,
 }
+impl neocogi_render_core::abi::IRenderDriverBound for Capture {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+        Err(neocogi_com::NC_E_NOINTERFACE)
+    }
+}
 impl IRenderer for Capture {
     fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         let mut blocks = Vec::new();

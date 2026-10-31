@@ -107,10 +107,15 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let pixels = [255u8, 32, 16, 255, 16, 255, 32, 255, 32, 16, 255, 255, 255, 255, 255, 255];
     let image_size = Size { width: 2, height: 2 };
     assert_eq!(
-        factory.create_texture(image_size, NcCopyFromBufferOffset::new(0, &pixels[..15])).unwrap_err(),
+        factory
+            .create_texture(image_size, neocogi_render_gpu::source::initial_bytes(pixels[..15].to_vec()).borrow()?)
+            .unwrap_err(),
         NC_E_INVALID_ARG
     );
-    let texture = factory.create_texture(image_size, NcCopyFromBufferOffset::new(0, &pixels))?;
+    let texture = factory.create_texture(
+        image_size,
+        neocogi_render_gpu::source::initial_bytes((NcCopyFromBufferOffset::new(0, &pixels)).as_slice().to_vec()).borrow()?,
+    )?;
     assert_eq!(texture.size()?, image_size);
     let clients: ComPtr<IRenderClientFactoryAbi> = renderer.try_add_ref()?.query()?;
     let controller = clients.create_client(RenderClientLimits::default())?;
@@ -161,11 +166,11 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
             role: GpuBufferRole::Vertex,
             byte_len: payload.len() as u64,
         },
-        Bytes::source(payload).as_com_ref(),
+        neocogi_render_gpu::source::supplied(Bytes::source(payload).as_com_ref())?.borrow()?,
     )?;
     let indices = resources.create_buffer(
         GpuBufferDesc { role: GpuBufferRole::Index, byte_len: 6 },
-        Bytes::source([0u16, 1, 3].into_iter().flat_map(u16::to_le_bytes).collect()).as_com_ref(),
+        neocogi_render_gpu::source::supplied(Bytes::source([0u16, 1, 3].into_iter().flat_map(u16::to_le_bytes).collect()).as_com_ref())?.borrow()?,
     )?;
     // Raw bytes have no semantic meaning until draw consumption validates the complete footprint.
     let host = renderer.try_add_ref()?.query::<IPlatformWindowAbi>()?.graphics_host()?;

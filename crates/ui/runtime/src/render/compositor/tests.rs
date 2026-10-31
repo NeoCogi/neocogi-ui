@@ -29,6 +29,11 @@ struct Recorder {
     /// IRenderer methods take shared access, so the callback and assertion owner need one cell.
     capture: Rc<RefCell<Capture>>,
 }
+impl neocogi_render_core::abi::IRenderDriverBound for Recorder {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+        Err(neocogi_com::NC_E_NOINTERFACE)
+    }
+}
 impl IRenderer for Recorder {
     /// Copies the live stream before borrowing assertion storage, keeping foreign calls reentrant.
     fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
@@ -45,6 +50,11 @@ impl IRenderer for Recorder {
 #[com_object(interfaces(ITexture))]
 /// Immutable texture capability used to verify resource ordering independently of a GPU device.
 struct Texture;
+impl neocogi_render_core::abi::IRenderDriverBound for Texture {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+        Err(neocogi_com::NC_E_NOINTERFACE)
+    }
+}
 impl ITexture for Texture {
     /// A single texel makes fractional destination clipping easy to check exactly.
     fn size(&self) -> Result<Size, NcStatus> {

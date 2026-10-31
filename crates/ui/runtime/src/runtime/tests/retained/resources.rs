@@ -17,6 +17,11 @@ struct TemporaryTexture {
     /// Drop publishes a copied lifecycle observation without keeping any UI capability alive.
     attempt: Rc<RefCell<Attempt>>,
 }
+impl neocogi_render_core::abi::IRenderDriverBound for TemporaryTexture {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+        Err(neocogi_com::NC_E_NOINTERFACE)
+    }
+}
 impl ITexture for TemporaryTexture {
     /// Dimensions are immutable for this resource's complete lifetime.
     fn size(&self) -> Result<Size, NcStatus> {

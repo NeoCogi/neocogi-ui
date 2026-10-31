@@ -103,7 +103,7 @@ impl Geometry {
                 role: GpuBufferRole::Vertex,
                 byte_len: vertices.len() as u64,
             },
-            Bytes::source(vertices).as_com_ref(),
+            neocogi_render_core::source::supplied(Bytes::source(vertices).as_com_ref())?.borrow()?,
         )?;
         let index_count = indices.len().try_into().map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)?;
         let indices: Vec<_> = indices.into_iter().flat_map(u32::to_le_bytes).collect();
@@ -112,7 +112,7 @@ impl Geometry {
                 role: GpuBufferRole::Index,
                 byte_len: indices.len() as u64,
             },
-            Bytes::source(indices).as_com_ref(),
+            neocogi_render_core::source::supplied(Bytes::source(indices).as_com_ref())?.borrow()?,
         )?;
         let code = Bytes::source(SHADER.as_bytes().to_vec());
         let vs = resources.create_shader(GpuShaderStage::Vertex, code.as_com_ref(), NcCopyFromBufferOffset::new(0, b"vs"))?;

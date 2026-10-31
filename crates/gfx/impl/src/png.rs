@@ -129,9 +129,9 @@ impl PngDecoder for PngDecoderObject {
         }
         let image = RgbaImage::decode_bounded(png.as_slice(), rgba_limit.min(MAX_ASSET_PIXELS_BYTES as u64) as usize)
             .map_err(|error| self.diagnostic.failure(error))?;
-        // Upload borrows the final CPU allocation only for this synchronous call.
+        // Transfer the decoded allocation into a source; the factory finishes bounded reads before native upload.
         target
-            .create_texture(image.size, NcCopyFromBufferOffset::new(0, &image.pixels))
+            .create_texture(image.size, neocogi_render_core::source::initial_bytes(image.pixels).borrow()?)
             .inspect_err(|status| {
                 self.diagnostic.failure(status);
             })
@@ -206,6 +206,11 @@ mod tests {
         /// Immutable dimensions supplied by the decoder.
         size: Size,
     }
+    impl neocogi_render_core::abi::IRenderDriverBound for Texture {
+        fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+            Err(neocogi_com::NC_E_NOINTERFACE)
+        }
+    }
     impl ITexture for Texture {
         /// Returns the uploaded dimensions without requiring a GPU in this boundary test.
         fn size(&self) -> Result<Size, NcStatus> {
@@ -223,13 +228,21 @@ mod tests {
         /// Retained diagnostics exercise reentry across the borrowed upload boundary.
         diagnostics: ComPtr<IGfxDiagnosticsAbi>,
     }
+    impl neocogi_render_core::abi::IRenderDriverBound for Factory {
+        fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+            Err(neocogi_com::NC_E_NOINTERFACE)
+        }
+    }
     impl ITextureFactory for Factory {
         /// Validates normalized RGBA pixels and deliberately calls back before returning.
-        fn create_texture(&self, size: Size, pixels: NcCopyFromBufferOffset<'_, u8>) -> Result<ComPtr<ITextureAbi>, NcStatus> {
+        fn create_texture(
+            &self,
+            size: Size,
+            pixels: neocogi_com::NcValueRef<'_, neocogi_render_core::abi::InitialGpuData>,
+        ) -> Result<ComPtr<ITextureAbi>, NcStatus> {
             self.calls.set(self.calls.get() + 1);
-            assert_eq!(pixels.offset(), 0);
-            assert_eq!(pixels.len(), size.width as usize * size.height as usize * 4);
-            assert!(pixels.as_slice().iter().all(|channel| *channel == 255));
+            let pixels = neocogi_render_core::source::read_initial(pixels, size.width as usize * size.height as usize * 4)?.unwrap();
+            assert!(pixels.iter().all(|channel| *channel == 255));
             self.diagnostics.diagnostic()?.to_string()?;
             if self.fail.get() {
                 return Err(RENDER_E_BACKEND);

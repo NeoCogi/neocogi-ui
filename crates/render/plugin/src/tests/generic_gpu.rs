@@ -18,7 +18,13 @@ fn gfx_generic_blocks_preserve_window_order_and_immutable_surface_output() {
         .acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
         .unwrap();
     let assets = neocogi_demo_assets::load_bundle(runtime).unwrap();
-    let native = PlatformObject::new(nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query().unwrap()).window("GFX generic executor", SIZE).unwrap();
+    let native = PlatformObject::new(
+        nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
+            .query()
+            .unwrap(),
+    )
+    .window("GFX generic executor", SIZE)
+    .unwrap();
     let weak = Rc::downgrade(&native.device);
     let window = WindowObject::from_value(native);
     let renderer: ComPtr<IRendererAbi> = window.query().unwrap();
@@ -29,7 +35,13 @@ fn gfx_generic_blocks_preserve_window_order_and_immutable_surface_output() {
     let image = images
         .create_texture(
             Size { width: 2, height: 2 },
-            NcCopyFromBufferOffset::new(0, &[255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255]),
+            neocogi_render_core::source::initial_bytes(
+                (NcCopyFromBufferOffset::new(0, &[255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255]))
+                    .as_slice()
+                    .to_vec(),
+            )
+            .borrow()
+            .unwrap(),
         )
         .unwrap();
     let clients: ComPtr<IRenderClientFactoryAbi> = window.query().unwrap();
@@ -115,7 +127,7 @@ impl IRenderStream for ClosingUiStream {
         assert!(matches!(
             self.editing.create_buffer(
                 GpuBufferDesc { role: GpuBufferRole::Vertex, byte_len: 4 },
-                Bytes::source(vec![0; 4]).as_com_ref()
+                neocogi_render_core::source::initial_bytes(vec![0; 4]).borrow().unwrap()
             ),
             Err(RENDER_E_BUSY)
         ));
@@ -131,7 +143,13 @@ impl IRenderStream for ClosingUiStream {
 #[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
 fn surfaces_recheck_ui_domains_and_exclude_resource_reentry_after_foreign_callbacks() {
     let _session = native_session();
-    let native = PlatformObject::new(nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query().unwrap()).window("surface admission", SIZE).unwrap();
+    let native = PlatformObject::new(
+        nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
+            .query()
+            .unwrap(),
+    )
+    .window("surface admission", SIZE)
+    .unwrap();
     let window = WindowObject::from_value(native);
     let host = window.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap();
     let surface = window.query::<IRenderSurfaceFactoryAbi>().unwrap().create_surface(SIZE).unwrap();
@@ -216,7 +234,11 @@ fn rectangle(rect: Rect, color: u32) -> Vec<RenderVertex> {
 #[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
 fn private_ui_image_import_renders_without_a_native_cache_com_cycle() {
     let _session = native_session();
-    let platform = PlatformObject::new(nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query().unwrap());
+    let platform = PlatformObject::new(
+        nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
+            .query()
+            .unwrap(),
+    );
     let native = platform.window("private UI image import", SIZE).unwrap();
     let device = Rc::downgrade(&native.device);
     let window = WindowObject::from_value(native);
@@ -225,7 +247,12 @@ fn private_ui_image_import_renders_without_a_native_cache_com_cycle() {
     let images: ComPtr<ITextureFactoryAbi> = window.query().unwrap();
     let pixels = [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255];
     let image = images
-        .create_texture(Size { width: 2, height: 2 }, NcCopyFromBufferOffset::new(0, &pixels))
+        .create_texture(
+            Size { width: 2, height: 2 },
+            neocogi_render_core::source::initial_bytes((NcCopyFromBufferOffset::new(0, &pixels)).as_slice().to_vec())
+                .borrow()
+                .unwrap(),
+        )
         .unwrap();
     let image_key = identity(&image).unwrap();
     let clients: ComPtr<IRenderClientFactoryAbi> = window.query().unwrap();
@@ -327,7 +354,11 @@ fn private_ui_image_import_renders_without_a_native_cache_com_cycle() {
 #[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
 fn generic_pipeline_renders_in_its_root_and_preserves_surrounding_ui() {
     let _session = native_session();
-    let platform = PlatformObject::new(nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query().unwrap());
+    let platform = PlatformObject::new(
+        nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
+            .query()
+            .unwrap(),
+    );
     let native = platform.window("generic graphics acceptance", SIZE).unwrap();
     let device = Rc::downgrade(&native.device);
     let unknown = WindowObject::from_value(native);
@@ -415,7 +446,11 @@ fn generic_pipeline_renders_in_its_root_and_preserves_surrounding_ui() {
 #[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
 fn generic_indexed_texture_and_uniform_snapshots_reach_the_native_pipeline() {
     let _session = native_session();
-    let platform = PlatformObject::new(nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query().unwrap());
+    let platform = PlatformObject::new(
+        nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
+            .query()
+            .unwrap(),
+    );
     let native = platform.window("generic bindings acceptance", SIZE).unwrap();
     let device = Rc::downgrade(&native.device);
     let unknown = WindowObject::from_value(native);
@@ -499,13 +534,19 @@ fn generic_indexed_texture_and_uniform_snapshots_reach_the_native_pipeline() {
                 role: GpuBufferRole::Vertex,
                 byte_len: encoded.len() as u64,
             },
-            Bytes::source(encoded).as_com_ref(),
+            neocogi_render_core::source::supplied(Bytes::source(encoded).as_com_ref())
+                .unwrap()
+                .borrow()
+                .unwrap(),
         )
         .unwrap();
     let index_buffer = resources
         .create_buffer(
             GpuBufferDesc { role: GpuBufferRole::Index, byte_len: 12 },
-            Bytes::source([0u16, 1, 2, 0, 2, 3].into_iter().flat_map(u16::to_le_bytes).collect()).as_com_ref(),
+            neocogi_render_core::source::supplied(Bytes::source([0u16, 1, 2, 0, 2, 3].into_iter().flat_map(u16::to_le_bytes).collect()).as_com_ref())
+                .unwrap()
+                .borrow()
+                .unwrap(),
         )
         .unwrap();
     let texture = resources
@@ -515,7 +556,10 @@ fn generic_indexed_texture_and_uniform_snapshots_reach_the_native_pipeline() {
                 format: GpuTextureFormat::Rgba8Unorm,
                 mip_count: 1,
             },
-            Bytes::source(vec![255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255]).as_com_ref(),
+            neocogi_render_core::source::supplied(Bytes::source(vec![255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255]).as_com_ref())
+                .unwrap()
+                .borrow()
+                .unwrap(),
         )
         .unwrap();
     let sampler = resources.create_sampler(GpuSamplerDesc::default()).unwrap();
@@ -592,7 +636,13 @@ fn generic_indexed_texture_and_uniform_snapshots_reach_the_native_pipeline() {
 #[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
 fn generic_depth_survives_draws_and_reset_with_independent_ordered_views() {
     let _session = native_session();
-    let native = PlatformObject::new(nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query().unwrap()).window("generic depth and clears", SIZE).unwrap();
+    let native = PlatformObject::new(
+        nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
+            .query()
+            .unwrap(),
+    )
+    .window("generic depth and clears", SIZE)
+    .unwrap();
     let device = Rc::downgrade(&native.device);
     let window = WindowObject::from_value(native);
     let renderer: ComPtr<IRendererAbi> = window.query().unwrap();

@@ -14,6 +14,11 @@ impl Drop for Renderer {
         self.dropped.set(true);
     }
 }
+impl neocogi_render_core::abi::IRenderDriverBound for Renderer {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+        Err(neocogi_com::NC_E_NOINTERFACE)
+    }
+}
 impl IRenderer for Renderer {
     fn render(&self, _: RenderInfo, _: neocogi_com::ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         Err(neocogi_com::NC_E_INVALID_ARG)

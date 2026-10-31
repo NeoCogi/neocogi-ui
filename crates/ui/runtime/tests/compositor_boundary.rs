@@ -34,6 +34,11 @@ struct CaptureRenderer {
     observation: Rc<Observation>,
 }
 
+impl neocogi_render_core::abi::IRenderDriverBound for CaptureRenderer {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+        Err(neocogi_com::NC_E_NOINTERFACE)
+    }
+}
 impl IRenderer for CaptureRenderer {
     /// Copies both bounded arrays while the invocation token is valid.
     fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
@@ -51,7 +56,7 @@ impl IRenderer for CaptureRenderer {
         });
         if let Some(atlas) = atlas {
             self.observation.size.set(Some(atlas.desc().size));
-            *self.observation.pixels.borrow_mut() = atlas.pixels().unwrap().to_vec();
+            *self.observation.pixels.borrow_mut() = atlas.pixels().unwrap().as_slice().unwrap().to_vec();
         }
         Ok(())
     }

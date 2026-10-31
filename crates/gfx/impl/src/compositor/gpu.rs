@@ -156,7 +156,7 @@ impl Graphics {
                 format: GpuTextureFormat::Rgba8Unorm,
                 mip_count: 1,
             },
-            source.as_com_ref(),
+            neocogi_render_core::source::supplied(source.as_com_ref())?.borrow()?,
         )?;
         host.prepare_ui_texture(resources, atlas.as_com_ref())?;
         Ok(atlas)
@@ -164,6 +164,9 @@ impl Graphics {
 
     /// Pack geometry once, then preserve client positions with UI blocks using the same resources.
     pub(super) fn lower(&self, frame: FrameState, vertices: &[RenderVertex], batches: &[Batch]) -> Result<Vec<Rc<ComBox<IRenderViewBlockAbi>>>, NcStatus> {
+        // A previous frame can release its final block only after renderer.render returns.
+        // Drain before allocating geometry so quota pressure cannot prevent reaching maintenance.
+        self.host.maintain()?;
         let buffers = self.geometry(vertices, batches)?;
         let mut recording = self.broker.begin_frame()?;
         let mut active: Option<Recording> = None;
@@ -280,7 +283,8 @@ impl Graphics {
             role: GpuBufferRole::Vertex,
             byte_len: bytes.len() as u64,
         };
-        self.resources.create_buffer(desc, Bytes::source(bytes).as_com_ref())
+        self.resources
+            .create_buffer(desc, neocogi_render_core::source::supplied(Bytes::source(bytes).as_com_ref())?.borrow()?)
     }
 }
 

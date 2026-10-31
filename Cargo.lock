@@ -964,7 +964,7 @@ dependencies = [
 [[package]]
 name = "neocogi-native-layout"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=050f786bd4c9d75ddbb72b7e89df56ee2e7a774f#050f786bd4c9d75ddbb72b7e89df56ee2e7a774f"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=e55e06ad5d0fa25130c51507b4da5ecf1f722cc0#e55e06ad5d0fa25130c51507b4da5ecf1f722cc0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -975,17 +975,19 @@ dependencies = [
 [[package]]
 name = "neocogi-render-core"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=050f786bd4c9d75ddbb72b7e89df56ee2e7a774f#050f786bd4c9d75ddbb72b7e89df56ee2e7a774f"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=e55e06ad5d0fa25130c51507b4da5ecf1f722cc0#e55e06ad5d0fa25130c51507b4da5ecf1f722cc0"
 dependencies = [
  "neocogi-com",
  "neocogi-idl",
+ "quote",
  "rs-math3d",
+ "syn 2.0.119",
 ]
 
 [[package]]
 name = "neocogi-render-glow"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=050f786bd4c9d75ddbb72b7e89df56ee2e7a774f#050f786bd4c9d75ddbb72b7e89df56ee2e7a774f"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=e55e06ad5d0fa25130c51507b4da5ecf1f722cc0#e55e06ad5d0fa25130c51507b4da5ecf1f722cc0"
 dependencies = [
  "glow 0.18.0",
  "neocogi-render-core",
@@ -996,7 +998,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-gpu"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=050f786bd4c9d75ddbb72b7e89df56ee2e7a774f#050f786bd4c9d75ddbb72b7e89df56ee2e7a774f"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=e55e06ad5d0fa25130c51507b4da5ecf1f722cc0#e55e06ad5d0fa25130c51507b4da5ecf1f722cc0"
 dependencies = [
  "neocogi-com",
  "neocogi-render-core",
@@ -1006,7 +1008,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-plugin"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=050f786bd4c9d75ddbb72b7e89df56ee2e7a774f#050f786bd4c9d75ddbb72b7e89df56ee2e7a774f"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=e55e06ad5d0fa25130c51507b4da5ecf1f722cc0#e55e06ad5d0fa25130c51507b4da5ecf1f722cc0"
 dependencies = [
  "glow 0.18.0",
  "js-sys",
@@ -1029,7 +1031,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-plugin-dylib"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=050f786bd4c9d75ddbb72b7e89df56ee2e7a774f#050f786bd4c9d75ddbb72b7e89df56ee2e7a774f"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=e55e06ad5d0fa25130c51507b4da5ecf1f722cc0#e55e06ad5d0fa25130c51507b4da5ecf1f722cc0"
 dependencies = [
  "neocogi-com",
  "neocogi-render-plugin",
@@ -1038,7 +1040,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-support"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=050f786bd4c9d75ddbb72b7e89df56ee2e7a774f#050f786bd4c9d75ddbb72b7e89df56ee2e7a774f"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=e55e06ad5d0fa25130c51507b4da5ecf1f722cc0#e55e06ad5d0fa25130c51507b4da5ecf1f722cc0"
 dependencies = [
  "neocogi-com",
  "neocogi-render-core",
@@ -1048,7 +1050,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-vulkan"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=050f786bd4c9d75ddbb72b7e89df56ee2e7a774f#050f786bd4c9d75ddbb72b7e89df56ee2e7a774f"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=e55e06ad5d0fa25130c51507b4da5ecf1f722cc0#e55e06ad5d0fa25130c51507b4da5ecf1f722cc0"
 dependencies = [
  "ash",
  "ash-window",
@@ -1062,7 +1064,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-webgl"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=050f786bd4c9d75ddbb72b7e89df56ee2e7a774f#050f786bd4c9d75ddbb72b7e89df56ee2e7a774f"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=e55e06ad5d0fa25130c51507b4da5ecf1f722cc0#e55e06ad5d0fa25130c51507b4da5ecf1f722cc0"
 dependencies = [
  "glow 0.18.0",
  "neocogi-render-core",
@@ -1073,7 +1075,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-wgpu"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=050f786bd4c9d75ddbb72b7e89df56ee2e7a774f#050f786bd4c9d75ddbb72b7e89df56ee2e7a774f"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=e55e06ad5d0fa25130c51507b4da5ecf1f722cc0#e55e06ad5d0fa25130c51507b4da5ecf1f722cc0"
 dependencies = [
  "neocogi-render-core",
  "neocogi-render-gpu",
@@ -1102,7 +1104,7 @@ dependencies = [
 [[package]]
 name = "neocogi-shader-compiler"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=050f786bd4c9d75ddbb72b7e89df56ee2e7a774f#050f786bd4c9d75ddbb72b7e89df56ee2e7a774f"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=e55e06ad5d0fa25130c51507b4da5ecf1f722cc0#e55e06ad5d0fa25130c51507b4da5ecf1f722cc0"
 dependencies = [
  "naga",
  "neocogi-com",
@@ -1114,7 +1116,7 @@ dependencies = [
 [[package]]
 name = "neocogi-shader-compiler-dylib"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=050f786bd4c9d75ddbb72b7e89df56ee2e7a774f#050f786bd4c9d75ddbb72b7e89df56ee2e7a774f"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=e55e06ad5d0fa25130c51507b4da5ecf1f722cc0#e55e06ad5d0fa25130c51507b4da5ecf1f722cc0"
 dependencies = [
  "neocogi-com",
  "neocogi-shader-compiler",
@@ -1123,7 +1125,7 @@ dependencies = [
 [[package]]
 name = "neocogi-shader-core"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=050f786bd4c9d75ddbb72b7e89df56ee2e7a774f#050f786bd4c9d75ddbb72b7e89df56ee2e7a774f"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=e55e06ad5d0fa25130c51507b4da5ecf1f722cc0#e55e06ad5d0fa25130c51507b4da5ecf1f722cc0"
 dependencies = [
  "neocogi-com",
  "neocogi-idl",

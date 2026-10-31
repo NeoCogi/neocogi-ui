@@ -23,6 +23,11 @@ struct CaptureRenderer {
     /// IRenderer has shared receivers, so callback observations require one interior-mutable slot.
     frame: Rc<RefCell<Frame>>,
 }
+impl neocogi_render_core::abi::IRenderDriverBound for CaptureRenderer {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+        Err(neocogi_com::NC_E_NOINTERFACE)
+    }
+}
 impl IRenderer for CaptureRenderer {
     /// Reads complete arrays while the token is live, then publishes copied observations.
     fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {

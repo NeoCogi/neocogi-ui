@@ -728,7 +728,10 @@ fn build_controls(
         ("Texture 3 - Blue", Size { width: 64, height: 24 }, [0, 0, 255, 255]),
     ] {
         let pixels = color.repeat(size.width as usize * size.height as usize);
-        let image = factory.create_texture(size, NcCopyFromBufferOffset::new(0, &pixels))?;
+        let image = factory.create_texture(
+            size,
+            neocogi_render_core::source::initial_bytes((NcCopyFromBufferOffset::new(0, &pixels)).as_slice().to_vec()).borrow()?,
+        )?;
         let mut control = button(ui, events_tx, name, Action::Log)?;
         control.set_image(image.as_com_ref(), false)?;
         append(&mut textures, control, LayoutTrack::Content)?;
@@ -746,7 +749,10 @@ fn build_controls(
         noise ^= noise << 5;
         pixels.extend_from_slice(&[noise as u8, (noise >> 8) as u8, (noise >> 16) as u8, 255]);
     }
-    let image = factory.create_texture(Size { width: 24, height: 32 }, NcCopyFromBufferOffset::new(0, &pixels))?;
+    let image = factory.create_texture(
+        Size { width: 24, height: 32 },
+        neocogi_render_core::source::initial_bytes((NcCopyFromBufferOffset::new(0, &pixels)).as_slice().to_vec()).borrow()?,
+    )?;
     let mut control = button(ui, events_tx, "Texture 4 - Noise", Action::Log)?;
     control.set_image(image.as_com_ref(), false)?;
     append(&mut textures, control, LayoutTrack::Content)?;

@@ -7,9 +7,9 @@ use neocogi_gfx_support::abi::RenderVertex;
 use neocogi_render_gpu::source::{Bytes, PipelineDesc};
 
 #[cfg(feature = "glow")]
-mod generic_gpu;
-#[cfg(feature = "glow")]
 pub(super) mod costs;
+#[cfg(feature = "glow")]
+mod generic_gpu;
 #[cfg(feature = "glow")]
 mod surfaces;
 #[cfg(feature = "glow")]
@@ -67,7 +67,10 @@ impl IRenderStream for Stream {
         let factory: ComPtr<ITextureFactoryAbi> = self.input.renderer.query()?;
         assert_eq!(
             factory
-                .create_texture(Size { width: 1, height: 1 }, NcCopyFromBufferOffset::new(0, &[0; 4]))
+                .create_texture(
+                    Size { width: 1, height: 1 },
+                    neocogi_render_core::source::initial_bytes(vec![0; 4]).borrow().unwrap()
+                )
                 .unwrap_err(),
             RENDER_E_BUSY
         );
@@ -76,7 +79,7 @@ impl IRenderStream for Stream {
                 .editing
                 .create_buffer(
                     GpuBufferDesc { role: GpuBufferRole::Vertex, byte_len: 4 },
-                    Bytes::source(vec![0; 4]).as_com_ref()
+                    neocogi_render_core::source::initial_bytes(vec![0; 4]).borrow().unwrap()
                 )
                 .err(),
             Some(RENDER_E_BUSY)
@@ -165,7 +168,11 @@ fn graphics(resources: &ComPtr<IRenderResourcesAbi>, broker: &ComPtr<IRenderView
 #[ignore = "requires a native SDL display; use SDL_VIDEODRIVER=offscreen for Glow or a native display for Vulkan/WGPU"]
 fn native_order_ownership_reentry_and_final_release() {
     let _session = native_session();
-    let platform = PlatformObject::new(nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query().unwrap());
+    let platform = PlatformObject::new(
+        nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
+            .query()
+            .unwrap(),
+    );
     let native = platform.window("COM GPU acceptance", SIZE).unwrap();
     let device = Rc::downgrade(&native.device);
     let unknown = WindowObject::from_value(native);
@@ -196,6 +203,17 @@ fn native_order_ownership_reentry_and_final_release() {
     let clients: ComPtr<IRenderClientFactoryAbi> = unknown.query().unwrap();
     let controller = clients.create_client(RenderClientLimits::default()).unwrap();
     let resources = controller.resources().unwrap();
+    let driver = renderer.driver_identity().unwrap();
+    assert_eq!(identity(&driver).unwrap(), identity(&factory.driver_identity().unwrap()).unwrap());
+    assert_eq!(identity(&driver).unwrap(), identity(&clients.driver_identity().unwrap()).unwrap());
+    assert_eq!(identity(&driver).unwrap(), identity(&resources.driver_identity().unwrap()).unwrap());
+    let zero = neocogi_render_core::source::initial(None);
+    let initialized = factory.create_texture(Size { width: 1, height: 1 }, zero.borrow().unwrap()).unwrap();
+    assert_eq!(initialized.size().unwrap(), Size { width: 1, height: 1 });
+    assert_eq!(identity(&driver).unwrap(), identity(&initialized.driver_identity().unwrap()).unwrap());
+    assert!(driver.query::<IRendererAbi>().is_err());
+    assert!(driver.query::<IRenderHostAbi>().is_err());
+    drop(initialized);
     let broker = unknown
         .query::<IPlatformWindowAbi>()
         .unwrap()
@@ -206,10 +224,20 @@ fn native_order_ownership_reentry_and_final_release() {
     let root = Rect { x: 0, y: 0, width: 64, height: 64 };
     let block = graphics(&resources, &broker, RenderViewRoot { client: root, target: root });
     let background = factory
-        .create_texture(Size { width: 1, height: 1 }, NcCopyFromBufferOffset::new(0, &[0, 255, 0, 255]))
+        .create_texture(
+            Size { width: 1, height: 1 },
+            neocogi_render_core::source::initial_bytes((NcCopyFromBufferOffset::new(0, &[0, 255, 0, 255])).as_slice().to_vec())
+                .borrow()
+                .unwrap(),
+        )
         .unwrap();
     let spare = factory
-        .create_texture(Size { width: 1, height: 1 }, NcCopyFromBufferOffset::new(0, &[0; 4]))
+        .create_texture(
+            Size { width: 1, height: 1 },
+            neocogi_render_core::source::initial_bytes((NcCopyFromBufferOffset::new(0, &[0; 4])).as_slice().to_vec())
+                .borrow()
+                .unwrap(),
+        )
         .unwrap();
     let spare_key = identity(&spare).unwrap();
     let input = Rc::new(Input {
@@ -254,7 +282,12 @@ fn native_order_ownership_reentry_and_final_release() {
     let foreign_block = graphics(&foreign_resources, &foreign_broker, RenderViewRoot { client: root, target: root });
     let foreign_factory: ComPtr<ITextureFactoryAbi> = foreign.query().unwrap();
     let foreign_texture = foreign_factory
-        .create_texture(Size { width: 1, height: 1 }, NcCopyFromBufferOffset::new(0, &[0; 4]))
+        .create_texture(
+            Size { width: 1, height: 1 },
+            neocogi_render_core::source::initial_bytes((NcCopyFromBufferOffset::new(0, &[0; 4])).as_slice().to_vec())
+                .borrow()
+                .unwrap(),
+        )
         .unwrap();
     let graphics_host = unknown.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap();
     let ui_domain = graphics_host.create_ui_client(Default::default()).unwrap();
@@ -377,9 +410,15 @@ fn input_delivery(unknown: &ComPtr<IUnknown>, device: &Weak<Device>) {
 #[com_object(interfaces(neocogi_shader_core::abi::ShaderCompiler))]
 struct RejectedCompiler;
 impl neocogi_shader_core::abi::ShaderCompiler for RejectedCompiler {
-    fn compile(&self,request:neocogi_shader_core::abi::ShaderCompileRequest,_:NcCopyFromBufferOffset<'_,u8>,entry:NcCopyFromBufferOffset<'_,u8>)->Result<ComPtr<neocogi_shader_core::abi::IShaderCompilationAbi>,NcStatus> {
-        let root:ComPtr<neocogi_shader_core::abi::ShaderCompilerAbi>=nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query()?;
-        root.compile(request,NcCopyFromBufferOffset::new(0,b"rejected_ui_shader_diagnostic"),entry)
+    fn compile(
+        &self,
+        request: neocogi_shader_core::abi::ShaderCompileRequest,
+        _: NcCopyFromBufferOffset<'_, u8>,
+        entry: NcCopyFromBufferOffset<'_, u8>,
+    ) -> Result<ComPtr<neocogi_shader_core::abi::IShaderCompilationAbi>, NcStatus> {
+        let root: ComPtr<neocogi_shader_core::abi::ShaderCompilerAbi> =
+            nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query()?;
+        root.compile(request, NcCopyFromBufferOffset::new(0, b"rejected_ui_shader_diagnostic"), entry)
     }
 }
 /// Exercise the actual UI->GFX->resource->compiler first-bind chain; capture detail
@@ -389,17 +428,37 @@ impl neocogi_shader_core::abi::ShaderCompiler for RejectedCompiler {
 fn first_ui_bind_shader_rejection_preserves_device_diagnostic() {
     use neocogi_gfx_support::abi::GfxPluginFactoryAbi;
     use neocogi_ui::abi::core::UiPluginFactoryAbi;
-    let _session=native_session();let runtime=crate::host_runtime();
+    let _session = native_session();
+    let runtime = crate::host_runtime();
     // SAFETY: linked immutable descriptors and code live for the process.
-    unsafe {runtime.register_plugin_descriptor(nc_gfx::plugin_descriptor()).unwrap();runtime.register_plugin_descriptor(nc_ui::plugin_descriptor()).unwrap();}
-    let gfx=runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime")).unwrap();
-    let factory=runtime.acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime")).unwrap();
-    let assets=neocogi_demo_assets::load_bundle(runtime).unwrap();let mut ui=factory.create_runtime(assets.as_com_ref(),gfx.as_com_ref()).unwrap();
-    let platform=PlatformObject::new(RejectedCompiler::from_value(RejectedCompiler).query().unwrap());
-    let native=platform.window("first bind rejection",Size {width:8,height:8}).unwrap();let weak=Rc::downgrade(&native.device);
-    let window:ComPtr<IPlatformWindowAbi>=WindowObject::from_value(native).query().unwrap();let renderer:ComPtr<IRendererAbi>=window.query().unwrap();let host=window.graphics_host().unwrap();
+    unsafe {
+        runtime.register_plugin_descriptor(nc_gfx::plugin_descriptor()).unwrap();
+        runtime.register_plugin_descriptor(nc_ui::plugin_descriptor()).unwrap();
+    }
+    let gfx = runtime
+        .acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
+        .unwrap();
+    let factory = runtime
+        .acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))
+        .unwrap();
+    let assets = neocogi_demo_assets::load_bundle(runtime).unwrap();
+    let mut ui = factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref()).unwrap();
+    let platform = PlatformObject::new(RejectedCompiler::from_value(RejectedCompiler).query().unwrap());
+    let native = platform.window("first bind rejection", Size { width: 8, height: 8 }).unwrap();
+    let weak = Rc::downgrade(&native.device);
+    let window: ComPtr<IPlatformWindowAbi> = WindowObject::from_value(native).query().unwrap();
+    let renderer: ComPtr<IRendererAbi> = window.query().unwrap();
+    let host = window.graphics_host().unwrap();
     assert!(ui.set_render_host(host.as_com_ref()).is_err());
-    let detail=renderer.query::<IRenderDiagnosticsAbi>().unwrap().diagnostic().unwrap().to_string_bounded(4096).unwrap();
-    assert!(detail.contains("rejected_ui_shader_diagnostic"),"{detail}");
-    drop((ui,host,renderer,window,platform));assert!(weak.upgrade().is_none());assert!(detail.contains("rejected_ui_shader_diagnostic"));
+    let detail = renderer
+        .query::<IRenderDiagnosticsAbi>()
+        .unwrap()
+        .diagnostic()
+        .unwrap()
+        .to_string_bounded(4096)
+        .unwrap();
+    assert!(detail.contains("rejected_ui_shader_diagnostic"), "{detail}");
+    drop((ui, host, renderer, window, platform));
+    assert!(weak.upgrade().is_none());
+    assert!(detail.contains("rejected_ui_shader_diagnostic"));
 }

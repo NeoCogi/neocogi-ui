@@ -20,6 +20,11 @@ struct ImageTexture {
     /// Test-only observations; the COM allocation itself owns no UI state.
     probe: Rc<ImageProbe>,
 }
+impl neocogi_render_core::abi::IRenderDriverBound for ImageTexture {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+        Err(neocogi_com::NC_E_NOINTERFACE)
+    }
+}
 impl ITexture for ImageTexture {
     /// Nested editing sees BUSY, while a failed dimension read publishes no new widget content.
     fn size(&self) -> Result<Size, NcStatus> {
@@ -128,6 +133,11 @@ fn image_controls_keep_owned_pixels_and_forward_ordered_semantic_paint_after_err
 struct ImageFrameRenderer {
     /// Copied final quads outlive the invocation without retaining renderer resources.
     quads: Rc<RefCell<Vec<[RenderVertex; 4]>>>,
+}
+impl neocogi_render_core::abi::IRenderDriverBound for ImageFrameRenderer {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+        Err(neocogi_com::NC_E_NOINTERFACE)
+    }
 }
 impl IRenderer for ImageFrameRenderer {
     /// Resolves each texture only during the active stream, then immediately releases the projection.

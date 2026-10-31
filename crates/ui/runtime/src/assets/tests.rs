@@ -267,7 +267,15 @@ struct UploadHost {
     /// Runtime and widget observations are weak to avoid a host-to-runtime ownership cycle.
     probe: Rc<Probe>,
 }
+impl neocogi_render_core::abi::IRenderDriverBound for UploadHost {
+    fn driver_identity(&self) -> Result<ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, NcStatus> {
+        self.inner.driver_identity()
+    }
+}
 impl neocogi_render_core::abi::IRenderHost for UploadHost {
+    fn maintain(&self) -> Result<(), NcStatus> {
+        self.inner.maintain()
+    }
     fn import_ui_texture(
         &self,
         resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>,
@@ -314,6 +322,11 @@ impl neocogi_render_core::abi::IRenderHost for UploadHost {
 #[com_object(interfaces(IRenderer))]
 /// Observes actual recorded atlas versions, independently of source image identity.
 struct UploadRenderer(Rc<Probe>);
+impl neocogi_render_core::abi::IRenderDriverBound for UploadRenderer {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+        Err(neocogi_com::NC_E_NOINTERFACE)
+    }
+}
 impl IRenderer for UploadRenderer {
     fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         let blocks = neocogi_gfx_support::testing::blocks(info, stream)?;

@@ -22,7 +22,15 @@ struct UploadHost {
     /// No callback or UI owner participates in this observation state.
     probe: std::rc::Rc<UploadProbe>,
 }
+impl neocogi_render_core::abi::IRenderDriverBound for UploadHost {
+    fn driver_identity(&self) -> Result<ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, NcStatus> {
+        self.inner.driver_identity()
+    }
+}
 impl neocogi_render_core::abi::IRenderHost for UploadHost {
+    fn maintain(&self) -> Result<(), NcStatus> {
+        self.inner.maintain()
+    }
     fn import_ui_texture(
         &self,
         resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>,
@@ -120,6 +128,11 @@ struct CaptureRenderer {
     capture: std::rc::Rc<RenderCapture>,
 }
 
+impl neocogi_render_core::abi::IRenderDriverBound for CaptureRenderer {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+        Err(neocogi_com::NC_E_NOINTERFACE)
+    }
+}
 impl IRenderer for CaptureRenderer {
     /// Copies every declared record while the invocation is active, then retains the stream.
     fn render(&self, info: RenderInfo, stream: neocogi_com::ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {

@@ -23,7 +23,13 @@ fn compositor(host: ComRef<'_, IRenderHostAbi>) -> ComPtr<neocogi_gfx_support::a
 #[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
 fn independent_surface_snapshots_keep_orientation_and_device_lifetime() {
     let _session = native_session();
-    let native = PlatformObject::new(nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query().unwrap()).window("immutable generic outputs", SIZE).unwrap();
+    let native = PlatformObject::new(
+        nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
+            .query()
+            .unwrap(),
+    )
+    .window("immutable generic outputs", SIZE)
+    .unwrap();
     let weak = Rc::downgrade(&native.device);
     let window = WindowObject::from_value(native);
     let host = window.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap();
@@ -33,10 +39,20 @@ fn independent_surface_snapshots_keep_orientation_and_device_lifetime() {
     let extent = Size { width: 32, height: 32 };
     let surface = factory.create_surface(extent).unwrap();
     let preview: ComPtr<IRendererAbi> = surface.query().unwrap();
+    let driver = renderer.driver_identity().unwrap();
+    assert_eq!(identity(&driver).unwrap(), identity(&surface.driver_identity().unwrap()).unwrap());
+    assert_eq!(identity(&driver).unwrap(), identity(&preview.driver_identity().unwrap()).unwrap());
+    assert_eq!(identity(&driver).unwrap(), identity(&host.driver_identity().unwrap()).unwrap());
     let source = images
         .create_texture(
             Size { width: 2, height: 2 },
-            NcCopyFromBufferOffset::new(0, &[255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255]),
+            neocogi_render_core::source::initial_bytes(
+                (NcCopyFromBufferOffset::new(0, &[255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255]))
+                    .as_slice()
+                    .to_vec(),
+            )
+            .borrow()
+            .unwrap(),
         )
         .unwrap();
     let mut compositor = compositor(host.as_com_ref());

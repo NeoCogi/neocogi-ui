@@ -277,6 +277,11 @@ struct Renderer {
     probe: Rc<RenderProbe>,
 }
 
+impl neocogi_render_core::abi::IRenderDriverBound for Renderer {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+        Err(neocogi_com::NC_E_NOINTERFACE)
+    }
+}
 impl IRenderer for Renderer {
     /// Copies bulk geometry during its valid scope and retains authority for later rejection tests.
     fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {

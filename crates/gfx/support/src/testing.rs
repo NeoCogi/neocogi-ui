@@ -51,7 +51,16 @@ struct Host {
     /// Caller-owned failure injection has no reference to the runtime or widgets.
     failure: Rc<Cell<Option<NcStatus>>>,
 }
+impl IRenderDriverBound for Host {
+    fn driver_identity(&self) -> Result<ComPtr<IRenderDriverIdentityAbi>, NcStatus> {
+        Ok(self.device.driver_identity())
+    }
+}
 impl IRenderHost for Host {
+    /// CPU-only assembly has no native work or retirement queue.
+    fn maintain(&self) -> Result<(), NcStatus> {
+        Ok(())
+    }
     /// Import requires prior explicit fixture registration and never calls the image's getters.
     fn import_ui_texture(&self, resources: ComRef<'_, IRenderResourcesAbi>, image: ComRef<'_, ITextureAbi>) -> Result<ComBox<IGpuTextureAbi>, NcStatus> {
         let id = IMAGES
@@ -165,7 +174,7 @@ pub fn read(info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(V
             let binding = &draw.vertex_buffers[0];
             assert_eq!(binding.slot, 0);
             let first_byte = binding.offset as usize + first as usize * 20;
-            let bytes = &binding.buffer.bytes()[first_byte..first_byte + count as usize * 20];
+            let bytes = &binding.buffer.bytes().as_slice().ok_or(NC_E_INVALID_ARG)?[first_byte..first_byte + count as usize * 20];
             let decoded = bytes
                 .chunks_exact(20)
                 .map(|v| RenderVertex {

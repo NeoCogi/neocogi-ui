@@ -155,6 +155,11 @@ struct TestImage {
     /// Positive test dimensions used by the real owning facade image wrapper.
     size: neocogi_ui::abi::core::Size,
 }
+impl neocogi_ui::abi::core::IRenderDriverBound for TestImage {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_ui::abi::core::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+        Err(neocogi_com::NC_E_NOINTERFACE)
+    }
+}
 impl neocogi_ui::abi::core::ITexture for TestImage {
     /// A real COM projection obeys the production immutable-dimension contract.
     fn size(&self) -> Result<neocogi_ui::abi::core::Size, neocogi_com::NcStatus> {

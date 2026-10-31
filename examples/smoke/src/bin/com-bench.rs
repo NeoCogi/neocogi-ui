@@ -47,6 +47,11 @@ struct Recorder {
     /// Taking this storage rejects recursive calls and avoids a RefCell borrow across COM.
     buffers: RefCell<Option<Buffers>>,
 }
+impl neocogi_render_core::abi::IRenderDriverBound for Recorder {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+        Err(neocogi_com::NC_E_NOINTERFACE)
+    }
+}
 impl IRenderer for Recorder {
     /// Always restores capacity after an outward call, including failed stream reads.
     fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
