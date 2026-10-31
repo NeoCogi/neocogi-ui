@@ -247,3 +247,41 @@ fn combo_forwarding_rejects_active_removal_then_releases_menu_and_queue() {
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
     assert_eq!(calls.get(), 1);
 }
+
+/// Large accepted definitions exercise the real core-to-node layout without lowering document limits.
+#[test]
+fn large_combo_layout_keeps_admitted_document_ceiling() {
+    let mut document = neocogi_ui_document::Document::new("large admitted combo");
+    document.root = neocogi_ui_document::Node::new(
+        "combo",
+        neocogi_ui_document::WidgetSpec::Combo {
+            labels: vec!["a".to_owned(); 65_536],
+            selected: None,
+            placeholder: "".into(),
+        },
+    );
+    document.outputs.clear();
+    document.validate_binary().unwrap();
+    assert_eq!(document.to_binary().unwrap().len(), 327_803);
+    for count in [2_000, 4_000, 8_000, 65_536] {
+        let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+        let root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
+        let mut root_handle = root.handle();
+        let window = ui.window("large combo", RECT, root).unwrap();
+        let entries: Vec<_> = (0..count)
+            .map(|id| ChoiceMenuEntry::Choice {
+                id,
+                label: MenuTextRange { first: 0, count: 1 },
+            })
+            .collect();
+        let combo = ui.combo_menu_unobserved(window.as_com_ref(), "a", &entries, ChoiceSelection::None).unwrap();
+        let mut handle = combo.handle();
+        root_handle.insert(0, combo, LinearEdge::new(LayoutTrack::Content)).unwrap();
+        ui.update(SIZE).unwrap();
+        assert_eq!(handle.choice_count().unwrap(), count as usize);
+        handle.set_selection(ChoiceSelection::Selected(count - 1)).unwrap();
+        ui.update(SIZE).unwrap();
+        assert_eq!(handle.display_text().unwrap(), "a");
+        ui.close().unwrap();
+    }
+}

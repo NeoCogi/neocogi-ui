@@ -35,13 +35,112 @@ mod bindings {
 }
 pub(crate) use bindings::{ChoicePopupAction, ChoicePopupIntent, IChoiceMenuState, IChoiceMenuStateAbi, IChoiceMenuStateVtblFor};
 
+/// Canonical checked menu data; its private index is derived, never separately mutable.
+/// The index stores entry positions rather than labels, IDs or another topology. No public
+/// capability/lifetime is added: ordinary label getters continue returning owned strings.
+#[derive(PartialEq)]
+pub(crate) struct ChoiceDefinition {
+    /// Shared UTF-8 backing referenced by checked entry ranges.
+    text: String,
+    /// Sole authoritative preorder hierarchy, including submenu headers.
+    entries: Vec<ChoiceMenuEntry>,
+    /// Preorder ordinal -> entry position; all positions name Choice variants.
+    choices: Vec<u32>,
+}
+impl ChoiceDefinition {
+    /// Validates once and builds matching metadata before any live state can be replaced.
+    fn new(text: String, entries: Vec<ChoiceMenuEntry>) -> Result<Self, NcStatus> {
+        u32::try_from(text.len()).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)?;
+        u32::try_from(entries.len()).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)?;
+        validate_menu(&text, &entries, None)?;
+        let count = entries.iter().filter(|entry| matches!(entry, ChoiceMenuEntry::Choice { .. })).count();
+        #[cfg(test)]
+        if probes::build() {
+            return Err(neocogi_com::NC_E_OUT_OF_MEMORY);
+        }
+        let mut choices = Vec::new();
+        choices.try_reserve_exact(count).map_err(|_| neocogi_com::NC_E_OUT_OF_MEMORY)?;
+        for (position, entry) in entries.iter().enumerate() {
+            if matches!(entry, ChoiceMenuEntry::Choice { .. }) {
+                choices.push(u32::try_from(position).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)?);
+            }
+        }
+        Ok(Self { text, entries, choices })
+    }
+
+    /// Performs bounded metadata lookup before copying only this leaf's referenced label.
+    fn label(&self, ordinal: usize) -> Option<&str> {
+        let position = usize::try_from(*self.choices.get(ordinal)?).ok()?;
+        let entry = self.entries.get(position)?;
+        #[cfg(test)]
+        probes::entry();
+        match *entry {
+            ChoiceMenuEntry::Choice { label, .. } => ranged_text(&self.text, label),
+            ChoiceMenuEntry::Submenu { .. } => None,
+        }
+    }
+}
+
+/// Thread-local observations belong only to unit-test execution; no counters or fault state ship.
+#[cfg(test)]
+pub(crate) mod probes {
+    use std::cell::Cell;
+    /// Distinguishes candidate construction and actual reads from interface-call counts.
+    #[derive(Clone, Copy, Default, Debug, PartialEq)]
+    pub(crate) struct Counts {
+        /// Candidate-admission attempts reaching index reservation.
+        pub(crate) builds: usize,
+        /// Actual authoritative entries resolved by ordinal metadata.
+        pub(crate) entries: usize,
+        /// Actual range resolutions, including each prefix visited by the original nth path.
+        pub(crate) ranges: usize,
+    }
+    thread_local! {
+        /// Tests run independent state without affecting another test thread.
+        static COUNTS: Cell<Counts> = const { Cell::new(Counts { builds: 0, entries: 0, ranges: 0 }) };
+        /// One deterministic failure at the real new-index reservation boundary.
+        static FAIL_NEXT: Cell<bool> = const { Cell::new(false) };
+    }
+    /// Resets probes after admission/popup work or returns one operation's observed totals.
+    pub(crate) fn take() -> Counts {
+        COUNTS.with(|value| value.replace(Counts::default()))
+    }
+    /// Records index admission and consumes an optional test allocation refusal.
+    pub(super) fn build() -> bool {
+        COUNTS.with(|value| {
+            let mut counts = value.get();
+            counts.builds += 1;
+            value.set(counts);
+        });
+        FAIL_NEXT.with(|value| value.replace(false))
+    }
+    /// Records the actual indexed entry access, not the public getter call.
+    pub(super) fn entry() {
+        COUNTS.with(|value| {
+            let mut counts = value.get();
+            counts.entries += 1;
+            value.set(counts);
+        });
+    }
+    /// Records slicing at its common owner so the original scan's extra work is observable.
+    pub(super) fn range() {
+        COUNTS.with(|value| {
+            let mut counts = value.get();
+            counts.ranges += 1;
+            value.set(counts);
+        });
+    }
+    /// Refuses the next candidate before new index publication, without exhausting process memory.
+    pub(crate) fn fail_next() {
+        FAIL_NEXT.with(|value| value.set(true));
+    }
+}
+
 #[com_object(interfaces(IChoiceMenuState, IChoiceMenu))]
 /// Plain authoritative choice menu state mutated exclusively through `IChoiceMenuState`'s mutable receiver.
 pub(crate) struct ChoiceMenuState {
-    /// Shared UTF-8 storage referenced by every checked preorder entry.
-    menu_text: String,
-    /// Authoritative preorder hierarchy with explicit direct-child counts.
-    entries: Vec<ChoiceMenuEntry>,
+    /// Canonical text/preorder and its inseparable derived ordinal index.
+    definition: ChoiceDefinition,
     /// Committed stable leaf identity; `None` remains distinct from every `u64` value.
     selection: Option<u64>,
     /// Monotonic semantic revision used to invalidate transient popup candidates.
@@ -57,15 +156,13 @@ pub(crate) struct ChoiceMenuState {
 impl ChoiceMenuState {
     /// Validates selection before allocating the private COM state identity.
     pub(crate) fn create(
-        menu_text: String,
-        entries: Vec<ChoiceMenuEntry>,
+        definition: ChoiceDefinition,
         selection: Option<u64>,
         queue: Option<ComPtr<neocogi_ui::abi::core::IEventReceiverAbi>>,
     ) -> Result<ComPtr<IChoiceMenuStateAbi>, NcStatus> {
-        validate_menu(&menu_text, &entries, selection)?;
+        validate_selection(selection, &definition.text, &definition.entries)?;
         let local = Self::into_local(Self {
-            menu_text,
-            entries,
+            definition,
             selection,
             revision: 0,
             popup_anchor: Rect::default(),
@@ -89,7 +186,7 @@ impl ChoiceMenuState {
         if !intent.is_known() || anchor.width < 0 || anchor.height < 0 {
             return Err(NC_E_INVALID_ARG);
         }
-        if choice_count(&self.entries) == 0 && intent != ChoicePopupIntent::Close {
+        if self.definition.choices.is_empty() && intent != ChoicePopupIntent::Close {
             return Ok(());
         }
         self.popup = match (self.popup, intent) {
@@ -131,7 +228,7 @@ impl ChoiceMenuState {
 
     /// Requests popup closure after replacing the item list with no choices.
     fn close_if_empty(&mut self) {
-        if choice_count(&self.entries) != 0 {
+        if !self.definition.choices.is_empty() {
             return;
         }
         self.popup = match self.popup {
@@ -156,27 +253,27 @@ impl IChoiceMenuState for ChoiceMenuState {
 
     /// Copies the one authoritative UTF-8 backing store without exposing internal allocation.
     fn menu_text(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
-        Ok(NcString::from_utf8_str(&self.menu_text))
+        Ok(NcString::from_utf8_str(&self.definition.text))
     }
 
     /// Copies only the requested suffix while reporting complete preorder cardinality.
     fn menu_entries(&self, mut output: NcOutputWriter<'_, ChoiceMenuEntry>) -> Result<u32, NcStatus> {
         let offset = usize::try_from(output.offset()).map_err(|_| NC_E_INVALID_ARG)?;
-        let source = self.entries.get(offset..).ok_or(NC_E_INVALID_ARG)?;
+        let source = self.definition.entries.get(offset..).ok_or(NC_E_INVALID_ARG)?;
         let count = source.len().min(output.capacity());
         output.extend_from_slice(&source[..count])?;
-        u32::try_from(self.entries.len()).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)
+        u32::try_from(self.definition.entries.len()).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)
     }
 
-    /// Reports the authoritative label count without a second collection.
+    /// Reads cardinality from the same derived index used by ordinal resolution.
     fn choice_count(&self) -> Result<u64, NcStatus> {
-        Ok(choice_count(&self.entries) as u64)
+        Ok(self.definition.choices.len() as u64)
     }
 
     /// Copies one strictly checked label from the authoritative collection.
     fn choice_label(&self, ordinal: u64) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         let ordinal = usize::try_from(ordinal).map_err(|_| NC_E_INVALID_ARG)?;
-        let label = choice_at(&self.menu_text, &self.entries, ordinal).ok_or(NC_E_INVALID_ARG)?;
+        let label = self.definition.label(ordinal).ok_or(NC_E_INVALID_ARG)?;
         Ok(NcString::from_utf8_str(label))
     }
 
@@ -187,14 +284,15 @@ impl IChoiceMenuState for ChoiceMenuState {
         entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntry>,
         selection: ChoiceSelection,
     ) -> Result<bool, NcStatus> {
-        let (menu_text, entries) = copied_menu(menu_text, entries)?;
+        let definition = copied_menu(menu_text, entries)?;
         let selection = decoded_selection(selection);
-        validate_menu(&menu_text, &entries, selection)?;
-        if self.menu_text == menu_text && self.entries == entries && self.selection == selection {
+        validate_selection(selection, &definition.text, &definition.entries)?;
+        if self.definition == definition && self.selection == selection {
             return Ok(false);
         }
-        self.menu_text = menu_text;
-        self.entries = entries;
+        // The COM mutable gate spans this publication, including old-data destruction.
+        // No observation can see new entries paired with the previous ordinal index.
+        self.definition = definition;
         self.selection = selection;
         self.advance_revision();
         self.close_if_empty();
@@ -204,7 +302,7 @@ impl IChoiceMenuState for ChoiceMenuState {
     /// Replaces selection only after validating it against the current item sequence.
     fn set_selection(&mut self, selection: ChoiceSelection) -> Result<bool, NcStatus> {
         let selection = decoded_selection(selection);
-        validate_selection(selection, &self.menu_text, &self.entries)?;
+        validate_selection(selection, &self.definition.text, &self.definition.entries)?;
         if self.selection == selection {
             return Ok(false);
         }
@@ -230,7 +328,7 @@ impl IChoiceMenuState for ChoiceMenuState {
 
     /// Commits a checked item and closes the popup even when the value was already selected.
     fn submit(&mut self, id: u64) -> Result<u64, NcStatus> {
-        validate_selection(Some(id), &self.menu_text, &self.entries)?;
+        validate_selection(Some(id), &self.definition.text, &self.definition.entries)?;
         let changed = self.selection != Some(id);
         if changed {
             self.selection = Some(id);
@@ -274,13 +372,13 @@ impl IChoiceMenu for ChoiceMenuState {
     /// Copies the selected label, using empty text only for the explicit absent-selection case.
     fn selected_label(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
         let label = match self.selection {
-            Some(id) => choice_label(&self.menu_text, &self.entries, id).ok_or(NC_E_INVALID_ARG)?,
+            Some(id) => choice_label(&self.definition.text, &self.definition.entries, id).ok_or(NC_E_INVALID_ARG)?,
             None => "",
         };
         Ok(NcString::from_utf8_str(label))
     }
 
-    /// Reports selectable leaf cardinality without flattening the hierarchy.
+    /// Reports leaf cardinality without scanning or duplicating the authoritative hierarchy.
     fn choice_count(&self) -> Result<u64, NcStatus> {
         <Self as IChoiceMenuState>::choice_count(self)
     }
@@ -491,39 +589,23 @@ fn validate_selection(selection: Option<u64>, text: &str, entries: &[ChoiceMenuE
 pub(crate) fn copied_menu(
     menu_text: NcCopyFromBufferOffset<'_, u8>,
     entries: NcCopyFromBufferOffset<'_, ChoiceMenuEntry>,
-) -> Result<(String, Vec<ChoiceMenuEntry>), NcStatus> {
+) -> Result<ChoiceDefinition, NcStatus> {
     if menu_text.offset() != 0 || entries.offset() != 0 {
         return Err(NC_E_INVALID_ARG);
     }
     let text = std::str::from_utf8(menu_text.as_slice()).map_err(|_| NC_E_INVALID_ARG)?;
     u32::try_from(text.len()).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)?;
-    let entries = entries.as_slice().to_vec();
     u32::try_from(entries.len()).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)?;
-    validate_menu(text, &entries, None)?;
-    Ok((text.to_owned(), entries))
+    ChoiceDefinition::new(text.to_owned(), entries.as_slice().to_vec())
 }
 
 /// Returns one checked UTF-8 label slice from the shared model storage.
 fn ranged_text(text: &str, range: MenuTextRange) -> Option<&str> {
+    #[cfg(test)]
+    probes::range();
     let first = usize::try_from(range.first).ok()?;
     let count = usize::try_from(range.count).ok()?;
     text.get(first..first.checked_add(count)?)
-}
-
-/// Counts selectable leaves without creating a parallel flattened collection.
-fn choice_count(entries: &[ChoiceMenuEntry]) -> usize {
-    entries.iter().filter(|entry| matches!(entry, ChoiceMenuEntry::Choice { .. })).count()
-}
-
-/// Resolves one preorder leaf ordinal directly from the authoritative serialized entries.
-fn choice_at<'a>(text: &'a str, entries: &[ChoiceMenuEntry], ordinal: usize) -> Option<&'a str> {
-    entries
-        .iter()
-        .filter_map(|entry| match *entry {
-            ChoiceMenuEntry::Choice { label, .. } => ranged_text(text, label),
-            ChoiceMenuEntry::Submenu { .. } => None,
-        })
-        .nth(ordinal)
 }
 
 /// Resolves a stable leaf identity independently from its label and hierarchy position.
@@ -622,14 +704,107 @@ mod tests {
         .map(|(id, label)| ChoiceMenuEntry::Choice { id, label })
         .to_vec();
         ChoiceMenuState {
-            menu_text,
-            entries,
+            definition: ChoiceDefinition::new(menu_text, entries).unwrap(),
             selection,
             revision: 0,
             popup_anchor: Rect::default(),
             popup: ChoicePopupLifecycle::Closed,
             changed_event: Default::default(),
         }
+    }
+
+    /// Generated COM getters resolve one entry/range per ordinal, including the admitted ceiling.
+    #[test]
+    fn indexed_labels_have_linear_resolution_through_com() {
+        let _host = crate::test_support::host_runtime();
+        for count in [512, 2_000, 4_000, 8_000, 65_536] {
+            let entries = (0..count)
+                .map(|i| ChoiceMenuEntry::Choice {
+                    id: 100_000 + i as u64,
+                    label: MenuTextRange { first: 0, count: 1 },
+                })
+                .collect();
+            probes::take();
+            let definition = ChoiceDefinition::new("a".into(), entries).unwrap();
+            let mut state = ChoiceMenuState::create(definition, None, None).unwrap();
+            let menu = state.query::<IChoiceMenuAbi>().unwrap();
+            assert_eq!(probes::take().builds, 1);
+            assert_eq!(menu.choice_count().unwrap(), count as u64);
+            for ordinal in 0..count {
+                assert_eq!(menu.choice_label(ordinal as u64).unwrap().to_string().unwrap(), "a");
+            }
+            assert_eq!(probes::take(), probes::Counts { builds: 0, entries: count, ranges: count });
+            assert!(matches!(menu.choice_label(count as u64), Err(NC_E_INVALID_ARG)));
+            assert!(menu.choice_label(u64::MAX).is_err());
+            state.set_selection(ChoiceSelection::Selected(100_000)).unwrap();
+            assert_eq!(probes::take().builds, 0);
+        }
+    }
+
+    /// Nested metadata keeps preorder ordinal distinct from stable identity and UTF-8 byte ranges.
+    #[test]
+    fn nested_index_and_retained_strings_survive_replacement() {
+        let _host = crate::test_support::host_runtime();
+        let range = MenuTextRange { first: 1, count: 2 };
+        let definition = ChoiceDefinition::new(
+            "xéunused".into(),
+            vec![
+                ChoiceMenuEntry::Choice { id: 80, label: range },
+                ChoiceMenuEntry::Submenu { label: range, children: 2 },
+                ChoiceMenuEntry::Choice { id: 7, label: range },
+                ChoiceMenuEntry::Submenu { label: range, children: 1 },
+                ChoiceMenuEntry::Choice { id: 999, label: range },
+            ],
+        )
+        .unwrap();
+        assert_eq!(definition.choices, [0, 2, 4]);
+        let mut state = ChoiceMenuState::create(definition, Some(999), None).unwrap();
+        let menu = state.query::<IChoiceMenuAbi>().unwrap();
+        let retained = menu.choice_label(2).unwrap();
+        for ordinal in 0..3 {
+            assert_eq!(menu.choice_label(ordinal).unwrap().to_string().unwrap(), "é");
+        }
+        state
+            .replace_menu(NcCopyFromBufferOffset::new(0, b""), NcCopyFromBufferOffset::new(0, &[]), ChoiceSelection::None)
+            .unwrap();
+        assert_eq!(menu.choice_count(), Ok(0));
+        drop(menu);
+        drop(state);
+        assert_eq!(retained.to_string().unwrap(), "é");
+    }
+
+    /// Refusal at the new allocation boundary cannot publish mismatched data/index or popup state.
+    #[test]
+    fn index_allocation_failure_preserves_complete_live_state() {
+        let mut state = state(Some(2));
+        state.apply_popup_intent(ChoicePopupIntent::Open, Rect::default()).unwrap();
+        let old = (state.revision, state.popup, state.selection);
+        let entries = [ChoiceMenuEntry::Choice {
+            id: 42,
+            label: MenuTextRange { first: 0, count: 1 },
+        }];
+        probes::fail_next();
+        assert_eq!(
+            state.replace_menu(
+                NcCopyFromBufferOffset::new(0, b"z"),
+                NcCopyFromBufferOffset::new(0, &entries),
+                ChoiceSelection::Selected(42)
+            ),
+            Err(neocogi_com::NC_E_OUT_OF_MEMORY)
+        );
+        assert_eq!((state.revision, state.popup, state.selection), old);
+        assert_eq!(state.definition.text, "AppleBananaCherry");
+        assert_eq!(state.definition.choices, [0, 1, 2]);
+        state
+            .replace_menu(
+                NcCopyFromBufferOffset::new(0, b"z"),
+                NcCopyFromBufferOffset::new(0, &entries),
+                ChoiceSelection::Selected(42),
+            )
+            .unwrap();
+        assert_eq!(state.definition.choices, [0]);
+        assert_eq!(state.definition.label(0), Some("z"));
+        assert_eq!(state.revision, old.0 + 1);
     }
 
     /// `None` and item zero remain structurally distinct in the authoritative plain state.
@@ -670,7 +845,7 @@ mod tests {
             encode_selection(Some(2)),
         );
         assert_eq!(result, Err(NC_E_INVALID_ARG));
-        assert_eq!(state.menu_text, "AppleBananaCherry");
+        assert_eq!(state.definition.text, "AppleBananaCherry");
         assert_eq!(state.selection, Some(2));
     }
 

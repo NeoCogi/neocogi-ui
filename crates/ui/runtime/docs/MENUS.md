@@ -140,3 +140,18 @@ continue to mark the owner while menu scope suspends its application widget cue.
 Keyboard navigation is intrinsic to menu surfaces, but mnemonics and shortcut dispatch remain
 outside the menu component. Shortcut hints are presentation only, and applications still own
 check/radio state transitions and accelerator policy.
+
+## Choice ordinal lookup
+
+Choice-menu state owns one checked definition containing UTF-8 text, preorder entries and
+an index of selectable entry positions. Creation and replacement validate and build the
+complete candidate before publication. A failed candidate, including failure to reserve
+its index, preserves the old definition, selection, revision and popup intent. A selection
+edit retains the definition. Stable choice IDs remain independent of preorder ordinals.
+
+Count and ordinal metadata lookup take constant time; copying a label takes time proportional
+to that label. Enumerating all labels therefore performs linear metadata work, including nested
+menus. The retained index adds one `u32` per choice (256 KiB of initialized positions for
+65,536 choices, plus allocation overhead). Existing getters return independent owned strings;
+separate calls do not promise an immutable multi-call snapshot for arbitrary foreign providers.
+Combo headers still measure the widest leaf and placeholder under the current fonts/assets.

@@ -18,9 +18,9 @@ pub(crate) fn create_choice_menu(
 
     // Copy every foreign input before any manager mutation, leaving validation failure atomic.
     let parent = storage.parent(parent)?;
-    let (menu_text, entries) = copied_menu(menu_text, entries)?;
+    let definition = copied_menu(menu_text, entries)?;
     let selection = decoded_selection(selection);
-    let state = ChoiceMenuState::create(menu_text, entries, selection, queue)?;
+    let state = ChoiceMenuState::create(definition, selection, queue)?;
     let menu = choice_menu(&state)?;
     let revision = state.revision()?;
 
