@@ -109,6 +109,72 @@ fn session(fixture: &mut Fixture) -> std::sync::mpsc::Receiver<Option<PathBuf>> 
     fixture.messages.take().expect("one consumer per constructed picker")
 }
 
+/// Both observations cross real generated interfaces while traversal owns the runtime context.
+type TraversalAttempt = (Result<bool, NcStatus>, Result<Visibility, NcStatus>);
+
+/// An ordinary modal-owned popup leaf can request cancellation during its update.
+struct CancelDuringTraversal {
+    /// Weak public editing capability, independent of the popup's exclusive leaf owner.
+    picker: neocogi_ui::FileDialog,
+    /// Only the outer test observes the result, after traversal has returned its context.
+    report: std::sync::mpsc::Sender<TraversalAttempt>,
+    /// A single attempt makes the subsequent outside-traversal retry unambiguous.
+    attempted: bool,
+}
+impl neocogi_ui::LeafContent for CancelDuringTraversal {
+    fn measure(&self, _: LayoutLimits, _: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
+        Ok(Size { width: 32, height: 24 })
+    }
+    fn paint(&mut self, _: WidgetPaint, _: &mut neocogi_ui::Painter<'_>) -> Result<(), NcStatus> {
+        Ok(())
+    }
+    fn update(&mut self, _: WidgetUpdate, _: WidgetEvent, _: &str) -> Result<GeometryChange, NcStatus> {
+        if !self.attempted {
+            self.attempted = true;
+            let visibility = self.picker.window()?.snapshot().map(|snapshot| snapshot.visibility);
+            self.report.send((self.picker.cancel(), visibility)).unwrap();
+        }
+        Ok(GeometryChange::NoChange)
+    }
+}
+
+/// Actual context checkout must reject completion before Idle or event creation.
+#[test]
+fn cancellation_during_modal_popup_traversal_preserves_request_until_retry() {
+    let mut fixture = Fixture::new();
+    let directory = tempfile::tempdir().unwrap();
+    let messages = session(&mut fixture);
+    fixture.open(directory.path());
+    let modal = fixture.handle.window().unwrap();
+    let (report, result) = std::sync::mpsc::channel();
+    let leaf = fixture
+        .ui
+        .widgets()
+        .leaf(
+            CancelDuringTraversal {
+                picker: fixture.handle.clone(),
+                report,
+                attempted: false,
+            },
+            WidgetOptions::NONE,
+        )
+        .unwrap();
+    let mut popup = fixture.ui.popup(modal.as_com_ref(), "cancel during update", leaf).unwrap();
+    popup.show_at(Rect { x: 30, y: 30, width: 32, height: 24 }).unwrap();
+    fixture.ui.update(SIZE).unwrap();
+    assert_eq!(result.try_recv().unwrap(), (Err(UI_E_BUSY), Err(UI_E_BUSY)));
+    assert_eq!(fixture.handle.active(), Ok(true));
+    assert_eq!(modal.snapshot().unwrap().visibility, Visibility::Visible);
+    assert!(messages.try_recv().is_err());
+    assert_eq!(fixture.handle.cancel(), Ok(true));
+    assert_eq!(fixture.handle.active(), Ok(false));
+    assert_eq!(modal.snapshot().unwrap().visibility, Visibility::Hidden);
+    assert_eq!(messages.try_recv(), Ok(None));
+    assert_eq!(fixture.handle.cancel(), Ok(false));
+    assert!(messages.try_recv().is_err());
+    fixture.handle.close().unwrap();
+}
+
 /// Accepts the real completion ABI without allocating an application message.
 #[com_object(interfaces(neocogi_ui::events::IEventReceiver))]
 struct DiscardingCompletion;
@@ -736,6 +802,8 @@ impl neocogi_ui::events::IEventReceiver for RefusingCompletion {
 /// One retryable window operation rejected before its real mutation.
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum WindowOperation {
+    /// Refuse observation without refusing the actual visibility operation.
+    Snapshot,
     /// Refuse the first hide, before the request may commit Idle.
     Hide,
     /// Refuse the first removal, after cancellation has committed.
@@ -749,6 +817,8 @@ struct RefusingWindow {
     window: ComPtr<IWindowAbi>,
     /// Selects the failure boundary without creating a second window implementation.
     operation: WindowOperation,
+    /// Distinct injected statuses make cleanup error precedence observable.
+    status: NcStatus,
     /// Shared IWindow methods require synchronized counting across COM projections.
     attempts: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
@@ -761,7 +831,11 @@ impl RefusingWindow {
 impl IWindow for RefusingWindow {
     /// Preserves observation of the real modal after refused removal.
     fn snapshot(&self) -> Result<WindowSnapshot, NcStatus> {
-        self.window.snapshot()
+        if self.refuse(WindowOperation::Snapshot) {
+            Err(self.status)
+        } else {
+            self.window.snapshot()
+        }
     }
     /// Preserves title observation.
     fn title(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
@@ -774,7 +848,7 @@ impl IWindow for RefusingWindow {
     /// A rejected hide leaves the real modal visible and the request Active.
     fn set_visibility(&self, visibility: Visibility) -> Result<(), NcStatus> {
         if visibility == Visibility::Hidden && self.refuse(WindowOperation::Hide) {
-            Err(UI_E_BUSY)
+            Err(self.status)
         } else {
             self.window.set_visibility(visibility)
         }
@@ -802,7 +876,7 @@ impl IWindow for RefusingWindow {
     /// The first refusal preserves ownership; the next call removes it normally.
     fn close(&self) -> Result<(), NcStatus> {
         if self.refuse(WindowOperation::Remove) {
-            Err(UI_E_BUSY)
+            Err(self.status)
         } else {
             self.window.close()
         }
@@ -811,11 +885,17 @@ impl IWindow for RefusingWindow {
 
 /// Installs a temporary failure boundary without replacing the actual modal tree.
 fn refuse_first(fixture: &Fixture, operation: WindowOperation) -> std::sync::Arc<std::sync::atomic::AtomicUsize> {
+    refuse_first_with_status(fixture, operation, UI_E_BUSY)
+}
+
+/// Allows nested proxies to refuse hide and removal with distinguishable failures.
+fn refuse_first_with_status(fixture: &Fixture, operation: WindowOperation, status: NcStatus) -> std::sync::Arc<std::sync::atomic::AtomicUsize> {
     let attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let window = fixture.handle.window().unwrap();
     let proxy = RefusingWindow::from_value(RefusingWindow {
         window,
         operation,
+        status,
         attempts: attempts.clone(),
     })
     .query()
@@ -855,6 +935,54 @@ fn failed_hide_preserves_the_active_request_until_completion_can_commit() {
         assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 2);
         fixture.handle.close().unwrap();
     }
+}
+
+/// Observation failure is irrelevant when the real hide operation succeeds.
+#[test]
+fn completion_does_not_query_a_snapshot_before_hiding() {
+    for accept in [false, true] {
+        let mut fixture = Fixture::new();
+        let directory = tempfile::tempdir().unwrap();
+        let messages = session(&mut fixture);
+        fixture.open(directory.path());
+        let modal = fixture.handle.window().unwrap();
+        let path = directory.path().join("exact selection");
+        fixture.widget.with_mut(|dialog| dialog.model.selected = Some(path.clone())).unwrap();
+        let attempts = refuse_first(&fixture, WindowOperation::Snapshot);
+        if accept {
+            fixture.widget.with_mut(|dialog| dialog.model.accept()).unwrap().unwrap();
+        } else {
+            assert_eq!(fixture.handle.cancel(), Ok(true));
+        }
+        assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert_eq!(fixture.handle.active(), Ok(false));
+        assert_eq!(modal.snapshot().unwrap().visibility, Visibility::Hidden);
+        assert_eq!(messages.try_recv().unwrap(), accept.then_some(path));
+        assert!(messages.try_recv().is_err());
+        fixture.handle.close().unwrap();
+    }
+}
+
+/// A close that cannot hide or remove has not committed cancellation; removal's error wins.
+#[test]
+fn close_preserves_active_when_hide_and_removal_both_refuse() {
+    let mut fixture = Fixture::new();
+    let directory = tempfile::tempdir().unwrap();
+    let messages = session(&mut fixture);
+    fixture.open(directory.path());
+    let modal = fixture.handle.window().unwrap();
+    let hide = refuse_first(&fixture, WindowOperation::Hide);
+    let remove = refuse_first_with_status(&fixture, WindowOperation::Remove, NC_E_INVALID_ARG);
+    assert_eq!(fixture.handle.close(), Err(NC_E_INVALID_ARG));
+    assert_eq!(fixture.handle.active(), Ok(true));
+    assert_eq!(modal.snapshot().unwrap().visibility, Visibility::Visible);
+    assert!(messages.try_recv().is_err());
+    assert_eq!(hide.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(remove.load(std::sync::atomic::Ordering::SeqCst), 1);
+    fixture.handle.close().unwrap();
+    assert!(!fixture.handle.as_interface().is_alive());
+    assert_eq!(messages.try_recv(), Ok(None));
+    assert!(messages.try_recv().is_err());
 }
 
 /// Delivery refusal is post-commit: it leaves an idle reusable modal, and an Idle

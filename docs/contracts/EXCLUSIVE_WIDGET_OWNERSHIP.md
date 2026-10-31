@@ -186,10 +186,11 @@ and releases the outbound queue; it does not manufacture a cancellation event
 from an expired origin. Facts already posted to an application queue remain there.
 
 Explicit picker close attempts cancellation and window removal independently. A
-completion queue error cannot strand the modal. If removal refuses before
-committing, the request is idle and close may retry removal without reposting its
-outcome. Removal errors take precedence over delivery errors; when removal
-succeeds, a delivery error is still returned. There is no `Closed` request state
+completion queue error cannot strand the modal. After cancellation commits, a
+refused removal leaves the request idle; close may retry removal without reposting
+its outcome. If hiding fails before cancellation commits and removal also refuses,
+the request remains active. Removal errors take precedence over cancellation errors;
+when removal succeeds, a cancellation error is still returned. There is no `Closed` request state
 or optional private receiver: expired COM ownership is the destruction boundary.
 
 Combo's auxiliary popup has a separate menu-service lifetime. The popup

@@ -131,9 +131,9 @@ impl Model {
         match self.request.phase {
             RequestPhase::Idle => Ok(false),
             RequestPhase::Active => {
-                if self.window().is_ok_and(|window| window.snapshot().is_ok()) {
-                    self.window()?.set_visibility(Visibility::Hidden)?;
-                }
+                // The operation itself is the precondition. A failed observation cannot
+                // authorize completing a request whose modal could still be visible.
+                self.window()?.set_visibility(Visibility::Hidden)?;
                 self.request.phase = RequestPhase::Idle;
                 Ok(true)
             }

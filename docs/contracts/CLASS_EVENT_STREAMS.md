@@ -91,7 +91,12 @@ exists. Posting through a shared port temporarily pins the source; the queued
 message still contains only its weak identity.
 
 FileDialog follows the same concrete-owner rule for acceptance and cancellation.
-An active request hides its modal, commits Idle, then constructs one completion
+An active request hides its modal and commits Idle. Only the successful hide
+operation authorizes that commit; a failed snapshot observation cannot replace it.
+A refused hide keeps the request Active
+and constructs no outcome. Window notification errors may follow a committed
+visibility change, so this does not promise visibility rollback on every error.
+After a successful hide and Idle commit, it constructs one completion
 snapshot and posts or drops that owner. An already Idle request has no new
 completion occurrence. Failure while hiding leaves the request Active; a
 construction or delivery failure after the Idle commit never reactivates it.
