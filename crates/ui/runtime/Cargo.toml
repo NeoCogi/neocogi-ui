@@ -30,7 +30,7 @@ rs-math3d.workspace = true
 
 [dev-dependencies]
 neocogi-shader-compiler.workspace = true
-neocogi-render-gpu.workspace = true
+neocogi-render-gpu = {workspace=true,features=["test-support"]}
 neocogi-ui-document.workspace = true
 neocogi-ui-nodes.workspace = true
 neocogi-ui-support = { workspace = true, features = ["test-support"] }

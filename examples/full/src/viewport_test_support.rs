@@ -84,7 +84,7 @@ pub(crate) fn recorder() -> (ComPtr<IPainterAbi>, Rc<RefCell<Output>>) {
 }
 
 /// Grants the same logical device whose restricted resources the widget owns.
-pub(crate) fn gpu_recorder(device: &GpuDevice) -> (ComPtr<IPainterAbi>, Rc<RefCell<Output>>) {
+pub(crate) fn gpu_recorder<B: neocogi_render_gpu::native::NativeResources>(device: &GpuDevice<B>) -> (ComPtr<IPainterAbi>, Rc<RefCell<Output>>) {
     let output = Rc::new(RefCell::new(Output::default()));
     let frame = device.broker().begin_frame().unwrap();
     let recorder = Recorder::from_value(Recorder {

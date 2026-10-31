@@ -229,10 +229,10 @@ fn rectangle(rect: Rect, color: u32) -> Vec<RenderVertex> {
     vec![q[0], q[1], q[2], q[0], q[2], q[3]]
 }
 
-/// Real immutable-image import samples native pixels while native retention strips all COM leases.
+/// Real immutable-image import samples captured native pixels without retaining a public COM image.
 #[test]
 #[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
-fn private_ui_image_import_renders_without_a_native_cache_com_cycle() {
+fn private_ui_image_import_retains_native_pixels_without_a_com_image_cycle() {
     let _session = native_session();
     let platform = PlatformObject::new(
         nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
@@ -343,10 +343,10 @@ fn private_ui_image_import_renders_without_a_native_cache_com_cycle() {
     drop(source);
     assert!(
         !device.upgrade().unwrap().textures.borrow().contains_key(&image_key),
-        "native caches must not keep imported COM leases alive"
+        "native captures must not keep public COM images alive"
     );
     drop((resources, ui, client, clients, images, graphics, renderer, window));
-    assert!(device.upgrade().is_none(), "an idle native cache must not retain its own device facade");
+    assert!(device.upgrade().is_none(), "native images must not retain their driver facade");
 }
 
 /// Asymmetry proves normalized position orientation; color clear and later UI prove confinement/order.
@@ -438,7 +438,7 @@ fn generic_pipeline_renders_in_its_root_and_preserves_surrounding_ui() {
     assert_eq!(pixel(50, 50), [0, 255, 0, 255]);
     drop(access);
     drop((owner, resources, domain, broker, clients, renderer, unknown));
-    assert!(device.upgrade().is_none(), "native caches must not retain their host through a domain");
+    assert!(device.upgrade().is_none(), "native allocations must not retain their host through a domain");
 }
 
 /// Indexed encoded streams, packed attributes, uniforms, texture rows and update versions reach GL.

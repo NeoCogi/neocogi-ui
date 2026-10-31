@@ -27,9 +27,9 @@ pub(crate) struct Sample {
 /// Captures authentic blocks after real UI paint without substituting a fake GPU host.
 struct Capture {
     /// Same logical device as the production window authenticates all stream observers.
-    logical: neocogi_render_gpu::GpuDevice,
+    logical: neocogi_render_gpu::GpuDevice<gpu::Backend>,
     /// Only a synchronous COM receiver needs interior mutability; no outward borrow is retained.
-    blocks: Rc<RefCell<Vec<Rc<neocogi_render_gpu::record::Block>>>>,
+    blocks: Rc<RefCell<Vec<Rc<neocogi_render_gpu::record::Block<gpu::Backend>>>>>,
 }
 impl neocogi_render_core::abi::IRenderDriverBound for Capture {
     fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
@@ -130,15 +130,15 @@ fn measure_ui_and_mixed_client_costs() {
             for command in block.commands() {
                 if let neocogi_render_gpu::command::Command::Draw(draw) = command {
                     draws += 1;
-                    pipelines.insert(draw.pipeline.id());
+                    pipelines.insert(Rc::as_ptr(&draw.pipeline) as usize);
                     for vertex in &draw.vertex_buffers {
-                        buffers.insert(vertex.buffer.id());
+                        buffers.insert(Rc::as_ptr(&vertex.buffer) as usize);
                     }
                     if let Some(index) = &draw.index {
-                        buffers.insert(index.buffer.id());
+                        buffers.insert(Rc::as_ptr(&index.buffer) as usize);
                     }
                     for image in &draw.textures {
-                        textures.insert(image.texture.id());
+                        textures.insert(Rc::as_ptr(&image.texture) as usize);
                     }
                 }
             }

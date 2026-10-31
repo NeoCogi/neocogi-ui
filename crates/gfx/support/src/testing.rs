@@ -6,16 +6,19 @@
 //! this is not a native image authenticator and must never accept untrusted application images.
 use crate::abi::RenderVertex;
 use neocogi_com::{com_object, ComBox, ComPtr, ComRef, NcStatus, NC_E_INVALID_ARG};
-use neocogi_render_core::{abi::*, TextureId};
+use neocogi_render_core::{abi::*};
 use neocogi_render_gpu::{
     command::{Command, DrawRange},
-    GpuDevice,
+    testing::{Backend, Core, Image},
 };
 use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
 };
 use std::rc::Rc;
+
+/// Concrete virtual family is selected explicitly by headless tests.
+type GpuDevice = neocogi_render_gpu::GpuDevice<Backend>;
 
 /// Decoded UI observations used only by headless integration assertions.
 #[derive(Clone, Debug)]
@@ -38,9 +41,11 @@ pub enum UiBatch {
 
 thread_local! {
     /// Thread affinity matches COM objects and the production graphics recorder.
-    static DEVICE: GpuDevice = GpuDevice::new(nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query().unwrap());
+    static CORE: Rc<Core> = Core::new();
+    /// Physical virtual core is shared only on this fixture thread.
+    static DEVICE: GpuDevice = GpuDevice::new(CORE.with(Clone::clone),nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query().unwrap());
     /// Keys are explicitly replaced at each fixture-image construction; no COM owner is retained.
-    static IMAGES: RefCell<HashMap<usize, TextureId>> = RefCell::new(HashMap::new());
+    static IMAGES: RefCell<HashMap<usize, Rc<Image>>> = RefCell::new(HashMap::new());
 }
 
 #[com_object(interfaces(IRenderHost))]
@@ -64,9 +69,9 @@ impl IRenderHost for Host {
     /// Import requires prior explicit fixture registration and never calls the image's getters.
     fn import_ui_texture(&self, resources: ComRef<'_, IRenderResourcesAbi>, image: ComRef<'_, ITextureAbi>) -> Result<ComBox<IGpuTextureAbi>, NcStatus> {
         let id = IMAGES
-            .with(|images| images.borrow().get(&(image.as_raw().object as usize)).copied())
+            .with(|images| images.borrow().get(&(image.as_raw().object as usize)).cloned())
             .ok_or(NC_E_INVALID_ARG)?;
-        self.device.import_ui_texture(resources, id, image.try_add_ref()?)
+        self.device.import_ui_texture(resources, id)
     }
     /// Run real logical provenance checks; this assembly owns no native texture upload.
     fn prepare_ui_texture(&self, resources: ComRef<'_, IRenderResourcesAbi>, texture: ComRef<'_, IGpuTextureAbi>) -> Result<(), NcStatus> {
@@ -78,7 +83,7 @@ impl IRenderHost for Host {
     }
     /// UI provenance is granted only through the trusted fixture assembly.
     fn create_ui_client(&self, limits: RenderClientLimits) -> Result<ComBox<IRenderClientDomainAbi>, NcStatus> {
-        self.device.create_ui_client(limits, None)
+        self.device.create_ui_client(limits)
     }
     /// Every consumer gets a separate frame coordinator on the same logical device.
     fn recording_broker(&self) -> Result<ComPtr<IRenderViewBrokerAbi>, NcStatus> {
@@ -102,17 +107,18 @@ pub fn host_with_preparation_failure(failure: Rc<Cell<Option<NcStatus>>>) -> Com
 
 /// Registers dimensions known by the fixture owner, preserving hostile getter/reentrancy tests.
 pub fn register_image(image: ComRef<'_, ITextureAbi>, size: Size) {
-    let id = TextureId::for_render_target(size.width, size.height).expect("positive fixture image size");
-    IMAGES.with(|images| images.borrow_mut().insert(image.as_raw().object as usize, id));
+    let key = image.as_raw().object as usize;
+    let native = CORE.with(|core| Image::ordinary(core.clone(), size, key));
+    IMAGES.with(|images| images.borrow_mut().insert(key, native));
 }
 
-/// Assertion-only reverse lookup of a registered fixture image; this does not retain its owner.
-pub fn image_identity(id: TextureId) -> Option<usize> {
-    IMAGES.with(|images| images.borrow().iter().find_map(|(key, value)| (*value == id).then_some(*key)))
+/// Assertion observation belongs to the captured virtual image, not a recycled COM pointer lookup.
+pub fn image_identity(image: &Image) -> Option<usize> {
+    image.origin()
 }
 
 /// Authenticates a real sealed contribution on this thread's fixture assembly.
-pub fn snapshot(block: ComRef<'_, IRenderViewBlockAbi>) -> Result<Rc<neocogi_render_gpu::record::Block>, NcStatus> {
+pub fn snapshot(block: ComRef<'_, IRenderViewBlockAbi>) -> Result<Rc<neocogi_render_gpu::record::Block<Backend>>, NcStatus> {
     DEVICE.with(|device| device.block_snapshot(block))
 }
 
@@ -120,7 +126,7 @@ pub fn snapshot(block: ComRef<'_, IRenderViewBlockAbi>) -> Result<Rc<neocogi_ren
 pub fn texture(
     resources: ComRef<'_, IRenderResourcesAbi>,
     texture: ComRef<'_, IGpuTextureAbi>,
-) -> Result<Rc<neocogi_render_gpu::resource::TextureVersion>, NcStatus> {
+) -> Result<Rc<neocogi_render_gpu::resource::TextureVersion<Backend>>, NcStatus> {
     DEVICE.with(|device| device.ui_texture_snapshot(resources, texture))
 }
 
@@ -143,7 +149,7 @@ pub fn client_block(root: RenderViewRoot) -> (ComBox<IRenderClientDomainAbi>, Co
 }
 
 /// Authenticates actual generic blocks for CPU benchmarks and assertions, without decoding UI bytes.
-pub fn blocks(info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<Vec<Rc<neocogi_render_gpu::record::Block>>, NcStatus> {
+pub fn blocks(info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<Vec<Rc<neocogi_render_gpu::record::Block<Backend>>>, NcStatus> {
     (0..info.block_count)
         .map(|index| {
             let observer = stream.view(info.invocation, index)?;
@@ -186,7 +192,7 @@ pub fn read(info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(V
                 })
                 .collect::<Vec<_>>();
             let first = vertices.len() as u32;
-            if draw.textures[0].texture.imported_id().is_some() {
+            if draw.textures[0].texture.imported_image().is_some() {
                 assert_eq!(decoded.len(), 6);
                 vertices.extend([decoded[0], decoded[1], decoded[2], decoded[5]]);
                 batches.push(UiBatch::Texture { first });

@@ -37,5 +37,6 @@ rs-math3d.workspace = true
 wasm-bindgen.workspace = true
 
 [dev-dependencies]
+neocogi-render-gpu = {workspace=true,features=["test-support"]}
 neocogi-shader-compiler.workspace = true
 neocogi-ui = { workspace = true, features = ["test-support"] }

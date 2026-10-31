@@ -21,8 +21,8 @@ neocogi-native-layout.workspace = true
 neocogi-com = { workspace = true, features = ["runtime"] }
 ui-library = { package = "neocogi-ui-runtime-dylib", path = "../../crates/ui/runtime/dylib", artifact = "cdylib" }
 nodes-library = { package = "neocogi-ui-nodes-dylib", path = "../../crates/ui/nodes/dylib", artifact = "cdylib" }
-shader-library = { package = "neocogi-shader-compiler-dylib", git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "e55e06ad5d0fa25130c51507b4da5ecf1f722cc0", artifact = "cdylib" }
-render-library = { package = "neocogi-render-plugin-dylib", git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "e55e06ad5d0fa25130c51507b4da5ecf1f722cc0", artifact = "cdylib", default-features = false }
+shader-library = { package = "neocogi-shader-compiler-dylib", git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "be7373625f3600febacceb1beee67745bd6b47ef", artifact = "cdylib" }
+render-library = { package = "neocogi-render-plugin-dylib", git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "be7373625f3600febacceb1beee67745bd6b47ef", artifact = "cdylib", default-features = false }
 gfx-library = { package = "neocogi-gfx-dylib", path = "../../crates/gfx/plugin/dylib", artifact = "cdylib", default-features = false, features = ["builder"] }
 skin-library = { package = "neocogi-skin-dylib", path = "../../crates/skin/plugin/dylib", artifact = "cdylib", default-features = false, features = ["theme-json"], optional = true }
 extension-library = { package = "neocogi-example-ui-extension-dylib", path = "../../examples/ui-extension/dylib", artifact = "cdylib", optional = true }

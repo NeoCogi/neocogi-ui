@@ -315,7 +315,7 @@ fn camera_bytes(projection: &Mat4f, view: &Mat4f) -> Vec<u8> {
 #[cfg(test)]
 mod viewport_tests {
     use super::*;
-    use neocogi_render_gpu::{GpuDevice, command::Command};
+    use neocogi_render_gpu::command::Command;
 
     /// Distinct named values pin the layout read by all three declared shader attributes.
     #[test]
@@ -330,7 +330,7 @@ mod viewport_tests {
     /// Final paint uses a real scoped view and captures the late visible aspect as generic uniforms.
     #[test]
     fn paint_captures_the_final_visible_aspect_and_skips_empty_clients() {
-        let device = GpuDevice::new(
+        let device = neocogi_render_gpu::testing::device(
             nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
                 .query()
                 .unwrap(),

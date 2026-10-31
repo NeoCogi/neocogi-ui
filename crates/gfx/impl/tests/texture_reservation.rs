@@ -53,7 +53,11 @@ fn texture() -> (ComPtr<ITextureAbi>, Rc<Cell<u32>>) {
 /// CPU import retains concrete texture owners; this fixture does not model device authentication.
 struct OwnedTextures;
 impl Resources for OwnedTextures {
-    fn view(&self, view: neocogi_com::WeakComBox<IRenderViewBlockAbi>) -> Result<Rc<neocogi_render_gpu::record::Block>, NcStatus> {
+    type Backend = neocogi_render_gpu::testing::Backend;
+    fn view(
+        &self,
+        view: neocogi_com::WeakComBox<IRenderViewBlockAbi>,
+    ) -> Result<Rc<neocogi_render_gpu::record::Block<neocogi_render_gpu::testing::Backend>>, NcStatus> {
         neocogi_gfx_support::testing::snapshot(view.as_com_ref())
     }
 }
@@ -101,7 +105,7 @@ impl IRenderer for Renderer {
                     };
                     draw.textures[0]
                         .texture
-                        .imported_id()
+                        .imported_image()
                         .map(|id| neocogi_gfx_support::testing::image_identity(id).unwrap())
                 })
             })

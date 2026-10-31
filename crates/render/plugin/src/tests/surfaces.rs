@@ -99,8 +99,119 @@ fn independent_surface_snapshots_keep_orientation_and_device_lifetime() {
     assert_eq!(pixel(24, 24), [255, 255, 0, 255]);
     assert_eq!(pixel(40, 4), [255, 0, 255, 255]);
     assert_eq!(pixel(40, 40), [51, 51, 51, 255]);
+    let physical = Rc::downgrade(&weak.upgrade().unwrap().access().unwrap().state().gpu.core());
     drop((compositor, source, renderer, images, host, window));
-    assert!(weak.upgrade().is_some(), "retained images own their native device");
+    assert!(weak.upgrade().is_none(), "completed images cannot retain their driver facade");
+    assert!(physical.upgrade().is_some(), "completed images retain only actual native lifetime");
     drop((old, new));
-    assert!(weak.upgrade().is_none(), "native caches must not retain their own facade");
+    assert!(physical.upgrade().is_none(), "final image release tears down the physical owner");
+}
+
+#[com_object(interfaces(IRenderHost))]
+/// Native fixture captures its actual UI factory and gives it a bounded logical byte quota.
+struct QuotaHost {
+    /// All native preparation/maintenance uses the production host, not a test renderer.
+    native: ComPtr<IRenderHostAbi>,
+    /// The real private factory is inspected only by this acceptance test.
+    factory: Rc<RefCell<Option<ComPtr<IRenderResourcesAbi>>>>,
+}
+impl IRenderDriverBound for QuotaHost {
+    fn driver_identity(&self) -> Result<ComPtr<IRenderDriverIdentityAbi>, NcStatus> {
+        self.native.driver_identity()
+    }
+}
+impl IRenderHost for QuotaHost {
+    fn maintain(&self) -> Result<(), NcStatus> {
+        self.native.maintain()
+    }
+    fn import_ui_texture(&self, resources: ComRef<'_, IRenderResourcesAbi>, image: ComRef<'_, ITextureAbi>) -> Result<ComBox<IGpuTextureAbi>, NcStatus> {
+        self.native.import_ui_texture(resources, image)
+    }
+    fn prepare_ui_texture(&self, resources: ComRef<'_, IRenderResourcesAbi>, texture: ComRef<'_, IGpuTextureAbi>) -> Result<(), NcStatus> {
+        self.native.prepare_ui_texture(resources, texture)
+    }
+    fn recording_broker(&self) -> Result<ComPtr<IRenderViewBrokerAbi>, NcStatus> {
+        self.native.recording_broker()
+    }
+    fn create_ui_client(&self, mut limits: RenderClientLimits) -> Result<ComBox<IRenderClientDomainAbi>, NcStatus> {
+        limits.live_bytes = 8 * 1024 * 1024;
+        let domain = self.native.create_ui_client(limits)?;
+        *self.factory.borrow_mut() = Some(domain.resources()?);
+        Ok(domain)
+    }
+}
+
+/// A queued native deletion must free quota before GFX attempts its next geometry allocation.
+#[test]
+#[ignore = "requires native GL; run with SDL_VIDEODRIVER=offscreen"]
+fn gfx_maintenance_precedes_geometry_admission_at_exact_quota_pressure() {
+    use glow::HasContext;
+    let _session = native_session();
+    let native = PlatformObject::new(
+        nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
+            .query()
+            .unwrap(),
+    )
+    .window("GFX pre-admission retirement", SIZE)
+    .unwrap();
+    let device = native.device.clone();
+    let window = WindowObject::from_value(native);
+    let renderer: ComPtr<IRendererAbi> = window.query().unwrap();
+    let captured = Rc::new(RefCell::new(None));
+    let host: ComPtr<IRenderHostAbi> = QuotaHost::from_value(QuotaHost {
+        native: window.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap(),
+        factory: captured.clone(),
+    })
+    .query()
+    .unwrap();
+    let mut compositor = compositor(host.as_com_ref());
+    let resources = captured.borrow().as_ref().unwrap().clone();
+    let texture = resources
+        .create_texture(
+            GpuTextureDesc {
+                size: Size { width: 1, height: 1 },
+                format: GpuTextureFormat::Rgba8Unorm,
+                mip_count: 1,
+            },
+            neocogi_render_core::source::initial(None).borrow().unwrap(),
+        )
+        .unwrap();
+    host.prepare_ui_texture(resources.as_com_ref(), texture.as_com_ref()).unwrap();
+    let core = device.access().unwrap().state().gpu.core();
+    core.current().unwrap();
+    // SAFETY: This actual selected GL context owns all submitted initialization below.
+    unsafe {
+        core.dispatch().finish();
+    }
+    host.maintain().unwrap();
+    drop(texture);
+    let before = device.logical.live_bytes(resources.as_com_ref()).unwrap();
+    // The next six UI vertices require exactly 120 bytes. Leave only 116 while the native
+    // texture's 4-byte retirement packet is queued; no CPU zero payload is allocated for padding.
+    let padding = resources
+        .create_buffer(
+            GpuBufferDesc {
+                role: GpuBufferRole::Vertex,
+                byte_len: 8 * 1024 * 1024 - before - 116,
+            },
+            neocogi_render_core::source::initial(None).borrow().unwrap(),
+        )
+        .unwrap();
+    assert_eq!(8 * 1024 * 1024 - device.logical.live_bytes(resources.as_com_ref()).unwrap(), 116);
+    let vertex = |x, y| RenderVertex { x, y, u: 0., v: 0., rgba: 0xffffffff };
+    let vertices = [
+        vertex(0., 0.),
+        vertex(64., 0.),
+        vertex(64., 64.),
+        vertex(64., 64.),
+        vertex(0., 64.),
+        vertex(0., 0.),
+    ];
+    compositor.begin(SIZE, 0xff000000).unwrap();
+    compositor
+        .atlas_triangles(Rect { x: 0, y: 0, width: 64, height: 64 }, NcCopyFromBufferOffset::new(0, &vertices))
+        .unwrap();
+    // Moving maintenance after geometry would reject this call before renderer.render is reached.
+    compositor.submit(renderer.as_com_ref()).unwrap();
+    drop(padding);
 }

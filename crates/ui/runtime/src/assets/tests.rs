@@ -257,7 +257,7 @@ struct Probe {
     /// Initial host binding is prepared before the test arms reentry/failure injection.
     armed: Cell<bool>,
     /// The observer must see the exact atlas version accepted by native preparation.
-    prepared: Cell<u64>,
+    prepared: Cell<usize>,
 }
 #[com_object(interfaces(neocogi_render_core::abi::IRenderHost))]
 /// Native preparation probes run through the private graphics host, without owning their runtime.
@@ -314,7 +314,7 @@ impl neocogi_render_core::abi::IRenderHost for UploadHost {
                 return Err(UI_E_RENDER);
             }
         }
-        self.probe.prepared.set(version.id());
+        self.probe.prepared.set(Rc::as_ptr(&version) as usize);
         Ok(())
     }
 }
@@ -334,7 +334,7 @@ impl IRenderer for UploadRenderer {
         for block in blocks {
             for command in block.commands() {
                 if let neocogi_render_gpu::command::Command::Draw(draw) = command {
-                    assert_eq!(draw.textures[0].texture.id(), self.0.prepared.get());
+                    assert_eq!(Rc::as_ptr(&draw.textures[0].texture) as usize, self.0.prepared.get());
                     draws += 1;
                 }
             }

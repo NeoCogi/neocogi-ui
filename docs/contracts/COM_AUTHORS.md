@@ -936,14 +936,19 @@ The UI's frame API reports backend failures as `UI_E_RENDER`; query
 `IRenderDiagnostics::diagnostic` on the renderer for the underlying preparation or
 native-driver detail. Returned diagnostic strings are immutable snapshots.
 
-An image keeps its native allocation, window and context alive after the public
-window interface is released. Prepared and submitted draws retain their immutable native images until their
-actual completion requirements are satisfied. Final COM release immediately removes registry authentication before
-that address can be reused; final native-image release deletes while idle, or queues
-deletion until the active ownership transaction exits. Deletion selects the owning
-GL context, and destructors never submit or present. Idle frame storage retains no
-resource references, so it cannot form a device/resource cycle. Plugins remain loaded
-for the process lifetime; hot unloading is unsupported.
+An image keeps its native allocation and physical device/context alive after the
+public window is released, without retaining the driver facade or input routes.
+Prepared and submitted draws retain actual native images until their completion
+requirements are satisfied. Final COM release removes registry authentication
+before the address can be reused. Final native backing release sends an owned
+retirement packet; frame/pre-admission/explicit maintenance and shutdown drain it
+after actual completion owners release. Idle release waits for maintenance. If
+the receiver is already gone, the failed send returns that same owned packet for
+safe cleanup with its physical lifetime guard. GL cleanup selects the owning
+context. Destruction adds no draw or presentation; driver maintenance may flush
+and fence already-issued immediate work. Packets and physical cores retain no
+driver/domain/source-version/sender back-edge. Plugins remain loaded for the
+process lifetime; hot unloading is unsupported.
 
 The trusted host creates a client domain through `IRenderClientFactory::create_client`.
 It keeps the exclusive controller and delegates only `domain.resources()` to widgets.

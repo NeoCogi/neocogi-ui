@@ -129,7 +129,7 @@ pub(crate) use menu::{Menu, MenuBar, MenuItem, MenuItemAccessError, MenuItemHand
 pub use image::{ImageError, ImageSource, ImageStorageError, MAX_DECODED_RGBA_BYTES, load_image_bytes};
 pub use input::{Key, KeyEvent, KeyState, Modifiers, MouseButton};
 pub use math::{expand_rect, rect, vec2};
-pub use render::{NinePatch, NinePatchCell, NinePatchCells, NinePatchContent, NinePatchImage, SliceInsets, TextureError, TextureId};
+pub use render::{NinePatch, NinePatchCell, NinePatchCells, NinePatchContent, NinePatchImage, SliceInsets, TextureError};
 pub use theme::{
     AssetChrome, AssetMetrics, CaptionSide, ChromeRole, ChromeState, Color, ControlRole, ControlState, FlatPalette, FontRef, FontRole, FrameRole, IconRef,
     IconRole, MenuRole, MenuState, PointerState, ResourceCatalog, Skin, SkinBundle, SurfaceRole, SurfaceState, TitleAlignment, Visual, color,
