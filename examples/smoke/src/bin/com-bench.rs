@@ -29,8 +29,9 @@ pub extern "C" fn neocogi_bench_end() {
 /// Reusable receiver storage represents an ordinary renderer's bounded bulk-copy cost.
 #[derive(Default)]
 struct Buffers {
-    /// Authenticated immutable blocks retain the same captured resources as native preparation.
-    blocks: Vec<std::rc::Rc<neocogi_render_gpu::record::Block>>,
+    /// Authenticated immutable captures use the explicit CPU probe family selected by this
+    /// benchmark's headless render host, matching gfx-support::testing::blocks.
+    blocks: Vec<std::rc::Rc<neocogi_render_gpu::record::Block<neocogi_render_gpu::testing::Backend>>>,
 }
 impl Buffers {
     /// Reads real generic capabilities; no obsolete UI vertex transport is measured.
@@ -47,8 +48,8 @@ struct Recorder {
     /// Taking this storage rejects recursive calls and avoids a RefCell borrow across COM.
     buffers: RefCell<Option<Buffers>>,
 }
-impl neocogi_render_core::abi::IRenderDriverBound for Recorder {
-    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+impl IRenderDriverBound for Recorder {
+    fn driver_identity(&self) -> Result<ComPtr<IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
         Err(neocogi_com::NC_E_NOINTERFACE)
     }
 }
