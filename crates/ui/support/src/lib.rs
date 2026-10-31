@@ -19,6 +19,7 @@ pub mod interaction;
 pub mod layout;
 pub mod math;
 pub mod render;
+pub mod scroll;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 pub mod text_layout;

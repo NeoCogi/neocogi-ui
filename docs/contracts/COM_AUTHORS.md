@@ -672,6 +672,11 @@ clamps it against freshly measured content. This lets `scroll_to_end` accompany 
 content replacement without losing the new end to the old range. `ScrollInfo`
 therefore distinguishes current requests from the last installed ranges and
 viewport. Programmatic setters are silent: they do not fabricate user events.
+Scrollbar thumb, inverse drag and centered-track mapping share the support
+implementation across providers. Its content range uses wide integers independently
+of finite screen tracks; products widen before division. Existing public node
+scrollbar ranges retain their i32 domain and widen exactly at that helper boundary.
+
 The standalone scrollbar offset setter clamps immediately to its installed range.
 Disabling a scroll composite clears its requests and ranges and changes the
 structural children's participation on the next placement.
