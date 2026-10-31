@@ -33,6 +33,12 @@ two simultaneous backend frames.
 
 ## Backend sources
 
+Vulkan window presentation requires the surface to advertise opaque composition.
+Construction and swapchain rebuild reject unsupported surfaces before native
+swapchain creation, with an opaque-composition diagnostic. Other composition
+modes are not transparent-window fallbacks; they need their own pixel-alpha
+contract. A failed destructive rebuild leaves presentation unavailable.
+
 Renderer sources live together under `crates/render`. The `plugin` package is the
 deployment shell and owns the platform/device integration. The other packages are
 ordinary Rust implementation libraries linked into the selected plugin artifact; they
