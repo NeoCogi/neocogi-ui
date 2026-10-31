@@ -71,12 +71,16 @@ impl Options {
 
 /// Initializes the Cargo composition and runs interactively or exercises its smoke gate.
 #[neocogi_com::com_main]
-fn main(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
+fn main(runtime: neocogi_com::Runtime) -> std::process::ExitCode {
+    neocogi_demo_host::report_exit(run(runtime))
+}
+
+/// Keeps ordinary startup errors intact until the shared Display reporting boundary.
+fn run(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
     let options = Options::read()?;
     neocogi_demo_host::initialize(runtime)?;
     let platform = runtime.acquire_plugin_root::<PlatformAbi>(neocogi_com::guid_from_qualified_name(renderer_plugin_name()))?;
     let assets = neocogi_demo_assets::load_bundle(runtime)?;
-    let atlas = assets.image()?;
     let native = platform.create_window(NcCopyFromBufferOffset::new(0, b"NeoCogi UI"), Size { width: 640, height: 400 })?;
     let renderer: ComPtr<IRendererAbi> = native.query()?;
     let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;

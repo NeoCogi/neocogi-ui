@@ -56,3 +56,13 @@ fn first_bind_error_preserves_phase_status_and_owned_detail() {
         assert!(error.to_string().contains("UI renderer setup failed"));
     }
 }
+
+/// Every entry-point error representation reaches the same Display-based exit conversion.
+#[test]
+fn report_exit_accepts_host_status_and_boxed_errors() {
+    assert_eq!(report_exit(Ok::<_, HostError>(())), std::process::ExitCode::SUCCESS);
+    assert_eq!(report_exit(Err(HostError::Message("host diagnostic".into()))), std::process::ExitCode::FAILURE);
+    assert_eq!(report_exit(Err(neocogi_com::NC_E_INVALID_ARG)), std::process::ExitCode::FAILURE);
+    let boxed: Box<dyn std::error::Error> = Box::new(neocogi_com::NC_E_INVALID_ARG);
+    assert_eq!(report_exit(Err(boxed)), std::process::ExitCode::FAILURE);
+}

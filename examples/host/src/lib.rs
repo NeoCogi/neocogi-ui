@@ -81,7 +81,7 @@ impl std::error::Error for HostError {
 /// so size optimization cannot discard the operational diagnostic.
 /// Browser binaries have no OS stderr: their startup errors go to the JavaScript console. The page
 /// separately verifies that successful initialization published a canvas before hiding its status.
-pub fn report_exit(result: Result<(), HostError>) -> std::process::ExitCode {
+pub fn report_exit<E: fmt::Display>(result: Result<(), E>) -> std::process::ExitCode {
     match result {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(error) => {

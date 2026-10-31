@@ -226,6 +226,12 @@ Both release and min-size retain fat LTO, one codegen unit and symbol stripping.
 The min-size profile also selects immediate abort, removes Rust panic locations
 and debug formatting, and disables forced unwind tables for deployed target code.
 Build scripts and procedural macros retain normal host panic/diagnostic settings.
+All demo and benchmark entry points convert startup results through the shared
+`neocogi_demo_host::report_exit` helper. It formats any `Display` error (including
+boxed errors and COM status codes) and returns an explicit success/failure exit
+code. Native failures go to stderr and browser failures to the JavaScript console;
+ordinary `Result` termination would use stripped `Debug` and lose these diagnostics.
+
 Cargo's abort-test harness preserves the target panic strategy while isolating
 panic expectations in child processes, including min-size profile tests.
 

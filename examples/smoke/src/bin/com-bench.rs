@@ -230,7 +230,12 @@ fn memory() -> Result<(), Box<dyn Error>> {
 
 /// Loads one trusted UI plugin and emits machine-readable timing samples for one selected shape.
 #[neocogi_com::com_main]
-fn main(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
+fn main(runtime: neocogi_com::Runtime) -> std::process::ExitCode {
+    neocogi_demo_host::report_exit(run(runtime))
+}
+
+/// Reports benchmark failures with the same size-independent formatting as the demos.
+fn run(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
     let mut arguments = std::env::args_os().skip(1);
     let library = arguments.next().ok_or("usage: neocogi-com-bench <UI-library> <single|deep|wide> [--counts]")?;
     let shape = arguments.next().ok_or("missing shape")?.into_string().map_err(|_| "invalid shape")?;
