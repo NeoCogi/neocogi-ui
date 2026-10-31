@@ -201,10 +201,40 @@ impl Camera {
         let rot_matrix = Quatf::mat4(&self.rotation);
         let cam_pos = self.target + transform_vec3(&rot_matrix, &pos) * self.distance;
         let cam_up = transform_vec3(&rot_matrix, &up);
-        //let cam_dir     = Vec3f::normalize(&(self.target - cam_pos));
+        self.pos = cam_pos;
+        self.up = cam_up;
+        self.direction = Vec3f::normalize(&(self.target - cam_pos));
 
         self.view = lookat(&cam_pos, &self.target, &cam_up);
         self.projection = perspective(self.fov, self.aspect, self.near_plane, self.far_plane);
+    }
+
+    /// Checks actual f32 view/projection/PVM and inverse, rather than only finite inputs.
+    /// This demo refuses numeric envelopes that collapse its eye/basis or matrix inversion.
+    pub(super) fn is_usable(&self) -> bool {
+        fn finite(matrix: &Mat4f) -> bool {
+            matrix.col.iter().all(|c| [c.x, c.y, c.z, c.w].into_iter().all(f32::is_finite))
+        }
+        let pvm = self.projection * self.view;
+        let displacement = self.target - self.pos;
+        let basis = [self.view.col[0], self.view.col[1], self.view.col[2]];
+        self.distance.is_finite()
+            && self.distance > 0.
+            && self.near_plane > 0.
+            && self.near_plane < self.far_plane
+            && self.far_plane.is_finite()
+            && displacement.length().is_finite()
+            && displacement.length() > 0.
+            && basis.iter().all(|v| {
+                let length = v.x * v.x + v.y * v.y + v.z * v.z;
+                length.is_finite() && length > 0.5 && length < 1.5
+            })
+            && finite(&self.view)
+            && finite(&self.projection)
+            && finite(&pvm)
+            && pvm.determinant().is_finite()
+            && pvm.determinant() != 0.
+            && finite(&pvm.inverse())
     }
 
     pub fn position(&self) -> Vec3f {

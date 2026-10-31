@@ -33,8 +33,11 @@
 use rs_math3d::*;
 use super::camera::*;
 
+/// Whether a usable navigation candidate was committed.
 pub enum UpdateResult {
+    /// The resulting camera/PVM is usable, including unchanged no-op movement.
     Handled,
+    /// Invalid numeric input/candidate preserves the previous usable state.
     Unhandled,
 }
 
@@ -44,29 +47,68 @@ pub enum NavigationMode {
     Orbit,
 }
 
+/// View-local interaction with one authoritative camera and checked distance interval.
 pub struct View3D {
+    /// Owns current distance, clip planes and derived view/projection matrices.
     camera: Camera,
+    /// Chooses the existing orbit/pan calculation.
     nav_mode: NavigationMode,
+    /// Positive dimensions corresponding to the last committed projection.
     dimension: Dimensioni,
     /// Visible client origin in widget-local coordinates; captured drags may lie outside it.
     origin: Vec2i,
-    scroll: f32,
-    bounds: Box3f,
+    /// Caller-selected finite distance interval; Camera owns the sole current distance.
+    zoom: (f32, f32),
+    /// Derived from the admitted camera in the same commit as that camera.
     pvm: Mat4f,
 }
 
 impl View3D {
-    pub fn new(camera: Camera, dimension: Dimensioni, bounds: Box3f) -> Self {
-        let scroll = camera.distance();
-        Self {
+    /// Admits a finite camera and one useful zoom interval before navigation begins.
+    pub fn new(camera: Camera, dimension: Dimensioni, zoom: (f32, f32)) -> Result<Self, String> {
+        if dimension.width <= 0
+            || dimension.height <= 0
+            || !zoom.0.is_finite()
+            || !zoom.1.is_finite()
+            || zoom.0 <= 0.
+            || zoom.1 < zoom.0
+            || !(zoom.0..=zoom.1).contains(&camera.distance())
+        {
+            return Err("invalid viewport or finite zoom interval".into());
+        }
+        let camera = camera.with_aspect(dimension.width as f32 / dimension.height as f32);
+        for distance in [zoom.0, camera.distance(), zoom.1] {
+            let candidate = Camera::new(
+                camera.target(),
+                distance,
+                camera.rotation(),
+                camera.fov(),
+                dimension.width as f32 / dimension.height as f32,
+                camera.near_plane(),
+                camera.far_plane(),
+            );
+            if !candidate.is_usable() {
+                return Err("camera scale/translation is unsupported by f32 projection".into());
+            }
+        }
+        Ok(Self {
             camera,
             nav_mode: NavigationMode::Orbit,
             dimension,
             origin: Vec2i::default(),
-            scroll,
-            bounds,
+            zoom,
             pvm: *camera.projection_matrix() * *camera.view_matrix(),
+        })
+    }
+
+    /// Publishes a candidate and its derived PVM together, preserving the last valid state on failure.
+    fn commit_camera(&mut self, candidate: Camera) -> UpdateResult {
+        if !candidate.is_usable() {
+            return UpdateResult::Unhandled;
         }
+        self.pvm = *candidate.projection_matrix() * *candidate.view_matrix();
+        self.camera = candidate;
+        UpdateResult::Handled
     }
 
     /// Translates captured signed coordinates before float conversion, preserving small movements
@@ -89,62 +131,33 @@ impl View3D {
         norm_pos
     }
 
-    fn refresh_projection(&mut self) {
-        // TODO: do proper computation of the far plane
-        let far_plane = self.bounds.extent().length() * 100.0;
-        self.camera = self.camera.with_far_plane(far_plane);
-        self.pvm = *self.camera.projection_matrix() * *self.camera.view_matrix();
-    }
-
+    /// Orbit/pan changes retain the caller's clip policy and publish only usable matrices.
     pub fn update_drag(&mut self, prev: Vec2i, curr: Vec2i) -> UpdateResult {
-        self.refresh_projection();
-
-        let handled = match self.nav_mode {
-            NavigationMode::Orbit => {
-                let p = self.normalize_pointer_pos(&prev);
-                let c = self.normalize_pointer_pos(&curr);
-
-                self.camera = self.camera.trackball_rotate(self.dimension, &p, &c);
-                UpdateResult::Handled
-            }
-
-            NavigationMode::Pan => {
-                let p = self.viewport_position(&prev);
-                let c = self.viewport_position(&curr);
-                self.camera = self.camera.pan(self.dimension, &p, &c);
-                UpdateResult::Handled
-            }
+        let candidate = match self.nav_mode {
+            NavigationMode::Orbit => self
+                .camera
+                .trackball_rotate(self.dimension, &self.normalize_pointer_pos(&prev), &self.normalize_pointer_pos(&curr)),
+            NavigationMode::Pan => self.camera.pan(self.dimension, &self.viewport_position(&prev), &self.viewport_position(&curr)),
         };
-
-        self.pvm = *self.camera.projection_matrix() * *self.camera.view_matrix();
-        handled
+        self.commit_camera(candidate)
     }
 
+    /// Every wheel/key zoom derives from Camera's distance and the same checked finite interval.
     pub fn apply_scroll(&mut self, delta: f32) -> UpdateResult {
-        self.apply_scroll_with_limits(delta, 0.5, f32::MAX)
-    }
-
-    /// Moves the orbit camera along its view radius while enforcing caller-selected limits.
-    pub fn apply_scroll_with_limits(&mut self, delta: f32, minimum: f32, maximum: f32) -> UpdateResult {
-        // Components know the useful scale of their own scene. Keeping the clamp here ensures the
-        // authoritative `scroll` radius and reconstructed Camera can never diverge when a wheel
-        // delta crosses either limit.
-        let minimum = minimum.max(0.5);
-        let maximum = maximum.max(minimum);
-        self.scroll = (self.scroll + delta).clamp(minimum, maximum);
-        let distance = self.scroll;
-        let aspect = (self.dimension.width as f32) / (self.dimension.height as f32);
-        self.camera = Camera::new(
+        if !delta.is_finite() {
+            return UpdateResult::Unhandled;
+        }
+        let distance = (f64::from(self.camera.distance()) + f64::from(delta)).clamp(f64::from(self.zoom.0), f64::from(self.zoom.1)) as f32;
+        let candidate = Camera::new(
             self.camera.target(),
             distance,
             self.camera.rotation(),
             self.camera.fov(),
-            aspect,
+            self.dimension.width as f32 / self.dimension.height as f32,
             self.camera.near_plane(),
             self.camera.far_plane(),
         );
-        self.pvm = *self.camera.projection_matrix() * *self.camera.view_matrix();
-        UpdateResult::Handled
+        self.commit_camera(candidate)
     }
 
     /// Updates the positive viewport size and projection; origin belongs to `set_viewport`.
@@ -152,17 +165,19 @@ impl View3D {
         if (self.dimension.width, self.dimension.height) == (dimension.width, dimension.height) {
             return;
         }
-        self.dimension = dimension;
-        let aspect = (self.dimension.width as f32) / (self.dimension.height as f32);
-        self.camera = self.camera.with_aspect(aspect);
-        self.refresh_projection();
+        let aspect = dimension.width as f32 / dimension.height as f32;
+        if matches!(self.commit_camera(self.camera.with_aspect(aspect)), UpdateResult::Handled) {
+            self.dimension = dimension;
+        }
     }
 
     /// Fits projection and input normalization to a nonempty visible widget-local client rectangle.
     /// Callers skip empty clips. Paint also calls this after final layout, so a layout-only change
     /// cannot leave the camera using dimensions from an earlier input traversal.
     pub fn set_viewport(&mut self, viewport: Recti) {
-        debug_assert!(viewport.width > 0 && viewport.height > 0);
+        if viewport.width <= 0 || viewport.height <= 0 {
+            return;
+        }
         self.origin = Vec2i::new(viewport.x, viewport.y);
         self.set_dimension(Dimensioni::new(viewport.width, viewport.height));
     }
@@ -173,7 +188,6 @@ impl View3D {
     pub fn set_navigation_mode(&mut self, nav_mode: NavigationMode) {
         if nav_mode != self.nav_mode {
             self.nav_mode = nav_mode;
-            self.refresh_projection();
         }
     }
 
@@ -193,6 +207,32 @@ impl View3D {
 #[cfg(test)]
 mod viewport_tests {
     use super::*;
+
+    /// Resizing, orbiting and all zoom inputs preserve clips and refuse corrupt numeric candidates.
+    #[test]
+    fn navigation_retains_clip_policy_and_last_valid_camera() {
+        let mut view = crate::grid::create_grid_view_3d();
+        let clips = (view.camera.near_plane(), view.camera.far_plane());
+        for distance_delta in [f32::MAX, -f32::MAX, 0.5, -0.5] {
+            view.apply_scroll(distance_delta);
+            assert!(view.camera.is_usable());
+            assert!((32. ..=120.).contains(&view.camera.distance()));
+            assert_eq!((view.camera.near_plane(), view.camera.far_plane()), clips);
+        }
+        let previous = view.pvm();
+        assert!(matches!(view.apply_scroll(f32::NAN), UpdateResult::Unhandled));
+        assert!(matches!(view.apply_scroll(f32::INFINITY), UpdateResult::Unhandled));
+        same_matrix(previous, view.pvm());
+        for dimension in [(80, 40), (1, 100_000), (100_000, 1)] {
+            view.set_viewport(Recti::new(3, 7, dimension.0, dimension.1));
+            for mode in [NavigationMode::Pan, NavigationMode::Orbit] {
+                view.set_navigation_mode(mode);
+                view.update_drag(Vec2i::new(8, 10), Vec2i::new(10, 12));
+                assert!(view.camera.is_usable());
+                assert_eq!((view.camera.near_plane(), view.camera.far_plane()), clips);
+            }
+        }
+    }
 
     /// Compares numerical output rather than camera bookkeeping or cached field values.
     fn same_matrix(left: Mat4f, right: Mat4f) {

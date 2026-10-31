@@ -121,8 +121,7 @@ impl LeafContent for GridWidget {
             }
             WidgetEvent::Scroll { delta, .. } => {
                 let wheel = if delta.y != 0 { delta.y } else { delta.x };
-                grid.view
-                    .apply_scroll_with_limits(wheel as f32 * GRID_WHEEL_DISTANCE_SCALE, GRID_MIN_CAMERA_DISTANCE, GRID_MAX_CAMERA_DISTANCE);
+                grid.view.apply_scroll(wheel as f32 * GRID_WHEEL_DISTANCE_SCALE);
             }
             _ => {}
         }
@@ -159,7 +158,6 @@ pub(super) fn create_grid_view_3d() -> View3D {
     let axis = Vec3f::cross(&basis, &camera_direction);
     let rotation = Quatf::normalize(&Quatf::new(axis.x, axis.y, axis.z, 1.0 + Vec3f::dot(&basis, &camera_direction)));
     let extent = GRID_HALF_EXTENT as f32;
-    let bounds = Box3f::new(&Vec3f::new(-extent, -extent, -0.1), &Vec3f::new(extent, extent, 0.1));
     let camera = Camera::new(
         Vec3f::new(0.0, 0.0, 0.0),
         camera_offset.length(),
@@ -169,7 +167,7 @@ pub(super) fn create_grid_view_3d() -> View3D {
         0.1,
         GRID_MAX_CAMERA_DISTANCE + extent * 2.0,
     );
-    View3D::new(camera, Dimensioni::new(1, 1), bounds)
+    View3D::new(camera, Dimensioni::new(1, 1), (GRID_MIN_CAMERA_DISTANCE, GRID_MAX_CAMERA_DISTANCE)).expect("constant grid camera is valid")
 }
 
 /// Projection state reused while the fullscreen widget converts world-space grid lines.
@@ -469,7 +467,7 @@ mod grid_tests {
         let before = build_xy_grid_vertices(area, false, view.pvm());
 
         let _ = view.update_drag(Vec2i::new(400, 300), Vec2i::new(460, 330));
-        let _ = view.apply_scroll_with_limits(-3.0, GRID_MIN_CAMERA_DISTANCE, GRID_MAX_CAMERA_DISTANCE);
+        let _ = view.apply_scroll(-3.0);
         let after = build_xy_grid_vertices(area, false, view.pvm());
 
         assert!(!before.is_empty());

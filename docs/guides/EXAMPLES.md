@@ -69,6 +69,22 @@ painter; Suzanne owns its buffers, shaders, pipeline and camera uniform encoding
 It receives a restricted resource factory and records generic indexed draws in a
 runtime-bounded view. The renderer has no semantic mesh or scene service.
 
+Suzanne's OBJ decoder accepts finite three-component positions/normals, two-component
+UVs, and faces with at least three positive absolute one-based indices. Positive
+forward references resolve against the final arrays; zero, negative and out-of-range
+indices fail with line context. Comments and other OBJ records are ignored. Missing
+UVs become zero per corner, missing normals use the emitted triangle's flat normal,
+and supplied normals are normalized. Zero-area triangles, unusable geometry and
+invalid UTF-8 fail before mesh GPU creation. Polygon faces retain fan triangulation;
+concave polygons and material loading are outside this decoder's supported subset.
+
+Only finalized vertex values, triangle indices and referenced-position bounds leave
+the decoder. Camera setup uses those bounds to choose clip planes and a finite zoom
+interval once. Resize, orbit, pan and wheel/W/S zoom preserve the planes and publish
+only usable matrices. Scales or translations unsupported by the demo's f32 camera
+produce a setup error instead of silently rescaling geometry. Grid navigation uses
+the same view owner with its own distance interval of 32–120 and far plane of 160.
+
 ## Keyboard and text
 
 SDL and browser adapters forward copied logical keys, modifiers and repeat state

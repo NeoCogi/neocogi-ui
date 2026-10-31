@@ -51,7 +51,7 @@
 // IN THE SOFTWARE.
 //
 //! Suzanne owns its vertex layout, shaders and camera; the renderer executes only generic commands.
-use super::{camera::Camera, graphics::*, obj_loader::Obj, polymesh::PolyMesh, view3d::View3D};
+use super::{camera::Camera, graphics::*, obj_loader::MeshData, view3d::View3D};
 use neocogi_com::ComBox;
 use neocogi_render_gpu::{
     source::{Bytes, PipelineDesc},
@@ -176,25 +176,20 @@ pub(super) struct Suzanne {
 }
 impl Suzanne {
     /// The trusted application grants a factory; the widget never receives the common renderer.
-    pub(super) fn new(resources: ComRef<'_, IRenderResourcesAbi>) -> Result<Self, NcStatus> {
-        let mesh = Obj::from_byte_stream(&neocogi_demo_assets::suzanne_obj().map_err(|_| neocogi_com::NC_E_LOAD_FAILED)?)
-            .map_err(|_| neocogi_com::NC_E_INVALID_ARG)?
-            .to_polymesh();
-        let bounds = mesh.calculate_bounding_box();
-        let view = View3D::new(
-            Camera::new(
-                bounds.center(),
-                bounds.max.length() * 3.,
-                Quatf::identity(),
-                PI / 4.,
-                1.,
-                0.1,
-                bounds.max.length() * 10.,
-            ),
-            Dimensioni::new(1, 1),
-            bounds,
-        );
-        let (vertices, indices) = mesh_buffers(&mesh);
+    pub(super) fn new(resources: ComRef<'_, IRenderResourcesAbi>) -> Result<Self, neocogi_demo_host::HostError> {
+        let bytes = neocogi_demo_assets::suzanne_obj().map_err(|e| neocogi_demo_host::HostError::Message(format!("load Suzanne OBJ failed: {e}")))?;
+        Self::from_bytes(resources, &bytes)
+    }
+
+    /// Completes decoding, framing and CPU encoding before the first mesh-client factory call.
+    fn from_bytes(resources: ComRef<'_, IRenderResourcesAbi>, bytes: &[u8]) -> Result<Self, neocogi_demo_host::HostError> {
+        let prepare = || -> Result<_, String> {
+            let mesh = MeshData::parse(bytes)?;
+            let view = mesh_view(mesh.bounds())?;
+            let (vertices, indices) = mesh_buffers(&mesh);
+            Ok((view, vertices, indices))
+        };
+        let (view, vertices, indices) = prepare().map_err(|e| neocogi_demo_host::HostError::Message(format!("invalid Suzanne OBJ: {e}")))?;
         Ok(Self {
             view,
             geometry: Geometry::new(resources, vertices, indices)?,
@@ -280,27 +275,53 @@ fn vertex_bytes(output: &mut Vec<u8>, position: Vec3f, normal: Vec3f, uv: Vec2f)
             .flat_map(f32::to_le_bytes),
     );
 }
-/// Triangulates OBJ corners while keeping the exact position/normal/UV interpretation local.
-fn mesh_buffers(mesh: &PolyMesh) -> (Vec<u8>, Vec<u32>) {
-    let mut vertices = Vec::new();
-    let mut indices = Vec::new();
-    for poly in mesh.polys() {
-        let first = (vertices.len() / STRIDE as usize) as u32;
-        let mut count = 0;
-        for vertex in poly {
-            vertex_bytes(
-                &mut vertices,
-                mesh.vertex_position(vertex.pos),
-                mesh.vertex_normal(vertex.normal),
-                mesh.vertex_uv(vertex.tex),
-            );
-            count += 1;
+/// Encodes already finalized values; no unresolved OBJ indices reach this GPU boundary.
+fn mesh_buffers(mesh: &MeshData) -> (Vec<u8>, Vec<u32>) {
+    let mut vertices = Vec::with_capacity(mesh.vertices().len() * STRIDE as usize);
+    for vertex in mesh.vertices() {
+        vertex_bytes(&mut vertices, vertex.position, vertex.normal, vertex.uv);
+    }
+    (vertices, mesh.indices().to_vec())
+}
+
+/// Chooses finite framing/zoom/clips once from referenced extents using f64 intermediates.
+/// Unsupported f32 scales/translations return an error; geometry is never implicitly rescaled.
+fn mesh_view(bounds: Box3f) -> Result<View3D, String> {
+    let low = [bounds.min.x, bounds.min.y, bounds.min.z].map(f64::from);
+    let high = [bounds.max.x, bounds.max.y, bounds.max.z].map(f64::from);
+    let center: [f64; 3] = std::array::from_fn(|i| (low[i] + high[i]) * 0.5);
+    let radius = (0..3).map(|i| ((high[i] - low[i]) * 0.5).powi(2)).sum::<f64>().sqrt();
+    let values = [radius * 2.5, radius * 4., radius * 20., radius * 0.01, radius * 24.].map(|n| n as f32);
+    if !center.iter().all(|n| n.is_finite()) || !values.iter().all(|n| n.is_finite() && *n > 0.) {
+        return Err("unsupported camera bounds/scale".into());
+    }
+    let [minimum, distance, maximum, near, far] = values;
+    let target = Vec3f::new(center[0] as f32, center[1] as f32, center[2] as f32);
+    let camera = Camera::new(target, distance, Quatf::identity(), PI / 4., 1., near, far);
+    // Validate actual f32 clip coverage at both zoom limits and the initial framing.
+    // The f64 formulas above cannot detect precision lost when translated f32 matrices cancel.
+    for d in [minimum, distance, maximum] {
+        let candidate = Camera::new(target, d, Quatf::identity(), PI / 4., 1., near, far);
+        if !candidate.is_usable() {
+            return Err("unsupported camera scale/translation".into());
         }
-        for index in 2..count {
-            indices.extend([first, first + index - 1, first + index]);
+        let pvm = *candidate.projection_matrix() * *candidate.view_matrix();
+        for x in [bounds.min.x, bounds.max.x] {
+            for y in [bounds.min.y, bounds.max.y] {
+                for z in [bounds.min.z, bounds.max.z] {
+                    let clip = pvm * Vec4f::new(x, y, z, 1.);
+                    if ![clip.x, clip.y, clip.z, clip.w].into_iter().all(f32::is_finite)
+                        || clip.w <= 0.
+                        || clip.z.abs() >= clip.w
+                        || (d == distance && (clip.x.abs() >= clip.w || clip.y.abs() >= clip.w))
+                    {
+                        return Err("camera cannot represent mesh framing/clip coverage".into());
+                    }
+                }
+            }
         }
     }
-    (vertices, indices)
+    View3D::new(camera, Dimensioni::new(1, 1), (minimum, maximum))
 }
 /// The shader consumes two column-major matrices with sixteen-byte column alignment.
 fn camera_bytes(projection: &Mat4f, view: &Mat4f) -> Vec<u8> {
@@ -316,6 +337,119 @@ fn camera_bytes(projection: &Mat4f, view: &Mat4f) -> Vec<u8> {
 mod viewport_tests {
     use super::*;
     use neocogi_render_gpu::command::Command;
+
+    /// Refuses every resource operation while counting actual COM calls before any allocation.
+    #[neocogi_com::com_object(interfaces(IRenderResources))]
+    struct UnreachableResources {
+        /// This shared counter is required because COM resource factories use shared receivers.
+        calls: std::rc::Rc<std::cell::Cell<usize>>,
+    }
+    impl UnreachableResources {
+        /// A decoder failure must return before entering this independently observable boundary.
+        fn reject<T>(&self) -> Result<T, NcStatus> {
+            self.calls.set(self.calls.get() + 1);
+            Err(neocogi_com::NC_E_INVALID_ARG)
+        }
+    }
+    impl IRenderDriverBound for UnreachableResources {
+        fn driver_identity(&self) -> Result<ComPtr<IRenderDriverIdentityAbi>, NcStatus> {
+            self.reject()
+        }
+    }
+    impl IRenderResources for UnreachableResources {
+        fn create_buffer(
+            &self,
+            _: GpuBufferDesc,
+            _: neocogi_com::NcValueRef<'_, neocogi_render_core::abi::InitialGpuData>,
+        ) -> Result<ComBox<IGpuBufferAbi>, NcStatus> {
+            self.reject()
+        }
+        fn create_texture(
+            &self,
+            _: GpuTextureDesc,
+            _: neocogi_com::NcValueRef<'_, neocogi_render_core::abi::InitialGpuData>,
+        ) -> Result<ComBox<IGpuTextureAbi>, NcStatus> {
+            self.reject()
+        }
+        fn create_sampler(&self, _: GpuSamplerDesc) -> Result<ComBox<IGpuSamplerAbi>, NcStatus> {
+            self.reject()
+        }
+        fn create_shader(
+            &self,
+            _: GpuShaderStage,
+            _: ComRef<'_, IGpuDataSourceAbi>,
+            _: NcCopyFromBufferOffset<'_, u8>,
+        ) -> Result<ComBox<IGpuShaderAbi>, NcStatus> {
+            self.reject()
+        }
+        fn create_pipeline(
+            &self,
+            _: ComRef<'_, IGpuPipelineSourceAbi>,
+            _: ComRef<'_, IGpuShaderAbi>,
+            _: ComRef<'_, IGpuShaderAbi>,
+        ) -> Result<ComBox<IGpuPipelineAbi>, NcStatus> {
+            self.reject()
+        }
+        fn update_buffer(&self, _: ComRef<'_, IGpuBufferAbi>, _: u64, _: ComRef<'_, IGpuDataSourceAbi>) -> Result<(), NcStatus> {
+            self.reject()
+        }
+        fn update_texture(&self, _: ComRef<'_, IGpuTextureAbi>, _: Rect, _: ComRef<'_, IGpuDataSourceAbi>) -> Result<(), NcStatus> {
+            self.reject()
+        }
+    }
+
+    /// Real construction retains parser context and makes no mesh-client calls on malformed assets.
+    #[test]
+    fn invalid_asset_never_reaches_gpu_factory() {
+        let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+        let resources: ComPtr<IRenderResourcesAbi> = UnreachableResources::from_value(UnreachableResources { calls: calls.clone() }).query().unwrap();
+        for bytes in [
+            b"\xff".as_slice(),
+            b"v 0 0 0\nf 1 2 3".as_slice(),
+            b"v 0 0 0\nv 1e-30 0 0\nv 0 1e-30 0\nf 1 2 3".as_slice(),
+        ] {
+            let error = match Suzanne::from_bytes(resources.as_com_ref(), bytes) {
+                Err(error) => error,
+                Ok(_) => panic!("invalid asset accepted"),
+            };
+            assert!(error.to_string().contains("invalid Suzanne OBJ:"));
+            assert_eq!(calls.get(), 0);
+        }
+    }
+
+    /// Production Suzanne geometry and tiny/large/translated bounds either frame meaningfully or
+    /// return a useful setup error before upload; successful navigation retains finite matrices.
+    #[test]
+    fn finalized_mesh_framing_handles_numeric_boundaries() {
+        let mesh = MeshData::parse(include_bytes!("../../../assets/suzanne.obj")).unwrap();
+        let mut view = mesh_view(mesh.bounds()).unwrap();
+        let (vertices, indices) = mesh_buffers(&mesh);
+        assert_eq!(vertices.len(), mesh.vertices().len() * STRIDE as usize);
+        assert!(indices.iter().all(|i| (*i as usize) < mesh.vertices().len()));
+        view.set_viewport(Recti::new(10, 20, 800, 400));
+        for scale in [1e-30, 1e-8, 1., 2e20] {
+            for offset in [0., -3. * scale, 1e20] {
+                let bounds = Box3f::new(&Vec3f::new(offset, -scale, -scale), &Vec3f::new(offset + scale, 0., 0.));
+                match mesh_view(bounds) {
+                    Ok(mut view) => {
+                        for delta in [0.5, -0.5, f32::MAX, -f32::MAX] {
+                            view.apply_scroll(delta);
+                            view.set_viewport(Recti::new(2, 3, 320, 240));
+                            view.update_drag(Vec2i::new(100, 100), Vec2i::new(101, 102));
+                            for matrix in [view.pvm(), view.projection_matrix(), view.view_matrix()] {
+                                assert!(matrix.col.iter().all(|c| [c.x, c.y, c.z, c.w].into_iter().all(f32::is_finite)));
+                                assert_ne!(matrix.determinant(), 0.);
+                            }
+                        }
+                    }
+                    Err(error) => assert!(error.contains("camera")),
+                }
+            }
+        }
+        // This previously generated far<near on the first viewport resize.
+        let tiny = Box3f::new(&Vec3f::zero(), &Vec3f::new(1e-8, 1e-8, 0.));
+        assert!(mesh_view(tiny).is_ok());
+    }
 
     /// Distinct named values pin the layout read by all three declared shader attributes.
     #[test]

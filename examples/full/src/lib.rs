@@ -7,7 +7,6 @@ mod grid;
 mod mesh;
 mod obj_loader;
 mod painter_demo;
-mod polymesh;
 mod style_editor;
 mod view3d;
 
