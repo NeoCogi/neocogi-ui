@@ -90,3 +90,114 @@ fn partial_paint_releases_owned_commands_before_a_later_frame_succeeds() {
     assert_eq!(attempt.borrow().releases, 2);
     assert_eq!(later.borrow().releases, 1);
 }
+
+/// Client actions performed inside the production IWidget::paint callback.
+#[derive(Copy, Clone)]
+enum GpuPaintExit {
+    /// Leave a healthy host-owned recording unfinished when its facade dies.
+    Unfinished,
+    /// Try to erase a command failure by explicit cancellation before destruction.
+    RejectedCancel,
+    /// Ignore a command failure and let the facade die.
+    RejectedDrop,
+    /// Retry begin after destroying unfinished work, then ignore its result.
+    Retry,
+    /// Deliberately abandon a healthy contribution.
+    Cancel,
+    /// Seal a valid contribution before dropping its facade.
+    Finish,
+}
+
+/// An ordinary leaf receives only resource and painter capabilities, without host session access.
+struct GpuPaint {
+    /// Same-device factory; the test retains the exclusive domain controller.
+    resources: ComPtr<neocogi_render_core::abi::IRenderResourcesAbi>,
+    /// Allows a later frame to succeed without replacing or remounting the leaf.
+    exit: Rc<std::cell::Cell<GpuPaintExit>>,
+}
+impl LeafContent for GpuPaint {
+    /// Keeps the real paint allocation positive and independent of the selected exit behavior.
+    fn measure(&self, _: LayoutLimits, _: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
+        Ok(Size { width: 40, height: 20 })
+    }
+    /// The test changes paint behavior without invalidating its committed layout.
+    fn update(&mut self, _: WidgetUpdate, _: WidgetEvent, _: &str) -> Result<GeometryChange, NcStatus> {
+        Ok(GeometryChange::NoChange)
+    }
+    /// Return Ok deliberately: host harvesting must reject unfinished/rejected work independently.
+    fn paint(&mut self, _: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
+        let mut view = painter.begin_render_view(self.resources.as_com_ref())?;
+        view.clear_color(0xff112233)?;
+        match self.exit.get() {
+            GpuPaintExit::RejectedCancel | GpuPaintExit::RejectedDrop => {
+                assert_eq!(view.clear_depth(f32::NAN), Err(neocogi_com::NC_E_INVALID_ARG));
+                if matches!(self.exit.get(), GpuPaintExit::RejectedCancel) {
+                    view.cancel()?;
+                }
+            }
+            GpuPaintExit::Cancel => view.cancel()?,
+            GpuPaintExit::Finish => view.finish()?,
+            GpuPaintExit::Unfinished | GpuPaintExit::Retry => {}
+        }
+        drop(view);
+        if matches!(self.exit.get(), GpuPaintExit::Retry) {
+            assert_eq!(
+                painter.begin_render_view(self.resources.as_com_ref()).err(),
+                Some(neocogi_render_core::abi::RENDER_E_STATE)
+            );
+            assert_eq!(
+                painter.begin_render_view(self.resources.as_com_ref()).err(),
+                Some(neocogi_render_core::abi::RENDER_E_STATE)
+            );
+        }
+        Ok(())
+    }
+}
+
+/// Actual callback return, host harvest and compositor submission enforce one failure boundary.
+#[test]
+fn gpu_paint_failure_survives_facade_drop_cancel_and_retry_until_host_return() {
+    for mode in [
+        GpuPaintExit::Unfinished,
+        GpuPaintExit::RejectedCancel,
+        GpuPaintExit::RejectedDrop,
+        GpuPaintExit::Retry,
+    ] {
+        let mut fixture = Headless::standard();
+        let domain = neocogi_gfx_support::testing::client();
+        let resources = domain.resources().unwrap();
+        let exit = Rc::new(std::cell::Cell::new(mode));
+        let leaf = fixture
+            .ui
+            .widgets()
+            .leaf(
+                GpuPaint {
+                    resources: resources.clone(),
+                    exit: exit.clone(),
+                },
+                WidgetOptions::NONE,
+            )
+            .unwrap();
+        let _owner = window(&fixture.ui, "gpu", Rect { x: 10, y: 10, width: 120, height: 80 }, leaf);
+        let later = Rc::new(RefCell::new(Attempt::default()));
+        let later_leaf = fixture.ui.widgets().leaf(PartialPaint { attempt: later.clone() }, WidgetOptions::NONE).unwrap();
+        let _later_owner = window(&fixture.ui, "later", Rect { x: 140, y: 10, width: 120, height: 80 }, later_leaf);
+        fixture.ui.update(VIEW).unwrap();
+        for _ in 0..2 {
+            assert_eq!(
+                fixture.ui.render(VIEW, fixture.renderer.as_com_ref()),
+                Err(neocogi_render_core::abi::RENDER_E_STATE)
+            );
+            assert_eq!(fixture.snapshot().calls, 0);
+            assert_eq!(later.borrow().releases, 0);
+            assert_eq!(neocogi_gfx_support::testing::recording_usage(resources.as_com_ref()).unwrap(), (0, 0));
+        }
+        for success in [GpuPaintExit::Cancel, GpuPaintExit::Finish] {
+            exit.set(success);
+            fixture.frame(VIEW).unwrap();
+        }
+        assert_eq!(fixture.snapshot().calls, 2);
+        assert_eq!(later.borrow().releases, 2);
+        assert_eq!(neocogi_gfx_support::testing::recording_usage(resources.as_com_ref()).unwrap(), (0, 0));
+    }
+}

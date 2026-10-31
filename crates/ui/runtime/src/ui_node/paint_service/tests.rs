@@ -102,6 +102,42 @@ fn unhandled_view_failure_rejects_the_whole_invocation_even_if_the_widget_retrie
     drop(frame); // Abort is legal and must not submit a native frame.
 }
 
+/// Client destruction releases its shell; only host harvesting decides whether work was finished.
+#[test]
+fn dropped_and_cancelled_rejections_remain_sticky_at_the_host_harvest_boundary() {
+    for (reject, cancel) in [(false, false), (true, false), (true, true)] {
+        let device = neocogi_render_gpu::testing::device(
+            nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
+                .query()
+                .unwrap(),
+        );
+        let domain = device.create_client(RenderClientLimits::default()).unwrap();
+        let resources = domain.resources().unwrap();
+        let frames = std::rc::Rc::new(gpu::Frames::default());
+        frames.install(device.broker());
+        let frame = frames.begin().unwrap();
+        let local = recorder(frames, 1);
+        let mut painter: ComPtr<IPainterAbi> = local.query().unwrap();
+        let mut view = painter.begin_render_view(scope(1), resources.as_com_ref()).unwrap();
+        view.clear_color(0xff112233).unwrap();
+        if reject {
+            assert_eq!(view.clear_depth(f32::NAN), Err(NC_E_INVALID_ARG));
+        }
+        if cancel {
+            view.cancel().unwrap();
+        }
+        drop(view);
+        let usage = device.recording_usage(resources.as_com_ref()).unwrap();
+        assert_eq!(usage.1, 0);
+        assert_eq!(usage.0 > 0, !reject);
+        assert_eq!(local.try_borrow_mut().unwrap().harvest(), Err(RENDER_E_STATE));
+        assert_eq!(device.recording_usage(resources.as_com_ref()).unwrap(), (0, 0));
+        assert_eq!(painter.begin_render_view(scope(1), resources.as_com_ref()).err(), Some(RENDER_E_STATE));
+        assert_eq!(local.try_borrow_mut().unwrap().harvest(), Err(RENDER_E_STATE));
+        drop(frame);
+    }
+}
+
 /// Cancel is explicit abandonment, while a later token never revives a previous painter identity.
 #[test]
 fn cancelled_views_are_empty_and_retained_painters_cannot_join_a_later_widget() {

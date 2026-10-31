@@ -183,7 +183,10 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     check.bind_index_buffer(indices.as_com_ref(), GpuIndexFormat::U16, 0)?;
     assert!(check.draw_indexed(3, 1, 0).is_err());
     check.cancel()?;
-    frame.finish()?;
+    // Cancellation cannot erase the rejected draw; abort this deliberately failed CPU frame.
+    assert_eq!(session.state()?, RenderViewState::Rejected);
+    assert_eq!(frame.finish(), Err(RENDER_E_STATE));
+    frame.abort()?;
     resources.update_buffer(
         indices.as_com_ref(),
         0,

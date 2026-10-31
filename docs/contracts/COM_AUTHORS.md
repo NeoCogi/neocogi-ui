@@ -978,19 +978,20 @@ private immutable versions through execution/completion. A weak lifetime check i
 neither a callback nor a GPU completion signal. Pipelines retain their shader artifacts
 independently of public shader owners.
 
-GL/WebGL keeps issued native snapshots and their device-free byte/capacity receipts
-behind completion fences. Collection observes those fences before refunding charges.
-An abandoned immediate frame keeps any already-issued work pending; its destructor
-does not issue native commands. The next preparation seals and collects that work,
-and final executor destruction waits before releasing it. Public owner expiry alone
-never establishes that the driver has finished using an allocation.
+Native completion, abandonment and maintenance follow the canonical
+[GPU lifecycle contract](GPU_RENDERING.md#immutable-native-preparation-data-and-identity).
+Public owner expiry alone never establishes that the driver has finished using
+an allocation. Maintenance may fence or flush work already issued, including on
+frame destruction; it adds neither a draw nor presentation.
 
 `Painter::begin_render_view(resources)` reserves an exact painter-order position and
 returns a temporary exclusive command view. Its copied client information comes from
 committed visible geometry. Bind pipelines, explicit byte streams, sampled textures
 and copied uniform inputs, then issue primitive draws and call `finish`. Explicit
-cancel contributes nothing. Unfinished or rejected work fails the paint invocation;
-paint return permanently revokes retained facades. Nested viewports and clips remain
+cancel of healthy recording contributes nothing. Client Drop preserves unfinished
+or rejected state; cancel cannot erase a rejection. Unfinished or rejected work
+fails the paint invocation; paint return permanently revokes retained facades.
+Nested viewports and clips remain
 inside the private root, and reset cannot recover broader target authority.
 
 Vertex/index buffers and uniforms use explicitly encoded bytes with declared layouts.

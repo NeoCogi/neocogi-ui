@@ -135,6 +135,11 @@ pub fn client() -> ComBox<IRenderClientDomainAbi> {
     DEVICE.with(|device| device.create_client(RenderClientLimits::default()).expect("valid client fixture limits"))
 }
 
+/// Observes charged pending bytes and live client shells on the fixture's actual recording device.
+pub fn recording_usage(resources: ComRef<'_, IRenderResourcesAbi>) -> Result<(u64, u32), NcStatus> {
+    DEVICE.with(|device| device.recording_usage(resources))
+}
+
 /// Seals one real client contribution. The returned controller must outlive submission.
 pub fn client_block(root: RenderViewRoot) -> (ComBox<IRenderClientDomainAbi>, ComBox<IRenderViewBlockAbi>) {
     let domain = client();
