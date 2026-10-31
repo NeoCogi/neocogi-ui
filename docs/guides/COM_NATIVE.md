@@ -34,6 +34,10 @@ cargo run -p neocogi-demo-smoke --no-default-features --features monolith-extens
 ```
 
 `NEOCOGI_DEMO_FRAMES=8` selects a finite full/basic/editor run for acceptance.
+Only an absent variable disables the limit. A present value must decode to a
+positive `u32`; empty, zero, malformed, overflowing and undecodable native values
+fail at startup with the frame-limit diagnostic. Only successfully presented
+frames count toward the limit.
 The smoke command has its own deterministic `--smoke` behavior.
 
 ## Platform dependencies

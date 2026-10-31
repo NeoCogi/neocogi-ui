@@ -563,23 +563,23 @@ fn renderer_plugin_name() -> &'static str {
 
 /// Opt-in finite demos exercise ordinary input/update/render and teardown without a separate mock loop.
 /// Native runs use NEOCOGI_DEMO_FRAMES; browser runs use the `frames` query parameter. Omission runs
-/// until close or AppState's stop request; malformed or zero limits fail explicitly at startup.
+/// until close or AppState's stop request; present undecodable, malformed or zero limits fail
+/// explicitly at startup. Parsing remains before driver-loop entry without reordering setup.
 fn frame_limit() -> Result<Option<u32>, HostError> {
+    let invalid = || HostError::Message("demo frame limit must be a positive u32".to_owned());
     #[cfg(not(target_arch = "wasm32"))]
-    let value = std::env::var("NEOCOGI_DEMO_FRAMES").ok();
+    let value = match std::env::var("NEOCOGI_DEMO_FRAMES") {
+        Ok(value) => Some(value),
+        Err(std::env::VarError::NotPresent) => None,
+        Err(std::env::VarError::NotUnicode(_)) => return Err(invalid()),
+    };
     #[cfg(target_arch = "wasm32")]
     let value = web_sys::window()
         .and_then(|window| window.location().search().ok())
         .and_then(|search| web_sys::UrlSearchParams::new_with_str(&search).ok())
         .and_then(|query| query.get("frames"));
     value
-        .map(|value| {
-            value
-                .parse::<u32>()
-                .ok()
-                .filter(|count| *count > 0)
-                .ok_or_else(|| HostError::Message("demo frame limit must be a positive u32".to_owned()))
-        })
+        .map(|value| value.parse::<u32>().ok().filter(|count| *count > 0).ok_or_else(invalid))
         .transpose()
 }
 

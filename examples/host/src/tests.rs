@@ -66,3 +66,63 @@ fn report_exit_accepts_host_status_and_boxed_errors() {
     let boxed: Box<dyn std::error::Error> = Box::new(neocogi_com::NC_E_INVALID_ARG);
     assert_eq!(report_exit(Err(boxed)), std::process::ExitCode::FAILURE);
 }
+
+/// Invoke the real private parser with child-owned environment instead of mutating
+/// this process's environment while unrelated tests may be running on other threads.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn frame_limit_distinguishes_absence_from_invalid_native_values() {
+    const CHILD: &str = "NEOCOGI_TEST_FRAME_LIMIT_EXPECTED";
+    if let Some(expected) = std::env::var_os(CHILD) {
+        let result = frame_limit();
+        match expected.to_str().unwrap() {
+            "absent" => assert!(matches!(result, Ok(None))),
+            "one" => assert!(matches!(result, Ok(Some(1)))),
+            "max" => assert!(matches!(result, Ok(Some(u32::MAX)))),
+            "invalid" => assert_eq!(result.unwrap_err().to_string(), "demo frame limit must be a positive u32"),
+            _ => panic!("unknown child expectation"),
+        }
+        return;
+    }
+    let mut cases: Vec<(&str, Option<std::ffi::OsString>)> = vec![
+        ("absent", None),
+        ("one", Some("1".into())),
+        ("max", Some(u32::MAX.to_string().into())),
+        ("invalid", Some("".into())),
+        ("invalid", Some("0".into())),
+        ("invalid", Some("abc".into())),
+        ("invalid", Some("-1".into())),
+        ("invalid", Some("4294967296".into())),
+    ];
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStringExt;
+        cases.push(("invalid", Some(std::ffi::OsString::from_vec(vec![0xff]))));
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStringExt;
+        cases.push(("invalid", Some(std::ffi::OsString::from_wide(&[0xd800]))));
+    }
+    for (expected, value) in cases {
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap());
+        child
+            .args(["--exact", "tests::frame_limit_distinguishes_absence_from_invalid_native_values", "--nocapture"])
+            .env(CHILD, expected);
+        match &value {
+            Some(value) => {
+                child.env("NEOCOGI_DEMO_FRAMES", value);
+            }
+            None => {
+                child.env_remove("NEOCOGI_DEMO_FRAMES");
+            }
+        }
+        let output = child.output().unwrap();
+        assert!(
+            output.status.success(),
+            "{value:?}: {}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
