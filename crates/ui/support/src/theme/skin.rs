@@ -250,7 +250,7 @@ impl Skin {
             insets: value.patch.insets,
             center_visible: u8::from(value.patch.center_visible),
             content_color: packed_color(value.content_color),
-            patch: patch.into(),
+            patch,
         }
     }
 }
