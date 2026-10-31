@@ -97,7 +97,13 @@ The script builds the wasm library test export, starts a temporary localhost ser
 result in headless Chromium. Set `CHROME_BIN` to a compatible executable or
 `NEOCOGI_BROWSER_TEST_PORT` to change the default port 8118. Generated bindings and result HTML
 remain under the selected target root's `browser-input-tests` and `browser-full-tests`
-directories (default `target`). The fixture covers DOM composition/paste, keyboard,
+directories (default `target`). Before launching Chromium, the runner waits up to ten
+seconds for its own HTTP child to publish a private signal after binding the port.
+An occupied port, early child exit or startup timeout fails with the server log;
+another listener's response cannot qualify the suite. Exit and handled termination
+signals reap the child and remove its private startup files. Separate simultaneous
+runs should use distinct ports and target roots to avoid sharing generated sites.
+The fixture covers DOM composition/paste, keyboard,
 wheel conversion, button chords, cancellation, and teardown. It stubs capture acquisition because
 synthetic pointer events cannot acquire native capture; trusted pointer/OS IME/mobile behavior
 still needs interactive platform testing.
@@ -107,6 +113,13 @@ The fast producer/consumer path and install-policy matrix runs with
 script copies and subprocess canaries, so it does not replace the real wasm/browser
 suites. The browser CI job runs both real suites under a custom target root with
 spaces, while the Pages job retains its deployment artifact path.
+
+`python3 -m unittest discover -s scripts -p test_browser_server.py` exercises the
+unchanged runner with real loopback servers, a fetching browser canary, and stubbed
+build tools. It checks both selected suites, an unrelated PASS listener, early
+exit, failed readiness publication, bounded timeout, termination and cleanup after
+a failing browser result. It needs loopback access and complements the actual
+WebAssembly/Chromium suites; it does not execute their rendering or DOM tests.
 
 ## GitHub Pages
 

@@ -12,17 +12,19 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import socket
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import urllib.request
 
 ROOT = Path(__file__).resolve().parent.parent
 CANARY = r'''
-import json, os, sys, urllib.request
+import json, os, signal, sys, urllib.request
 from pathlib import Path
 name = Path(sys.argv[0]).name
 if name == 'cargo':
@@ -36,6 +38,15 @@ elif name == 'python3':
     if len(sys.argv) == 5 and sys.argv[1] == '-':
         Path(os.environ['SERVER_CALL']).write_text(json.dumps({
             'pid': os.getpid(), 'ready': sys.argv[4], 'site': sys.argv[2]}))
+        mode = os.environ.get('BROWSER_SERVER_FAULT')
+        if mode == 'exit':
+            raise SystemExit('injected startup failure')
+        if mode == 'stall':
+            print('injected startup stall', file=sys.stderr, flush=True)
+            signal.pause()
+        if mode == 'publication':
+            # Bind remains real; publishing to a directory fails after bind.
+            Path(sys.argv[4]).mkdir()
     os.execv(sys.executable, [sys.executable, *sys.argv[1:]])
 else:
     raise SystemExit('unexpected canary executable')
@@ -74,6 +85,7 @@ class BrowserServerTests(unittest.TestCase):
             CHROME_BIN=str(self.bin / 'probe-browser'),
             BROWSER_CALL=str(self.browser_call), SERVER_CALL=str(self.server_call),
         )
+        self.environment.pop('BROWSER_SERVER_FAULT', None)
 
     def run_suite(self, suite: str, port: int) -> subprocess.CompletedProcess[str]:
         """Run the production script from outside its checkout, with a hard limit."""
@@ -135,6 +147,67 @@ class BrowserServerTests(unittest.TestCase):
             finally:
                 server.shutdown()
                 thread.join(timeout=5)
+
+    def test_early_exit_and_failed_publication_report_diagnostics(self) -> None:
+        for mode, diagnostic in [('exit', 'injected startup failure'),
+                                 ('publication', 'IsADirectoryError')]:
+            with self.subTest(mode=mode):
+                self.environment['BROWSER_SERVER_FAULT'] = mode
+                result = self.run_suite('input', self.free_port())
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertIn('did not become ready', result.stdout)
+                self.assertIn(diagnostic, result.stdout)
+                self.assertFalse(self.browser_call.exists())
+                self.assert_cleaned()
+
+    def test_timeout_ignores_stale_site_signal_and_reaps_stalled_child(self) -> None:
+        # A shared site artifact cannot substitute for a new private publication.
+        site = self.workspace / 'target with spaces/browser-input-tests'
+        site.mkdir(parents=True)
+        (site / 'server-ready').write_text('ready\n')
+        self.environment['BROWSER_SERVER_FAULT'] = 'stall'
+        start = time.monotonic()
+        result = self.run_suite('input', self.free_port())
+        elapsed = time.monotonic() - start
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertGreaterEqual(elapsed, 9)
+        self.assertLess(elapsed, 18)
+        self.assertIn('did not become ready', result.stdout)
+        self.assertIn('injected startup stall', result.stdout)
+        self.assertFalse(self.browser_call.exists())
+        self.assert_cleaned()
+
+    def test_termination_during_startup_reaps_child_and_signal_directory(self) -> None:
+        self.environment['BROWSER_SERVER_FAULT'] = 'stall'
+        self.environment['NEOCOGI_BROWSER_TEST_PORT'] = str(self.free_port())
+        process = subprocess.Popen(
+            ['bash', str(self.workspace / 'scripts/test-browser-input.sh'), 'input'],
+            cwd=self.base, env=self.environment, text=True, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        try:
+            deadline = time.monotonic() + 5
+            while not self.server_call.exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertTrue(self.server_call.exists(), 'server child did not launch')
+            process.send_signal(signal.SIGTERM)
+            output, _ = process.communicate(timeout=5)
+            self.assertEqual(process.returncode, 143, output)
+            self.assertFalse(self.browser_call.exists())
+            self.assert_cleaned()
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.communicate(timeout=5)
+
+    def test_failed_browser_result_still_cleans_up_real_server(self) -> None:
+        fixture = self.workspace / 'crates/render/plugin/tests/browser-input.html'
+        fixture.write_text('<pre id="result">FAIL</pre>')
+        result = self.run_suite('input', self.free_port())
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn('<pre id="result">FAIL</pre>', result.stdout)
+        self.assertTrue(self.browser_call.exists())
+        self.assert_cleaned()
 
 
 if __name__ == '__main__':

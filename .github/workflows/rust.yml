@@ -151,6 +151,8 @@ jobs:
       - uses: actions/checkout@v6
       - name: Browser producer/consumer paths and explicit override policy
         run: python3 -m unittest discover -s scripts -p test_web_paths.py
+      - name: Owned HTTP readiness, occupied ports and startup failure cleanup
+        run: python3 -m unittest discover -s scripts -p test_browser_server.py
       - run: rustup target add wasm32-unknown-unknown
       - name: Build the static browser application and matching binding tool
         run: scripts/web-demo.sh build
