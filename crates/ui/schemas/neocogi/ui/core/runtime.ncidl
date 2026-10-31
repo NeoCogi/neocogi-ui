@@ -1,4 +1,4 @@
-#[version(4)]
+#[version(1)]
 /// Scoped facade which appends typed operations to the runtime's current frame paint context.
 interface IPainter {
     /// Reserves an ordered graphics contribution rooted in the committed visible client area.
@@ -34,7 +34,7 @@ interface IPainter {
     fn text_run(&mut self, scope: PaintScope, font: PaintFont, position: Point, rgba: u32, text: &[u8]) -> Result<()>;
 }
 
-#[version(3)]
+#[version(1)]
 /// Common widget capability; factories return one ComBox owner, containers consume it,
 /// and application observers use WeakComBox. Owner removal rejects new calls;
 /// admitted calls finish before provider destruction. There is no widget close method.
@@ -182,7 +182,7 @@ struct WindowLayer {
     number: u8,
 }
 
-#[version(2)]
+#[version(1)]
 /// Concrete window presentation bits; unknown bits are rejected before mutation.
 bitenum WindowOptions: u16 {
     /// No optional presentation behavior.
@@ -226,7 +226,7 @@ struct WindowSnapshot {
     child_clip: ChildClip,
 }
 
-#[version(2)]
+#[version(1)]
 /// Logical UI window retained independently of its runtime's tree membership.
 interface IWindow {
     /// Copies current authoritative geometry, visibility and policy without caching app-side state.
@@ -254,7 +254,7 @@ interface IWindow {
     fn close(&self) -> Result<()>;
 }
 
-#[version(3)]
+#[version(1)]
 /// Window policy and topology are owned by the UI runtime object.
 interface IWindowManager {
     /// Creates a visible structural child; a modal parent is rejected before claiming the widget.
@@ -288,7 +288,7 @@ interface IConstructionHost {
     fn host(&self) -> Result<ComPtr<IWidgetHost>>;
 }
 
-#[version(7)]
+#[version(1)]
 /// One constructible retained UI with input, rendering, and resource ownership.
 interface UiRuntime: IInputSink + IWindowManager + IMenus + IChoiceMenus {
     /// Prepares private compositor resources and installs the client's CPU recording broker.
@@ -329,7 +329,7 @@ interface UiRuntime: IInputSink + IWindowManager + IMenus + IChoiceMenus {
     fn close(&self) -> Result<()>;
 }
 
-#[version(3)]
+#[version(1)]
 /// Runtime identity and mutation authority without a reference back to its tree.
 interface IWidgetHost {
     /// Posts through the owner's current update/dispatch origin. No scope-control
@@ -357,7 +357,7 @@ interface IWidgetHost {
     fn mark_geometry_changed(&self) -> Result<()>;
 }
 
-#[version(3)]
+#[version(1)]
 /// A popup has transient placement and cannot be passed to ordinary window operations.
 interface IPopup {
     /// Reports whether this popup belongs to the manager's active visible branch.

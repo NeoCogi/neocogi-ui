@@ -73,7 +73,7 @@ struct GridExtent {
     rows: u32,
 }
 
-#[version(2)]
+#[version(1)]
 /// Constructible directional container whose concrete editing API is one class contract.
 interface Linear: IWidget + IContainerLayout {
     /// Returns the stable read-only topology view for this container's lifetime.
@@ -111,7 +111,7 @@ struct GridLimits {
     max_rows: u32,
 }
 
-#[version(2)]
+#[version(1)]
 /// Constructible Grid whose topology, spans, and both track axes share one class contract.
 interface Grid: IWidget + IContainerLayout {
     /// Returns the immutable resource ceilings chosen by this Grid's constructor.
@@ -166,7 +166,7 @@ struct SplitOptions {
     handle_width: i32,
 }
 
-#[version(5)]
+#[version(1)]
 /// Two-pane layout with a draggable divider owned by this same concrete container.
 /// Zero children is empty; one fills the allocation; two enable the divider.
 interface SplitView: IWidget + IContainerLayout {
@@ -191,7 +191,7 @@ interface SplitView: IWidget + IContainerLayout {
     fn set_position(&mut self, position: i32) -> Result<()>;
 }
 
-#[version(2)]
+#[version(1)]
 /// Constructible scroll composite with one replaceable content root and private structural roles.
 interface ScrollArea: IWidget + IContainerLayout + IScrolling {
     /// Returns the actual application content widget, without its surrounding transform surface.
@@ -222,7 +222,7 @@ interface Disclosure: IWidget + IContainerLayout {
     fn body(&self) -> Result<WeakComBox<Linear>>;
 }
 
-#[version(2)]
+#[version(1)]
 /// Fixed-coordinate form; rectangles belong to the parent, in content pixels.
 /// Children paint in insertion order, so later siblings appear above earlier ones.
 interface Form: IWidget + IContainerLayout {

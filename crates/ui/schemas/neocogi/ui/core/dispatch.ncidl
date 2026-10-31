@@ -18,7 +18,7 @@ enum InputBoundary: u8 {
     End,
 }
 
-#[version(3)]
+#[version(1)]
 /// Application-owned message execution, borrowed for one UI update only.
 /// The application is not a widget. Its inbox may span several windows and
 /// is never mounted, retained, or closed by the widget tree.

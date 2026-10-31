@@ -129,12 +129,12 @@ traversal borrow. Geometry edits still need ordinary notifications; renderer wor
 belongs after the completed update. An error preserves already committed edits;
 the processor decides whether an uncompleted request remains available for retry.
 
-The generated `IApplicationDispatcher` version 3 returns `ApplicationDispatch`:
+The generated `IApplicationDispatcher` v1 returns `ApplicationDispatch`:
 `MessageHandled`, `PendingChangesApplied`, or `Idle`. Applied pending changes
 request another private-dispatch/layout pass even without a geometry notification.
 This distinction avoids treating a newly posted child message as an idle boundary.
 
-Version 3 also provides `input_boundary(InputBoundary)` for ordered Begin/End
+The same v1 interface also provides `input_boundary(InputBoundary)` for ordered Begin/End
 bookkeeping around one actually consumed input and its settled messages. Keep
 geometry edits and new raw input outside this hook. If commands are decoded
 later, retain markers in their event FIFO and copy each command's input identity
@@ -1117,3 +1117,11 @@ are probed; candidate measurements never place children. Final chosen geometry
 still passes through normal runtime placement/cache rules exactly once, with
 clamped ranges/offsets. An unchanged retained fast path may skip foreign placement
 callbacks. Failed measurements propagate normally and leave layout retryable.
+
+### Pre-release declaration baseline
+
+Workspace-authored NCIDL declarations use version 1 until the first release.
+Rebuild all generated providers and consumers together when a declaration changes.
+The SDK-derived structural fingerprint still distinguishes incompatible contracts;
+a matching version numeral never makes stale bindings compatible. This does not
+change the exact published COM/host/IDL package versions or persistent file formats.

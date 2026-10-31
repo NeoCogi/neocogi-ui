@@ -1,4 +1,4 @@
-#[version(2)]
+#[version(1)]
 /// Process entry for coarse-grained appearance compilation and external themes.
 interface SkinPluginFactory {
     /// Creates one typed palette and metric compiler using the narrow GFX revision capability.

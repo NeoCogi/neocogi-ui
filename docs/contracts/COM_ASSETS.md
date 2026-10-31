@@ -154,7 +154,7 @@ session. Draw errors preserve complete vertex/batch coverage; direct-client
 continuation and frame cleanup follow the [render contract](RENDER_SURFACES.md).
 A compositor can no longer be supplied to UI construction. Migrate former
 `create_runtime(assets, compositor)` calls to `create_runtime(assets, gfx)` and remove
-the caller's compositor allocation. `UiPluginFactory` is now version 3, so rebuild
+the caller's compositor allocation. `UiPluginFactory` uses the pre-release v1 baseline, so rebuild
 the application and plugins together. Shared libraries, native monoliths, and
 WebAssembly all use this same factory contract; core UI links only GFX contracts.
 

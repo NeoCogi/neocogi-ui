@@ -32,7 +32,7 @@ interface IWidgetProbe {
     fn calls(&self) -> Result<WidgetCalls>;
 }
 
-#[version(3)]
+#[version(1)]
 /// A custom control with one enum-valued event port and a concrete editing interface.
 interface Counter: IWidget + ILeafLayout + IWidgetProbe {
     /// Reads the actual current activation count.
@@ -42,7 +42,7 @@ interface Counter: IWidget + ILeafLayout + IWidgetProbe {
 
 }
 
-#[version(2)]
+#[version(1)]
 /// A one-child container demonstrates a domain-specific layout policy over the shared child editor.
 interface IInset: IContainer {
     /// Installs or replaces its one child; removed-child teardown uses the ordinary committed outcome.
@@ -51,7 +51,7 @@ interface IInset: IContainer {
     fn set_padding(&mut self, padding: i32) -> Result<()>;
 }
 
-#[version(2)]
+#[version(1)]
 /// Stateless plugin interface receiving runtime authority explicitly for each custom object.
 interface ExtensionProvider: IDesignWidgetCatalog {
     /// Creates a counter whose complete state belongs to the returned COM identity.

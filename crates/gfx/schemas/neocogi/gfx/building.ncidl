@@ -25,7 +25,7 @@ struct AssetAppearanceRevision {
     chrome: AssetChrome,
 }
 
-#[version(3)]
+#[version(1)]
 /// One transactional font and image packing session with concrete named operations.
 /// Names contain 1 to 2048 UTF-8 bytes. Retained fonts and icons, including inherited assets,
 /// share a 16384-record bound; a crossing addition fails without changing the draft.
@@ -50,7 +50,7 @@ interface IAssetBuilder {
     fn finish(&self) -> Result<ComPtr<IAssetBundle>>;
 }
 
-#[version(2)]
+#[version(1)]
 /// Constructible CPU resource root; UI and hosts need no linked font or PNG implementation.
 interface AssetLoader: IGfxDiagnostics {
     /// Starts a fresh atlas using an opaque-white PNG tile; dimensions are validated before reading files.

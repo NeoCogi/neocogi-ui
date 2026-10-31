@@ -101,7 +101,7 @@ enum FileDialogMode: u8 {
     Save,
 }
 
-#[version(5)]
+#[version(1)]
 /// Public editing capability of the nodes-provider file picker composite.
 /// The provider mounts the same object through IWidget/IContainerLayout; this
 /// capability controls its modal request and does not grant a second attachment.
@@ -120,7 +120,7 @@ interface IFileDialog {
 
 }
 
-#[version(3)]
+#[version(1)]
 /// Standard picker construction capability exposed by a nodes interface bound to window management.
 interface IFileDialogs {
     /// Creates one hidden reusable modal owned by the authenticated ordinary window.

@@ -181,7 +181,7 @@ enum FontRole: u8 {
     Mono = 4,
 }
 
-#[version(2)]
+#[version(1)]
 /// Four nonnegative pixel insets used by resolved theme geometry.
 struct Insets {
     /// Leading horizontal thickness.
@@ -194,7 +194,7 @@ struct Insets {
     bottom: i32,
 }
 
-#[version(2)]
+#[version(1)]
 /// Complete scalar layout recipe; installation rejects negative dimensions.
 #[persistence(default)]
 struct AssetMetrics {
@@ -379,7 +379,7 @@ struct AssetChromeVisuals {
 /// Independently created catalogs remain unrelated even when their names match.
 interface IAssetCatalog {}
 
-#[version(4)]
+#[version(1)]
 /// Immutable, self-contained resource revision. Every copy writes the exact requested range.
 /// Names partition their byte table in font-then-icon order. Fonts require an underscore
 /// fallback; body and the standard semantic icon names are mandatory. Consumers import
@@ -421,7 +421,7 @@ interface IAssetBundle {
 /// A palette is an authoring value, not retained runtime appearance state. Compiling it eagerly into
 /// complete resolved visual values avoids the former shadow color array that could disagree with
 /// what widgets actually painted.
-#[version(2)]
+#[version(1)]
 #[persistence(default)]
 struct FlatPalette {
     /// Ordinary control text and semantic glyph color.

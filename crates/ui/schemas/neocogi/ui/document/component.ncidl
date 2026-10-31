@@ -4,7 +4,7 @@ extern neocogi.ui.nodes;
 use neocogi.ui.nodes::UiFactory;
 use neocogi.ui.core::{IWidget, IWidgetHost};
 
-#[version(2)]
+#[version(1)]
 /// A compiled component exposes its root and typed widget lookup.
 /// Getters and setters belong to the returned widget interfaces; event receivers
 /// are supplied to factories during construction, never discovered as commands.
@@ -15,7 +15,7 @@ interface IUiComponent {
     fn widget(&self, name: &[u8]) -> Result<WeakComBox<IWidget>>;
 }
 
-#[version(3)]
+#[version(1)]
 /// Optional COM capability queried from an activated plugin root factory.
 /// It lets an independent designer enumerate constructible widgets without
 /// linking the plugin's Rust contract or implementation crate.

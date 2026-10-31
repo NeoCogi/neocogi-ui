@@ -1,4 +1,4 @@
-#[version(2)]
+#[version(1)]
 /// Constructible CPU decoder uploading through the target renderer's image factory.
 interface PngDecoder: IGfxDiagnostics {
     /// Decodes one static PNG and uploads exact normalized RGBA through a borrowed factory.

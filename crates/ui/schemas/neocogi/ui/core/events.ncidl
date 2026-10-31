@@ -31,7 +31,7 @@ interface IEventReceiver {
     fn post(&mut self, origin: &EventOrigin, event: ComBox<IEvent>) -> Result<()>;
 }
 
-#[version(4)]
+#[version(1)]
 /// Constructor delivery policy shared by every observable widget and service.
 enum EventBinding {
     /// Permanently disable delivery for this instance, as in a designer preview.

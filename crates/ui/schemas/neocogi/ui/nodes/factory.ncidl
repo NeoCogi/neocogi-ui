@@ -1,4 +1,4 @@
-#[version(3)]
+#[version(1)]
 /// Constructible button interface with only its shared widget and leaf-layout protocols separated.
 interface Button: IWidget + ILeafLayout {
 
@@ -33,7 +33,7 @@ interface Button: IWidget + ILeafLayout {
     fn clear_image(&mut self) -> Result<()>;
 }
 
-#[version(6)]
+#[version(1)]
 /// Runtime-bound construction shorthand over concrete built-in node contracts and compositions.
 interface UiFactory: IConstructionHost + IFileDialogs {
 

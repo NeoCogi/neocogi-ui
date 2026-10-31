@@ -52,7 +52,7 @@ enum ChoiceSelection: u8 {
     Selected(u64),
 }
 
-#[version(3)]
+#[version(1)]
 /// Live selection-oriented menu owned by the core popup manager.
 ///
 /// The menu owns hierarchy, navigation, placement and committed selection. A header control such
@@ -82,7 +82,7 @@ interface IChoiceMenu {
     fn close(&mut self) -> Result<()>;
 }
 
-#[version(3)]
+#[version(1)]
 /// Construction capability for selection menus managed by the core popup forest.
 interface IChoiceMenus {
     /// Creates one validated hidden choice hierarchy owned by an authenticated ordinary window.
@@ -94,7 +94,7 @@ interface IChoiceMenus {
         selection: ChoiceSelection, events: &EventBinding) -> Result<ComPtr<IChoiceMenu>>;
 }
 
-#[version(2)]
+#[version(1)]
 /// Live compact row capability, editable before mounting and while its owning surface exists.
 interface IMenuItem {
     /// Returns the same label used by measurement, paint and captured submissions.
@@ -115,7 +115,7 @@ interface IMenuItem {
     fn set_shortcut_hint(&self, hint: &[u8]) -> Result<()>;
 }
 
-#[version(2)]
+#[version(1)]
 /// Unique declaration tree consumed once by the owning manager; retained item capabilities remain live afterward.
 interface IMenuBuilder {
     /// Appends an enabled unmarked row and returns its editing/event capability.
@@ -126,7 +126,7 @@ interface IMenuBuilder {
     fn submenu(&self, label: &[u8]) -> Result<ComPtr<IMenuBuilder>>;
 }
 
-#[version(2)]
+#[version(1)]
 /// Menu construction and attachment capability on the same runtime identity as the window manager.
 interface IMenus {
     /// Creates one root declaration; for a bar its direct entries must all be submenus.

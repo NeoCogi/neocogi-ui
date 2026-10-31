@@ -125,7 +125,7 @@ work returns `ApplyOutcome::ChangesApplied`. This is an empty-inbox operation,
 not a once-per-frame callback: it can run before the first raw input and after
 each input, several times per update. Repeated idle calls must not create work.
 
-`IApplicationDispatcher` version 3 returns the generated `ApplicationDispatch`
+`IApplicationDispatcher` v1 returns the generated `ApplicationDispatch`
 enum: `MessageHandled`, `PendingChangesApplied`, or `Idle`. Both work outcomes
 charge the shared budget and revisit child dispatch/layout before later input,
 even when applying changes only posts a private message without a geometry edit.
@@ -161,7 +161,7 @@ FIFO as semantic events. Each decoded command then carries its own input identit
 instead of consulting native polling state that may already describe a later
 gesture. The theme editor uses this rule for Undo groups. Semantic events still
 travel as their original `ComBox<IEvent>` and weak widget origin; bookkeeping
-does not translate or wrap their payload interfaces. ABI version 3 requires
+does not translate or wrap their payload interfaces. The v1 structural contract requires
 rebuilding application and UI components together.
 
 Runtime dispatch snapshots contain weak handles and cannot retain removed values.

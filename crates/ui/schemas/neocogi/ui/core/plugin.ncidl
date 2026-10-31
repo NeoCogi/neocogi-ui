@@ -1,4 +1,4 @@
-#[version(3)]
+#[version(1)]
 /// Process entry interface for the retained UI implementation plugin.
 interface UiPluginFactory {
     /// Imports immutable resources and asks the shareable GFX interface for a fresh compositor.

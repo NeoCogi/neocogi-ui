@@ -1,5 +1,5 @@
 
-#[version(2)]
+#[version(1)]
 /// Activation occurrence shared by buttons, list items and menu commands.
 /// The envelope supplies exact source identity; display labels are not event data.
 interface IActivatedEvent: IEvent {}
@@ -20,7 +20,7 @@ interface ITextSubmittedEvent: IEvent {
     fn text(&self) -> Result<ComPtr<INcString>>;
 }
 
-#[version(2)]
+#[version(1)]
 /// Common category for immutable window lifecycle facts.
 interface IWindowEvent: IEvent {}
 
@@ -67,7 +67,7 @@ interface IWindowRestoredEvent: IWindowEvent {
     fn rect(&self) -> Result<Rect>;
 }
 
-#[version(2)]
+#[version(1)]
 /// Captured dismissal; whole-runtime shutdown does not synthesize this fact.
 interface IPopupDismissedEvent: IEvent {}
 

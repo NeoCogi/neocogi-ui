@@ -51,7 +51,7 @@ struct NinePatchDraw {
     patch: AssetPatch,
 }
 
-#[version(5)]
+#[version(1)]
 /// Renderer-neutral display-list executor owned by the GFX plugin.
 ///
 /// UI code supplies semantic operations in painter order. The compositor owns

@@ -1,4 +1,4 @@
-#[version(2)]
+#[version(1)]
 /// Concrete multiline wrapping policy shared by display and editing controls.
     enum TextWrapping: u8 {
         /// Preserve explicit line breaks without inserting visual breaks.

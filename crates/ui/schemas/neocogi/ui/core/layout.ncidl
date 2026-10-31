@@ -1,4 +1,4 @@
-#[version(2)]
+#[version(1)]
 /// Common widget option bits; parent-child sizing rules belong to container edges.
 bitenum WidgetOptions: u16 {
     /// No optional frame or routing override.
@@ -54,7 +54,7 @@ bitenum WidgetOptions: u16 {
         Panel = 16,
     }
 
-#[version(2)]
+#[version(1)]
 /// Current common widget policy, cached only within a synchronized runtime transaction.
 struct WidgetProperties {
     /// Current frame and pointer-routing options.
@@ -156,7 +156,7 @@ interface IContainerLayout {
     fn accepts_event(&self, event: WidgetEvent, text: &[u8]) -> Result<bool>;
 }
 
-#[version(2)]
+#[version(1)]
 /// Exclusive topology authority owned by a container implementation.
 /// Insert/replace return their unchanged candidate on failure; existing topology
 /// is unchanged on Err. Success consumes the candidate once. Destroying the editor releases children and expires its view.
