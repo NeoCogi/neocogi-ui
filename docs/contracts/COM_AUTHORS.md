@@ -24,6 +24,15 @@ IDs are scoped to their owner. A static counter compiled into several shared lib
 
 Default UI and GPU pointers are thread-local. Atomic reference counts do not make UI methods, OS windows, or GPU contexts thread-safe. Do not strengthen a threading marker without the corresponding implementation guarantee, including final destruction on another thread.
 
+Replaceable shared service slots must end their local borrow before calling a
+foreign retention or release method. The runtime's clipboard slot uses a local
+`Rc<ComPtr<_>>` snapshot: selecting that owner admits the lookup, and outgoing
+COM retention runs afterward. A retention callback may replace the installed
+clipboard or close the runtime; the admitted lookup still returns its selected
+service, while later calls observe the replacement or closure. Incoming borrowed
+clipboard services still require fallible shared retention; exclusive owners
+cannot be installed through a borrowed interface.
+
 ## Update, measurement, and external state
 
 The update result describes geometry: preferred measurement or child-placement inputs changed, or they did not. It is not a generic "something happened" flag. A widget may emit an event, change hover/focus painting, or update a paint cache while reporting no geometry change.

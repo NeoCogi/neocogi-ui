@@ -12,8 +12,9 @@ use std::{
 pub(crate) struct HostState {
     /// Dispatch-owner capability; widget-facing host projections can only post.
     pub(crate) event_origins: neocogi_ui_support::EventOriginOwner,
-    /// Replaceable host service shared by independent COM widgets; no borrow spans a request.
-    pub(crate) clipboard: RefCell<Option<ComPtr<neocogi_ui::abi::core::ITextClipboardAbi>>>,
+    /// Replaceable service shared by distinct COM projections. Clone only the local Rc under
+    /// this slot's borrow; foreign retention/release must run after that guard has ended.
+    pub(crate) clipboard: RefCell<Option<Rc<ComPtr<neocogi_ui::abi::core::ITextClipboardAbi>>>>,
     /// Topology edits invalidate the runtime's reusable descendant-first widget snapshot.
     pub(crate) dispatch_order_changed: Cell<bool>,
     /// Conservative count of live dispatcher-bearing nodes, including unmounted roots.
@@ -68,7 +69,10 @@ impl IWidgetHost for WidgetHost {
     /// Clones only the installed platform capability, without exposing retained runtime state.
     fn clipboard(&self) -> Result<ComPtr<neocogi_ui::abi::core::ITextClipboardAbi>, NcStatus> {
         self.check_mutation()?;
-        self.state.clipboard.borrow().clone().ok_or(neocogi_com::NC_E_NOT_FOUND)
+        let installed = self.state.clipboard.borrow().clone().ok_or(neocogi_com::NC_E_NOT_FOUND)?;
+        // The selected owner remains pinned even if AddRef replaces the service or closes the
+        // runtime. This already-admitted lookup returns that snapshot; later calls see closure.
+        Ok(ComPtr::clone(installed.as_ref()))
     }
     /// Exposes current metadata to independent widget implementations without granting tree ownership.
     fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
