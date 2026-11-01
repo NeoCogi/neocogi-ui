@@ -43,8 +43,8 @@ pub mod prelude {
         IconRole, MenuRole, MenuState, PointerState, ResourceCatalog, Skin, SkinBundle, SurfaceRole, SurfaceState, TitleAlignment, Visual, color,
     };
     pub use rs_math3d::{
-        Box3f, Color4b, CrossProduct, Dimension, Dimensioni, FloatVector, Mat4f, Quat, Quatf, Rect, Recti, Vec2f, Vec2i, Vec3f, Vec4f, Vector, Vector3,
-        color4b, ortho4,
+        Box3f, Color4b, CrossProduct, Dimension, Dimensioni, RealVector, Mat4f, Quat, Quatf, Rect, Recti, Vec2f, Vec2i, Vec3f, Vec4f, Vector, Vector3, color4b,
+        ortho4,
     };
 }
 

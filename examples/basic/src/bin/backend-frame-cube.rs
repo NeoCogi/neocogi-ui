@@ -93,8 +93,8 @@ fn face_depth(corners: &[usize; 4], points: &[Vec3f; 8]) -> f32 {
 
 /// CPU-projects colored faces into local coordinates; the UI supplies its own atlas material.
 fn build_cube_vertices(area: Rect, angle: f32) -> Vec<ColoredVertex> {
-    let rotate_y = Quatf::of_axis_angle(&Vec3f::new(0.0, 1.0, 0.0), angle, EPS_F32).expect("valid Y rotation");
-    let rotate_x = Quatf::of_axis_angle(&Vec3f::new(1.0, 0.0, 0.0), angle * 0.63, EPS_F32).expect("valid X rotation");
+    let rotate_y = Quatf::checked_of_axis_angle(&Vec3f::new(0.0, 1.0, 0.0), angle, EPS_F32).expect("valid Y rotation");
+    let rotate_x = Quatf::checked_of_axis_angle(&Vec3f::new(1.0, 0.0, 0.0), angle * 0.63, EPS_F32).expect("valid X rotation");
     let model = (rotate_x * rotate_y).mat4();
     let view = lookat(&Vec3f::new(0.0, 0.0, 4.0), &Vec3f::new(0.0, 0.0, 0.0), &Vec3f::new(0.0, 1.0, 0.0));
     let projection = perspective(std::f32::consts::FRAC_PI_3, area.width.max(1) as f32 / area.height.max(1) as f32, 0.1, 100.0);

@@ -964,7 +964,7 @@ dependencies = [
 [[package]]
 name = "neocogi-native-layout"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=209055c570e23a8b1d782cc008f4f914750c6be3#209055c570e23a8b1d782cc008f4f914750c6be3"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=5c5a4fb7550ba71d20ec9f38cdc96032103441c8#5c5a4fb7550ba71d20ec9f38cdc96032103441c8"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -975,7 +975,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-core"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=209055c570e23a8b1d782cc008f4f914750c6be3#209055c570e23a8b1d782cc008f4f914750c6be3"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=5c5a4fb7550ba71d20ec9f38cdc96032103441c8#5c5a4fb7550ba71d20ec9f38cdc96032103441c8"
 dependencies = [
  "neocogi-com",
  "neocogi-idl",
@@ -987,7 +987,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-glow"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=209055c570e23a8b1d782cc008f4f914750c6be3#209055c570e23a8b1d782cc008f4f914750c6be3"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=5c5a4fb7550ba71d20ec9f38cdc96032103441c8#5c5a4fb7550ba71d20ec9f38cdc96032103441c8"
 dependencies = [
  "glow 0.18.0",
  "neocogi-render-core",
@@ -1000,7 +1000,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-gpu"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=209055c570e23a8b1d782cc008f4f914750c6be3#209055c570e23a8b1d782cc008f4f914750c6be3"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=5c5a4fb7550ba71d20ec9f38cdc96032103441c8#5c5a4fb7550ba71d20ec9f38cdc96032103441c8"
 dependencies = [
  "neocogi-com",
  "neocogi-render-core",
@@ -1010,7 +1010,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-plugin"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=209055c570e23a8b1d782cc008f4f914750c6be3#209055c570e23a8b1d782cc008f4f914750c6be3"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=5c5a4fb7550ba71d20ec9f38cdc96032103441c8#5c5a4fb7550ba71d20ec9f38cdc96032103441c8"
 dependencies = [
  "glow 0.18.0",
  "js-sys",
@@ -1033,7 +1033,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-plugin-dylib"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=209055c570e23a8b1d782cc008f4f914750c6be3#209055c570e23a8b1d782cc008f4f914750c6be3"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=5c5a4fb7550ba71d20ec9f38cdc96032103441c8#5c5a4fb7550ba71d20ec9f38cdc96032103441c8"
 dependencies = [
  "neocogi-com",
  "neocogi-render-plugin",
@@ -1042,7 +1042,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-support"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=209055c570e23a8b1d782cc008f4f914750c6be3#209055c570e23a8b1d782cc008f4f914750c6be3"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=5c5a4fb7550ba71d20ec9f38cdc96032103441c8#5c5a4fb7550ba71d20ec9f38cdc96032103441c8"
 dependencies = [
  "neocogi-com",
  "neocogi-render-core",
@@ -1052,7 +1052,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-vulkan"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=209055c570e23a8b1d782cc008f4f914750c6be3#209055c570e23a8b1d782cc008f4f914750c6be3"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=5c5a4fb7550ba71d20ec9f38cdc96032103441c8#5c5a4fb7550ba71d20ec9f38cdc96032103441c8"
 dependencies = [
  "ash",
  "ash-window",
@@ -1066,7 +1066,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-webgl"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=209055c570e23a8b1d782cc008f4f914750c6be3#209055c570e23a8b1d782cc008f4f914750c6be3"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=5c5a4fb7550ba71d20ec9f38cdc96032103441c8#5c5a4fb7550ba71d20ec9f38cdc96032103441c8"
 dependencies = [
  "glow 0.18.0",
  "neocogi-render-core",
@@ -1077,7 +1077,7 @@ dependencies = [
 [[package]]
 name = "neocogi-render-wgpu"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=209055c570e23a8b1d782cc008f4f914750c6be3#209055c570e23a8b1d782cc008f4f914750c6be3"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=5c5a4fb7550ba71d20ec9f38cdc96032103441c8#5c5a4fb7550ba71d20ec9f38cdc96032103441c8"
 dependencies = [
  "neocogi-render-core",
  "neocogi-render-gpu",
@@ -1106,7 +1106,7 @@ dependencies = [
 [[package]]
 name = "neocogi-shader-compiler"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=209055c570e23a8b1d782cc008f4f914750c6be3#209055c570e23a8b1d782cc008f4f914750c6be3"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=5c5a4fb7550ba71d20ec9f38cdc96032103441c8#5c5a4fb7550ba71d20ec9f38cdc96032103441c8"
 dependencies = [
  "naga",
  "neocogi-com",
@@ -1118,7 +1118,7 @@ dependencies = [
 [[package]]
 name = "neocogi-shader-compiler-dylib"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=209055c570e23a8b1d782cc008f4f914750c6be3#209055c570e23a8b1d782cc008f4f914750c6be3"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=5c5a4fb7550ba71d20ec9f38cdc96032103441c8#5c5a4fb7550ba71d20ec9f38cdc96032103441c8"
 dependencies = [
  "neocogi-com",
  "neocogi-shader-compiler",
@@ -1127,7 +1127,7 @@ dependencies = [
 [[package]]
 name = "neocogi-shader-core"
 version = "0.0.0"
-source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=209055c570e23a8b1d782cc008f4f914750c6be3#209055c570e23a8b1d782cc008f4f914750c6be3"
+source = "git+ssh://git@github.com/NeoCogi/neocogi-platform.git?rev=5c5a4fb7550ba71d20ec9f38cdc96032103441c8#5c5a4fb7550ba71d20ec9f38cdc96032103441c8"
 dependencies = [
  "neocogi-com",
  "neocogi-idl",
@@ -1598,9 +1598,9 @@ checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
 
 [[package]]
 name = "rs-math3d"
-version = "0.13.0"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2736edc4e5f6234eed8833c23957769274bd79bcc4b4780422b14a3a97bfadb6"
+checksum = "5c96fa13453cbe448eb5358c49f5c34a30b8e5666487536c597857c8cbad3daf"
 dependencies = [
  "num-traits",
 ]

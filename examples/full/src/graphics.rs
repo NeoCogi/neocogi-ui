@@ -54,7 +54,7 @@
 pub(super) use neocogi_ui::*;
 pub(super) use neocogi_com::{ComPtr, ComRef, NcStatus, NcCopyFromBufferOffset};
 pub(super) use rs_math3d::{Vec2f, Vec2i, Vec3f, Vec4f, Mat4f, Quatf, Box3f, Recti, Dimensioni};
-pub(super) use rs_math3d::{FloatVector, Vector, CrossProduct};
+pub(super) use rs_math3d::{RealVector, Vector, CrossProduct};
 pub(super) use std::f32::consts::PI;
 
 /// Constructs a local mathematical rectangle, without retaining runtime geometry.

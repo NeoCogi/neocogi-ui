@@ -41,8 +41,8 @@ readme = "README.md"
 repository = "https://github.com/NeoCogi/neocogi-ui"
 
 [workspace.dependencies]
-neocogi-shader-core = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "209055c570e23a8b1d782cc008f4f914750c6be3" }
-neocogi-shader-compiler = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "209055c570e23a8b1d782cc008f4f914750c6be3", default-features = false }
+neocogi-shader-core = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "5c5a4fb7550ba71d20ec9f38cdc96032103441c8" }
+neocogi-shader-compiler = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "5c5a4fb7550ba71d20ec9f38cdc96032103441c8", default-features = false }
 neocogi-ui-samples = { path = "examples/ui-samples" }
 neocogi-ui-design = { path = "crates/ui/design" }
 neocogi-ui-document = { path = "crates/ui/document" }
@@ -55,7 +55,7 @@ neocogi-skin-impl = { path = "crates/skin/impl", version = "0.0.0", default-feat
 neocogi-skin = { path = "crates/skin/plugin", default-features = false }
 neocogi-com = { version = "=0.1.0-alpha.1", default-features = false }
 neocogi-com-host = { version = "=0.1.0-alpha.1", default-features = false }
-neocogi-native-layout = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "209055c570e23a8b1d782cc008f4f914750c6be3" }
+neocogi-native-layout = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "5c5a4fb7550ba71d20ec9f38cdc96032103441c8" }
 neocogi-idl = { version = "=0.1.0-alpha.1" }
 proc-macro2 = { version = "1", features = ["span-locations"] }
 quote = "1"
@@ -66,13 +66,13 @@ neocogi-ui-runtime = { path = "crates/ui/runtime", version = "0.0.0", default-fe
 neocogi-ui-nodes = { path = "crates/ui/nodes", version = "0.0.0", default-features = false }
 neocogi-demo-assets = { path = "examples/assets", default-features = false }
 neocogi-demo-host = { path = "examples/host", default-features = false }
-neocogi-render-gpu = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "209055c570e23a8b1d782cc008f4f914750c6be3" }
-neocogi-render-core = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "209055c570e23a8b1d782cc008f4f914750c6be3" }
-neocogi-render-support = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "209055c570e23a8b1d782cc008f4f914750c6be3" }
-neocogi-render-glow = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "209055c570e23a8b1d782cc008f4f914750c6be3" }
-neocogi-render-webgl = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "209055c570e23a8b1d782cc008f4f914750c6be3" }
-neocogi-render-vulkan = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "209055c570e23a8b1d782cc008f4f914750c6be3" }
-neocogi-render-wgpu = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "209055c570e23a8b1d782cc008f4f914750c6be3" }
+neocogi-render-gpu = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "5c5a4fb7550ba71d20ec9f38cdc96032103441c8" }
+neocogi-render-core = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "5c5a4fb7550ba71d20ec9f38cdc96032103441c8" }
+neocogi-render-support = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "5c5a4fb7550ba71d20ec9f38cdc96032103441c8" }
+neocogi-render-glow = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "5c5a4fb7550ba71d20ec9f38cdc96032103441c8" }
+neocogi-render-webgl = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "5c5a4fb7550ba71d20ec9f38cdc96032103441c8" }
+neocogi-render-vulkan = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "5c5a4fb7550ba71d20ec9f38cdc96032103441c8" }
+neocogi-render-wgpu = { git = "ssh://git@github.com/NeoCogi/neocogi-platform.git", rev = "5c5a4fb7550ba71d20ec9f38cdc96032103441c8" }
 
 ash = { version = "0.38", default-features = false, features = ["linked"] }
 ash-window-handle = { package = "ash-window", version = "0.13" }
@@ -83,7 +83,7 @@ png = "0.18"
 miniz_oxide = { version = "0.8.9", default-features = false }
 pollster = "1"
 raw-window-handle = "0.6"
-rs-math3d = "0.13"
+rs-math3d = "=0.20.0"
 sdl2 = { version = "0.38", features = ["raw-window-handle"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

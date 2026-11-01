@@ -141,7 +141,7 @@ pub(crate) use ui_node::{
 
 #[allow(unused_imports)]
 pub(crate) use rs_math3d::{
-    Box3f, Color4b, CrossProduct, Dimension, Dimensioni, FloatVector, Mat4f, Quat, Quatf, Rect, Recti, Vec2f, Vec2i, Vec3f, Vec4f, Vector, Vector3, color4b,
+    Box3f, Color4b, CrossProduct, Dimension, Dimensioni, RealVector, Mat4f, Quat, Quatf, Rect, Recti, Vec2f, Vec2i, Vec3f, Vec4f, Vector, Vector3, color4b,
     ortho4,
 };
 pub(crate) use render::geometry::UNCLIPPED_RECT;

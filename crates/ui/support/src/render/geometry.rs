@@ -36,7 +36,7 @@ pub static UNCLIPPED_RECT: Recti = Recti {
     width: i32::MAX,
     height: i32::MAX,
 };
-use rs_math3d::{Color4b, FloatVector, Recti, Vec2f};
+use rs_math3d::{Color4b, RealVector, Recti, Vec2f};
 use std::ops::Range;
 
 /// Floating-point tolerance shared by tessellation and clipping predicates.
