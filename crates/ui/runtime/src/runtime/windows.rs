@@ -424,6 +424,13 @@ enum PopupEdit {
         /// Caller-provided screen-space geometry copied before entering the manager transaction.
         anchor: Rect,
     },
+    /// Request fitting beside a complete screen-space trigger.
+    Anchored {
+        /// Complete caller-supplied trigger box, copied before the manager transaction.
+        anchor: Rect,
+        /// Known generated side tag validated before active-path mutation.
+        side: neocogi_ui::abi::core::PopupSide,
+    },
     /// Dismiss this active branch while retaining its definition.
     Hide,
     /// Replace popup appearance and automatic sizing.
@@ -477,6 +484,7 @@ impl LogicalPopup {
             PopupEdit::Show => context.window_manager.show_popup(&self.popup),
             // Explicit placement keeps the caller's copied screen rectangle authoritative.
             PopupEdit::ShowAt { anchor } => context.window_manager.show_popup_at(&self.popup, local_rect(anchor)),
+            PopupEdit::Anchored { anchor, side } => context.window_manager.show_popup_anchored(&self.popup, local_rect(anchor), side),
             // Hiding truncates the active popup branch without destroying its retained definition.
             PopupEdit::Hide => context.window_manager.hide_popup(&self.popup),
             // Option changes remain popup-specific and cannot accidentally mutate window chrome.
@@ -505,6 +513,13 @@ impl IPopup for LogicalPopup {
             return Err(NC_E_INVALID_ARG);
         }
         self.edit(PopupEdit::ShowAt { anchor })
+    }
+    /// Validates a complete trigger and direction before publishing a fitting request.
+    fn show_anchored(&mut self, anchor: Rect, side: neocogi_ui::abi::core::PopupSide) -> Result<(), NcStatus> {
+        if anchor.width < 0 || anchor.height < 0 || !side.is_known() {
+            return Err(NC_E_INVALID_ARG);
+        }
+        self.edit(PopupEdit::Anchored { anchor, side })
     }
     /// Dismisses active descendants through existing manager policy.
     fn hide(&mut self) -> Result<(), NcStatus> {

@@ -88,7 +88,7 @@ impl WindowManager {
     }
 
     /// Separates a bar's compact heading surface and uniquely owned popup declarations once for both creation paths.
-    pub(super) fn prepare_menu_bar(menu_bar: Option<crate::MenuBar>) -> (Option<MenuSurface>, Vec<Vec<MenuEntry>>) {
+    pub(super) fn prepare_menu_bar(menu_bar: Option<crate::MenuBar>) -> (Option<Box<MenuSurface>>, Vec<Vec<MenuEntry>>) {
         // Move top-level labels into the bar while retaining only their row vectors until the root
         // exists. This flat transfer avoids constructing a recursive hierarchy beside the forest.
         let mut menu_popups = Vec::new();
@@ -101,7 +101,7 @@ impl WindowManager {
                 headings.push(MenuSlot::Branch { label });
                 menu_popups.push(entries);
             }
-            MenuSurface::new(headings, false)
+            Box::new(MenuSurface::new(headings, false))
         });
 
         (menu_bar, menu_popups)
@@ -301,6 +301,21 @@ impl WindowManager {
         Ok(handle)
     }
 
+    /// Copies the authoritative positive cap into the existing compact hierarchy only on change.
+    pub(crate) fn set_choice_popup_limit(&mut self, popup: &PopupHandle, count: u32) -> Result<bool, SurfaceMutationError> {
+        let id = self.popup_id(popup)?;
+        let mut changed = false;
+        for key in self.popup_subtree(id) {
+            if let Some(menu) = self.surfaces.surface_mut(key).and_then(|surface| surface.body.menu_mut()) {
+                changed |= menu.set_visible_limit(count);
+            }
+        }
+        if changed {
+            self.invalidate_ui_commit();
+        }
+        Ok(changed)
+    }
+
     /// Replaces one choice menu's complete hierarchy after its owner changed model revision.
     pub(crate) fn replace_choice_popup(&mut self, popup: &PopupHandle, menu: crate::Menu, committed: Option<u64>) -> Result<(), SurfaceMutationError> {
         let id = self.popup_id(popup)?;
@@ -318,9 +333,11 @@ impl WindowManager {
             .popup_node_mut(id)
             .and_then(|node| node.surface.body.menu_mut())
             .ok_or(SurfaceMutationError::UnknownPopup)?;
+        let revoked_capture = surface.has_capture();
         if !surface.replace_choices(rows, committed) {
             return Err(SurfaceMutationError::UnknownPopup);
         }
+        self.discard_pointer_capture_tail |= revoked_capture;
         self.remove_popup_descendants(id);
         for (trigger_slot, entries) in children {
             self.register_choice_menu_popup(SurfaceKey::Popup(id), trigger_slot, entries, committed);
@@ -337,9 +354,13 @@ impl WindowManager {
     /// Opens a choice menu and restores the complete branch containing its committed leaf.
     pub(crate) fn show_choice_popup_at(&mut self, popup: &PopupHandle, anchor: Recti) -> Result<(), SurfaceMutationError> {
         let root = self.popup_id(popup)?;
-        let path = self.prepare_choice_path(root)?;
-        self.show_popup_at(popup, anchor)?;
-        self.activate_choice_path(path)?;
+        if self.surfaces.popup_is_active(root) {
+            self.show_popup_anchored(popup, anchor, neocogi_ui::abi::core::PopupSide::Below)?;
+        } else {
+            let path = self.prepare_choice_path(root)?;
+            self.show_popup_anchored(popup, anchor, neocogi_ui::abi::core::PopupSide::Below)?;
+            self.activate_choice_path(path)?;
+        }
         self.invalidate_ui_commit();
         Ok(())
     }
@@ -426,7 +447,7 @@ impl WindowManager {
             parent: Some(parent),
             surface,
             kind: SurfaceKind::Popup(PopupState::Application {
-                anchor: Recti::default(),
+                placement: PopupPlacement::At(Recti::default()),
                 events,
                 focus_on_layout: false,
             }),
@@ -705,28 +726,50 @@ impl WindowManager {
 
     /// Shows one popup at an exact screen-space anchor and updates the sole active path.
     pub fn show_popup_at(&mut self, popup: &PopupHandle, anchor: Recti) -> Result<(), SurfaceMutationError> {
-        // Resolve the stable ID before opening; foreign and destroyed handles have no matching
-        // application-popup node in this forest.
-        let popup = self.popup_id(popup)?;
-        // Open first so an invalid child path cannot partially replace its retained anchor.
-        self.open_popup_id(popup)?;
-        if self.active_menu_surface().is_some() {
-            // Successful application-popup replacement already dismissed the menu ancestry. Clear
-            // only its keyboard selection so the newly opened popup remains active.
-            self.finish_keyboard_menu(false);
-        }
-        let node = self.surfaces.popup_node_mut(popup).expect("authenticated popup must remain retained");
-        let focus_widgets = matches!(node.surface.body, SurfaceBody::Widgets { .. });
-        let PopupState::Application { anchor: current, focus_on_layout, .. } = node.popup_mut().expect("popup lookup must return popup policy") else {
+        self.show_popup_request(popup, PopupPlacement::At(anchor))
+    }
+
+    /// Requests anchored fitting while retaining the popup's own fixed-axis size intent.
+    pub fn show_popup_anchored(&mut self, popup: &PopupHandle, anchor: Recti, side: neocogi_ui::abi::core::PopupSide) -> Result<(), SurfaceMutationError> {
+        let id = self.popup_id(popup)?;
+        let node = self.surfaces.popup_node(id).ok_or(SurfaceMutationError::UnknownPopup)?;
+        let Some(PopupState::Application { placement, .. }) = node.popup() else {
             return Err(SurfaceMutationError::UnknownPopup);
         };
-        *current = anchor;
-        // Widget geometry is committed later in this transaction, so defer first-focus selection
-        // until that tree has valid allocations and clipping. Menu bodies own row selection and do
-        // not manufacture a meaningless widget-focus request.
-        *focus_on_layout = focus_widgets;
-        node.surface.rect = anchor;
-        self.active_surface = Some(SurfaceKey::Popup(popup));
+        let mut preferred = placement.preferred_rect();
+        if node.surface.body.menu().is_some_and(|menu| menu.is_choice()) {
+            preferred.width = anchor.width;
+        }
+        self.show_popup_request(
+            popup,
+            PopupPlacement::Anchored {
+                anchor,
+                side,
+                preferred: Dimensioni::new(preferred.width, preferred.height),
+            },
+        )
+    }
+
+    /// Publishes placement only after owner/path validation; repositioning retains current descendants.
+    fn show_popup_request(&mut self, handle: &PopupHandle, placement: PopupPlacement) -> Result<(), SurfaceMutationError> {
+        let popup = self.popup_id(handle)?;
+        let was_active = self.surfaces.popup_is_active(popup);
+        if !was_active {
+            self.open_popup_id(popup)?;
+            if self.active_menu_surface().is_some() {
+                self.finish_keyboard_menu(false);
+            }
+        }
+        let node = self.surfaces.popup_node_mut(popup).expect("authenticated popup remains retained");
+        let focus_widgets = !was_active && matches!(node.surface.body, SurfaceBody::Widgets { .. });
+        let PopupState::Application { placement: current, focus_on_layout, .. } = node.popup_mut().expect("application popup policy") else {
+            return Err(SurfaceMutationError::UnknownPopup);
+        };
+        *current = placement;
+        *focus_on_layout |= focus_widgets;
+        if !was_active {
+            self.active_surface = Some(SurfaceKey::Popup(popup));
+        }
         self.invalidate_ui_commit();
         Ok(())
     }
@@ -930,8 +973,9 @@ impl WindowManager {
     pub(super) fn truncate_active_popup_path(&mut self, keep: usize) {
         let Some(mut current) = self.surfaces.active_popup else { return };
         let restore_owner = match self.active_surface {
-            Some(SurfaceKey::Popup(active)) if self.surfaces.popup_is_active(active)
-                && self.surfaces.popup_depth(active).is_some_and(|depth| depth >= keep) => {
+            Some(SurfaceKey::Popup(active))
+                if self.surfaces.popup_is_active(active) && self.surfaces.popup_depth(active).is_some_and(|depth| depth >= keep) =>
+            {
                 // Save only the owning root. A direct parent may be removed by this same suffix.
                 self.surfaces.owning_root(SurfaceKey::Popup(active))
             }

@@ -751,9 +751,55 @@ restores the keyboard/committed fallback. Arrows move only the candidate, Enter 
 row press commits, and Escape/outside dismissal preserves the prior selection.
 
 Popup placement uses the header's complete outer border box rather than its inset
-content rectangle. Its horizontal extent remains fixed to that box while row
-content determines height, so theme-specific frames cannot shift the left edge or
-extend the right edge.
+content rectangle. Core prefers below, flips above when that provides more usable
+space, and fits within the owning surface's permitted clip. Width matches the
+header when the frame permits it; narrow frames can shift or reduce that width.
+Ordinary windows permit their popups across the drawable, while clipped child
+owners inherit their ancestors' content clipping.
+
+Combo and IChoiceMenu expose `max_visible_items` and `set_max_visible_items`.
+The default is ten complete direct rows per panel. The count must be positive;
+zero fails without mutation, and a large count never allocates by the cap or
+reduces the accepted model. Branches and disabled rows occupy space; descendants
+count only in their own panel. Every nested choice panel inherits the same limit.
+The core model owns this value; Combo forwards it without a second copy. A live
+count edit silently reflows the installed hierarchy without rebuilding it or
+changing selection. Replacement preserves the limit. Call `ui.update` to commit
+semantic-model edits; the Combo wrapper also supplies normal sticky invalidation.
+
+```rust,ignore
+let combo = ui.combo_box_unobserved(window.as_com_ref(), &labels,
+    ChoiceSelection::None)?;
+combo.handle().set_max_visible_items(8)?;
+// Insert combo through the parent's ordinary child collection, then update.
+```
+
+Available frame height can further reduce the visible count. Selection panels
+normalize their rows to one measured text/artwork height and snap scrolling to
+complete rows. Command/context menus keep measured variable row heights and
+separators; their panels use available-height scrolling without an arbitrary
+count cap. Menu bars retain horizontal heading layout. A scrollbar occupies its
+own gutter, excluded from row text, artwork, hit testing and submenu attachment.
+The complete row model remains owned by one compact surface; paint/hit traversal
+selects a visible range from wide content coordinates before screen translation.
+Cumulative positions and offsets use i64, shared ratio products use i128, and only
+final visible rectangles narrow into the screen domain.
+
+Placement prefers one body-font line of external vertical frame clearance. The
+margin can shrink if necessary to keep one complete row usable; hard clipping
+never relaxes. A physically tiny frame can show a clipped positive body, even
+if it must overlap the trigger. A finite zero inherited clip stays empty and
+cannot capture or activate a row. The global drawable still requires positive
+dimensions under the existing runtime contract.
+
+Wheel input over a menu is consumed at its limits and cannot activate a row or
+scroll content behind it. Thumb capture remains with that menu until release or
+cancellation, including outside its rectangle. Arrows, Home/End and PageUp/PageDown
+move and reveal the transient candidate; reveal is requested by navigation/open,
+not ordinary repaint, so it does not undo wheel scrolling. Scrolling alone does
+not open a newly exposed branch. A parent scroll reanchors its child while the
+trigger is fully visible, otherwise dismissing that child suffix. Physical
+left/right flipping does not change logical submenu navigation.
 
 The header and composition manager share one runtime-private typed state capability.
 That allocation owns ordinary text, generated preorder entries, stable selection,
@@ -792,8 +838,20 @@ on a window; trying to attach another reports `UI_E_POLICY`. Dynamic bar
 replacement is not exposed. For an ordinary standalone popup, build a root with
 items/separators/submenus and call `menus.popup(window, &builder)`, then use the
 returned `IPopup` capability's `show()` method for current-pointer placement or
-`show_at(anchor)` for an exact screen anchor. Its hide/close methods retain their
-ordinary transient-lifetime behavior. Successful mounting consumes declarations;
+`show_at(anchor)` for a retained requested rectangle. Its displayed allocation is
+fitted to the permitted frame without overwriting that request. `show_anchored`
+accepts a complete trigger box and a generated `PopupSide`; core chooses that side
+or its opposite and fits the allocation. Default automatic axes measure content;
+fixed axes retain the popup size last requested with `show_at`, independently of
+the trigger's dimensions. Rectangle anchors are snapshots, not widget bindings;
+resubmit one to reposition an open popup while preserving valid state. Resize and
+clip changes refit from the original request without drift.
+
+General widget popups receive a finite final body allocation. Applications choose
+which content scrolls by composing an existing ScrollArea, allowing fixed search
+boxes, headers and footers. Core never silently wraps arbitrary popup content in
+an outer scroller. Its hide/close methods retain their ordinary transient-lifetime
+behavior. Successful mounting consumes declarations;
 subsequent builder appends report `UI_E_CLOSED`.
 
 Menu item interfaces resolve the same native row before and after that transfer.

@@ -38,6 +38,8 @@
 use std::fmt;
 
 use neocogi_ui_support::text_layout::content_height;
+use neocogi_ui_support::scroll::{ScrollbarAxis, ScrollbarGeometry, paint_scrollbar, scrollbar_max_scroll};
+use crate::math::clamp_i64_to_i32;
 use crate::math::RectExt;
 use crate::{AtlasHandle, Color, Dimensioni, FontRef, FontRole, MenuRole, MenuState, MouseButton, Recti, Skin, UiInputEvent, Vec2i, WidgetOption, WidgetPaintCtx};
 
@@ -46,6 +48,9 @@ mod tests;
 
 /// Smallest marker column that can contain the atlas-independent radio fallback.
 const MIN_MARKER_COLUMN_WIDTH: i32 = 3;
+
+/// Initial presentation cap used by the authoritative core model and its installed panels.
+pub(crate) const DEFAULT_CHOICE_VISIBLE_ITEMS: u32 = 10;
 
 /// Visual state displayed in the optional marker gutter of one menu item.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -365,17 +370,65 @@ pub(crate) enum MenuAction {
     SubmitAndClose(Result<(), neocogi_com::NcStatus>),
 }
 
+/// A compact row's full content position; aggregate heights never narrow to screen units.
+#[derive(Clone, Copy, Eq, PartialEq)]
+struct MenuRowBounds {
+    /// Local horizontal position, including the panel inset.
+    x: i32,
+    /// Full vertical position before viewport translation.
+    y: i64,
+    /// Allocated row width, excluding the scrollbar gutter.
+    width: i32,
+    /// Measured positive row height.
+    height: i32,
+}
+
+impl MenuRowBounds {
+    /// Builds one retained row value without a second geometry tree.
+    fn new(x: i32, y: impl Into<i64>, width: i32, height: i32) -> Self {
+        Self { x, y: y.into(), width, height }
+    }
+
+    /// Narrows only after subtracting the full-content scroll offset.
+    fn local_rect(self, offset: i64, origin_y: i32) -> Recti {
+        Recti::new(self.x, clamp_i64_to_i32(self.y - offset + i64::from(origin_y)), self.width, self.height)
+    }
+}
+
+/// Exclusive menu gesture ownership; row activation and scrollbar drag are distinct.
+#[derive(Clone, Copy, Default)]
+enum MenuCapture {
+    /// No physical gesture belongs to this menu.
+    #[default]
+    None,
+    /// Swallow the remaining tail of a press-only row gesture.
+    Row,
+    /// Drag from the initial pointer/offset, avoiding accumulated snapping error.
+    Scrollbar {
+        /// Initial pointer in the menu's local coordinates.
+        start: Vec2i,
+        /// Full content offset at the beginning of this physical drag.
+        offset: i64,
+    },
+}
+
 /// Shared output of menu measurement, hit testing, anchoring, and paint geometry.
 #[derive(Default)]
 struct MenuSurfaceLayout {
     /// Preferred content extent.
     size: Dimensioni,
     /// Heading or row rectangles in declaration order.
-    slots: Vec<Recti>,
+    slots: Vec<MenuRowBounds>,
     /// Width before the shared control-text region in popup rows.
     marker_width: i32,
     /// Intrinsic popup row width before an owner may constrain its exact horizontal extent.
     intrinsic_row_width: i32,
+    /// Popup panel chrome measured in the same style revision as the rows.
+    insets: crate::SliceInsets,
+    /// Cross-axis track width, reserved only for actual overflow.
+    scrollbar_width: i32,
+    /// Smallest usable thumb length in this style.
+    min_thumb: i32,
 }
 
 /// Manager-owned concrete presentation for one complete menu bar or popup.
@@ -404,9 +457,19 @@ pub(crate) struct MenuSurface {
     open_slot: Option<usize>,
     /// Whether this surface consumed the current left-button gesture.
     ///
-    /// The manager uses this concrete bit only to keep drag/release away from application trees.
+    /// The manager uses this exhaustive gesture state to keep drag/release away from application trees.
     /// Pointer actions remain press-only, while manager-owned keyboard selection is independent.
-    captured: bool,
+    capture: MenuCapture,
+    /// Single full-content offset, independent of the screen coordinate domain.
+    offset_y: i64,
+    /// Committed local row clip; excludes panel chrome and scrollbar gutter.
+    viewport: Recti,
+    /// Single committed track/range mapping; absent when no usable track is required.
+    scrollbar: Option<ScrollbarGeometry>,
+    /// Installed choice policy; commands have no item-count cap.
+    max_visible_items: Option<u32>,
+    /// Reveal is requested by navigation/open, never by an ordinary repaint.
+    reveal_pending: bool,
     /// Screen-space content rectangle assigned during the latest layout commit.
     rect: Recti,
     /// Screen-space viewport clip shared by hit testing and paint.
@@ -426,7 +489,12 @@ impl MenuSurface {
             hovered_slot: None,
             keyboard_slot: None,
             open_slot: None,
-            captured: false,
+            capture: MenuCapture::None,
+            offset_y: 0,
+            viewport: Recti::default(),
+            scrollbar: None,
+            max_visible_items: None,
+            reveal_pending: false,
             rect: Recti::default(),
             clip: Recti::default(),
             geometry: MenuSurfaceLayout::default(),
@@ -437,6 +505,8 @@ impl MenuSurface {
     pub(crate) fn choices(rows: Vec<MenuSlot>, committed: Option<u64>) -> Self {
         let mut surface = Self::new(rows, true);
         surface.mode = MenuMode::Choices { committed, submitted: None };
+        surface.max_visible_items = Some(DEFAULT_CHOICE_VISIBLE_ITEMS);
+        surface.reveal_pending = true;
         surface.keyboard_slot = surface
             .rows
             .iter()
@@ -458,6 +528,8 @@ impl MenuSurface {
             .iter()
             .position(|row| matches!(row, MenuSlot::Choice { id, enabled: true, .. } if Some(*id) == committed));
         self.geometry = MenuSurfaceLayout::default();
+        self.capture = MenuCapture::None;
+        self.reveal_pending = true;
         true
     }
 
@@ -477,7 +549,11 @@ impl MenuSurface {
             .rows
             .iter()
             .position(|row| matches!(row, MenuSlot::Choice { id, enabled: true, .. } if Some(*id) == committed));
-        self.captured = false;
+        self.capture = MenuCapture::None;
+        self.reveal_pending = true;
+        if self.keyboard_slot.is_none() {
+            self.focus_first();
+        }
         true
     }
 
@@ -509,12 +585,28 @@ impl MenuSurface {
         // Menus deliberately keep intrinsic row geometry. Root layout stretches only the bar's
         // assigned width, while popup outer auto-size consumes this exact preferred size. Moving
         // the old slot vector into the helper retains its allocation across committed layouts.
+        let preserve_candidate = self.candidate_visible();
+        let previous_candidate = self.keyboard_slot.and_then(|slot| self.geometry.slots.get(slot)).copied();
         let slots = std::mem::take(&mut self.geometry.slots);
         self.geometry = if self.popup {
             layout_popup(&self.rows, style, atlas, slots)
         } else {
             layout_bar(&self.rows, style, atlas, slots)
         };
+        if let Some(limit) = self.max_visible_items {
+            // Branch artwork and text share one uniform choice-panel row height.
+            let height = self.geometry.slots.iter().map(|row| row.height).max().unwrap_or(0);
+            for (index, row) in self.geometry.slots.iter_mut().enumerate() {
+                row.y = index as i64 * i64::from(height);
+                row.height = height;
+            }
+            let visible = self.geometry.slots.len().min(limit as usize);
+            self.geometry.size.height = clamp_i64_to_i32(visible as i64 * i64::from(height) + i64::from(self.geometry.insets.vertical_extent()));
+        }
+        if preserve_candidate && previous_candidate != self.keyboard_slot.and_then(|slot| self.geometry.slots.get(slot)).copied() {
+            self.reveal_pending = true;
+        }
+        self.geometry.size.width = self.width_for_height(self.geometry.size.height);
         self.geometry.size
     }
 
@@ -522,26 +614,220 @@ impl MenuSurface {
     pub(crate) fn layout(&mut self, rect: Recti, viewport: Recti) {
         // Slots remain local so the same cached values feed painting and relational anchors. The bar
         // may be wider than its headings; popup surfaces retain their measured intrinsic allocation.
+        let previous_rect = self.rect;
+        let previous_scrollbar = self.scrollbar;
         self.rect = rect;
         self.clip = viewport;
-        if matches!(self.mode, MenuMode::Choices { .. }) {
-            // A combo-like trigger supplies the exact horizontal extent. Preserve the menu
-            // panel's measured margins while stretching every hit and paint row together.
-            let difference = rect.width.saturating_sub(self.geometry.size.width);
+        let preserve_candidate = self.candidate_visible();
+        let previous_height = self.viewport.height;
+        let insets = self.geometry.insets;
+        let body_height = rect.height.saturating_sub(insets.vertical_extent()).max(0);
+        let overflow = self.content_height() > i64::from(body_height);
+        let gutter = if self.popup && overflow && body_height > 0 {
+            self.geometry
+                .scrollbar_width
+                .min(rect.width.saturating_sub(insets.horizontal_extent()).saturating_sub(1).max(0))
+        } else {
+            0
+        };
+        self.viewport = if self.popup {
+            Recti::new(
+                insets.left,
+                insets.top,
+                rect.width.saturating_sub(insets.horizontal_extent()).saturating_sub(gutter).max(0),
+                body_height,
+            )
+        } else {
+            Recti::new(0, 0, rect.width.max(0), rect.height.max(0))
+        };
+        if self.popup {
             for slot in &mut self.geometry.slots {
-                slot.width = self.geometry.intrinsic_row_width.saturating_add(difference).max(0);
+                slot.width = self.viewport.width;
             }
         }
+        self.set_offset(self.offset_y);
+        if std::mem::take(&mut self.reveal_pending) || (preserve_candidate && previous_height != self.viewport.height) {
+            self.reveal_candidate();
+        }
+        self.scrollbar = (gutter > 0).then(|| {
+            ScrollbarGeometry::new(
+                ScrollbarAxis::Vertical,
+                Recti::new(self.viewport.x.saturating_add(self.viewport.width), self.viewport.y, gutter, body_height),
+                body_height,
+                self.content_height(),
+                self.offset_y,
+                self.geometry.min_thumb,
+            )
+        });
+        // A changed track/range invalidates this physical drag. The forest observes
+        // the capture transition and consumes its remaining drag/release tail.
+        let drag_geometry = |bar: ScrollbarGeometry| {
+            let track = bar.track();
+            (track.x, track.y, track.width, track.height, bar.thumb().height, bar.max_offset())
+        };
+        if matches!(self.capture, MenuCapture::Scrollbar { .. })
+            && ((previous_rect.x, previous_rect.y) != (rect.x, rect.y) || previous_scrollbar.map(drag_geometry) != self.scrollbar.map(drag_geometry))
+        {
+            self.capture = MenuCapture::None;
+        }
+    }
+
+    /// Installs presentation policy without rebuilding rows or disturbing selection/capture.
+    pub(crate) fn set_visible_limit(&mut self, count: u32) -> bool {
+        debug_assert!(count > 0, "the core state admits positive visible limits");
+        if self.max_visible_items.is_none() || self.max_visible_items == Some(count) {
+            return false;
+        }
+        self.max_visible_items = Some(count);
+        true
+    }
+
+    /// Whether the creating trigger fixes this choice panel's outer width.
+    pub(crate) fn is_choice(&self) -> bool {
+        self.max_visible_items.is_some()
+    }
+
+    /// Full aggregate body height; no screen-sized cache truncates trailing rows.
+    fn content_height(&self) -> i64 {
+        self.geometry.slots.last().map_or(0, |row| row.y + i64::from(row.height))
+    }
+
+    /// Natural width plus a gutter iff this particular allocation actually overflows.
+    pub(crate) fn width_for_height(&self, height: i32) -> i32 {
+        if !self.popup {
+            return self.geometry.size.width;
+        }
+        let body = height.saturating_sub(self.geometry.insets.vertical_extent()).max(0);
+        self.geometry
+            .intrinsic_row_width
+            .saturating_add(self.geometry.insets.horizontal_extent())
+            .saturating_add(if self.content_height() > i64::from(body) {
+                self.geometry.scrollbar_width
+            } else {
+                0
+            })
+    }
+
+    /// Fits complete choice rows, allowing a positive partial body only in a physically tiny frame.
+    pub(crate) fn fit_height(&self, available: i32) -> i32 {
+        let chrome = self.geometry.insets.vertical_extent();
+        let body = available.saturating_sub(chrome).max(0);
+        let row = self.geometry.slots.first().map_or(0, |row| row.height);
+        if self.max_visible_items.is_some() && row > 0 && body >= row {
+            chrome.saturating_add(body / row * row)
+        } else {
+            available.max(0)
+        }
+    }
+
+    /// Smallest complete body needed before relaxing the preferred external line clearance.
+    pub(crate) fn minimum_height(&self) -> i32 {
+        self.rows
+            .iter()
+            .zip(&self.geometry.slots)
+            .filter(|(entry, _)| !matches!(entry, MenuSlot::Separator))
+            .map(|(_, row)| row.height)
+            .min()
+            .unwrap_or(0)
+            .saturating_add(self.geometry.insets.vertical_extent())
+    }
+
+    /// Clamps and snaps one full-content offset. Painting cannot change this state.
+    fn set_offset(&mut self, requested: i64) {
+        let maximum = scrollbar_max_scroll(self.content_height(), i64::from(self.viewport.height));
+        let mut offset = requested.clamp(0, maximum);
+        if self.max_visible_items.is_some()
+            && let Some(row) = self.geometry.slots.first()
+            && row.height > 0
+        {
+            let step = i64::from(row.height);
+            offset = (offset / step * step).min(maximum);
+        }
+        if offset != self.offset_y {
+            self.hovered_slot = None;
+        }
+        self.offset_y = offset;
+    }
+
+    /// Whether the current candidate was fully visible before a geometry change.
+    /// An offscreen candidate deliberately left behind by wheel input must not force reveal.
+    fn candidate_visible(&self) -> bool {
+        self.viewport.height > 0
+            && self
+                .keyboard_slot
+                .and_then(|slot| self.geometry.slots.get(slot))
+                .is_some_and(|row| row.y >= self.offset_y && row.y + i64::from(row.height) <= self.offset_y + i64::from(self.viewport.height))
+    }
+
+    /// Reveals a navigation target once, preserving wheel-only scrolling on later layouts.
+    fn reveal_candidate(&mut self) {
+        let Some(row) = self.keyboard_slot.and_then(|slot| self.geometry.slots.get(slot)).copied() else {
+            return;
+        };
+        let bottom = row.y + i64::from(row.height);
+        let visible_bottom = self.offset_y + i64::from(self.viewport.height);
+        if row.y < self.offset_y {
+            self.set_offset(row.y);
+        } else if bottom > visible_bottom {
+            self.set_offset(bottom - i64::from(self.viewport.height));
+        }
+    }
+
+    /// Binary searches the sole ordered row geometry for paint and pointer traversal.
+    fn visible_slots(&self) -> std::ops::Range<usize> {
+        let start = self.geometry.slots.partition_point(|row| row.y + i64::from(row.height) <= self.offset_y);
+        let end = self
+            .geometry
+            .slots
+            .partition_point(|row| row.y < self.offset_y + i64::from(self.viewport.height));
+        start..end
+    }
+
+    /// Moves by one viewport through eligible rows without allocating a filtered model.
+    pub(crate) fn page_keyboard_focus(&mut self, forward: bool) -> bool {
+        let Some(current) = self.keyboard_slot else { return self.focus_first() };
+        let position = self.geometry.slots.get(current).map_or(0, |row| row.y);
+        let target = if forward {
+            position + i64::from(self.viewport.height)
+        } else {
+            position - i64::from(self.viewport.height)
+        };
+        let mut candidate = current;
+        if forward {
+            for slot in current + 1..self.rows.len() {
+                if Self::slot_accepts_keyboard(&self.rows[slot]) {
+                    candidate = slot;
+                }
+                if self.geometry.slots[slot].y >= target && candidate != current {
+                    break;
+                }
+            }
+        } else {
+            for slot in (0..current).rev() {
+                if Self::slot_accepts_keyboard(&self.rows[slot]) {
+                    candidate = slot;
+                }
+                if self.geometry.slots[slot].y <= target && candidate != current {
+                    break;
+                }
+            }
+        }
+        self.focus_slot(candidate)
     }
 
     /// Returns whether this concrete surface owns a menu pointer gesture.
     pub(crate) fn has_capture(&self) -> bool {
-        self.captured
+        !matches!(self.capture, MenuCapture::None)
     }
 
     /// Returns whether one screen point lies in this surface's allocated and clipped region.
     pub(crate) fn contains(&self, point: Vec2i) -> bool {
         self.rect.contains_point(point) && self.clip.contains_point(point)
+    }
+
+    /// A finite empty body can retain navigation/dismissal intent but cannot activate an item.
+    pub(crate) fn accepts_activation(&self) -> bool {
+        self.viewport.width > 0 && self.viewport.height > 0 && self.rect.positive_intersection(self.clip).is_some()
     }
 
     /// Clears only pointer hover while retaining any active press capture.
@@ -556,7 +842,7 @@ impl MenuSurface {
         // Open state is synchronized separately from active forest edges and must survive ordinary
         // hover loss until the manager commits a different popup path.
         self.clear_pointer_hover();
-        self.captured = false;
+        self.capture = MenuCapture::None;
     }
 
     /// Clears this surface's keyboard selection without changing pointer or open-path state.
@@ -568,6 +854,7 @@ impl MenuSurface {
     /// Selects the first enabled item or branch in declaration order.
     pub(crate) fn focus_first(&mut self) -> bool {
         // Separators and disabled items remain visible but are never keyboard landing points.
+        self.reveal_pending = true;
         self.keyboard_slot = self.rows.iter().position(Self::slot_accepts_keyboard);
         self.keyboard_slot.is_some()
     }
@@ -575,6 +862,7 @@ impl MenuSurface {
     /// Selects the last enabled item or branch in declaration order.
     pub(crate) fn focus_last(&mut self) -> bool {
         // Reverse position preserves the original slot index without allocating a filtered list.
+        self.reveal_pending = true;
         self.keyboard_slot = self.rows.iter().rposition(Self::slot_accepts_keyboard);
         self.keyboard_slot.is_some()
     }
@@ -604,6 +892,7 @@ impl MenuSurface {
             };
             if Self::slot_accepts_keyboard(&self.rows[slot]) {
                 self.keyboard_slot = Some(slot);
+                self.reveal_pending = true;
                 return true;
             }
         }
@@ -617,6 +906,7 @@ impl MenuSurface {
         // selection on a separator or disabled item.
         let selectable = self.rows.get(slot).is_some_and(Self::slot_accepts_keyboard);
         self.keyboard_slot = selectable.then_some(slot);
+        self.reveal_pending = selectable;
         selectable
     }
 
@@ -667,16 +957,66 @@ impl MenuSurface {
             return MenuRoute::unhandled();
         };
         let inside = self.rect.contains_point(position) && self.clip.contains_point(position);
-        if !inside && !self.captured {
+        if !inside && !self.has_capture() {
             self.hovered_slot = None;
             return MenuRoute::unhandled();
         }
 
-        // Slot geometry is local while normalized input is screen-space. Translate once and use the
-        // same rectangles later painted by `paint`, including full-row separator occlusion.
         let local = Vec2i::new(position.x.saturating_sub(self.rect.x), position.y.saturating_sub(self.rect.y));
-        let slot = inside
-            .then(|| self.geometry.slots.iter().position(|bounds| bounds.contains_point(local)))
+        if let UiInputEvent::Scroll { delta, .. } = input {
+            if delta.y != 0 && self.popup {
+                let step = self.geometry.slots.first().map_or(1, |row| row.height.max(1));
+                let movement = if self.max_visible_items.is_some() {
+                    // Platform deltas are normalized pixel distances; a nonzero small delta
+                    // still advances one complete choice row, preserving the existing sign.
+                    let rows = (i64::from(delta.y).unsigned_abs() / step as u64).max(1) as i64;
+                    rows * i64::from(step) * i64::from(delta.y.signum())
+                } else {
+                    i64::from(delta.y)
+                };
+                self.set_offset(self.offset_y.saturating_add(movement));
+            }
+            self.hovered_slot = self
+                .viewport
+                .contains_point(local)
+                .then(|| {
+                    self.visible_slots()
+                        .find(|&slot| self.geometry.slots[slot].local_rect(self.offset_y, self.viewport.y).contains_point(local))
+                })
+                .flatten();
+            return MenuRoute::handled(None);
+        }
+        if let MenuCapture::Scrollbar { start, offset } = self.capture {
+            match input {
+                UiInputEvent::MouseMove { .. } | UiInputEvent::MouseDrag { .. } => {
+                    if let Some(bar) = self.scrollbar {
+                        self.set_offset(offset.saturating_add(bar.drag_delta(Vec2i::new(local.x.saturating_sub(start.x), local.y.saturating_sub(start.y)))));
+                    }
+                }
+                UiInputEvent::MouseUp { button, .. } if button.intersects(MouseButton::LEFT) => self.capture = MenuCapture::None,
+                _ => {}
+            }
+            self.hovered_slot = None;
+            return MenuRoute::handled(None);
+        }
+        if let Some(bar) = self.scrollbar
+            && inside
+            && bar.track().contains_point(local)
+        {
+            self.hovered_slot = None;
+            if matches!(input, UiInputEvent::MouseDown { button, .. } if button.intersects(MouseButton::LEFT)) {
+                if !bar.thumb().contains_point(local) {
+                    self.set_offset(bar.centered_offset(local));
+                }
+                self.capture = MenuCapture::Scrollbar { start: local, offset: self.offset_y };
+            }
+            return MenuRoute::handled(None);
+        }
+        let slot = (inside && self.viewport.contains_point(local))
+            .then(|| {
+                self.visible_slots()
+                    .find(|&slot| self.geometry.slots[slot].local_rect(self.offset_y, self.viewport.y).contains_point(local))
+            })
             .flatten();
         self.hovered_slot = slot;
         if matches!(self.mode, MenuMode::Commands)
@@ -708,7 +1048,7 @@ impl MenuSurface {
         // Only the left press commits policy. Capture keeps the remainder of that physical gesture
         // out of the application tree even when popup closure removes this surface from traversal.
         if matches!(input, UiInputEvent::MouseDown { button, .. } if button.intersects(MouseButton::LEFT)) {
-            self.captured = true;
+            self.capture = MenuCapture::Row;
             let action = slot.and_then(|slot| match self.rows.get_mut(slot)? {
                 MenuSlot::Branch { .. } => Some(MenuAction::OpenSlot(slot)),
                 MenuSlot::Choice { id, enabled: true, .. } => {
@@ -727,7 +1067,7 @@ impl MenuSurface {
             return MenuRoute::handled(action);
         }
         if matches!(input, UiInputEvent::MouseUp { button, .. } if button.intersects(MouseButton::LEFT)) {
-            self.captured = false;
+            self.capture = MenuCapture::None;
         }
         MenuRoute::handled(None)
     }
@@ -753,7 +1093,7 @@ impl MenuSurface {
             self.hovered_slot.is_some(),
             false,
             false,
-            self.captured,
+            self.has_capture(),
             window_active,
             crate::WidgetOption::NONE,
         );
@@ -763,76 +1103,92 @@ impl MenuSurface {
         let panel_role = if self.popup { MenuRole::Popup } else { MenuRole::Bar };
         let panel_state = if enabled { MenuState::Normal } else { MenuState::Disabled };
         let _ = ctx.draw_menu_state(panel_role, panel_state, ctx.local_rect());
-        for (slot, entry) in self.rows.iter().enumerate() {
-            let row = self.geometry.slots[slot];
-            match entry {
-                MenuSlot::Item(item) => {
-                    let hovered = self.hovered_slot == Some(slot);
-                    let focused = self.keyboard_slot == Some(slot);
-                    let state = MenuState::from_interaction(enabled && item.parameters.enabled, false, hovered, focused, self.captured && hovered);
-                    // Check and radio state already has a dedicated marker glyph. Keeping the row
-                    // on MenuItem prevents persistent marker data from overriding interaction art.
-                    let role = MenuRole::Item;
-                    let _ = ctx.draw_menu_state(role, state, row);
-                    let marker = Recti::new(row.x, row.y, self.geometry.marker_width.max(0), row.height);
-                    let text = text_region(row, self.geometry.marker_width);
-                    // Text, marks, and shortcut hints resolve the same semantic role and exact
-                    // interaction state as the row background.
-                    let color = ctx.menu_content_color(role, state);
-                    paint_item_marker(&mut ctx, marker, item.parameters.mark, color);
-                    let font = style.resolve_font(ctx.atlas(), &item.parameters.font);
-                    // Both strings share one clip so control padding is applied exactly once.
-                    ctx.draw_control_text_color_with_font(font, &item.parameters.label, text, color, WidgetOption::NONE);
-                    if let Some(hint) = &item.parameters.shortcut_hint {
-                        ctx.draw_control_text_color_with_font(font, hint, text, color, WidgetOption::ALIGN_RIGHT);
+        ctx.with_clip(self.viewport, |ctx| {
+            for slot in self.visible_slots() {
+                let entry = &self.rows[slot];
+                let row = self.geometry.slots[slot].local_rect(self.offset_y, self.viewport.y);
+                match entry {
+                    MenuSlot::Item(item) => {
+                        let hovered = self.hovered_slot == Some(slot);
+                        let focused = self.keyboard_slot == Some(slot);
+                        let state = MenuState::from_interaction(enabled && item.parameters.enabled, false, hovered, focused, self.has_capture() && hovered);
+                        // Check and radio state already has a dedicated marker glyph. Keeping the row
+                        // on MenuItem prevents persistent marker data from overriding interaction art.
+                        let role = MenuRole::Item;
+                        let _ = ctx.draw_menu_state(role, state, row);
+                        let marker = Recti::new(row.x, row.y, self.geometry.marker_width.max(0), row.height);
+                        let text = text_region(row, self.geometry.marker_width);
+                        // Text, marks, and shortcut hints resolve the same semantic role and exact
+                        // interaction state as the row background.
+                        let color = ctx.menu_content_color(role, state);
+                        paint_item_marker(ctx, marker, item.parameters.mark, color);
+                        let font = style.resolve_font(ctx.atlas(), &item.parameters.font);
+                        // Both strings share one clip so control padding is applied exactly once.
+                        ctx.draw_control_text_color_with_font(font, &item.parameters.label, text, color, WidgetOption::NONE);
+                        if let Some(hint) = &item.parameters.shortcut_hint {
+                            ctx.draw_control_text_color_with_font(font, hint, text, color, WidgetOption::ALIGN_RIGHT);
+                        }
                     }
-                }
-                MenuSlot::Choice { label, enabled: choice_enabled, .. } => {
-                    let hovered = self.hovered_slot == Some(slot);
-                    // Hover applies only while the pointer lies over a row. Keyboard navigation
-                    // supersedes the committed value until the scope ends; otherwise the selected
-                    // leaf remains visibly emphasized when the pointer leaves the popup.
-                    let focused = self.highlighted_choice_slot() == Some(slot);
-                    let state = MenuState::from_interaction(enabled && *choice_enabled, false, hovered, focused, self.captured && hovered);
-                    let role = MenuRole::Item;
-                    let _ = ctx.draw_menu_state(role, state, row);
-                    let text = text_region(row, self.geometry.marker_width);
-                    let font = style.resolve_font(ctx.atlas(), &FontRef::Role(FontRole::Body));
-                    let color = ctx.menu_content_color(role, state);
-                    ctx.draw_control_text_color_with_font(font, label, text, color, WidgetOption::NONE);
-                }
-                MenuSlot::Separator => paint_separator(&mut ctx, row),
-                MenuSlot::Branch { label } => {
-                    let hovered = self.hovered_slot == Some(slot);
-                    let focused = self.keyboard_slot == Some(slot);
-                    let state = MenuState::from_interaction(enabled, self.open_slot == Some(slot), hovered, focused, self.captured && hovered);
-                    let role = if self.popup { MenuRole::Item } else { MenuRole::Title };
-                    let _ = ctx.draw_menu_state(role, state, row);
-                    // Bar headings use their full slot; popup branches reserve the marker gutter.
-                    let text = if self.popup { text_region(row, self.geometry.marker_width) } else { row };
-                    let font = style.resolve_font(ctx.atlas(), &FontRef::Role(FontRole::Body));
-                    let color = ctx.menu_content_color(role, state);
-                    ctx.draw_control_text_color_with_font(font, label, text, color, WidgetOption::NONE);
-                    if self.popup {
-                        paint_submenu_arrow(&mut ctx, text, color);
+                    MenuSlot::Choice { label, enabled: choice_enabled, .. } => {
+                        let hovered = self.hovered_slot == Some(slot);
+                        // Hover applies only while the pointer lies over a row. Keyboard navigation
+                        // supersedes the committed value until the scope ends; otherwise the selected
+                        // leaf remains visibly emphasized when the pointer leaves the popup.
+                        let focused = self.highlighted_choice_slot() == Some(slot);
+                        let state = MenuState::from_interaction(enabled && *choice_enabled, false, hovered, focused, self.has_capture() && hovered);
+                        let role = MenuRole::Item;
+                        let _ = ctx.draw_menu_state(role, state, row);
+                        let text = text_region(row, self.geometry.marker_width);
+                        let font = style.resolve_font(ctx.atlas(), &FontRef::Role(FontRole::Body));
+                        let color = ctx.menu_content_color(role, state);
+                        ctx.draw_control_text_color_with_font(font, label, text, color, WidgetOption::NONE);
+                    }
+                    MenuSlot::Separator => paint_separator(ctx, row),
+                    MenuSlot::Branch { label } => {
+                        let hovered = self.hovered_slot == Some(slot);
+                        let focused = self.keyboard_slot == Some(slot);
+                        let state = MenuState::from_interaction(enabled, self.open_slot == Some(slot), hovered, focused, self.has_capture() && hovered);
+                        let role = if self.popup { MenuRole::Item } else { MenuRole::Title };
+                        let _ = ctx.draw_menu_state(role, state, row);
+                        // Bar headings use their full slot; popup branches reserve the marker gutter.
+                        let text = if self.popup { text_region(row, self.geometry.marker_width) } else { row };
+                        let font = style.resolve_font(ctx.atlas(), &FontRef::Role(FontRole::Body));
+                        let color = ctx.menu_content_color(role, state);
+                        ctx.draw_control_text_color_with_font(font, label, text, color, WidgetOption::NONE);
+                        if self.popup {
+                            paint_submenu_arrow(ctx, text, color);
+                        }
                     }
                 }
             }
+        });
+        if let Some(bar) = self.scrollbar {
+            paint_scrollbar(&mut ctx, bar);
         }
         ctx.finish()
     }
 
     /// Resolves one local slot into screen coordinates for popup anchoring and diagnostics.
     pub(crate) fn slot_rect(&self, slot: usize) -> Option<Recti> {
-        // Translation occurs at the concrete owner boundary; no runtime node lookup is involved.
-        self.geometry.slots.get(slot).copied().map(|bounds| {
-            Recti::new(
-                self.rect.x.saturating_add(bounds.x),
-                self.rect.y.saturating_add(bounds.y),
-                bounds.width,
-                bounds.height,
-            )
-        })
+        let bounds = self.geometry.slots.get(slot)?.local_rect(self.offset_y, self.viewport.y);
+        if self.popup
+            && (self.viewport.height <= 0
+                || bounds.y < self.viewport.y
+                || i64::from(bounds.y) + i64::from(bounds.height) > i64::from(self.viewport.y) + i64::from(self.viewport.height))
+        {
+            return None;
+        }
+        Some(Recti::new(
+            self.rect.x.saturating_add(bounds.x),
+            self.rect.y.saturating_add(bounds.y),
+            bounds.width,
+            bounds.height,
+        ))
+    }
+
+    /// Outer border box, used instead of a gutter-shrunken row edge for submenu attachment.
+    pub(crate) fn outer_rect(&self) -> Recti {
+        self.rect
     }
 
     /// Replaces the paint-only child highlight derived from active forest edges.
@@ -882,7 +1238,7 @@ impl MenuRoute {
 }
 
 /// Computes horizontal heading slots for one persistent bar surface.
-fn layout_bar(headings: &[MenuSlot], style: &Skin, atlas: &AtlasHandle, mut slots: Vec<Recti>) -> MenuSurfaceLayout {
+fn layout_bar(headings: &[MenuSlot], style: &Skin, atlas: &AtlasHandle, mut slots: Vec<MenuRowBounds>) -> MenuSurfaceLayout {
     // An explicitly empty bar is inert and consumes no application-content height. Keeping this
     // edge case in the shared geometry function also prevents paint and hit testing from disagreeing.
     slots.clear();
@@ -892,6 +1248,7 @@ fn layout_bar(headings: &[MenuSlot], style: &Skin, atlas: &AtlasHandle, mut slot
             slots,
             marker_width: 0,
             intrinsic_row_width: 0,
+            ..MenuSurfaceLayout::default()
         };
     }
 
@@ -910,7 +1267,7 @@ fn layout_bar(headings: &[MenuSlot], style: &Skin, atlas: &AtlasHandle, mut slot
             continue;
         };
         let width = atlas.get_text_size(font, label).width.max(0).saturating_add(padding.saturating_mul(2));
-        slots.push(Recti::new(x, 0, width, preferred_height));
+        slots.push(MenuRowBounds::new(x, 0, width, preferred_height));
         x = x.saturating_add(width);
     }
     MenuSurfaceLayout {
@@ -918,11 +1275,12 @@ fn layout_bar(headings: &[MenuSlot], style: &Skin, atlas: &AtlasHandle, mut slot
         slots,
         marker_width: 0,
         intrinsic_row_width: 0,
+        ..MenuSurfaceLayout::default()
     }
 }
 
 /// Computes vertical popup rows and one shared marker/text split.
-fn layout_popup(rows: &[MenuSlot], style: &Skin, atlas: &AtlasHandle, mut slots: Vec<Recti>) -> MenuSurfaceLayout {
+fn layout_popup(rows: &[MenuSlot], style: &Skin, atlas: &AtlasHandle, mut slots: Vec<MenuRowBounds>) -> MenuSurfaceLayout {
     // MenuPopup is the sole popup shell, so its structural insets surround every row without a
     // second WindowFrame. Measure raw glyph maxima because control text supplies its own padding.
     slots.clear();
@@ -932,7 +1290,7 @@ fn layout_popup(rows: &[MenuSlot], style: &Skin, atlas: &AtlasHandle, mut slots:
     let mut label_width = 0_i32;
     let mut trailing_width = 0_i32;
     let mut marker = false;
-    let mut y = panel_insets.top;
+    let mut y = 0_i64;
     for entry in rows {
         let height = match entry {
             MenuSlot::Item(item) => {
@@ -974,8 +1332,8 @@ fn layout_popup(rows: &[MenuSlot], style: &Skin, atlas: &AtlasHandle, mut slots:
                 content_height(style, atlas, &font_choice, visual_height)
             }
         };
-        slots.push(Recti::new(panel_insets.left, y, 0, height));
-        y = y.saturating_add(height);
+        slots.push(MenuRowBounds::new(panel_insets.left, y, 0, height));
+        y += i64::from(height);
     }
 
     let marker_width = if marker {
@@ -1002,10 +1360,13 @@ fn layout_popup(rows: &[MenuSlot], style: &Skin, atlas: &AtlasHandle, mut slots:
         slot.width = row_width;
     }
     MenuSurfaceLayout {
-        size: Dimensioni::new(preferred_width, y.saturating_add(panel_insets.bottom)),
+        size: Dimensioni::new(preferred_width, clamp_i64_to_i32(y + i64::from(panel_insets.vertical_extent()))),
         slots,
         marker_width,
         intrinsic_row_width: row_width,
+        insets: panel_insets,
+        scrollbar_width: style.metrics().scrollbar_size.max(0),
+        min_thumb: style.metrics().thumb_size.max(0),
     }
 }
 

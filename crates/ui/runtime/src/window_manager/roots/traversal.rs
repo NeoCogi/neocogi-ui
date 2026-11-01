@@ -118,25 +118,47 @@ impl WindowManager {
             }
         }
 
-        // Keys are copied one at a time so mutating geometry never requires cloning the traversal.
-        for index in 0..self.surfaces.visible_order.len() {
+        // Suffix dismissal may shorten visible_order while walking it; never retain its old length.
+        let mut index = 0;
+        while index < self.surfaces.visible_order.len() {
             let key = self.surfaces.visible_order[index];
-            if matches!(key, SurfaceKey::Popup(_)) {
-                let rect = self
-                    .resolved_popup_rect(key)
-                    .expect("active popup anchor node must remain in its retained parent surface");
-                self.surfaces.surface_mut(key).expect("visible popup must remain retained").rect = rect;
-            }
             let clip = self.resolved_surface_clip(key, viewport);
+            if let SurfaceKey::Popup(popup) = key {
+                let Some(request) = self.resolved_popup_placement(key) else {
+                    let keep = self.surfaces.popup_depth(popup).expect("visible popup has an active depth");
+                    self.truncate_active_popup_path(keep);
+                    self.sync_menu_presentation();
+                    continue;
+                };
+                self.surfaces
+                    .surface_mut(key)
+                    .expect("visible popup remains retained")
+                    .fit_popup(request, clip, &style, atlas)?;
+            }
             let node = self.surfaces.node_mut(key).expect("visible surface must remain retained");
+            let had_capture = node.owns_pointer_gesture();
             node.layout(&style, atlas, clip)?;
+            let revoked_capture = had_capture && !node.owns_pointer_gesture();
             if node.take_popup_focus_request() {
-                // The popup is now mounted with committed geometry, so its first eligible Tab stop
-                // can become the runtime's focused node without a speculative rectangle.
                 let _ = node.surface.body.advance_focus(false);
             }
+            self.discard_pointer_capture_tail |= revoked_capture;
+            index += 1;
         }
         Ok(())
+    }
+
+    /// Test-only observation of committed popup allocations after real public runtime updates.
+    #[cfg(test)]
+    pub(crate) fn test_popup_rects(&self) -> Vec<Recti> {
+        self.surfaces
+            .visible_order
+            .iter()
+            .filter_map(|key| match key {
+                SurfaceKey::Popup(_) => self.surfaces.surface(*key).map(|surface| surface.rect),
+                SurfaceKey::Root(_) => None,
+            })
+            .collect()
     }
 
     /// Routes and applies one normalized event across every eligible surface.

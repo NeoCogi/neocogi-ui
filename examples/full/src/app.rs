@@ -68,7 +68,24 @@ pub(super) use queue::Inputs;
 use neocogi_com::INcStringComPtrExt;
 
 /// Application-owned combo values never cross the ABI as an erased generic collection.
-const FRUIT: [&str; 4] = ["Apple", "Banana", "Cherry", "Date"];
+const FRUIT: [&str; 16] = [
+    "Apple",
+    "Banana",
+    "Cherry",
+    "Date",
+    "Fig",
+    "Grape",
+    "Guava",
+    "Kiwi",
+    "Lemon",
+    "Lime",
+    "Mango",
+    "Orange",
+    "Papaya",
+    "Pear",
+    "Plum",
+    "Tangerine",
+];
 /// Ordinary expanding edge reused by explicit tree construction.
 const FLEX: LayoutTrack = LayoutTrack::Flex { weight: 1. };
 
@@ -532,6 +549,8 @@ fn create(runtime: neocogi_com::Runtime) -> Result<(Host, State, std::sync::mpsc
     demo.set_options(WindowOptions::FRAME | WindowOptions::MINIMIZE_BUTTON | WindowOptions::MAXIMIZE_BUTTON)?;
     let info = [label(ui, "40, 40")?, label(ui, "300, 450")?, label(ui, "0.0")?];
     let combo = ui.combo_box_with_queue(demo.as_com_ref(), &FRUIT, ChoiceSelection::Selected(0), Some(events_tx.queue.as_com_ref()))?;
+    // The complete choice model stays available through the bounded scrolling popup.
+    combo.handle().set_max_visible_items(8)?;
     let menus = ui.menus()?;
     let popup_menu = menus.create("Test Popup")?;
     menu_item(&popup_menu, &mut events_tx, "Hello", Action::Log)?;

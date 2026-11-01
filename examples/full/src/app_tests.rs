@@ -298,6 +298,75 @@ fn construction_rejection_checks(ui: &Ui) -> Result<(), NcStatus> {
     Ok(())
 }
 
+/// Native and WebGL exercise the same bounded Combo input and resize path.
+fn popup_scrolling_checks(host: &Host, size: Size) -> Result<(), NcStatus> {
+    let column = host.ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
+    let mut children = column.handle();
+    let window = host
+        .ui
+        .window("Popup scrolling", Rect { x: 600, y: 400, width: 240, height: 180 }, column)
+        .map_err(|(status, _candidate)| status)?;
+    window.set_options(WindowOptions::NO_TITLE | WindowOptions::NO_PADDING | WindowOptions::NO_RESIZE)?;
+    let combo = host.ui.combo_box_unobserved(window.as_com_ref(), &FRUIT, ChoiceSelection::Selected(0))?;
+    let mut control = combo.handle();
+    assert_eq!(control.max_visible_items()?, 10);
+    control.set_max_visible_items(8)?;
+    children
+        .insert(0, combo, LinearEdge::new(LayoutTrack::Content))
+        .map_err(|(status, _candidate)| status)?;
+    host.ui.update(size)?;
+    // The fresh unframed window has one header at its exact top-left. Route real
+    // public pointer/keyboard events, leaving all menu state and fitting to core.
+    let header = Point { x: 605, y: 405 };
+    for event in [
+        UiInput::Pointer(header),
+        UiInput::Down { position: header, buttons: 1 },
+        UiInput::Up { position: header, buttons: 1 },
+    ] {
+        host.ui.input(event, "")?;
+    }
+    host.ui.update(size)?;
+    let key = |key| {
+        host.ui.input(
+            UiInput::Key(KeyStroke {
+                key,
+                value: 0,
+                pressed: true,
+                repeat: false,
+                modifiers: 0,
+            }),
+            "",
+        )
+    };
+    key(KeyCode::End)?;
+    host.ui.update(size)?;
+    host.ui.render(size, host.renderer.as_com_ref())?;
+    // Shrink a live popup, then refit after a drawable-layout change; the complete
+    // candidate/model remains usable through the exact same generated interfaces.
+    control.set_max_visible_items(3)?;
+    host.ui.update(Size { width: 300, height: 180 })?;
+    host.ui.update(size)?;
+    key(KeyCode::Enter)?;
+    host.ui.update(size)?;
+    assert_eq!(control.selection()?, ChoiceSelection::Selected(15));
+    assert_eq!(control.display_text()?, "Tangerine");
+    for event in [UiInput::Down { position: header, buttons: 1 }, UiInput::Up { position: header, buttons: 1 }] {
+        host.ui.input(event, "")?;
+    }
+    key(KeyCode::Home)?;
+    key(KeyCode::PageDown)?;
+    host.ui.input(UiInput::Pointer(Point { x: 610, y: 450 }), "")?;
+    host.ui.input(UiInput::Scroll(Point { x: 0, y: 60 }), "")?;
+    host.ui.update(size)?;
+    host.ui.render(size, host.renderer.as_com_ref())?;
+    key(KeyCode::Escape)?;
+    host.ui.update(size)?;
+    assert_eq!(control.selection()?, ChoiceSelection::Selected(15), "scroll/cancel do not commit a candidate");
+    window.close()?;
+    host.ui.update(size)?;
+    host.ui.render(size, host.renderer.as_com_ref())
+}
+
 /// Exercises application-level composition against real runtime, platform and decoder objects.
 fn exercise() -> Result<(Host, TestApp<State, neocogi_ui::events::EventMessage>), HostError> {
     let (host, state, events) = create(crate::host_runtime())?;
@@ -364,6 +433,7 @@ fn exercise() -> Result<(Host, TestApp<State, neocogi_ui::events::EventMessage>)
     state = app.state();
     host.ui.render(size, host.renderer.as_com_ref())?;
     drop(state);
+    popup_scrolling_checks(&host, size)?;
     Ok((host, app))
 }
 

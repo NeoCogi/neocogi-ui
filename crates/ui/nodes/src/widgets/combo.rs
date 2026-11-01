@@ -132,9 +132,9 @@ impl Combo {
         let header = crate::frame::outer_from_content(ctx.screen_content_rect(), insets);
         neocogi_ui::abi::core::Rect {
             x: header.x,
-            y: header.y.saturating_add(header.height),
+            y: header.y,
             width: header.width,
-            height: 1,
+            height: header.height,
         }
     }
 }
@@ -274,6 +274,23 @@ impl Combo {
 }
 
 impl neocogi_ui::abi::nodes::Combo for Combo {
+    /// Observes the core-owned row policy and preserves provider errors.
+    fn max_visible_items(&self) -> Result<u32, NcStatus> {
+        self.runtime().state.readable()?;
+        self.menu.max_visible_items()
+    }
+
+    /// Admits mutation before forwarding and invalidates only a real policy edit.
+    fn set_max_visible_items(&mut self, count: u32) -> Result<(), NcStatus> {
+        self.runtime().state.writable()?;
+        let previous = self.menu.max_visible_items()?;
+        self.menu.set_max_visible_items(count)?;
+        if previous != count {
+            self.runtime_mut().state.record_change(GeometryChange::Changed);
+        }
+        Ok(())
+    }
+
     /// Returns an explicit tagged optional position from the authoritative model.
     fn selection(&self) -> Result<ChoiceSelection, NcStatus> {
         self.runtime().state.readable()?;
@@ -357,5 +374,95 @@ impl neocogi_ui::abi::core::IWidgetDispatcher for Combo {
     /// Relays one immutable menu snapshot without copying its payload.
     fn dispatch_next(&mut self) -> Result<bool, NcStatus> {
         self.events.dispatch_next(&mut self.runtime.state)
+    }
+}
+
+#[cfg(test)]
+mod limit_provider_tests {
+    use super::*;
+    use crate::test_support::algorithm::Algorithm;
+    use neocogi_ui::abi::core::{IChoiceMenu, IChoiceMenuVtblFor};
+
+    #[neocogi_com::com_object(interfaces(IChoiceMenu))]
+    /// A valid alternate provider makes configuration failures observable across COM.
+    struct FailingChoice {
+        /// Fixed failure injection needs no shared mutation or test-only production path.
+        read_error: Option<NcStatus>,
+    }
+    impl IChoiceMenu for FailingChoice {
+        /// Either returns its installed policy or an explicit observation failure.
+        fn max_visible_items(&self) -> Result<u32, NcStatus> {
+            self.read_error.map_or(Ok(10), Err)
+        }
+        /// Fails independently after a successful observation, without changing policy.
+        fn set_max_visible_items(&mut self, _: u32) -> Result<(), NcStatus> {
+            Err(neocogi_com::NC_E_NOT_FOUND)
+        }
+        /// This fixture has no selected leaf.
+        fn selection(&self) -> Result<ChoiceSelection, NcStatus> {
+            Ok(ChoiceSelection::None)
+        }
+        /// Explicit absence has an independently owned empty label.
+        fn selected_label(&self) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+            Ok(NcString::from_utf8_str(""))
+        }
+        /// Configuration failure is independent of its empty choice hierarchy.
+        fn choice_count(&self) -> Result<u64, NcStatus> {
+            Ok(0)
+        }
+        /// No ordinal is valid in the empty fixture.
+        fn choice_label(&self, _: u64) -> Result<ComPtr<INcStringAbi>, NcStatus> {
+            Err(neocogi_com::NC_E_INVALID_ARG)
+        }
+        /// Model edits are outside this provider's deliberately limited test contract.
+        fn replace(&mut self, _: NcCopyFromBufferOffset<'_, u8>, _: NcCopyFromBufferOffset<'_, ChoiceMenuEntry>, _: ChoiceSelection) -> Result<(), NcStatus> {
+            Err(neocogi_com::NC_E_INVALID_ARG)
+        }
+        /// No nonempty selection is supported by this fixture.
+        fn set_selection(&mut self, _: ChoiceSelection) -> Result<(), NcStatus> {
+            Err(neocogi_com::NC_E_INVALID_ARG)
+        }
+        /// This empty test model cannot open a popup.
+        fn show_at(&mut self, _: neocogi_ui::abi::core::Rect) -> Result<(), NcStatus> {
+            Ok(())
+        }
+        /// There is no open branch to dismiss.
+        fn hide(&mut self) -> Result<(), NcStatus> {
+            Ok(())
+        }
+        /// Empty-model toggles leave it closed.
+        fn toggle_at(&mut self, _: neocogi_ui::abi::core::Rect) -> Result<(), NcStatus> {
+            Ok(())
+        }
+        /// Retiring this configuration fixture owns no forest resources.
+        fn close(&mut self) -> Result<(), NcStatus> {
+            Ok(())
+        }
+    }
+
+    /// Both dependencies and the Combo entrypoints are real COM objects with ordinary call gates.
+    #[test]
+    fn visible_limit_preserves_alternate_provider_errors() {
+        for read_error in [Some(neocogi_com::NC_E_INVALID_ARG), None] {
+            let mut combo = Algorithm::new(WidgetOption::NONE, |runtime| {
+                let menu = FailingChoice::from_value(FailingChoice { read_error }).query::<IChoiceMenuAbi>().unwrap();
+                Combo::from_runtime(
+                    runtime,
+                    ComboParameters::new(),
+                    menu,
+                    String::new(),
+                    crate::widget_object::CompositeEvents::new(false).0,
+                )
+            })
+            .map(|value| Combo::into_box(value).query::<ComboAbi>().unwrap());
+            if let Some(status) = read_error {
+                assert_eq!(combo.max_visible_items(), Err(status));
+                assert_eq!(combo.set_max_visible_items(5), Err(status));
+            } else {
+                assert_eq!(combo.max_visible_items(), Ok(10));
+                assert_eq!(combo.set_max_visible_items(5), Err(neocogi_com::NC_E_NOT_FOUND));
+                assert_eq!(combo.max_visible_items(), Ok(10));
+            }
+        }
     }
 }

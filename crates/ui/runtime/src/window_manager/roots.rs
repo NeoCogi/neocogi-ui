@@ -271,7 +271,7 @@ impl Surface {
         let auto_height = self.options.intersects(WindowOption::AUTO_HEIGHT);
         let mut menu_bar = menu_bar;
         let menu_intrinsic = menu_bar.as_deref_mut().map(|bar| bar.measure(style, atlas));
-        if self.options.intersects(WindowOption::AUTO_SIZE) {
+        if self.options.intersects(WindowOption::AUTO_SIZE) && !matches!(frame_kind, RootFrameKind::Popup) {
             // Convert retained outer bounds to application-body bounds before asking the content
             // tree for intrinsic size. Fixed axes retain their programmed outer extent.
             let shell = root_chrome_geometry(
@@ -340,6 +340,70 @@ impl Surface {
             bar.layout(rect, clip);
         }
         self.body.layout(style, atlas, self.geometry.body, clip)
+    }
+
+    /// Measures popup content at its permitted width, then fits and commits one outer allocation.
+    /// Automatic sizing is resolved here and cannot re-expand the fitted height in layout.
+    fn fit_popup(&mut self, request: PopupPlacement, clip: Recti, style: &Skin, atlas: &crate::AtlasHandle) -> Result<(), neocogi_com::NcStatus> {
+        let requested = request.preferred_rect();
+        // A zero-sized previous request must not erase frame/padding before
+        // measuring wrapping content at the width it will actually receive.
+        let reference = Recti::new(0, 0, i32::MAX, i32::MAX);
+        let shell = root_chrome_geometry(
+            reference,
+            Dimensioni::default(),
+            None,
+            &self.name,
+            self.options,
+            RootFrameKind::Popup,
+            style,
+            atlas,
+        );
+        let chrome = Dimensioni::new(
+            reference.width.saturating_sub(shell.body.width),
+            reference.height.saturating_sub(shell.body.height),
+        );
+        let width = if self.options.intersects(WindowOption::AUTO_WIDTH) {
+            clip.width
+        } else {
+            requested.width.min(clip.width)
+        };
+        let height = if self.options.intersects(WindowOption::AUTO_HEIGHT) {
+            crate::AvailableSpace::Unbounded
+        } else {
+            crate::AvailableSpace::bounded(requested.height.min(clip.height)).shrink(chrome.height)
+        };
+        let content = self.body.measure(
+            style,
+            atlas,
+            crate::Constraints::new(crate::AvailableSpace::bounded(width).shrink(chrome.width), height),
+        )?;
+        let intrinsic = root_chrome_geometry(Recti::default(), content, None, &self.name, self.options, RootFrameKind::Popup, style, atlas).intrinsic_outer;
+        let mut desired = Dimensioni::new(
+            if self.options.intersects(WindowOption::AUTO_WIDTH) {
+                intrinsic.width
+            } else {
+                requested.width
+            },
+            if self.options.intersects(WindowOption::AUTO_HEIGHT) {
+                intrinsic.height
+            } else {
+                requested.height
+            },
+        );
+        let font = style.resolve_font(atlas, &crate::FontRef::Role(crate::FontRole::Body));
+        let gap = i32::try_from(atlas.get_font_height(font)).unwrap_or(i32::MAX);
+        let minimum = self.body.menu_mut().map_or(1, |menu| menu.minimum_height()).saturating_add(chrome.height);
+        let (first, _) = interaction::fit_popup_rect(request, clip, desired, gap, minimum);
+        if let Some(menu) = self.body.menu_mut() {
+            let body_height = first.height.saturating_sub(chrome.height).max(0);
+            desired.height = menu.fit_height(body_height).saturating_add(chrome.height).min(first.height);
+            if self.options.intersects(WindowOption::AUTO_WIDTH) {
+                desired.width = menu.width_for_height(desired.height.saturating_sub(chrome.height)).saturating_add(chrome.width);
+            }
+        }
+        self.rect = interaction::fit_popup_rect(request, clip, desired, gap, minimum).0;
+        Ok(())
     }
 
     /// Returns whether the outer surface contains one screen-space point.
@@ -548,8 +612,9 @@ struct RootState {
     unminimized_height: Option<i32>,
     /// Strong owner of the unified window geometry/lifecycle event stream.
     events: neocogi_ui::abi::core::EventPort,
-    /// Optional concrete menu bar laid out above the application widget body.
-    menu_bar: Option<MenuSurface>,
+    /// Optional uniquely owned bar; windows without a bar do not reserve its viewport state.
+    /// One allocation per installed bar keeps that optional state out of every forest node.
+    menu_bar: Option<Box<MenuSurface>>,
     /// Descendant viewport policy applied when layout enters direct structural child windows.
     child_window_clip: ChildWindowClip,
 }
@@ -567,12 +632,38 @@ impl RootState {
     }
 }
 
+/// Original application placement, retained separately from the fitted screen rectangle.
+#[derive(Clone, Copy)]
+enum PopupPlacement {
+    /// Explicit origin and preferred allocation; fitting never overwrites this intent.
+    At(Recti),
+    /// Snapshot trigger box and preferred direction, with the popup's requested allocation.
+    Anchored {
+        /// Complete trigger border box in screen coordinates.
+        anchor: Recti,
+        /// Validated preferred side; the opposite may be chosen to show more content.
+        side: neocogi_ui::abi::core::PopupSide,
+        /// Requested fixed-axis size, distinct from trigger dimensions and last fitted size.
+        preferred: Dimensioni,
+    },
+}
+
+impl PopupPlacement {
+    /// Requested allocation before automatic sizing; resizing never drifts from fitted bounds.
+    fn preferred_rect(self) -> Recti {
+        match self {
+            Self::At(rect) => rect,
+            Self::Anchored { anchor, preferred, .. } => Recti::new(anchor.x, anchor.y, preferred.width, preferred.height),
+        }
+    }
+}
+
 /// Popup-specific policy attached to a concrete surface node.
 enum PopupState {
     /// Application-authored popup with exact placement and an observable dismissal event.
     Application {
-        /// Exact screen rectangle supplied by the public popup API.
-        anchor: Recti,
+        /// Original placement request supplied by the public popup API.
+        placement: PopupPlacement,
         /// Strong owner of policy-driven popup lifecycle events.
         events: neocogi_ui::abi::core::EventPort,
         /// Whether the next committed layout must select this popup's first keyboard target.
@@ -646,7 +737,7 @@ impl SurfaceNode {
     /// Reports whether chrome, menus or application content still own the pointer gesture.
     fn owns_pointer_gesture(&self) -> bool {
         self.root().is_some_and(|root| root.interaction != RootInteraction::None)
-            || self.root().and_then(|root| root.menu_bar.as_ref()).is_some_and(MenuSurface::has_capture)
+            || self.root().and_then(|root| root.menu_bar.as_deref()).is_some_and(MenuSurface::has_capture)
             || self.surface.body.owns_pointer_gesture()
     }
 
@@ -658,7 +749,7 @@ impl SurfaceNode {
             root.hovered_chrome = None;
         }
         if let Some(root) = self.root_mut()
-            && let Some(menu) = root.menu_bar.as_mut()
+            && let Some(menu) = root.menu_bar.as_deref_mut()
         {
             menu.clear_pointer_targets();
         }
@@ -672,7 +763,7 @@ impl SurfaceNode {
             root.hovered_chrome = None;
         }
         if let Some(root) = self.root_mut()
-            && let Some(menu) = root.menu_bar.as_mut()
+            && let Some(menu) = root.menu_bar.as_deref_mut()
         {
             menu.clear_pointer_targets();
         }
@@ -769,7 +860,7 @@ impl SurfaceNode {
         // Actionable title/close/resize geometry and the intrinsic menu bar use their committed
         // rectangles. Together with `frame`, these are precisely the parent-owned regions recorded
         // in the overlay pass rather than the earlier application-content pass.
-        frame || self.chrome_part_at(point).is_some() || self.root().and_then(|root| root.menu_bar.as_ref()).is_some_and(|menu| menu.contains(point))
+        frame || self.chrome_part_at(point).is_some() || self.root().and_then(|root| root.menu_bar.as_deref()).is_some_and(|menu| menu.contains(point))
     }
 
     /// Emits one concrete window event at the next safe application dispatch boundary.
@@ -822,7 +913,7 @@ impl SurfaceNode {
             SurfaceKind::Popup(_) => RootFrameKind::Popup,
         };
         let menu_bar = match &mut self.kind {
-            SurfaceKind::Root(root) => root.menu_bar.as_mut(),
+            SurfaceKind::Root(root) => root.menu_bar.as_deref_mut(),
             SurfaceKind::Popup(_) => None,
         };
         let minimized_content_height = unminimized_height.map(|_| style.window_chrome().minimized_content_height);

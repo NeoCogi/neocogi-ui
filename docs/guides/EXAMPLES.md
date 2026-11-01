@@ -46,6 +46,8 @@ maximize and restore use the window manager's geometry policy.
 File/View/Help menus demonstrate ordinary, disabled, checked and radio commands,
 cascading theme/spacing menus and a separate Popup button. Menu shortcuts are
 presentation hints; they do not automatically register keyboard accelerators.
+The fruit Combo retains sixteen choices in an eight-row scrolling dropdown; menus
+also scroll when frame space restricts them and flip or fit at the frame edges.
 View > Show Textures scrolls to the sampler's images. The sample includes native
 RGBA images, a compressed photograph and a deterministic noise texture. Images and
 the Suzanne mesh are external by default, resolved beside the native executable.

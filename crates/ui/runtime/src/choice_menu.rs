@@ -141,6 +141,8 @@ pub(crate) mod probes {
 pub(crate) struct ChoiceMenuState {
     /// Canonical text/preorder and its inseparable derived ordinal index.
     definition: ChoiceDefinition,
+    /// Positive visible-row limit, distinct from model/selection rebuild revision.
+    max_visible_items: u32,
     /// Committed stable leaf identity; `None` remains distinct from every `u64` value.
     selection: Option<u64>,
     /// Monotonic semantic revision used to invalidate transient popup candidates.
@@ -164,6 +166,7 @@ impl ChoiceMenuState {
         let local = Self::into_local(Self {
             definition,
             selection,
+            max_visible_items: crate::menu::DEFAULT_CHOICE_VISIBLE_ITEMS,
             revision: 0,
             popup_anchor: Rect::default(),
             popup: ChoicePopupLifecycle::Closed,
@@ -199,7 +202,10 @@ impl ChoiceMenuState {
                 self.popup_anchor = anchor;
                 ChoicePopupLifecycle::OpenRequested
             }
-            (ChoicePopupLifecycle::Open, ChoicePopupIntent::Open) => ChoicePopupLifecycle::Open,
+            (ChoicePopupLifecycle::Open, ChoicePopupIntent::Open) => {
+                self.popup_anchor = anchor;
+                ChoicePopupLifecycle::OpenRequested
+            }
             (ChoicePopupLifecycle::Open | ChoicePopupLifecycle::OpenRequested, ChoicePopupIntent::Close) => ChoicePopupLifecycle::CloseRequested,
             (ChoicePopupLifecycle::Closed | ChoicePopupLifecycle::CloseRequested, ChoicePopupIntent::Close) => ChoicePopupLifecycle::Closed,
             (ChoicePopupLifecycle::RemoveRequested, _) => ChoicePopupLifecycle::RemoveRequested,
@@ -241,6 +247,11 @@ impl ChoiceMenuState {
 }
 
 impl IChoiceMenuState for ChoiceMenuState {
+    /// Reads presentation policy without manufacturing a second model revision.
+    fn max_visible_items(&self) -> Result<u32, NcStatus> {
+        Ok(self.max_visible_items)
+    }
+
     /// Reads the scalar revision directly from the authoritative state.
     fn revision(&self) -> Result<u64, NcStatus> {
         Ok(self.revision)
@@ -364,6 +375,20 @@ impl IChoiceMenuState for ChoiceMenuState {
 }
 
 impl IChoiceMenu for ChoiceMenuState {
+    /// Shares the authoritative cap with the private coordinator.
+    fn max_visible_items(&self) -> Result<u32, NcStatus> {
+        Ok(self.max_visible_items)
+    }
+
+    /// Validates before silent mutation; the coordinator installs geometry separately.
+    fn set_max_visible_items(&mut self, count: u32) -> Result<(), NcStatus> {
+        if count == 0 {
+            return Err(NC_E_INVALID_ARG);
+        }
+        self.max_visible_items = count;
+        Ok(())
+    }
+
     /// Returns the exact optional stable identity from the authoritative menu model.
     fn selection(&self) -> Result<ChoiceSelection, NcStatus> {
         <Self as IChoiceMenuState>::selection(self)
@@ -483,13 +508,16 @@ impl ChoiceMenuController {
             state.submit(choice)?;
         }
         let revision = state.revision()?;
-        let presentation_changed = revision != self.observed_revision;
+        let mut presentation_changed = revision != self.observed_revision;
         if presentation_changed {
             let menu = choice_menu(&state)?;
             let committed = decoded_selection(state.selection()?);
             manager.replace_choice_popup(&self.popup, menu, committed).map_err(surface_status)?;
             self.observed_revision = revision;
         }
+        presentation_changed |= manager
+            .set_choice_popup_limit(&self.popup, state.max_visible_items()?)
+            .map_err(surface_status)?;
         let action = state.reconcile_popup(visible)?;
         match action {
             ChoicePopupAction::None => Ok((ControllerDisposition::Keep, presentation_changed)),
@@ -706,6 +734,7 @@ mod tests {
         ChoiceMenuState {
             definition: ChoiceDefinition::new(menu_text, entries).unwrap(),
             selection,
+            max_visible_items: crate::menu::DEFAULT_CHOICE_VISIBLE_ITEMS,
             revision: 0,
             popup_anchor: Rect::default(),
             popup: ChoicePopupLifecycle::Closed,

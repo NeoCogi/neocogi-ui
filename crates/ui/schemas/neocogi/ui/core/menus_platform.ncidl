@@ -59,6 +59,10 @@ enum ChoiceSelection: u8 {
 /// as Combo owns only its presentation and delegates these menu responsibilities through this
 /// interface. Mutations are silent; only user submission publishes `ChoiceSelection`.
 interface IChoiceMenu {
+    /// Maximum complete direct rows per panel, initially ten; independent of model size.
+    fn max_visible_items(&self) -> Result<u32>;
+    /// Positive counts only; silently reflows an open panel without replacing its hierarchy.
+    fn set_max_visible_items(&mut self, count: u32) -> Result<()>;
     /// Returns the exact committed stable identity, including explicit absence.
     fn selection(&self) -> Result<ChoiceSelection>;
     /// Copies the selected leaf label, or an empty string when no leaf is committed.
@@ -71,7 +75,7 @@ interface IChoiceMenu {
     fn replace(&mut self, menu_text: &[u8], entries: &[ChoiceMenuEntry], selection: ChoiceSelection) -> Result<()>;
     /// Silently changes the committed selection; an unknown identity is rejected.
     fn set_selection(&mut self, selection: ChoiceSelection) -> Result<()>;
-    /// Requests activation below an exact screen-space anchor after the current traversal phase.
+    /// Requests preferred-below placement from the complete trigger border box; may flip above.
     fn show_at(&mut self, anchor: Rect) -> Result<()>;
     /// Requests dismissal after the current traversal phase while retaining the menu definition.
     fn hide(&mut self) -> Result<()>;

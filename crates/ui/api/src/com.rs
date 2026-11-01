@@ -920,6 +920,14 @@ impl<P> Widget<ComboAbi, P>
 where
     P: WidgetStorage<ComboAbi> + core::ops::DerefMut<Target = <ComboAbi as neocogi_com::ComClientInterface>::Client<neocogi_com::ThreadLocal>>,
 {
+    /// Returns the positive per-panel row limit; initially ten.
+    pub fn max_visible_items(&self) -> Result<u32, NcStatus> {
+        self.interface.max_visible_items()
+    }
+    /// Silently changes the positive per-panel limit without changing selection.
+    pub fn set_max_visible_items(&mut self, count: u32) -> Result<(), NcStatus> {
+        self.interface.set_max_visible_items(count)
+    }
     /// Returns the NCIDL-defined selection value without a parallel facade record.
     pub fn selection(&self) -> Result<ChoiceSelection, NcStatus> {
         self.interface.selection()

@@ -261,6 +261,10 @@ interface TextArea: IWidget + IContainerLayout + IScrolling + IWidgetDispatcher 
 #[version(1)]
 /// Runtime-owned combo box whose header, item model, popup, and interaction state form one control.
 interface Combo: IWidget + ILeafLayout + IWidgetDispatcher {
+    /// Maximum complete direct rows per panel, initially ten; independent of model size.
+    fn max_visible_items(&self) -> Result<u32>;
+    /// Positive counts only; silently reflows an open panel without replacing its hierarchy.
+    fn set_max_visible_items(&mut self, count: u32) -> Result<()>;
     /// Returns the committed stable leaf identity, preserving `None` independently of every ID.
     fn selection(&self) -> Result<ChoiceSelection>;
     /// Returns the exact rendered header text: the selected label or the configured placeholder.

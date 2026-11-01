@@ -13,6 +13,7 @@ mod embedded_input;
 mod input_boundaries;
 mod ordinary_construction;
 mod pending_changes;
+mod popup_viewports;
 mod recovery;
 mod resource_refresh;
 mod retention;

@@ -28,6 +28,8 @@ enum ChoicePopupAction: u8 {
 #[version(1)]
 /// Runtime-private typed access to one authoritative choice menu model.
 interface IChoiceMenuState {
+    /// Reads the authoritative positive per-panel row cap without a projection rebuild.
+    fn max_visible_items(&self) -> Result<u32>;
     /// Returns a revision changed by hierarchy labels or committed selection.
     fn revision(&self) -> Result<u64>;
     /// Returns the explicit optional committed leaf identity.
@@ -53,7 +55,7 @@ interface IChoiceMenuState {
     fn request_popup(&mut self, intent: ChoicePopupIntent, anchor: neocogi::renderer::Rect) -> Result<()>;
     /// Reconciles semantic lifecycle with actual generic-popup visibility.
     fn reconcile_popup(&mut self, visible: bool) -> Result<ChoicePopupAction>;
-    /// Returns the most recently captured header-bottom anchor.
+    /// Returns the most recently captured complete trigger border box.
     fn popup_anchor(&self) -> Result<neocogi::renderer::Rect>;
     /// Commits one user choice, publishes a changed snapshot, and requests popup closure.
     fn submit(&mut self, id: u64) -> Result<u64>;

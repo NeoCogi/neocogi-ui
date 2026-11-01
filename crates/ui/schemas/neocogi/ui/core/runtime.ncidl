@@ -358,14 +358,29 @@ interface IWidgetHost {
 }
 
 #[version(1)]
+/// Preferred opening direction of an anchored popup; fitting may choose its opposite.
+enum PopupSide: u8 {
+    /// Prefer below the complete trigger box.
+    Below,
+    /// Prefer above the complete trigger box.
+    Above,
+    /// Prefer the trigger's right edge.
+    Right,
+    /// Prefer the trigger's left edge.
+    Left,
+}
+
+#[version(1)]
 /// A popup has transient placement and cannot be passed to ordinary window operations.
 interface IPopup {
     /// Reports whether this popup belongs to the manager's active visible branch.
     fn visibility(&self) -> Result<Visibility>;
     /// Activates the popup's input scope at the latest consumed pointer position.
     fn show(&mut self) -> Result<()>;
-    /// Atomically sets an exact screen anchor and activates the popup's input scope.
+    /// Retains a requested screen rectangle; the displayed allocation fits within frame bounds.
     fn show_at(&mut self, anchor: Rect) -> Result<()>;
+    /// Opens beside a complete trigger box, flipping/fitting within permitted frame bounds.
+    fn show_anchored(&mut self, anchor: Rect, side: PopupSide) -> Result<()>;
     /// Dismisses this active branch while preserving the definition for later reuse.
     fn hide(&mut self) -> Result<()>;
     /// Changes popup framing, padding and preferred-size policy.

@@ -2,6 +2,15 @@
 
 ## 0.0.0 (unreleased)
 
+- Bound Combo dropdowns to a positive configurable visible-item count (default
+  ten), further constrained by frame space, with vertical scrolling and one
+  text line of preferred edge clearance. Share fitting, scrolling and scrollbar
+  mapping with compact command/context menus and cascading submenus. Preserve
+  complete models and wide content coordinates through viewport translation.
+  Add explicit anchored general-popup placement, keeping authored ScrollArea
+  bodies and fixed headers/footers under application control. The full demo's
+  fruit selector demonstrates sixteen choices through an eight-row viewport.
+
 - Use the published crates.io COM SDK, host and IDL compiler at exactly
   `0.1.0-alpha.1`, including standalone generated-binding fixtures. Record registry
   checksums in the lockfile, remove the SSH fetching requirement, and retain

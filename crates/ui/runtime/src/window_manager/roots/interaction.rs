@@ -23,7 +23,7 @@ impl WindowManager {
     /// Borrows the concrete menu presentation attached to one root or menu-popup key.
     pub(super) fn menu_surface(&self, key: SurfaceKey) -> Option<&MenuSurface> {
         match key {
-            SurfaceKey::Root(root) => self.surfaces.root_node(root)?.root()?.menu_bar.as_ref(),
+            SurfaceKey::Root(root) => self.surfaces.root_node(root)?.root()?.menu_bar.as_deref(),
             SurfaceKey::Popup(popup) => self.surfaces.popup_node(popup)?.surface.body.menu(),
         }
     }
@@ -31,7 +31,7 @@ impl WindowManager {
     /// Mutably borrows the concrete menu presentation attached to one forest key.
     pub(super) fn menu_surface_mut(&mut self, key: SurfaceKey) -> Option<&mut MenuSurface> {
         match key {
-            SurfaceKey::Root(root) => self.surfaces.root_node_mut(root)?.root_mut()?.menu_bar.as_mut(),
+            SurfaceKey::Root(root) => self.surfaces.root_node_mut(root)?.root_mut()?.menu_bar.as_deref_mut(),
             SurfaceKey::Popup(popup) => self.surfaces.popup_node_mut(popup)?.surface.body.menu_mut(),
         }
     }
@@ -95,9 +95,7 @@ impl WindowManager {
     /// Returns current input eligibility without retaining a second focus projection.
     /// Display, modal membership and enabled ancestry are one current-input policy.
     pub(super) fn surface_can_receive_input(&self, surface: SurfaceKey) -> bool {
-        self.surfaces.is_displayed(surface)
-            && self.surface_is_eligible(surface, self.surfaces.active_modal_root())
-            && self.surface_accepts_input(surface)
+        self.surfaces.is_displayed(surface) && self.surface_is_eligible(surface, self.surfaces.active_modal_root()) && self.surface_accepts_input(surface)
     }
 
     /// Repairs active-surface identity after visibility or ownership changes.
@@ -118,7 +116,7 @@ impl WindowManager {
         for index in 0..self.surfaces.nodes.len() {
             let node = &mut self.surfaces.nodes[index];
             if let Some(root) = node.root_mut()
-                && let Some(bar) = root.menu_bar.as_mut()
+                && let Some(bar) = root.menu_bar.as_deref_mut()
             {
                 bar.set_open_slot(None);
             }
@@ -146,25 +144,31 @@ impl WindowManager {
         }
     }
 
-    /// Resolves one active popup rectangle from its exact or relational placement.
-    pub(super) fn resolved_popup_rect(&self, key: SurfaceKey) -> Option<Recti> {
+    /// Resolves the original application request or the currently visible parent-row relation.
+    pub(super) fn resolved_popup_placement(&self, key: SurfaceKey) -> Option<PopupPlacement> {
         let SurfaceKey::Popup(popup) = key else { return None };
         let definition = self.surfaces.popup_node(popup)?;
         match definition.popup()? {
-            PopupState::Application { anchor, .. } => Some(*anchor),
+            PopupState::Application { placement, .. } => Some(*placement),
             PopupState::Menu { trigger_slot } => {
-                // The direct parent is the sole anchor source: root parents open below, while popup
-                // parents open to the right. No runtime node or weak typed widget is consulted.
                 let parent = definition.parent?;
+                let menu = self.menu_surface(parent)?;
+                let trigger = menu.slot_rect(*trigger_slot)?;
                 let below = matches!(parent, SurfaceKey::Root(_));
-                let trigger = self.menu_surface(parent)?.slot_rect(*trigger_slot)?;
-                let current = definition.surface.rect;
-                let (x, y) = if below {
-                    (trigger.x, trigger.y.saturating_add(trigger.height))
-                } else {
-                    (trigger.x.saturating_add(trigger.width), trigger.y)
-                };
-                Some(Recti::new(x, y, current.width, current.height))
+                let outer = menu.outer_rect();
+                Some(PopupPlacement::Anchored {
+                    anchor: if below {
+                        trigger
+                    } else {
+                        Recti::new(outer.x, trigger.y, outer.width, trigger.height)
+                    },
+                    side: if below {
+                        neocogi_ui::abi::core::PopupSide::Below
+                    } else {
+                        neocogi_ui::abi::core::PopupSide::Right
+                    },
+                    preferred: Dimensioni::default(),
+                })
             }
         }
     }
@@ -190,7 +194,7 @@ impl WindowManager {
         // restores hover only on the menu that actually owns the event without revoking capture.
         for node in &mut self.surfaces.nodes {
             if let Some(root) = node.root_mut()
-                && let Some(bar) = root.menu_bar.as_mut()
+                && let Some(bar) = root.menu_bar.as_deref_mut()
             {
                 bar.clear_pointer_hover();
             }
@@ -255,7 +259,7 @@ impl WindowManager {
         }
         for node in &mut self.surfaces.nodes {
             if let Some(root) = node.root_mut()
-                && let Some(bar) = root.menu_bar.as_mut()
+                && let Some(bar) = root.menu_bar.as_deref_mut()
             {
                 bar.clear_keyboard_target();
             }
@@ -293,7 +297,7 @@ impl WindowManager {
             .surfaces
             .root_node(root)
             .and_then(SurfaceNode::root)
-            .and_then(|state| state.menu_bar.as_ref())
+            .and_then(|state| state.menu_bar.as_deref())
             .is_some()
         {
             return false;
@@ -367,8 +371,11 @@ impl WindowManager {
             SurfaceKey::Root(_) => false,
         };
         match event.key {
+            crate::Key::Enter | crate::Key::Space if !self.menu_surface(surface).is_some_and(MenuSurface::accepts_activation) => true,
             crate::Key::ArrowDown if popup => self.menu_surface_mut(surface).is_some_and(|menu| menu.move_keyboard_focus(true)),
             crate::Key::ArrowUp if popup => self.menu_surface_mut(surface).is_some_and(|menu| menu.move_keyboard_focus(false)),
+            crate::Key::PageDown if popup => self.menu_surface_mut(surface).is_some_and(|menu| menu.page_keyboard_focus(true)),
+            crate::Key::PageUp if popup => self.menu_surface_mut(surface).is_some_and(|menu| menu.page_keyboard_focus(false)),
             crate::Key::Home => self.menu_surface_mut(surface).is_some_and(MenuSurface::focus_first),
             crate::Key::End => self.menu_surface_mut(surface).is_some_and(MenuSurface::focus_last),
             crate::Key::ArrowRight if !popup => self.move_keyboard_menu_heading(root, true, false),
@@ -759,6 +766,157 @@ impl WindowManager {
                 self.posted(result);
                 self.invalidate_ui_commit();
             }
+        }
+    }
+}
+
+/// Fits one requested popup in finite permitted bounds. All edge arithmetic precedes narrowing.
+/// The line clearance is soft only when it would prevent the smallest usable body.
+pub(super) fn fit_popup_rect(
+    request: PopupPlacement,
+    clip: Recti,
+    desired: Dimensioni,
+    gap: i32,
+    minimum_height: i32,
+) -> (Recti, Option<neocogi_ui::abi::core::PopupSide>) {
+    use neocogi_ui::abi::core::PopupSide;
+    use crate::math::clamp_i64_to_i32;
+    let left = i64::from(clip.x);
+    let top = i64::from(clip.y);
+    let right = left + i64::from(clip.width.max(0));
+    let bottom = top + i64::from(clip.height.max(0));
+    let gap = i64::from(gap.max(0)).min(bottom - top);
+    let minimum = i64::from(minimum_height.max(0)).min(i64::from(desired.height.max(0)));
+    let (mut low, mut high) = (top + gap, bottom - gap);
+    if high - low < minimum {
+        low = top;
+        high = bottom;
+    }
+    let mut width = i64::from(desired.width.max(0)).min(right - left);
+    let mut height = i64::from(desired.height.max(0));
+    let (x, y, side) = match request {
+        PopupPlacement::At(rect) => (i64::from(rect.x), i64::from(rect.y), None),
+        PopupPlacement::Anchored { anchor, side, .. } => {
+            let ax = i64::from(anchor.x);
+            let ay = i64::from(anchor.y);
+            let ar = ax + i64::from(anchor.width.max(0));
+            let ab = ay + i64::from(anchor.height.max(0));
+            match side {
+                PopupSide::Below | PopupSide::Above => {
+                    let mut below = (high - ab).max(0);
+                    let mut above = (ay - low).max(0);
+                    // Clearances must not make a usable one-row side disappear.
+                    if below.max(above) < minimum {
+                        low = top;
+                        high = bottom;
+                        below = (high - ab).max(0);
+                        above = (ay - low).max(0);
+                    }
+                    let prefer_below = side == PopupSide::Below;
+                    let preferred = if prefer_below { below } else { above };
+                    let opposite = if prefer_below { above } else { below };
+                    let choose_below = if height <= preferred || preferred >= opposite {
+                        prefer_below
+                    } else {
+                        !prefer_below
+                    };
+                    // If the trigger covers the tiny frame, an overlapping clipped body
+                    // is preferable to making every row unreachable until resize.
+                    let available = if below.max(above) == 0 {
+                        (high - low).max(0)
+                    } else if choose_below {
+                        below
+                    } else {
+                        above
+                    };
+                    height = height.min(available);
+                    (
+                        ax,
+                        if choose_below { ab } else { ay - height },
+                        Some(if choose_below { PopupSide::Below } else { PopupSide::Above }),
+                    )
+                }
+                PopupSide::Right | PopupSide::Left => {
+                    let space_right = (right - ar).max(0);
+                    let space_left = (ax - left).max(0);
+                    let prefer_right = side == PopupSide::Right;
+                    let preferred = if prefer_right { space_right } else { space_left };
+                    let opposite = if prefer_right { space_left } else { space_right };
+                    let choose_right = if width <= preferred || preferred >= opposite {
+                        prefer_right
+                    } else {
+                        !prefer_right
+                    };
+                    width = width.min(if choose_right { space_right } else { space_left });
+                    (
+                        if choose_right { ar } else { ax - width },
+                        ay,
+                        Some(if choose_right { PopupSide::Right } else { PopupSide::Left }),
+                    )
+                }
+                _ => unreachable!("popup side is validated before request publication"),
+            }
+        }
+    };
+    height = height.min((high - low).max(0));
+    let x = x.clamp(left, (right - width).max(left));
+    let y = y.clamp(low, (high - height).max(low));
+    (Recti::new(clamp_i64_to_i32(x), clamp_i64_to_i32(y), width as i32, height as i32), side)
+}
+
+#[cfg(test)]
+mod popup_fitting_tests {
+    use super::*;
+    use neocogi_ui::abi::core::PopupSide;
+
+    /// Creates a complete trigger snapshot with the same preferred dimensions for each side.
+    fn anchored(y: i32, side: PopupSide) -> PopupPlacement {
+        PopupPlacement::Anchored {
+            anchor: Recti::new(100, y, 120, 24),
+            side,
+            preferred: Dimensioni::default(),
+        }
+    }
+
+    /// Requested side, complete rows and line clearance match the numerical examples.
+    #[test]
+    fn below_above_and_bounded_height_use_the_original_trigger() {
+        let desired = Dimensioni::new(120, 242);
+        for (frame_height, y, expected_y, expected_height, expected_side) in [
+            (600, 100, 124, 242, PopupSide::Below),
+            (600, 400, 158, 242, PopupSide::Above),
+            (240, 100, 124, 100, PopupSide::Below),
+        ] {
+            let (rect, side) = fit_popup_rect(anchored(y, PopupSide::Below), Recti::new(0, 0, 600, frame_height), desired, 16, 26);
+            assert_eq!((rect.x, rect.y, rect.width, rect.height), (100, expected_y, 120, expected_height));
+            assert_eq!(side, Some(expected_side));
+        }
+    }
+
+    /// Finite zero stays zero, negative origins stay bounded, and side fitting can flip left.
+    #[test]
+    fn finite_clips_and_submenu_sides_do_not_wrap_or_become_unbounded() {
+        let trigger = PopupPlacement::Anchored {
+            anchor: Recti::new(560, 200, 30, 24),
+            side: PopupSide::Right,
+            preferred: Dimensioni::default(),
+        };
+        let (rect, side) = fit_popup_rect(trigger, Recti::new(0, 0, 600, 300), Dimensioni::new(120, 200), 16, 12);
+        assert_eq!(side, Some(PopupSide::Left));
+        assert_eq!(rect.x, 440);
+        assert!(rect.y + rect.height <= 284);
+        for clip in [Recti::new(-50, -30, 40, 20), Recti::new(0, 0, 0, 0)] {
+            let (rect, _) = fit_popup_rect(
+                PopupPlacement::At(Recti::new(i32::MAX, i32::MIN, 200, 200)),
+                clip,
+                Dimensioni::new(200, 200),
+                16,
+                20,
+            );
+            assert!(rect.width <= clip.width && rect.height <= clip.height);
+            assert!(rect.x >= clip.x && rect.y >= clip.y);
+            assert!(i64::from(rect.x) + i64::from(rect.width) <= i64::from(clip.x) + i64::from(clip.width));
+            assert!(i64::from(rect.y) + i64::from(rect.height) <= i64::from(clip.y) + i64::from(clip.height));
         }
     }
 }

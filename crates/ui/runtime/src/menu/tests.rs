@@ -61,7 +61,7 @@ fn popup_text_region_separates_labels_from_shortcuts_and_submenu_arrows() {
 
     // The item label and right-aligned shortcut are positioned by the same production helper and
     // clipped by the same production region. Their measured extents must fit without intersecting.
-    let item_region = text_region(layout.slots[0], layout.marker_width);
+    let item_region = text_region(layout.slots[0].local_rect(0, 0), layout.marker_width);
     let item_font = style.resolve_font(&atlas, &FontRef::Role(FontRole::Body));
     let label_size = atlas.get_text_size(item_font, "aaaa");
     let hint_size = atlas.get_text_size(item_font, "bbbb");
@@ -74,7 +74,7 @@ fn popup_text_region_separates_labels_from_shortcuts_and_submenu_arrows() {
 
     // A submenu label uses the identical horizontal region while its arrow uses the production
     // trailing rectangle. Both must stay inside the row, with at least the intended padding gap.
-    let branch_row = layout.slots[1];
+    let branch_row = layout.slots[1].local_rect(0, 0);
     let branch_region = text_region(branch_row, layout.marker_width);
     let branch_size = atlas.get_text_size(item_font, "aaaaaa");
     let branch_position = control_text_position_with_font(&style, &atlas, item_font, "aaaaaa", branch_region, WidgetOption::NONE);
@@ -176,4 +176,155 @@ fn choice_submission_and_model_replacement_are_distinct() {
     ));
     assert_eq!(surface.highlighted_choice_slot(), Some(0));
     assert_eq!(surface.take_choice_submission(), None);
+}
+
+/// The count cap changes viewport size, never admission, and only overflow gets a gutter.
+#[test]
+fn choice_viewports_bound_rows_without_truncating_the_model() {
+    let atlas = test_atlas();
+    let style = test_skin(&atlas);
+    for count in [0, 1, 9, 10, 11, 100] {
+        let rows = (0..count).map(|id| MenuSlot::Choice { id, label: "a".into(), enabled: true }).collect();
+        let mut menu = MenuSurface::choices(rows, None);
+        let size = menu.measure(&style, &atlas);
+        menu.layout(Recti::new(20, 30, 100, size.height), Recti::new(0, 0, 400, 400));
+        assert_eq!(menu.visible_slots().len(), (count as usize).min(10));
+        assert_eq!(menu.rows.len(), count as usize);
+        assert_eq!(menu.scrollbar.is_some(), count > 10 && style.metrics().scrollbar_size > 0);
+        let original = menu.keyboard_slot();
+        if count > 10 {
+            menu.route_pointer(
+                &UiInputEvent::Scroll {
+                    pos: Vec2i::new(22, 32),
+                    delta: Vec2i::new(0, 1),
+                },
+                false,
+            );
+            assert!(menu.offset_y > 0);
+            menu.layout(Recti::new(20, 30, 100, size.height), Recti::new(0, 0, 400, 400));
+            assert_eq!(menu.keyboard_slot(), original);
+            assert!(menu.offset_y > 0, "ordinary layout must not undo wheel movement");
+            assert!(menu.take_choice_submission().is_none());
+        }
+        assert!(menu.set_visible_limit(3));
+        let size = menu.measure(&style, &atlas);
+        menu.layout(Recti::new(20, 30, 100, size.height), Recti::new(0, 0, 400, 400));
+        assert_eq!(menu.visible_slots().len(), (count as usize).min(3));
+        assert!(!menu.set_visible_limit(3));
+    }
+}
+
+/// Variable command rows and uniform choice rows both preserve full aggregate coordinates.
+#[test]
+fn huge_menu_rows_stay_distinct_until_screen_translation() {
+    let atlas = test_atlas();
+    let style = test_skin(&atlas);
+    let rows = (0..65_536).map(|id| MenuSlot::Choice { id, label: "a".into(), enabled: true }).collect();
+    let mut menu = MenuSurface::choices(rows, Some(65_535));
+    menu.measure(&style, &atlas);
+    // Exercise the production committed geometry with a valid wide aggregate.
+    for (index, row) in menu.geometry.slots.iter_mut().enumerate() {
+        row.y = index as i64 * 40_000;
+        row.height = 40_000;
+    }
+    menu.layout(
+        Recti::new(20, 30, 120, 400_000 + menu.geometry.insets.vertical_extent()),
+        Recti::new(0, 0, 640, 500_000),
+    );
+    assert!(menu.offset_y > i64::from(i32::MAX));
+    assert_eq!(menu.visible_slots(), 65_526..65_536);
+    let last = menu.slot_rect(65_535).unwrap();
+    let previous = menu.slot_rect(65_534).unwrap();
+    assert_eq!(last.y - previous.y, 40_000);
+    assert!(matches!(
+        menu.route_pointer(
+            &UiInputEvent::MouseDown {
+                pos: Vec2i::new(last.x + 1, last.y + 1),
+                button: MouseButton::LEFT
+            },
+            false
+        )
+        .action,
+        Some(MenuAction::SubmitAndClose(Ok(())))
+    ));
+    assert_eq!(menu.take_choice_submission(), Some(65_535));
+}
+
+/// Thumb drags preserve a single initial anchor and cannot submit an exposed row on release.
+#[test]
+fn menu_scrollbar_capture_has_no_row_activation_or_incremental_rounding() {
+    let atlas = test_atlas();
+    let style = test_skin(&atlas);
+    let rows = (0..100).map(|id| MenuSlot::Choice { id, label: "a".into(), enabled: true }).collect();
+    let mut menu = MenuSurface::choices(rows, None);
+    menu.set_visible_limit(3);
+    let size = menu.measure(&style, &atlas);
+    let allocation = Recti::new(20, 30, 120, size.height);
+    let clip = Recti::new(0, 0, 400, 400);
+    menu.layout(allocation, clip);
+    let Some(bar) = menu.scrollbar else {
+        panic!("fixture requires a visible scrollbar")
+    };
+    let thumb = bar.thumb();
+    let start = Vec2i::new(20 + thumb.x, 30 + thumb.y);
+    menu.route_pointer(&UiInputEvent::MouseDown { pos: start, button: MouseButton::LEFT }, false);
+    for distance in [1, 2, 10_000] {
+        menu.route_pointer(
+            &UiInputEvent::MouseDrag {
+                pos: Vec2i::new(start.x, start.y + distance),
+                delta: Vec2i::new(0, 1),
+                buttons: MouseButton::LEFT,
+            },
+            false,
+        );
+        menu.layout(allocation, clip);
+    }
+    assert!(menu.has_capture());
+    assert_eq!(menu.visible_slots().end, 100);
+    menu.route_pointer(
+        &UiInputEvent::MouseUp {
+            pos: Vec2i::new(22, 32),
+            button: MouseButton::LEFT,
+        },
+        false,
+    );
+    assert!(!menu.has_capture());
+    assert!(menu.take_choice_submission().is_none());
+    assert!(menu.focus_first());
+    menu.layout(allocation, clip);
+    assert_eq!(menu.offset_y, 0);
+    assert!(menu.page_keyboard_focus(true));
+    menu.layout(allocation, clip);
+    assert!(menu.offset_y > 0);
+    assert!(menu.slot_rect(menu.keyboard_slot().unwrap()).is_some());
+}
+
+/// Mixed row heights use the same wide content domain as uniform choice panels.
+#[test]
+fn variable_command_row_measurement_preserves_large_tail_positions() {
+    let mut data = crate::test_support::test_asset_data_with_font_sizes(&[("body", 10)]);
+    data.tables.metrics.spacing = 100_000;
+    let atlas = AtlasHandle::from_validated_data(data, None).unwrap();
+    let style = test_skin(&atlas);
+    let mut rows = Vec::new();
+    for _ in 0..25_000 {
+        rows.push(MenuSlot::Separator);
+        rows.push(MenuSlot::Branch { label: "a".into() });
+    }
+    let mut menu = MenuSurface::new(rows, true);
+    menu.measure(&style, &atlas);
+    assert!(menu.content_height() > i64::from(i32::MAX));
+    menu.focus_last();
+    menu.layout(Recti::new(10, 20, 120, 300), Recti::new(0, 0, 400, 400));
+    let last = menu.slot_rect(49_999).unwrap();
+    assert!(last.y >= 20 && last.y + last.height <= 320);
+    assert!(menu.visible_slots().len() < 10);
+    let route = menu.route_pointer(
+        &UiInputEvent::MouseDown {
+            pos: Vec2i::new(last.x + 1, last.y + 1),
+            button: MouseButton::LEFT,
+        },
+        false,
+    );
+    assert!(matches!(route.action, Some(MenuAction::OpenSlot(49_999))));
 }
