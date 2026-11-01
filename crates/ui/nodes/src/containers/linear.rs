@@ -517,7 +517,7 @@ fn measure(ctx: &mut MeasureCtx<'_>, state: &Linear, constraints: Constraints) -
     for index in 0..count {
         let placement = state.spec(index);
         let initial = measure_child(ctx, orientation, index, AvailableSpace::Unbounded, cross_space, placement)?;
-        let main = resolver.next(placement.main, orientation.main(initial));
+        let main = resolver.next(placement.main, orientation.main(initial))?;
         let child = measure_child(ctx, orientation, index, AvailableSpace::Bounded(main), cross_space, placement)?;
         cross_content = cross_content.max(placement.fixed_cross.unwrap_or_else(|| orientation.cross(child)).max(0));
     }
@@ -599,9 +599,9 @@ fn place(ctx: &mut ContainerLayoutCtx<'_>, state: &mut Linear, rect: Recti) -> R
         gap,
         count,
         specs.iter().zip(resolved_main.iter()).map(|(spec, content)| (spec.main, *content)),
-    );
+    )?;
     for (spec, extent) in specs.iter().zip(resolved_main.iter_mut()) {
-        *extent = resolver.next(spec.main, *extent);
+        *extent = resolver.next(spec.main, *extent)?;
     }
     let extent = resolver.extent();
 

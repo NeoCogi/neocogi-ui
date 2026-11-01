@@ -26,6 +26,12 @@ fn grid_construction_validates_limits_and_explicit_tracks() {
         ui.widgets().grid(&[], &[LayoutTrack::Content; 2], LIMITS).err(),
         Some(neocogi_com::NC_E_OUT_OF_RANGE)
     );
+    for weight in [1e30, f32::MIN_POSITIVE] {
+        assert_eq!(
+            ui.widgets().grid(&[LayoutTrack::Flex { weight }], &[], LIMITS).err(),
+            Some(neocogi_com::NC_E_OUT_OF_RANGE)
+        );
+    }
     let mut grid = ui.widgets().grid(&[], &[], LIMITS).unwrap();
     assert_eq!(grid.limits().unwrap(), LIMITS);
     let (child, probe) = recorded_leaf(&runtime);

@@ -30,7 +30,7 @@ pub use path::NativePath;
 
 /// Compact menu declarations and live item clients.
 pub mod menu;
-pub use menu::{Menus, MenuBuilder, MenuItem};
+pub use menu::{Menus, MenuBuilder, MenuItem, MAX_MENU_ENTRIES, MAX_MENU_DEPTH};
 
 /// Standard native-path file-picker requests and clients.
 pub mod file_dialog;
@@ -56,3 +56,6 @@ pub use neocogi_ui::abi::core::{EventSourceMetadata, UiEventSource};
 
 /// Shared IDL bindings and their Rust conveniences.
 pub mod abi;
+
+/// Bounded UI coordinates and checked rs-math3d conversions shared by clients and providers.
+pub mod geometry;

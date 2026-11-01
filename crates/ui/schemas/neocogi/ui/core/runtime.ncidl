@@ -6,17 +6,20 @@ interface IPainter {
     /// uses trusted layout geometry; caller-supplied scope values cannot enlarge it. A retained
     /// view expires on every paint return. Resource ownership remains with the granted domain.
     fn begin_render_view(&mut self, scope: PaintScope, resources: &IRenderResources) -> Result<ComBox<IRenderView>>;
-    /// Records a nonnegative-width solid line with finite local endpoints. Zero width draws nothing.
-    fn stroke_line(&mut self, scope: PaintScope, from: PaintPoint, to: PaintPoint, width: f32, rgba: u32) -> Result<()>;
-    /// Records finite local polygon points at offset zero; fewer than three points draw nothing.
-    /// Concave polygon tessellation and clipping use the same UI implementation as built-in drawing.
-    fn fill_polygon(&mut self, scope: PaintScope, points: &[PaintPoint], rgba: u32) -> Result<()>;
+    /// Records bounded integer pixel endpoints and a nonnegative integer width; zero draws nothing.
+    fn stroke_line(&mut self, scope: PaintScope, from: Point, to: Point, width: i32, rgba: u32) -> Result<()>;
+    /// Explicit fractional input, checked and rounded once to the UI fixed-point grid.
+    fn stroke_line_f32(&mut self, scope: PaintScope, from: PaintPoint, to: PaintPoint, width: f32, rgba: u32) -> Result<()>;
+    /// Records bounded integer pixel points; fewer than three points draw nothing.
+    fn fill_polygon(&mut self, scope: PaintScope, points: &[Point], rgba: u32) -> Result<()>;
+    /// Explicit fractional polygon input, using the same checked fixed-point tessellator.
+    fn fill_polygon_f32(&mut self, scope: PaintScope, points: &[PaintPoint], rgba: u32) -> Result<()>;
     /// Records solid triangles in widget-local coordinates. The complete input starts at offset zero,
-    /// has a multiple of three vertices and contains only finite positions. Atlas mapping belongs
+    /// has a multiple of three vertices and bounded finite fractional UI positions. Atlas mapping belongs
     /// to the UI implementation and follows the currently installed resource revision.
     fn colored_triangles(&mut self, scope: PaintScope, vertices: &[ColoredVertex]) -> Result<()>;
     /// Records complete atlas triangles in local coordinates; offset is zero,
-    /// length is divisible by three, and every position/UV component is finite.
+    /// length is divisible by three. Positions enter bounded fixed UI geometry; UVs remain finite floats.
     fn triangles(&mut self, scope: PaintScope, vertices: &[RenderVertex]) -> Result<()>;
     /// Retains an immutable renderer-owned RGBA texture and draws its normalized source region in local coordinates.
     /// Negative extents are invalid; zero extents draw nothing. Ownership is validated before GPU execution.

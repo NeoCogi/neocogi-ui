@@ -331,3 +331,93 @@ fn standalone_menu_popup_submits_then_hides_without_destroying_its_live_rows() {
     assert_eq!(item.label(), Err(UI_E_CLOSED));
     window.close().unwrap();
 }
+
+/// All command branches spend the same bounded tree budget, and rejection leaves builders usable.
+#[test]
+fn command_menus_enforce_total_entry_and_depth_limits_through_com() {
+    let runtime = runtime();
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
+    let owner = mount(&runtime, button(&runtime).query().unwrap()).unwrap();
+    let menus = ui.menus().unwrap();
+    let root = menus.create("entry limit").unwrap();
+    for _ in 0..63 {
+        root.separator().unwrap();
+    }
+    let branch = root.submenu("the 64th entry").unwrap();
+    assert_eq!(root.separator(), Err(neocogi_com::NC_E_OUT_OF_RANGE));
+    assert_eq!(root.item("overflow").err(), Some(neocogi_com::NC_E_OUT_OF_RANGE));
+    assert_eq!(branch.item("overflow in descendant").err(), Some(neocogi_com::NC_E_OUT_OF_RANGE));
+    let mut popup = menus.popup(owner.as_com_ref(), &root).unwrap();
+    popup.show_at(Rect { x: 0, y: 0, width: 120, height: 1 }).unwrap();
+    ui.update(SIZE).unwrap();
+    popup.hide().unwrap();
+
+    let root = menus.create("depth limit").unwrap();
+    let mut deepest = root.clone();
+    for _ in 1..neocogi_ui::MAX_MENU_DEPTH {
+        deepest = deepest.submenu("branch").unwrap();
+    }
+    assert_eq!(deepest.submenu("ninth level").err(), Some(neocogi_com::NC_E_OUT_OF_RANGE));
+    deepest.item("still a valid eighth-level item").unwrap();
+    root.item("root remains usable").unwrap();
+    menus.popup(owner.as_com_ref(), &root).unwrap();
+}
+
+/// Choice creation/replacement and depth admission share the same exact limits as command menus.
+#[test]
+fn choice_menu_limits_preserve_the_previous_model_and_selection() {
+    let runtime = runtime();
+    let owner = mount(&runtime, button(&runtime).query().unwrap()).unwrap();
+    let service = runtime.query::<IChoiceMenusAbi>().unwrap();
+    let label = MenuTextRange { first: 0, count: 1 };
+    let entries: Vec<_> = (0..64).map(|id| ChoiceMenuEntry::Choice { id, label }).collect();
+    let mut menu = service
+        .create_choice_menu(
+            owner.as_com_ref(),
+            NcCopyFromBufferOffset::new(0, b"a"),
+            NcCopyFromBufferOffset::new(0, &entries),
+            ChoiceSelection::Selected(63),
+            neocogi_com::NcValueRef::new(&EventBinding::Unobserved).unwrap(),
+        )
+        .unwrap();
+    let mut oversized = entries.clone();
+    oversized.push(ChoiceMenuEntry::Choice { id: 64, label });
+    assert_eq!(
+        service
+            .create_choice_menu(
+                owner.as_com_ref(),
+                NcCopyFromBufferOffset::new(0, b"a"),
+                NcCopyFromBufferOffset::new(0, &oversized),
+                ChoiceSelection::None,
+                neocogi_com::NcValueRef::new(&EventBinding::Unobserved).unwrap()
+            )
+            .err(),
+        Some(neocogi_com::NC_E_OUT_OF_RANGE)
+    );
+    assert_eq!(
+        menu.replace(
+            NcCopyFromBufferOffset::new(0, b"a"),
+            NcCopyFromBufferOffset::new(0, &oversized),
+            ChoiceSelection::None
+        ),
+        Err(neocogi_com::NC_E_OUT_OF_RANGE)
+    );
+    assert_eq!(menu.choice_count().unwrap(), 64);
+    assert_eq!(menu.selection().unwrap(), ChoiceSelection::Selected(63));
+    for branches in [7, 8] {
+        let mut hierarchy = vec![ChoiceMenuEntry::Submenu { label, children: 1 }; branches];
+        hierarchy.push(ChoiceMenuEntry::Choice { id: 42, label });
+        let result = menu.replace(
+            NcCopyFromBufferOffset::new(0, b"a"),
+            NcCopyFromBufferOffset::new(0, &hierarchy),
+            ChoiceSelection::Selected(42),
+        );
+        if branches == 7 {
+            result.unwrap();
+        } else {
+            assert_eq!(result, Err(neocogi_com::NC_E_OUT_OF_RANGE));
+        }
+        assert_eq!(menu.choice_count().unwrap(), 1);
+        assert_eq!(menu.selection().unwrap(), ChoiceSelection::Selected(42));
+    }
+}

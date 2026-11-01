@@ -192,7 +192,7 @@ fn json_byte_limit_counts_escaped_text_and_aggregate_overhead() {
     let base = document.to_json().unwrap().len();
     let available = MAX_BYTES - base;
     document.name = "\n".repeat(available / 2);
-    if available % 2 != 0 {
+    if !available.is_multiple_of(2) {
         document.name.push('x');
     }
     let exact = document.to_json().unwrap();
@@ -207,3 +207,35 @@ fn json_byte_limit_counts_escaped_text_and_aggregate_overhead() {
 
 // This final integration-test executable owns one embedded runtime.
 extern crate neocogi_com_host as _;
+
+/// Authored models reject the same menu/geometry inputs as the runtime before either serialization path.
+#[test]
+fn persisted_menu_and_fixed_layout_limits_match_runtime_admission() {
+    let mut document = Document::new("bounded menu");
+    document.root = Node::new(
+        "combo",
+        WidgetSpec::Combo {
+            labels: vec!["a".into(); neocogi_ui::MAX_MENU_ENTRIES],
+            selected: None,
+            placeholder: String::new(),
+        },
+    );
+    document.outputs.clear();
+    document.to_json().unwrap();
+    document.to_binary().unwrap();
+    if let WidgetSpec::Combo { labels, .. } = &mut document.root.widget {
+        labels.push("overflow".into());
+    }
+    assert!(document.to_json().is_err());
+    assert!(document.to_binary().is_err());
+    for weight in [1e30, f32::MIN_POSITIVE] {
+        document.root = Node::new(
+            "grid",
+            WidgetSpec::Grid {
+                columns: vec![Track::Flex { weight }],
+                rows: vec![Track::Content],
+            },
+        );
+        assert!(document.validate().is_err());
+    }
+}

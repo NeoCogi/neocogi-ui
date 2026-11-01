@@ -14,6 +14,7 @@ fn rectangle(edge: Rect) -> Result<Rect, NcStatus> {
     {
         return Err(NC_E_INVALID_ARG);
     }
+    neocogi_ui::geometry::rectangle(edge)?;
     Ok(edge)
 }
 /// Copies the retained ABI value; the form has no second geometry representation.

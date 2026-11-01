@@ -637,7 +637,7 @@ fn resolved_column_span(
     // placement_end = first_column + column_span.
     let placement_end = placement.column.saturating_add(placement.column_span);
     for index in 0..columns {
-        let size = resolver.next(track(&state.column_tracks, index), preferred_column(ctx, state, index, spacing)?);
+        let size = resolver.next(track(&state.column_tracks, index), preferred_column(ctx, state, index, spacing)?)?;
         if index >= placement.column && index < placement_end {
             // span_width = previous_span_width + resolved_track_width.
             width = width.saturating_add(size);
@@ -659,7 +659,7 @@ fn resolve_columns_into(ctx: &mut impl GridMeasureCtx, state: &Grid, available_w
     for index in 0..count {
         columns.push(preferred_column(ctx, state, index, spacing)?);
     }
-    resolve_tracks_in_place(available_width, spacing, &state.column_tracks, columns);
+    resolve_tracks_in_place(available_width, spacing, &state.column_tracks, columns)?;
     Ok(())
 }
 
@@ -680,7 +680,7 @@ fn resolve_rows_into(
             Ok(track_span(columns, placement.column, placement.column_span, spacing))
         })?);
     }
-    resolve_tracks_in_place(available_height, spacing, &state.row_tracks, rows);
+    resolve_tracks_in_place(available_height, spacing, &state.row_tracks, rows)?;
     Ok(())
 }
 
@@ -697,7 +697,7 @@ fn measured_tracks(
 ) -> Result<i32, NcStatus> {
     let mut resolver = TrackResolver::try_new(available, spacing, count, (0..count).map(|index| Ok((track(tracks, index), preferred(index)?))))?;
     for index in 0..count {
-        resolver.next(track(tracks, index), preferred(index)?);
+        resolver.next(track(tracks, index), preferred(index)?)?;
     }
     Ok(resolver.extent())
 }

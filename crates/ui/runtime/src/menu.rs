@@ -269,9 +269,15 @@ pub struct MenuBar {
 
 impl MenuBar {
     /// Creates a bar from uniquely owned top-level menu descriptions.
-    pub fn new(menus: impl IntoIterator<Item = Menu>) -> Self {
-        // Collect once at the ownership boundary; registration consumes this vector without clones.
-        Self { menus: menus.into_iter().collect() }
+    pub fn new(menus: impl IntoIterator<Item = Menu>) -> Result<Self, neocogi_com::NcStatus> {
+        let mut remaining = neocogi_ui::MAX_MENU_ENTRIES;
+        let mut result = Vec::new();
+        for menu in menus {
+            remaining = remaining.checked_sub(1).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
+            visit_menu(&menu, 2, &mut remaining)?;
+            result.push(menu);
+        }
+        Ok(Self { menus: result })
     }
 
     /// Transfers the uniquely owned top-level declarations to window registration.
@@ -297,12 +303,33 @@ impl Menu {
         Self { label: label.into(), entries: Vec::new() }
     }
 
+    /// Validates the sole tree before registration or an append; no mirrored count is retained.
+    pub(crate) fn validate_limits(&self) -> Result<usize, neocogi_com::NcStatus> {
+        let mut remaining = neocogi_ui::MAX_MENU_ENTRIES;
+        visit_menu(self, 1, &mut remaining)?;
+        Ok(neocogi_ui::MAX_MENU_ENTRIES - remaining)
+    }
+
     /// Separates the parent-facing label from the rows consumed by one popup surface.
     pub(crate) fn into_parts(self) -> (String, Vec<MenuEntry>) {
         // Moving both values lets the manager install labels and rows without cloning declaration
         // strings or retaining a second recursive topology.
         (self.label, self.entries)
     }
+}
+
+/// Counts authoritative rows with a bounded recursion depth before descending into each branch.
+fn visit_menu(menu: &Menu, depth: usize, remaining: &mut usize) -> Result<(), neocogi_com::NcStatus> {
+    if depth > neocogi_ui::MAX_MENU_DEPTH {
+        return Err(neocogi_com::NC_E_OUT_OF_RANGE);
+    }
+    for entry in &menu.entries {
+        *remaining = remaining.checked_sub(1).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
+        if let MenuEntry::Submenu(child) = entry {
+            visit_menu(child, depth + 1, remaining)?;
+        }
+    }
+    Ok(())
 }
 
 /// One ordered logical row in a declarative menu.
@@ -481,6 +508,10 @@ pub(crate) struct MenuSurface {
 impl MenuSurface {
     /// Creates one compact concrete presentation surface.
     pub(crate) fn new(rows: Vec<MenuSlot>, popup: bool) -> Self {
+        debug_assert!(
+            rows.len() <= neocogi_ui::MAX_MENU_ENTRIES,
+            "menu rows were admitted before surface construction"
+        );
         // Geometry and transient pointer state begin empty and become authoritative during layout.
         Self {
             rows,

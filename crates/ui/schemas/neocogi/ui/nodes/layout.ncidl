@@ -8,9 +8,9 @@ enum LayoutTrack: u8 {
         /// Exact nonnegative pixel extent.
         extent: i32,
     },
-    /// Receives a strictly positive finite weighted share of bounded remaining space.
+    /// Receives a positive weighted share; the weight must remain positive in checked S51.12.
     Flex {
-        /// Strictly positive finite share of bounded remaining space.
+        /// Finite positive input, checked for range and rounding-to-zero before mutation.
         weight: f32,
     },
 }

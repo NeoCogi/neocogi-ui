@@ -15,6 +15,12 @@ pub(crate) fn enqueue(context: &mut crate::window_manager::WindowManager, event:
         return Err(NC_E_INVALID_ARG);
     }
     match event {
+        UiInput::Pointer(p) | UiInput::Down { position: p, .. } | UiInput::Up { position: p, .. } | UiInput::Scroll(p) => {
+            neocogi_ui::geometry::integer_point(crate::Vec2i::new(p.x, p.y))?;
+        }
+        _ => {}
+    }
+    match event {
         UiInput::Cancel => context.cancel_input(),
         UiInput::Pointer(position) => context.mousemove(position.x, position.y),
         UiInput::Down { position, buttons } => context.mousedown(

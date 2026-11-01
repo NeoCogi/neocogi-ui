@@ -78,7 +78,7 @@ fn key(ui: &neocogi_ui::Ui, key: KeyCode) {
 /// Positive configuration, row caps, flipping, frame restriction and silent live edits cross COM.
 #[test]
 fn choice_popup_caps_and_frame_fitting_are_committed_together() {
-    for count in [0, 1, 9, 10, 11, 100] {
+    for count in [0, 1, 9, 10, 11, 64] {
         let fixture = PopupFixture::new(10);
         let owner = fixture.owner();
         let mut menu = fixture.choices(&owner, count);
@@ -119,33 +119,30 @@ fn choice_popup_caps_and_frame_fitting_are_committed_together() {
 
 /// A real last-row click proves the content range wasn't truncated before viewport translation.
 #[test]
-fn admitted_wide_combo_range_reveals_and_activates_the_final_stable_id() {
+fn bounded_combo_range_reveals_and_activates_the_final_stable_id() {
     let fixture = PopupFixture::new(39_998);
     let owner = fixture.owner();
-    let mut menu = fixture.choices(&owner, 65_536);
+    let mut menu = fixture.choices(&owner, 64);
     menu.show_at(Rect { x: 100, y: 100, width: 120, height: 24 }).unwrap();
-    let size = Size { width: 640, height: 500_000 };
+    let size = Size { width: 640, height: 131_072 };
     fixture.ui.update(size).unwrap();
     key(&fixture.ui, KeyCode::End);
     fixture.ui.update(size).unwrap();
     assert_eq!(menu.selection().unwrap(), ChoiceSelection::Selected(0), "navigation is not commitment");
     let popup = fixture.popups()[0];
-    assert_eq!(popup.height, 400_002);
-    let position = Point {
-        x: popup.x + 5,
-        y: popup.y + 1 + 9 * 40_000 + 5,
-    };
+    assert_eq!(popup.height, 40_002);
+    let position = Point { x: popup.x + 5, y: popup.y + 1 + 5 };
     fixture.ui.input(UiInput::Down { position, buttons: 1 }, "").unwrap();
     fixture.ui.input(UiInput::Up { position, buttons: 1 }, "").unwrap();
     fixture.ui.update(size).unwrap();
-    assert_eq!(menu.selection().unwrap(), ChoiceSelection::Selected(65_535));
+    assert_eq!(menu.selection().unwrap(), ChoiceSelection::Selected(63));
     assert!(fixture.popups().is_empty());
     menu.show_at(Rect { x: 100, y: 100, width: 120, height: 24 }).unwrap();
     fixture.ui.update(size).unwrap();
     let (renderer, probe) = renderer();
     fixture.ui.render(size, renderer.as_com_ref()).unwrap();
     assert!(probe.vertices.borrow().len() < 10_000, "only the bounded visible range may paint");
-    assert!(probe.vertices.borrow().iter().all(|v| v.x.is_finite() && v.y >= 0.0 && v.y <= 500_000.0));
+    assert!(probe.vertices.borrow().iter().all(|v| v.x.is_finite() && v.y >= 0.0 && v.y <= 131_072.0));
 }
 
 /// Scrolling a parent retires its obsolete child suffix without invalidating traversal indices.
@@ -158,7 +155,8 @@ fn parent_menu_scrolling_reanchors_or_dismisses_its_submenu() {
     let branch = builder.submenu("branch").unwrap();
     branch.item("a").unwrap();
     branch.item("b").unwrap();
-    for _ in 0..100 {
+    // One branch, its two leaves and these rows consume exactly 64 entries.
+    for _ in 0..61 {
         builder.item("a").unwrap();
     }
     let mut popup = menus.popup(owner.as_com_ref(), &builder).unwrap();
@@ -278,7 +276,7 @@ fn inherited_clips_tiny_frames_and_resize_keep_popup_geometry_finite() {
         .ui
         .child_window(owner.as_com_ref(), "child", Rect { x: 10, y: 10, width: 60, height: 60 }, child_root)
         .unwrap();
-    let mut menu = fixture.choices(&child, 100);
+    let mut menu = fixture.choices(&child, 64);
     menu.show_at(Rect { x: 0, y: 0, width: 120, height: 24 }).unwrap();
     for size in [SIZE, Size { width: 3, height: 5 }, SIZE] {
         fixture.ui.update(size).unwrap();
@@ -376,7 +374,7 @@ fn invalidated_scrollbar_capture_consumes_the_release_tail() {
             .ui
             .window("underlying", RECT, neocogi_ui::OwnedWidget::from_interface(leaf.query::<IWidgetAbi>().unwrap()))
             .unwrap();
-        let mut menu = fixture.choices(&owner, 100);
+        let mut menu = fixture.choices(&owner, 64);
         menu.show_at(Rect { x: 100, y: 100, width: 120, height: 24 }).unwrap();
         fixture.ui.update(SIZE).unwrap();
         let popup = fixture.popups()[0];

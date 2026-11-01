@@ -514,10 +514,10 @@ impl IWidget for RetainingWidget {
             assert_eq!(old.triangles(*expired, NcCopyFromBufferOffset::new(0, &[])), Err(UI_E_EXPIRED_SCOPE));
             assert_eq!(old.colored_triangles(*expired, NcCopyFromBufferOffset::new(0, &[])), Err(UI_E_EXPIRED_SCOPE));
             assert_eq!(
-                old.stroke_line(*expired, PaintPoint::default(), PaintPoint::default(), 1.0, 0),
+                old.stroke_line_f32(*expired, PaintPoint::default(), PaintPoint::default(), 1.0, 0),
                 Err(UI_E_EXPIRED_SCOPE)
             );
-            assert_eq!(old.fill_polygon(*expired, NcCopyFromBufferOffset::new(0, &[]), 0), Err(UI_E_EXPIRED_SCOPE));
+            assert_eq!(old.fill_polygon_f32(*expired, NcCopyFromBufferOffset::new(0, &[]), 0), Err(UI_E_EXPIRED_SCOPE));
         }
         // Malformed bulk batches fail transactionally before a valid command follows.
         assert_eq!(painter.triangles(scope, NcCopyFromBufferOffset::new(1, &[])), Err(NC_E_INVALID_ARG));
@@ -547,16 +547,16 @@ impl IWidget for RetainingWidget {
             Err(NC_E_INVALID_ARG)
         );
         assert_eq!(
-            painter.stroke_line(scope, PaintPoint { x: f32::INFINITY, y: 0.0 }, PaintPoint::default(), 1.0, 0),
+            painter.stroke_line_f32(scope, PaintPoint { x: f32::INFINITY, y: 0.0 }, PaintPoint::default(), 1.0, 0),
             Err(NC_E_INVALID_ARG)
         );
         assert_eq!(
-            painter.stroke_line(scope, PaintPoint::default(), PaintPoint::default(), -1.0, 0),
+            painter.stroke_line_f32(scope, PaintPoint::default(), PaintPoint::default(), -1.0, 0),
             Err(NC_E_INVALID_ARG)
         );
-        assert_eq!(painter.fill_polygon(scope, NcCopyFromBufferOffset::new(1, &[]), 0), Err(NC_E_INVALID_ARG));
+        assert_eq!(painter.fill_polygon_f32(scope, NcCopyFromBufferOffset::new(1, &[]), 0), Err(NC_E_INVALID_ARG));
         assert_eq!(
-            painter.fill_polygon(scope, NcCopyFromBufferOffset::new(0, &[PaintPoint { x: 0.0, y: f32::NAN }]), 0),
+            painter.fill_polygon_f32(scope, NcCopyFromBufferOffset::new(0, &[PaintPoint { x: 0.0, y: f32::NAN }]), 0),
             Err(NC_E_INVALID_ARG)
         );
         let invalid_clip = PaintScope {
@@ -1273,12 +1273,20 @@ impl IPainter for BuiltinPainter {
         panic!("unexpected GPU view")
     }
 
+    /// This fixture rejects unexpected integer primitive operations.
+    fn stroke_line(&mut self, _: PaintScope, _: Point, _: Point, _: i32, _: u32) -> Result<(), NcStatus> {
+        panic!("unexpected integer line")
+    }
+    /// This fixture rejects unexpected integer primitive operations.
+    fn fill_polygon(&mut self, _: PaintScope, _: NcCopyFromBufferOffset<'_, Point>, _: u32) -> Result<(), NcStatus> {
+        panic!("unexpected integer polygon")
+    }
     /// Built-ins no longer resolve lines through this primitive.
-    fn stroke_line(&mut self, _: PaintScope, _: PaintPoint, _: PaintPoint, _: f32, _: u32) -> Result<(), NcStatus> {
+    fn stroke_line_f32(&mut self, _: PaintScope, _: PaintPoint, _: PaintPoint, _: f32, _: u32) -> Result<(), NcStatus> {
         panic!("expected atlas triangles")
     }
     /// Built-ins no longer resolve polygons through this primitive.
-    fn fill_polygon(&mut self, _: PaintScope, _: NcCopyFromBufferOffset<'_, PaintPoint>, _: u32) -> Result<(), NcStatus> {
+    fn fill_polygon_f32(&mut self, _: PaintScope, _: NcCopyFromBufferOffset<'_, PaintPoint>, _: u32) -> Result<(), NcStatus> {
         panic!("expected atlas triangles")
     }
 
@@ -1871,4 +1879,51 @@ fn false_dispatch_callback_reconciles_raised_surface_before_next_receiver() {
     let _raising = ui.window("raising", RECT, raising).unwrap();
     ui.update(SIZE).unwrap();
     assert_eq!(&trace.borrow()[..4], &["raising", "first", "raising", "later"]);
+}
+
+/// Public visible-geometry rejection is atomic, and the same runtime remains usable afterward.
+#[test]
+fn bounded_surface_and_input_coordinates_reject_without_committing_an_edit() {
+    let ui = runtime();
+    let window = mount(&ui, button(&ui).query().unwrap()).unwrap();
+    ui.update(SIZE).unwrap();
+    let original = window.snapshot().unwrap();
+    assert_eq!(
+        window.set_rect(Rect { x: 131_072, y: 0, width: 1, height: 1 }),
+        Err(neocogi_com::NC_E_OUT_OF_RANGE)
+    );
+    assert_eq!(window.snapshot().unwrap().rect, original.rect);
+    assert_eq!(ui.update(Size { width: 131_073, height: 400 }), Err(neocogi_com::NC_E_OUT_OF_RANGE));
+    assert_eq!(
+        ui.input(UiInput::Pointer(Point { x: i32::MAX, y: 0 }), NcCopyFromBufferOffset::new(0, &[])),
+        Err(neocogi_com::NC_E_OUT_OF_RANGE)
+    );
+    ui.update(SIZE).unwrap();
+    window.set_rect(RECT).unwrap();
+    ui.update(SIZE).unwrap();
+}
+
+/// A long document's virtual origins remain valid before and after scrolling beyond the visible domain.
+#[test]
+fn long_scrolling_text_projects_virtual_geometry_into_the_bounded_frame() {
+    let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
+    let text = ui.widgets().text_block(&"a\n".repeat(20_000), TextWrapping::None).unwrap();
+    let scrolling = ui.widgets().scroll_area(text, true).unwrap();
+    let mut handle = scrolling.handle();
+    ui.window("long text", RECT, scrolling).unwrap();
+    let (renderer, probe) = renderer();
+    for offset in [0, i32::MAX] {
+        handle.set_offset(Point { x: 0, y: offset }).unwrap();
+        ui.update(SIZE).unwrap();
+        ui.render(SIZE, renderer.as_com_ref()).unwrap();
+        assert!(
+            probe
+                .vertices
+                .borrow()
+                .iter()
+                .all(|v| v.x >= 0.0 && v.x <= SIZE.width as f32 && v.y >= 0.0 && v.y <= SIZE.height as f32)
+        );
+    }
+    let info = handle.info().unwrap();
+    assert!(info.requested.y > neocogi_ui::geometry::COORDINATE_LIMIT);
 }

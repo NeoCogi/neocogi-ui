@@ -44,6 +44,7 @@ pub(super) fn status(error: SurfaceMutationError) -> NcStatus {
         SurfaceMutationError::UnknownWindow | SurfaceMutationError::UnknownPopup => UI_E_CLOSED,
         SurfaceMutationError::InvalidLayer(_) => NC_E_INVALID_ARG,
         SurfaceMutationError::Busy => UI_E_BUSY,
+        SurfaceMutationError::MenuLimit => neocogi_com::NC_E_OUT_OF_RANGE,
         _ => UI_E_POLICY,
     }
 }
@@ -101,9 +102,7 @@ impl RuntimeStorage {
     ) -> Result<ComPtr<IUnknown>, (NcStatus, neocogi_com::ComBox<neocogi_ui::abi::core::IWidgetAbi>)> {
         let prepared = (|| {
             self.factory.host.check_mutation()?;
-            if rect.width < 0 || rect.height < 0 {
-                return Err(NC_E_INVALID_ARG);
-            }
+            neocogi_ui::geometry::rectangle(rect)?;
             let title = checked_title(title)?;
             let context = self.context()?;
             self.prune_mounts(&context.window_manager);
@@ -341,9 +340,7 @@ impl IWindow for LogicalWindow {
     }
     /// Rejects negative allocation before changing manager geometry.
     fn set_rect(&self, rect: Rect) -> Result<(), NcStatus> {
-        if rect.width < 0 || rect.height < 0 {
-            return Err(NC_E_INVALID_ARG);
-        }
+        neocogi_ui::geometry::rectangle(rect)?;
         self.edit(WindowEdit::Rect(rect))
     }
     /// Preserves the difference between local intent and structurally effective visibility.
@@ -509,14 +506,13 @@ impl IPopup for LogicalPopup {
     }
     /// Validates allocation before atomically changing the exact anchor and input scope.
     fn show_at(&mut self, anchor: Rect) -> Result<(), NcStatus> {
-        if anchor.width < 0 || anchor.height < 0 {
-            return Err(NC_E_INVALID_ARG);
-        }
+        neocogi_ui::geometry::rectangle(anchor)?;
         self.edit(PopupEdit::ShowAt { anchor })
     }
     /// Validates a complete trigger and direction before publishing a fitting request.
     fn show_anchored(&mut self, anchor: Rect, side: neocogi_ui::abi::core::PopupSide) -> Result<(), NcStatus> {
-        if anchor.width < 0 || anchor.height < 0 || !side.is_known() {
+        neocogi_ui::geometry::rectangle(anchor)?;
+        if !side.is_known() {
             return Err(NC_E_INVALID_ARG);
         }
         self.edit(PopupEdit::Anchored { anchor, side })

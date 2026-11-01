@@ -42,12 +42,20 @@ impl IPainter for Recorder {
     fn fill(&mut self, _: PaintScope, _: Rect, _: u32) -> Result<(), NcStatus> {
         Ok(())
     }
+    /// This fixture rejects unexpected integer primitive operations.
+    fn stroke_line(&mut self, _: PaintScope, _: Point, _: Point, _: i32, _: u32) -> Result<(), NcStatus> {
+        panic!("unexpected integer line")
+    }
+    /// This fixture rejects unexpected integer primitive operations.
+    fn fill_polygon(&mut self, _: PaintScope, _: NcCopyFromBufferOffset<'_, Point>, _: u32) -> Result<(), NcStatus> {
+        panic!("unexpected integer polygon")
+    }
     /// Rejects an unexpected operation so the fixture cannot silently omit widget output.
-    fn stroke_line(&mut self, _: PaintScope, _: PaintPoint, _: PaintPoint, _: f32, _: u32) -> Result<(), NcStatus> {
+    fn stroke_line_f32(&mut self, _: PaintScope, _: PaintPoint, _: PaintPoint, _: f32, _: u32) -> Result<(), NcStatus> {
         panic!("unexpected stroke")
     }
     /// Rejects an unexpected operation so the fixture cannot silently omit widget output.
-    fn fill_polygon(&mut self, _: PaintScope, _: NcCopyFromBufferOffset<'_, PaintPoint>, _: u32) -> Result<(), NcStatus> {
+    fn fill_polygon_f32(&mut self, _: PaintScope, _: NcCopyFromBufferOffset<'_, PaintPoint>, _: u32) -> Result<(), NcStatus> {
         panic!("unexpected polygon")
     }
     /// Rejects an unexpected operation so the fixture cannot silently omit widget output.

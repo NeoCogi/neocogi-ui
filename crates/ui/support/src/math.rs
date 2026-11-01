@@ -30,7 +30,8 @@
 
 //! Lightweight geometry conveniences shared across retained layout and rendering.
 
-use rs_math3d::{Recti, Vec2f, Vec2i};
+use rs_math3d::{Recti, Vec2i, Vector};
+use neocogi_ui::geometry::{wide_integer, WidePoint, WideRectangle, WideScalar};
 
 /// Clamps one wider geometry calculation into the crate's signed coordinate domain.
 pub fn clamp_i64_to_i32(value: i64) -> i32 {
@@ -39,7 +40,7 @@ pub fn clamp_i64_to_i32(value: i64) -> i32 {
     value.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
 }
 
-/// Internal rectangle operations not yet supplied by `rs-math3d`.
+/// UI pixel/half-open policies over rs-math3d checked fixed-point rectangle operations.
 pub trait RectExt: Sized {
     /// Expands the rectangle uniformly on all sides with saturated coordinates and extents.
     fn expanded(self, amount: i32) -> Self;
@@ -64,31 +65,46 @@ pub trait RectExt: Sized {
 
     /// Returns the smallest rectangle containing both input rectangles.
     fn union(self, other: Self) -> Self;
-
-    /// Returns conservative integer bounds around finite floating-point positions.
-    fn from_points(points: &[Vec2f]) -> Option<Self>;
-
-    /// Returns conservative integer bounds around a finite thick line.
-    fn from_thick_line(from: Vec2f, to: Vec2f, width: f32) -> Option<Self>;
 }
 
+/// Converts stored integer pixel geometry to the shared wide fixed working domain.
+fn wide_rect(rect: Recti) -> WideRectangle {
+    WideRectangle::new(wide_integer(rect.x), wide_integer(rect.y), wide_integer(rect.width), wide_integer(rect.height))
+}
+
+/// Narrows only final integral virtual-layout results; all preceding cancellation stays exact.
+fn narrow(value: WideScalar) -> i32 {
+    clamp_i64_to_i32(value.to_bits() / 4096)
+}
+
+/// Retained integer rectangles are the public pixel representation, not a second arithmetic kernel.
 impl RectExt for Recti {
     fn expanded(self, amount: i32) -> Self {
-        let extent = amount.saturating_mul(2);
+        let r = wide_rect(self);
+        let amount = wide_integer(amount);
+        let twice = amount.checked_add(amount).expect("two i32 extents fit the wide fixed domain");
         Self::new(
-            self.x.saturating_sub(amount),
-            self.y.saturating_sub(amount),
-            self.width.saturating_add(extent),
-            self.height.saturating_add(extent),
+            narrow(r.x.checked_sub(amount).expect("i32 difference fits")),
+            narrow(r.y.checked_sub(amount).expect("i32 difference fits")),
+            narrow(r.width.checked_add(twice).expect("three i32 extents fit")),
+            narrow(r.height.checked_add(twice).expect("three i32 extents fit")),
         )
     }
 
     fn translated(self, offset: Vec2i) -> Self {
-        Self::new(self.x.saturating_add(offset.x), self.y.saturating_add(offset.y), self.width, self.height)
+        let origin = WidePoint::new(wide_integer(self.x), wide_integer(self.y));
+        let offset = WidePoint::new(wide_integer(offset.x), wide_integer(offset.y));
+        let p = WidePoint::checked_add_vv(&origin, &offset).expect("sum of i32 coordinates fits the wide fixed domain");
+        Self::new(narrow(p.x), narrow(p.y), self.width, self.height)
     }
 
     fn relative_to(self, origin: Vec2i) -> Self {
-        Self::new(self.x.saturating_sub(origin.x), self.y.saturating_sub(origin.y), self.width, self.height)
+        let p = WidePoint::checked_sub_vv(
+            &WidePoint::new(wide_integer(self.x), wide_integer(self.y)),
+            &WidePoint::new(wide_integer(origin.x), wide_integer(origin.y)),
+        )
+        .expect("difference of i32 coordinates fits the wide fixed domain");
+        Self::new(narrow(p.x), narrow(p.y), self.width, self.height)
     }
 
     fn has_positive_area(self) -> bool {
@@ -99,32 +115,21 @@ impl RectExt for Recti {
         if !self.has_positive_area() {
             return false;
         }
-        let x = i64::from(point.x);
-        let y = i64::from(point.y);
-        let left = i64::from(self.x);
-        let top = i64::from(self.y);
-        // Exclusive edges live in i64 so a positive extent at i32::MAX remains queryable.
-        x >= left && x < left + i64::from(self.width) && y >= top && y < top + i64::from(self.height)
+        let r = wide_rect(self);
+        let max = r.checked_max().expect("i32 origin plus extent fits the wide fixed domain");
+        let p = WidePoint::new(wide_integer(point.x), wide_integer(point.y));
+        // UI hit regions are half-open; rs-math3d's inclusive checked_contains has a different contract.
+        p.x >= r.x && p.y >= r.y && p.x < max.x && p.y < max.y
     }
 
     fn positive_intersection(self, other: Self) -> Option<Self> {
         if !self.has_positive_area() || !other.has_positive_area() {
             return None;
         }
-
-        // Recti permits an origin at i32::MAX together with a positive extent, so computing an
-        // exclusive edge in i32 can overflow even though both rectangles are individually valid.
-        // Wider intermediates make clipping total for renderer geometry derived from untrusted
-        // atlas metrics; the resulting origin and extent are bounded by the input i32 values.
-        let left = i64::from(self.x).max(i64::from(other.x));
-        let top = i64::from(self.y).max(i64::from(other.y));
-        let right = (i64::from(self.x) + i64::from(self.width)).min(i64::from(other.x) + i64::from(other.width));
-        let bottom = (i64::from(self.y) + i64::from(self.height)).min(i64::from(other.y) + i64::from(other.height));
-        if right <= left || bottom <= top {
-            return None;
-        }
-
-        Some(Self::new(left as i32, top as i32, (right - left) as i32, (bottom - top) as i32))
+        let r = wide_rect(self)
+            .checked_intersect(&wide_rect(other))
+            .expect("i32 rectangle edges fit the wide fixed domain")?;
+        (r.width > WideScalar::ZERO && r.height > WideScalar::ZERO).then(|| Self::new(narrow(r.x), narrow(r.y), narrow(r.width), narrow(r.height)))
     }
 
     fn overlaps(self, other: Self) -> bool {
@@ -132,57 +137,16 @@ impl RectExt for Recti {
     }
 
     fn union(self, other: Self) -> Self {
-        let min_x = i64::from(self.x.min(other.x));
-        let min_y = i64::from(self.y.min(other.y));
-        let max_x = (i64::from(self.x) + i64::from(self.width)).max(i64::from(other.x) + i64::from(other.width));
-        let max_y = (i64::from(self.y) + i64::from(self.height)).max(i64::from(other.y) + i64::from(other.height));
-        // Recti cannot represent a union wider than i32::MAX. Preserve the leading origin and
-        // saturate the extent instead of wrapping to a negative layout rectangle.
-        let width = (max_x - min_x).clamp(0, i64::from(i32::MAX)) as i32;
-        let height = (max_y - min_y).clamp(0, i64::from(i32::MAX)) as i32;
-        Self::new(min_x as i32, min_y as i32, width, height)
+        let a = wide_rect(self);
+        let b = wide_rect(other);
+        let min = WidePoint::min(&a.min(), &b.min());
+        let max = WidePoint::max(
+            &a.checked_max().expect("i32 rectangle edges fit"),
+            &b.checked_max().expect("i32 rectangle edges fit"),
+        );
+        let r = WideRectangle::checked_from(&min, &max).expect("union of i32 rectangles fits the wide fixed domain");
+        Self::new(narrow(r.x), narrow(r.y), narrow(r.width), narrow(r.height))
     }
-
-    fn from_points(points: &[Vec2f]) -> Option<Self> {
-        let first = *points.first()?;
-        if !point_is_finite(first) {
-            return None;
-        }
-
-        let mut min = first;
-        let mut max = first;
-        for point in points.iter().copied().skip(1) {
-            if !point_is_finite(point) {
-                return None;
-            }
-            min = Vec2f::new(min.x.min(point.x), min.y.min(point.y));
-            max = Vec2f::new(max.x.max(point.x), max.y.max(point.y));
-        }
-
-        let x0 = min.x.floor() as i32;
-        let y0 = min.y.floor() as i32;
-        let x1 = max.x.ceil() as i32;
-        let y1 = max.y.ceil() as i32;
-        let width = (i64::from(x1) - i64::from(x0)).clamp(0, i64::from(i32::MAX)) as i32;
-        let height = (i64::from(y1) - i64::from(y0)).clamp(0, i64::from(i32::MAX)) as i32;
-        Some(Self::new(x0, y0, width, height))
-    }
-
-    fn from_thick_line(from: Vec2f, to: Vec2f, width: f32) -> Option<Self> {
-        if !width.is_finite() || width <= 0.0 || !point_is_finite(from) || !point_is_finite(to) {
-            return None;
-        }
-
-        let half = width * 0.5;
-        let min = Vec2f::new(from.x.min(to.x) - half, from.y.min(to.y) - half);
-        let max = Vec2f::new(from.x.max(to.x) + half, from.y.max(to.y) + half);
-        Self::from_points(&[min, max])
-    }
-}
-
-/// Returns whether both point components are finite.
-fn point_is_finite(point: Vec2f) -> bool {
-    point.x.is_finite() && point.y.is_finite()
 }
 
 /// Convenience constructor for [`Vec2i`].
@@ -252,20 +216,5 @@ mod tests {
         );
         assert!(extreme.positive_intersection(Recti::new(0, 0, 32, 32)).is_none());
         assert!(extreme.contains_point(Vec2i::new(i32::MAX, i32::MIN)));
-    }
-
-    #[test]
-    fn floating_geometry_produces_conservative_integer_bounds() {
-        assert_rect(
-            Recti::from_points(&[Vec2f::new(0.7, -1.2), Vec2f::new(1.2, 3.1)]).expect("finite points have bounds"),
-            (0, -2, 2, 6),
-        );
-        assert!(Recti::from_points(&[]).is_none());
-        assert!(Recti::from_points(&[Vec2f::new(f32::NAN, 0.0)]).is_none());
-        assert_rect(
-            Recti::from_thick_line(Vec2f::new(1.0, 2.0), Vec2f::new(5.0, 4.0), 2.0).expect("finite thick line has bounds"),
-            (0, 1, 6, 4),
-        );
-        assert!(Recti::from_thick_line(Vec2f::new(0.0, 0.0), Vec2f::new(1.0, 1.0), 0.0).is_none());
     }
 }

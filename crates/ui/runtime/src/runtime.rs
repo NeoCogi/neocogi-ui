@@ -442,6 +442,8 @@ impl Runtime {
         if size.width <= 0 || size.height <= 0 {
             return Err(NC_E_INVALID_ARG);
         }
+        neocogi_ui::geometry::integer(size.width)?;
+        neocogi_ui::geometry::integer(size.height)?;
         if storage.updating.replace(true) {
             return Err(UI_E_BUSY);
         }

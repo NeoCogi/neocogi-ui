@@ -183,7 +183,7 @@ fn choice_submission_and_model_replacement_are_distinct() {
 fn choice_viewports_bound_rows_without_truncating_the_model() {
     let atlas = test_atlas();
     let style = test_skin(&atlas);
-    for count in [0, 1, 9, 10, 11, 100] {
+    for count in [0, 1, 9, 10, 11, 64] {
         let rows = (0..count).map(|id| MenuSlot::Choice { id, label: "a".into(), enabled: true }).collect();
         let mut menu = MenuSurface::choices(rows, None);
         let size = menu.measure(&style, &atlas);
@@ -219,8 +219,8 @@ fn choice_viewports_bound_rows_without_truncating_the_model() {
 fn huge_menu_rows_stay_distinct_until_screen_translation() {
     let atlas = test_atlas();
     let style = test_skin(&atlas);
-    let rows = (0..65_536).map(|id| MenuSlot::Choice { id, label: "a".into(), enabled: true }).collect();
-    let mut menu = MenuSurface::choices(rows, Some(65_535));
+    let rows = (0..64).map(|id| MenuSlot::Choice { id, label: "a".into(), enabled: true }).collect();
+    let mut menu = MenuSurface::choices(rows, Some(63));
     menu.measure(&style, &atlas);
     // Exercise the production committed geometry with a valid wide aggregate.
     for (index, row) in menu.geometry.slots.iter_mut().enumerate() {
@@ -228,13 +228,13 @@ fn huge_menu_rows_stay_distinct_until_screen_translation() {
         row.height = 40_000;
     }
     menu.layout(
-        Recti::new(20, 30, 120, 400_000 + menu.geometry.insets.vertical_extent()),
-        Recti::new(0, 0, 640, 500_000),
+        Recti::new(20, 30, 120, 80_000 + menu.geometry.insets.vertical_extent()),
+        Recti::new(0, 0, 640, 131_072),
     );
-    assert!(menu.offset_y > i64::from(i32::MAX));
-    assert_eq!(menu.visible_slots(), 65_526..65_536);
-    let last = menu.slot_rect(65_535).unwrap();
-    let previous = menu.slot_rect(65_534).unwrap();
+    assert!(menu.offset_y > i64::from(neocogi_ui::geometry::COORDINATE_LIMIT));
+    assert_eq!(menu.visible_slots(), 62..64);
+    let last = menu.slot_rect(63).unwrap();
+    let previous = menu.slot_rect(62).unwrap();
     assert_eq!(last.y - previous.y, 40_000);
     assert!(matches!(
         menu.route_pointer(
@@ -247,7 +247,7 @@ fn huge_menu_rows_stay_distinct_until_screen_translation() {
         .action,
         Some(MenuAction::SubmitAndClose(Ok(())))
     ));
-    assert_eq!(menu.take_choice_submission(), Some(65_535));
+    assert_eq!(menu.take_choice_submission(), Some(63));
 }
 
 /// Thumb drags preserve a single initial anchor and cannot submit an exposed row on release.
@@ -255,7 +255,7 @@ fn huge_menu_rows_stay_distinct_until_screen_translation() {
 fn menu_scrollbar_capture_has_no_row_activation_or_incremental_rounding() {
     let atlas = test_atlas();
     let style = test_skin(&atlas);
-    let rows = (0..100).map(|id| MenuSlot::Choice { id, label: "a".into(), enabled: true }).collect();
+    let rows = (0..64).map(|id| MenuSlot::Choice { id, label: "a".into(), enabled: true }).collect();
     let mut menu = MenuSurface::choices(rows, None);
     menu.set_visible_limit(3);
     let size = menu.measure(&style, &atlas);
@@ -280,7 +280,7 @@ fn menu_scrollbar_capture_has_no_row_activation_or_incremental_rounding() {
         menu.layout(allocation, clip);
     }
     assert!(menu.has_capture());
-    assert_eq!(menu.visible_slots().end, 100);
+    assert_eq!(menu.visible_slots().end, 64);
     menu.route_pointer(
         &UiInputEvent::MouseUp {
             pos: Vec2i::new(22, 32),
@@ -303,11 +303,11 @@ fn menu_scrollbar_capture_has_no_row_activation_or_incremental_rounding() {
 #[test]
 fn variable_command_row_measurement_preserves_large_tail_positions() {
     let mut data = crate::test_support::test_asset_data_with_font_sizes(&[("body", 10)]);
-    data.tables.metrics.spacing = 100_000;
+    data.tables.metrics.spacing = 100_000_000;
     let atlas = AtlasHandle::from_validated_data(data, None).unwrap();
     let style = test_skin(&atlas);
     let mut rows = Vec::new();
-    for _ in 0..25_000 {
+    for _ in 0..32 {
         rows.push(MenuSlot::Separator);
         rows.push(MenuSlot::Branch { label: "a".into() });
     }
@@ -316,7 +316,7 @@ fn variable_command_row_measurement_preserves_large_tail_positions() {
     assert!(menu.content_height() > i64::from(i32::MAX));
     menu.focus_last();
     menu.layout(Recti::new(10, 20, 120, 300), Recti::new(0, 0, 400, 400));
-    let last = menu.slot_rect(49_999).unwrap();
+    let last = menu.slot_rect(63).unwrap();
     assert!(last.y >= 20 && last.y + last.height <= 320);
     assert!(menu.visible_slots().len() < 10);
     let route = menu.route_pointer(
@@ -326,5 +326,5 @@ fn variable_command_row_measurement_preserves_large_tail_positions() {
         },
         false,
     );
-    assert!(matches!(route.action, Some(MenuAction::OpenSlot(49_999))));
+    assert!(matches!(route.action, Some(MenuAction::OpenSlot(63))));
 }

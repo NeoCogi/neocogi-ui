@@ -8,8 +8,7 @@ use crate::window_manager::{PopupHandle, SurfaceMutationError, WindowManager};
 use neocogi_com::{ComPtr, INcStringAbi, INcStringComPtrExt, NcCopyFromBufferOffset, NcOutputWriter, NcStatus, NcString, NC_E_INVALID_ARG, com_object};
 use neocogi_ui::abi::core::{ChoiceMenuEntry, ChoiceSelection, IChoiceMenu, IChoiceMenuAbi, IChoiceMenuVtblFor, MenuTextRange, Rect};
 
-/// Maximum accepted branch nesting, keeping foreign preorder input bounded on the native stack.
-const MAX_CHOICE_MENU_DEPTH: usize = 32;
+use neocogi_ui::{MAX_MENU_ENTRIES, MAX_MENU_DEPTH};
 
 /// Complete private popup lifecycle; every transition is centralized in [`ChoiceMenuState`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -51,7 +50,9 @@ impl ChoiceDefinition {
     /// Validates once and builds matching metadata before any live state can be replaced.
     fn new(text: String, entries: Vec<ChoiceMenuEntry>) -> Result<Self, NcStatus> {
         u32::try_from(text.len()).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)?;
-        u32::try_from(entries.len()).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)?;
+        if entries.len() > MAX_MENU_ENTRIES {
+            return Err(neocogi_com::NC_E_OUT_OF_RANGE);
+        }
         validate_menu(&text, &entries, None)?;
         let count = entries.iter().filter(|entry| matches!(entry, ChoiceMenuEntry::Choice { .. })).count();
         #[cfg(test)]
@@ -324,6 +325,7 @@ impl IChoiceMenuState for ChoiceMenuState {
 
     /// Delegates every intent to the exhaustive semantic state machine.
     fn request_popup(&mut self, intent: ChoicePopupIntent, anchor: Rect) -> Result<(), NcStatus> {
+        neocogi_ui::geometry::rectangle(anchor)?;
         self.apply_popup_intent(intent, anchor)
     }
 
@@ -578,6 +580,7 @@ impl ChoiceMenuManager {
 /// Converts generic surface policy failures at this private composition boundary.
 fn surface_status(error: SurfaceMutationError) -> NcStatus {
     match error {
+        SurfaceMutationError::MenuLimit => neocogi_com::NC_E_OUT_OF_RANGE,
         SurfaceMutationError::Busy => neocogi_ui::abi::core::UI_E_BUSY,
         SurfaceMutationError::UnknownWindow | SurfaceMutationError::UnknownPopup => neocogi_ui::abi::core::UI_E_CLOSED,
         SurfaceMutationError::InvalidLayer(_) => NC_E_INVALID_ARG,
@@ -621,9 +624,11 @@ pub(crate) fn copied_menu(
     if menu_text.offset() != 0 || entries.offset() != 0 {
         return Err(NC_E_INVALID_ARG);
     }
+    if entries.len() > MAX_MENU_ENTRIES {
+        return Err(neocogi_com::NC_E_OUT_OF_RANGE);
+    }
     let text = std::str::from_utf8(menu_text.as_slice()).map_err(|_| NC_E_INVALID_ARG)?;
     u32::try_from(text.len()).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)?;
-    u32::try_from(entries.len()).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)?;
     ChoiceDefinition::new(text.to_owned(), entries.as_slice().to_vec())
 }
 
@@ -646,6 +651,9 @@ fn choice_label<'a>(text: &'a str, entries: &[ChoiceMenuEntry], selected: u64) -
 
 /// Validates ranges, direct-child counts, unique leaf identities, and selection together.
 fn validate_menu(text: &str, entries: &[ChoiceMenuEntry], selection: Option<u64>) -> Result<(), NcStatus> {
+    if entries.len() > MAX_MENU_ENTRIES {
+        return Err(neocogi_com::NC_E_OUT_OF_RANGE);
+    }
     let mut ids = std::collections::HashSet::new();
     let mut index = 0;
     while index < entries.len() {
@@ -667,8 +675,11 @@ fn validate_node(text: &str, entries: &[ChoiceMenuEntry], index: usize, depth: u
         }
         ChoiceMenuEntry::Submenu { label, children } => {
             ranged_text(text, label).ok_or(NC_E_INVALID_ARG)?;
-            if children == 0 || depth >= MAX_CHOICE_MENU_DEPTH {
+            if children == 0 {
                 return Err(NC_E_INVALID_ARG);
+            }
+            if depth + 1 >= MAX_MENU_DEPTH {
+                return Err(neocogi_com::NC_E_OUT_OF_RANGE);
             }
             let mut next = index.checked_add(1).ok_or(NC_E_INVALID_ARG)?;
             for _ in 0..children {
@@ -746,7 +757,7 @@ mod tests {
     #[test]
     fn indexed_labels_have_linear_resolution_through_com() {
         let _host = crate::test_support::host_runtime();
-        for count in [512, 2_000, 4_000, 8_000, 65_536] {
+        for count in [1, 8, 16, 32, 64] {
             let entries = (0..count)
                 .map(|i| ChoiceMenuEntry::Choice {
                     id: 100_000 + i as u64,

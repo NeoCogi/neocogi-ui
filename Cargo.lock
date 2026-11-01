@@ -1192,6 +1192,7 @@ dependencies = [
  "neocogi-idl",
  "neocogi-render-core",
  "neocogi-ui-design",
+ "rs-math3d",
  "tempfile",
  "trybuild",
 ]

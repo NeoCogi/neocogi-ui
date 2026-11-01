@@ -499,7 +499,7 @@ impl Track {
         match *self {
             Self::Content => true,
             Self::Fixed { pixels } => pixels >= 0,
-            Self::Flex { weight } => weight.is_finite() && weight > 0.0,
+            Self::Flex { weight } => neocogi_ui::geometry::flex_weight(weight).is_ok(),
         }
     }
 }
@@ -593,7 +593,7 @@ fn validate_node<'a>(node: &'a Node, depth: usize, nodes: &mut BTreeMap<&'a str,
         }
         Number { value, step, precision } => value.is_finite() && step.is_finite() && *step >= 0.0 && *precision <= 6,
         Scrollbar { viewport, content, offset, .. } => *viewport >= 0 && *content >= 0 && *offset >= 0,
-        Combo { labels, selected, .. } => labels.len() <= 65536 && selected.is_none_or(|index| (index as usize) < labels.len()),
+        Combo { labels, selected, .. } => labels.len() <= neocogi_ui::MAX_MENU_ENTRIES && selected.is_none_or(|index| (index as usize) < labels.len()),
         Grid { columns, rows } => !columns.is_empty() && !rows.is_empty() && columns.iter().chain(rows).all(Track::valid),
         Split {
             position,
@@ -635,7 +635,17 @@ fn validate_node<'a>(node: &'a Node, depth: usize, nodes: &mut BTreeMap<&'a str,
             (Grid { .. }, Edge::Grid { columns, rows }) => *columns > 0 && *rows > 0,
             (Split { .. } | Scroll { .. }, Edge::Pane) => true,
             (Form { .. }, Edge::Position { x, y, width, height }) => {
-                *x >= 0 && *y >= 0 && *width > 0 && *height > 0 && x.checked_add(*width).is_some() && y.checked_add(*height).is_some()
+                *x >= 0
+                    && *y >= 0
+                    && *width > 0
+                    && *height > 0
+                    && neocogi_ui::geometry::rectangle(neocogi_ui::Rect {
+                        x: *x,
+                        y: *y,
+                        width: *width,
+                        height: *height,
+                    })
+                    .is_ok()
             }
             _ => false,
         };

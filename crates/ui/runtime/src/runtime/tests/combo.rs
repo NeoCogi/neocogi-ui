@@ -248,22 +248,26 @@ fn combo_forwarding_rejects_active_removal_then_releases_menu_and_queue() {
     assert_eq!(calls.get(), 1);
 }
 
-/// Large accepted definitions exercise the real core-to-node layout without lowering document limits.
+/// Document and runtime admission share the same explicit 64-entry menu ceiling.
 #[test]
-fn large_combo_layout_keeps_admitted_document_ceiling() {
+fn combo_layout_and_documents_share_the_menu_entry_ceiling() {
     let mut document = neocogi_ui_document::Document::new("large admitted combo");
     document.root = neocogi_ui_document::Node::new(
         "combo",
         neocogi_ui_document::WidgetSpec::Combo {
-            labels: vec!["a".to_owned(); 65_536],
+            labels: vec!["a".to_owned(); 64],
             selected: None,
             placeholder: "".into(),
         },
     );
     document.outputs.clear();
     document.validate_binary().unwrap();
-    assert_eq!(document.to_binary().unwrap().len(), 327_803);
-    for count in [2_000, 4_000, 8_000, 65_536] {
+    document.to_binary().unwrap();
+    if let neocogi_ui_document::WidgetSpec::Combo { labels, .. } = &mut document.root.widget {
+        labels.push("overflow".into());
+    }
+    assert!(document.validate_binary().is_err());
+    for count in [1, 8, 32, 64] {
         let ui = nc_ui_nodes::bind_builtin_nodes(runtime()).unwrap();
         let root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
         let mut root_handle = root.handle();

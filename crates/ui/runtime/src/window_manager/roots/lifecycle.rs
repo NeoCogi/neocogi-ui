@@ -264,6 +264,9 @@ impl WindowManager {
             Ok(owner) => owner,
             Err(reason) => return Err(SurfaceCreationError::new(reason, menu)),
         };
+        if menu.validate_limits().is_err() {
+            return Err(SurfaceCreationError::new(SurfaceMutationError::MenuLimit, menu));
+        }
         let (name, entries) = menu.into_parts();
         let (rows, children) = Self::consume_menu_entries(entries);
         let handle = self.register_application_popup(SurfaceKey::Root(owner), Surface::menu(name, MenuSurface::new(rows, true)), queue);
@@ -288,6 +291,9 @@ impl WindowManager {
             Ok(owner) => owner,
             Err(reason) => return Err(SurfaceCreationError::new(reason, menu)),
         };
+        if menu.validate_limits().is_err() {
+            return Err(SurfaceCreationError::new(SurfaceMutationError::MenuLimit, menu));
+        }
         let (name, entries) = menu.into_parts();
         let (rows, children) = Self::consume_menu_entries(entries);
         let mut surface = Surface::menu(name, MenuSurface::choices(rows, committed));
@@ -318,6 +324,7 @@ impl WindowManager {
 
     /// Replaces one choice menu's complete hierarchy after its owner changed model revision.
     pub(crate) fn replace_choice_popup(&mut self, popup: &PopupHandle, menu: crate::Menu, committed: Option<u64>) -> Result<(), SurfaceMutationError> {
+        menu.validate_limits().map_err(|_| SurfaceMutationError::MenuLimit)?;
         let id = self.popup_id(popup)?;
         let active = self.surfaces.popup_is_active(id);
         if active {

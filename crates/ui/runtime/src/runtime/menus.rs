@@ -54,7 +54,9 @@ impl IMenuBuilder for Builder {
         let label = text(input)?;
         let queue = events.to_owned()?.into_queue();
         let mut data = self.declaration.menu.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
-        let menu = menu_at(data.as_mut().ok_or(UI_E_CLOSED)?, &self.path)?;
+        let root = data.as_mut().ok_or(UI_E_CLOSED)?;
+        admit_append(root, &self.path, false)?;
+        let menu = menu_at(root, &self.path)?;
         // Complete all fallible declaration checks before publishing the COM
         // item and forest record with the same fixed weak origin.
         let slot = menu.entries.len();
@@ -78,7 +80,9 @@ impl IMenuBuilder for Builder {
     fn separator(&self) -> Result<(), NcStatus> {
         self.owner()?;
         let mut data = self.declaration.menu.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
-        menu_at(data.as_mut().ok_or(UI_E_CLOSED)?, &self.path)?.entries.push(MenuEntry::Separator);
+        let root = data.as_mut().ok_or(UI_E_CLOSED)?;
+        admit_append(root, &self.path, false)?;
+        menu_at(root, &self.path)?.entries.push(MenuEntry::Separator);
         Ok(())
     }
     /// Extends the existing declaration recursively and returns a scoped append-only child capability.
@@ -88,7 +92,9 @@ impl IMenuBuilder for Builder {
         let mut path = self.path.clone();
         {
             let mut data = self.declaration.menu.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
-            let menu = menu_at(data.as_mut().ok_or(UI_E_CLOSED)?, &path)?;
+            let root = data.as_mut().ok_or(UI_E_CLOSED)?;
+            admit_append(root, &path, true)?;
+            let menu = menu_at(root, &path)?;
             path.push(menu.entries.len());
             menu.entries.push(MenuEntry::Submenu(Menu::new(label)));
         }
@@ -100,6 +106,14 @@ impl IMenuBuilder for Builder {
         .query()
         .expect("child builder declares IMenuBuilder"))
     }
+}
+
+/// Admits one append against the actual tree and addressed panel, before any record is published.
+fn admit_append(root: &Menu, path: &[usize], submenu: bool) -> Result<(), NcStatus> {
+    if root.validate_limits()? >= neocogi_ui::MAX_MENU_ENTRIES || path.len() + 1 + usize::from(submenu) > neocogi_ui::MAX_MENU_DEPTH {
+        return Err(neocogi_com::NC_E_OUT_OF_RANGE);
+    }
+    Ok(())
 }
 
 /// Resolves only construction-owned submenu positions; live topology remains exclusively in the manager.
@@ -297,6 +311,7 @@ impl IMenus for Runtime {
         }
         let mut data = declaration.menu.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
         let menu = data.as_ref().ok_or(UI_E_CLOSED)?;
+        menu.validate_limits()?;
         if menu.entries.iter().any(|entry| !matches!(entry, MenuEntry::Submenu(_))) {
             return Err(NC_E_INVALID_ARG);
         }
@@ -308,7 +323,7 @@ impl IMenus for Runtime {
         });
         context
             .window_manager
-            .attach_menu_bar(&parent, crate::MenuBar::new(menus))
+            .attach_menu_bar(&parent, crate::MenuBar::new(menus)?)
             .map_err(windows::status)?;
         self.storage.pending.set(true);
         Ok(())
@@ -326,7 +341,11 @@ impl IMenus for Runtime {
         let declaration = self.storage.menu_declaration(menu)?;
         let mut context = self.storage.context()?;
         context.window_manager.window_visible(&parent).map_err(windows::status)?;
-        let menu = declaration.menu.try_borrow_mut().map_err(|_| UI_E_BUSY)?.take().ok_or(UI_E_CLOSED)?;
+        let menu = {
+            let mut data = declaration.menu.try_borrow_mut().map_err(|_| UI_E_BUSY)?;
+            data.as_ref().ok_or(UI_E_CLOSED)?.validate_limits()?;
+            data.take().expect("validated declaration is retained until transfer")
+        };
         let popup = context
             .window_manager
             .create_menu_popup(&parent, menu, None)

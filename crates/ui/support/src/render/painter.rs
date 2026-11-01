@@ -199,14 +199,17 @@ impl<'a> Painter<'a> {
 
     /// Tessellates and records one thick local line without clipping its generated triangles.
     pub fn stroke_line(&mut self, from: Vec2f, to: Vec2f, width: f32, color: Color) -> Result<(), neocogi_com::NcStatus> {
+        neocogi_ui::geometry::fractional_point(from)?;
+        neocogi_ui::geometry::fractional_point(to)?;
+        if width < 0.0 {
+            return Err(neocogi_com::NC_E_INVALID_ARG);
+        }
+        neocogi_ui::geometry::fractional_extent(width)?;
         if color.a == 0 || !self.clip.has_positive_area() {
             return Ok(());
         }
 
-        let Some(local_bounds) = Recti::from_thick_line(from, to, width) else {
-            return Ok(());
-        };
-        if !self.screen_rect(local_bounds).overlaps(self.clip) {
+        if !self.has_visible_bounds([from, to].into_iter(), width)? {
             return Ok(());
         }
         let offset = Vec2f::new(self.origin.x as f32, self.origin.y as f32);
@@ -225,30 +228,99 @@ impl<'a> Painter<'a> {
             return Err(neocogi_com::NC_E_OUT_OF_RANGE);
         }
 
+        for &point in points {
+            neocogi_ui::geometry::fractional_point(point)?;
+        }
         if points.len() < 3 || color.a == 0 || !self.clip.has_positive_area() {
             return Ok(());
         }
-        let Some(local_bounds) = Recti::from_points(points) else {
-            return Ok(());
-        };
-        if !self.screen_rect(local_bounds).overlaps(self.clip) {
+        if !self.has_visible_bounds(points.iter().copied(), 0.0)? {
             return Ok(());
         }
-
         let offset = Vec2f::new(self.origin.x as f32, self.origin.y as f32);
         self.list.push_polygon(self.clip, points, color4b(color.r, color.g, color.b, color.a), offset)?;
         Ok(())
     }
 
+    /// Uses validated integer pixel inputs without a temporary conversion vector.
+    pub fn fill_integer_polygon(&mut self, points: &[neocogi_ui::Point], color: Color) -> Result<(), neocogi_com::NcStatus> {
+        if points.len() > neocogi_render_core::abi::MAX_POLYGON_POINTS {
+            return Err(neocogi_com::NC_E_OUT_OF_RANGE);
+        }
+        for point in points {
+            neocogi_ui::geometry::integer_point(Vec2i::new(point.x, point.y))?;
+        }
+        if points.len() < 3 || color.a == 0 || !self.clip.has_positive_area() {
+            return Ok(());
+        }
+        if !self.has_visible_bounds(points.iter().map(|p| Vec2f::new(p.x as f32, p.y as f32)), 0.0)? {
+            return Ok(());
+        }
+        let offset = Vec2f::new(self.origin.x as f32, self.origin.y as f32);
+        self.list
+            .push_integer_polygon(self.clip, points, color4b(color.r, color.g, color.b, color.a), offset)
+    }
+
     /// Tessellates copied COM polygon points directly into this painter's retained frame storage.
     pub fn fill_contract_polygon(&mut self, points: &[neocogi_ui::abi::core::PaintPoint], color: Color) -> Result<(), neocogi_com::NcStatus> {
+        if points.len() > neocogi_render_core::abi::MAX_POLYGON_POINTS {
+            return Err(neocogi_com::NC_E_OUT_OF_RANGE);
+        }
+        for point in points {
+            neocogi_ui::geometry::fractional_point(Vec2f::new(point.x, point.y))?;
+        }
         if points.len() < 3 || color.a == 0 || !self.clip.has_positive_area() {
+            return Ok(());
+        }
+        if !self.has_visible_bounds(points.iter().map(|p| Vec2f::new(p.x, p.y)), 0.0)? {
             return Ok(());
         }
         let offset = Vec2f::new(self.origin.x as f32, self.origin.y as f32);
         self.list
             .push_contract_polygon(self.clip, points, color4b(color.r, color.g, color.b, color.a), offset)?;
         Ok(())
+    }
+
+    /// Rejects definitely hidden primitives using exact fixed bounds before any pixel narrowing.
+    /// All input points are admitted even when the complete shape falls outside the current clip.
+    fn has_visible_bounds(&self, points: impl Iterator<Item = Vec2f>, width: f32) -> Result<bool, neocogi_com::NcStatus> {
+        use neocogi_ui::geometry::{self, WidePoint, WideRectangle, WideScalar, wide_integer};
+        use rs_math3d::Vector;
+        let half = geometry::fractional_extent(width)?
+            .try_rescale::<i64, 12>()
+            .map_err(geometry::status)?
+            .checked_div(WideScalar::from_bits(8192))
+            .map_err(geometry::status)?;
+        let mut bounds: Option<(WidePoint, WidePoint)> = None;
+        for point in points {
+            let point = geometry::wide_fractional_point(point)?;
+            bounds = Some(match bounds {
+                None => (point, point),
+                Some((min, max)) => (WidePoint::min(&min, &point), WidePoint::max(&max, &point)),
+            });
+        }
+        let Some((min, max)) = bounds else {
+            return Ok(false);
+        };
+        let origin = WidePoint::new(wide_integer(self.origin.x), wide_integer(self.origin.y));
+        let expansion = WidePoint::new(half, half);
+        let min = WidePoint::checked_sub_vv(&min, &expansion)
+            .and_then(|p| WidePoint::checked_add_vv(&p, &origin))
+            .map_err(geometry::status)?;
+        let max = WidePoint::checked_add_vv(&max, &expansion)
+            .and_then(|p| WidePoint::checked_add_vv(&p, &origin))
+            .map_err(geometry::status)?;
+        let bounds = WideRectangle::checked_from(&min, &max).map_err(geometry::status)?;
+        let clip = WideRectangle::new(
+            wide_integer(self.clip.x),
+            wide_integer(self.clip.y),
+            wide_integer(self.clip.width),
+            wide_integer(self.clip.height),
+        );
+        Ok(bounds
+            .checked_intersect(&clip)
+            .map_err(geometry::status)?
+            .is_some_and(|r| r.width > WideScalar::ZERO && r.height > WideScalar::ZERO))
     }
 
     /// Executes `paint` with a clip narrowed by a local rectangle.

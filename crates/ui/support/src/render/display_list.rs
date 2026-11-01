@@ -175,7 +175,8 @@ impl DisplayList {
         if points > neocogi_render_core::abi::MAX_POLYGON_POINTS {
             return Err(neocogi_com::NC_E_OUT_OF_RANGE);
         }
-        let bytes = points * (core::mem::size_of::<SolidTriangle>() + core::mem::size_of::<Vec2f>() + core::mem::size_of::<usize>());
+        // Simplification appends behind the copied boundary, so reserve/charge both fixed spans.
+        let bytes = points * (core::mem::size_of::<SolidTriangle>() + 2 * core::mem::size_of::<neocogi_ui::geometry::WidePoint>());
         self.reserve_retained(bytes, points * points)
     }
 
@@ -206,12 +207,21 @@ impl DisplayList {
     /// Retains a complete atlas batch in painter order for final viewport clipping.
     pub fn push_atlas_triangles(&mut self, clip: Recti, origin: Vec2i, vertices: &[neocogi_ui::abi::core::RenderVertex]) -> Result<(), neocogi_com::NcStatus> {
         self.reserve_retained(core::mem::size_of_val(vertices), vertices.len())?;
+        if !vertices.len().is_multiple_of(3) {
+            return Err(neocogi_com::NC_E_INVALID_ARG);
+        }
+        for vertex in vertices {
+            if !vertex.u.is_finite() || !vertex.v.is_finite() {
+                return Err(neocogi_com::NC_E_INVALID_ARG);
+            }
+            translated_position(Vec2f::new(vertex.x, vertex.y), origin)?;
+        }
         let first = self.atlas_vertices.len();
         // Translate directly into retained storage, with no intermediate per-operation vector.
         for vertex in vertices {
             let [r, g, b, a] = vertex.rgba.to_le_bytes();
             self.atlas_vertices.push(super::Vertex::new(
-                Vec2f::new(vertex.x + origin.x as f32, vertex.y + origin.y as f32),
+                translated_position(Vec2f::new(vertex.x, vertex.y), origin)?,
                 Vec2f::new(vertex.u, vertex.v),
                 rs_math3d::color4b(r, g, b, a),
             ));
@@ -234,6 +244,12 @@ impl DisplayList {
     ) -> Result<(), neocogi_com::NcStatus> {
         use super::geometry::SolidVertex;
         self.reserve_retained(core::mem::size_of_val(vertices), vertices.len())?;
+        if !vertices.len().is_multiple_of(3) {
+            return Err(neocogi_com::NC_E_INVALID_ARG);
+        }
+        for vertex in vertices {
+            translated_position(Vec2f::new(vertex.x, vertex.y), origin)?;
+        }
         let offset = Vec2f::new(origin.x as f32, origin.y as f32);
         for triangle in vertices.as_chunks::<3>().0 {
             let triangle = SolidTriangle::from(triangle.map(|vertex| {
@@ -243,7 +259,7 @@ impl DisplayList {
                     color: rs_math3d::color4b(r, g, b, a),
                 }
             }));
-            if let Some(range) = self.solid_geometry.append_triangles(&[triangle], offset) {
+            if let Some(range) = self.solid_geometry.append_triangles(&[triangle], offset)? {
                 self.push_solid_range(clip, range);
             }
         }
@@ -301,7 +317,7 @@ impl DisplayList {
     /// Appends strongly typed solid triangles and records their valid contiguous range.
     pub fn push_solid_triangles(&mut self, clip: Recti, triangles: &[SolidTriangle]) -> Result<(), neocogi_com::NcStatus> {
         self.reserve_retained(core::mem::size_of_val(triangles), triangles.len().saturating_mul(3))?;
-        if let Some(range) = self.solid_geometry.append_triangles(triangles, Vec2f::new(0.0, 0.0)) {
+        if let Some(range) = self.solid_geometry.append_triangles(triangles, Vec2f::new(0.0, 0.0))? {
             self.push_solid_range(clip, range);
         }
         Ok(())
@@ -310,7 +326,7 @@ impl DisplayList {
     /// Tessellates and records one translated thick line.
     pub fn push_line(&mut self, clip: Recti, from: Vec2f, to: Vec2f, width: f32, color: Color4b, offset: Vec2f) -> Result<(), neocogi_com::NcStatus> {
         self.reserve_retained(2 * core::mem::size_of::<SolidTriangle>(), 6)?;
-        if let Some(range) = self.solid_geometry.append_line(from, to, width, color, offset) {
+        if let Some(range) = self.solid_geometry.append_line(from, to, width, color, offset)? {
             self.push_solid_range(clip, range);
         }
         Ok(())
@@ -319,7 +335,17 @@ impl DisplayList {
     /// Tessellates and records one translated simple polygon.
     pub fn push_polygon(&mut self, clip: Recti, points: &[Vec2f], color: Color4b, offset: Vec2f) -> Result<(), neocogi_com::NcStatus> {
         self.reserve_retained_polygon(points.len())?;
-        if let Some(range) = self.solid_geometry.append_polygon(points, color, offset) {
+        if let Some(range) = self.solid_geometry.append_polygon(points, color, offset)? {
+            self.push_solid_range(clip, range);
+        }
+        Ok(())
+    }
+
+    /// Copies validated integer pixels directly into the one fixed-point polygon workspace.
+    pub fn push_integer_polygon(&mut self, clip: Recti, points: &[neocogi_ui::Point], color: Color4b, offset: Vec2f) -> Result<(), neocogi_com::NcStatus> {
+        self.reserve_retained_polygon(points.len())?;
+        let points = points.iter().map(|point| Vec2f::new(point.x as f32, point.y as f32));
+        if let Some(range) = self.solid_geometry.append_polygon_points(points, color, offset)? {
             self.push_solid_range(clip, range);
         }
         Ok(())
@@ -335,7 +361,7 @@ impl DisplayList {
     ) -> Result<(), neocogi_com::NcStatus> {
         self.reserve_retained_polygon(points.len())?;
         let points = points.iter().map(|point| Vec2f::new(point.x, point.y));
-        if let Some(range) = self.solid_geometry.append_polygon_points(points, color, offset) {
+        if let Some(range) = self.solid_geometry.append_polygon_points(points, color, offset)? {
             self.push_solid_range(clip, range);
         }
         Ok(())
@@ -380,6 +406,15 @@ impl DisplayList {
     pub fn debug_operation_count(&self) -> usize {
         self.ops.len()
     }
+}
+
+/// Converts fractional UI input and applies the integer origin using one checked fixed kernel.
+fn translated_position(point: Vec2f, origin: Vec2i) -> Result<Vec2f, neocogi_com::NcStatus> {
+    use neocogi_ui::geometry::{self, WidePoint, wide_integer};
+    use rs_math3d::Vector;
+    let point = geometry::wide_fractional_point(point)?;
+    let origin = WidePoint::new(wide_integer(origin.x), wide_integer(origin.y));
+    geometry::render_point(WidePoint::checked_add_vv(&point, &origin).map_err(geometry::status)?)
 }
 
 /// Compares rectangle components without requiring an equality implementation from `rs-math3d`.

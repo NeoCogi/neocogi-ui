@@ -36,29 +36,26 @@ pub static UNCLIPPED_RECT: Recti = Recti {
     width: i32::MAX,
     height: i32::MAX,
 };
-use rs_math3d::{Color4b, RealVector, Recti, Vec2f};
+use neocogi_com::{NcStatus, NC_E_INVALID_ARG, NC_E_OUT_OF_RANGE};
+use neocogi_ui::geometry::{self, WidePoint, WideScalar};
+use rs_math3d::{Color4b, RealVector, Recti, Vec2f, Vector, Vector3};
 use std::ops::Range;
 
-/// Floating-point tolerance shared by tessellation and clipping predicates.
-pub const GEOM_EPS: f32 = 1.0e-5;
-/// Squared tolerance used for duplicate-position checks.
-const GEOM_EPS_SQ: f32 = GEOM_EPS * GEOM_EPS;
-
-/// Texture-independent vertex used by solid geometry.
+/// Final float vertex produced after checked fixed-point UI geometry calculations.
 #[derive(Clone, Copy)]
 pub struct SolidVertex {
-    /// Screen-space position.
+    /// Bounded screen-space rendering position.
     pub position: Vec2f,
     /// Interpolated vertex color.
     pub color: Color4b,
 }
 
-/// Strongly typed, texture-independent solid triangle.
+/// Texture-independent triangle ready for the existing floating-point renderer.
 #[derive(Clone, Copy)]
 pub struct SolidTriangle([SolidVertex; 3]);
 
 impl SolidTriangle {
-    /// Creates a triangle from three positions sharing one color.
+    /// Creates a final rendering triangle. Admission validates externally supplied vertices.
     pub const fn new(positions: [Vec2f; 3], color: Color4b) -> Self {
         Self([
             SolidVertex { position: positions[0], color },
@@ -67,47 +64,38 @@ impl SolidTriangle {
         ])
     }
 
-    /// Returns the triangle's three vertices in winding order.
+    /// Returns the three rendering vertices in winding order.
     pub const fn vertices(&self) -> &[SolidVertex; 3] {
         &self.0
-    }
-
-    /// Returns this triangle translated by a screen-space offset.
-    fn translated(mut self, offset: Vec2f) -> Self {
-        for vertex in &mut self.0 {
-            vertex.position = vertex.position + offset;
-        }
-        self
     }
 }
 
 impl From<[SolidVertex; 3]> for SolidTriangle {
-    /// Creates a triangle from three independently colored vertices.
     fn from(vertices: [SolidVertex; 3]) -> Self {
         Self(vertices)
     }
 }
 
-/// Validated range inside a [`SolidGeometry`] triangle arena.
+/// Nonempty range into the retained final-triangle arena.
 pub struct SolidTriangleRange {
-    /// Inclusive triangle index.
+    /// First included triangle.
     start: usize,
-    /// Exclusive triangle index.
+    /// First excluded triangle.
     end: usize,
 }
 
 impl SolidTriangleRange {
-    /// Creates a range only when at least one complete triangle was appended.
+    /// Empty or degenerate shapes do not create a retained operation.
     fn new(start: usize, end: usize) -> Option<Self> {
         (start < end).then_some(Self { start, end })
     }
 
-    /// Returns a standard range for read-only execution.
+    /// Exposes an immutable arena range to the final executor.
     pub fn as_range(&self) -> Range<usize> {
         self.start..self.end
     }
 
-    /// Extends this range over an immediately adjacent range.
+    /// Coalesces adjacent ranges without crossing operation/clip boundaries.
     pub fn extend(&mut self, next: &Self) -> bool {
         if self.end != next.start {
             return false;
@@ -117,17 +105,17 @@ impl SolidTriangleRange {
     }
 }
 
-/// Retained solid-triangle arena with reusable polygon tessellation storage.
+/// One arena of final float triangles and one reusable fixed-point polygon workspace.
 #[derive(Default)]
 pub struct SolidGeometry {
-    /// Screen-space triangles referenced by validated ranges.
+    /// Final vertices, never used as authoritative inputs for geometric predicates.
     triangles: Vec<SolidTriangle>,
-    /// Active polygon boundary reused by simplification and ear clipping.
-    polygon_boundary: Vec<Vec2f>,
+    /// Checked wide fixed coordinates retain small areas at large accepted origins.
+    polygon_boundary: Vec<WidePoint>,
 }
 
 impl SolidGeometry {
-    /// Creates empty solid geometry.
+    /// Constructs empty reusable storage.
     pub const fn new() -> Self {
         Self {
             triangles: Vec::new(),
@@ -135,266 +123,297 @@ impl SolidGeometry {
         }
     }
 
-    /// Clears retained and working geometry while preserving allocations.
+    /// Releases retained contents while preserving frame-to-frame capacity.
     pub fn clear(&mut self) {
         self.triangles.clear();
         self.polygon_boundary.clear();
     }
 
-    /// Returns whether no solid triangles are retained.
+    /// Observes actual retained output for focused regression fixtures.
     #[cfg(any(test, feature = "test-support"))]
     pub fn is_empty(&self) -> bool {
         self.triangles.is_empty()
     }
 
-    /// Returns all retained solid triangles.
+    /// Borrows the final renderer-compatible triangle arena.
     pub fn triangles(&self) -> &[SolidTriangle] {
         &self.triangles
     }
 
-    /// Appends pre-tessellated triangles after applying a screen-space offset.
-    pub fn append_triangles(&mut self, triangles: &[SolidTriangle], offset: Vec2f) -> Option<SolidTriangleRange> {
+    /// Checks a complete external batch before mutating the arena, then quantizes positions once.
+    pub fn append_triangles(&mut self, triangles: &[SolidTriangle], offset: Vec2f) -> Result<Option<SolidTriangleRange>, NcStatus> {
+        let offset = geometry::wide_fractional_point(offset)?;
+        for triangle in triangles {
+            for vertex in triangle.vertices() {
+                translated(geometry::wide_fractional_point(vertex.position)?, offset)?;
+            }
+        }
         let start = self.triangles.len();
         self.triangles.reserve(triangles.len());
         for triangle in triangles {
-            self.triangles.push(triangle.translated(offset));
+            let mut result = *triangle;
+            for vertex in &mut result.0 {
+                vertex.position = translated(geometry::wide_fractional_point(vertex.position)?, offset)?;
+            }
+            self.triangles.push(result);
         }
-        SolidTriangleRange::new(start, self.triangles.len())
+        Ok(SolidTriangleRange::new(start, self.triangles.len()))
     }
 
-    /// Tessellates and appends one thick line.
-    pub fn append_line(&mut self, from: Vec2f, to: Vec2f, width: f32, color: Color4b, offset: Vec2f) -> Option<SolidTriangleRange> {
-        let triangles = Self::line_triangles(from, to, width, color)?;
-        self.append_triangles(&triangles, offset)
+    /// Normalizes and expands one line entirely in checked fixed-point math.
+    pub fn append_line(&mut self, from: Vec2f, to: Vec2f, width: f32, color: Color4b, offset: Vec2f) -> Result<Option<SolidTriangleRange>, NcStatus> {
+        let Some(points) = Self::line_points(from, to, width)? else {
+            return Ok(None);
+        };
+        let offset = geometry::wide_fractional_point(offset)?;
+        // Validate all expanded/transformed positions before publishing either triangle.
+        let [a, b, c, d] = [
+            translated(points[0], offset)?,
+            translated(points[1], offset)?,
+            translated(points[2], offset)?,
+            translated(points[3], offset)?,
+        ];
+        let start = self.triangles.len();
+        self.triangles
+            .extend([SolidTriangle::new([a, b, c], color), SolidTriangle::new([a, c, d], color)]);
+        Ok(SolidTriangleRange::new(start, self.triangles.len()))
     }
 
-    /// Cleans, triangulates, and appends one simple polygon.
-    ///
-    /// Convex polygons use a triangle fan. Concave polygons use ear clipping against the reusable
-    /// `polygon_boundary` workspace. Both paths append strongly typed triangles directly, so no
-    /// flat triangle-position buffer escapes this object.
-    pub fn append_polygon(&mut self, points: &[Vec2f], color: Color4b, offset: Vec2f) -> Option<SolidTriangleRange> {
+    /// Admits finite, bounded fractional points before shared fixed-point polygon tessellation.
+    pub fn append_polygon(&mut self, points: &[Vec2f], color: Color4b, offset: Vec2f) -> Result<Option<SolidTriangleRange>, NcStatus> {
         self.append_polygon_points(points.iter().copied(), color, offset)
     }
 
-    /// Cleans, triangulates, and appends copied points from a typed boundary iterator.
-    ///
-    /// COM points can therefore enter the retained tessellation workspace directly instead of
-    /// allocating a temporary vector merely to change between equivalent coordinate structs.
-    pub fn append_polygon_points(&mut self, points: impl ExactSizeIterator<Item = Vec2f>, color: Color4b, offset: Vec2f) -> Option<SolidTriangleRange> {
+    /// Reuses the same workspace for native and copied COM inputs without a second point vector.
+    pub fn append_polygon_points(
+        &mut self,
+        points: impl ExactSizeIterator<Item = Vec2f>,
+        color: Color4b,
+        offset: Vec2f,
+    ) -> Result<Option<SolidTriangleRange>, NcStatus> {
+        if points.len() > neocogi_render_core::abi::MAX_POLYGON_POINTS {
+            return Err(NC_E_OUT_OF_RANGE);
+        }
+        let offset = geometry::wide_fractional_point(offset)?;
         let start = self.triangles.len();
-        if points.len() < 3 || !self.prepare_polygon(points) {
-            return None;
+        let result = self.triangulate(points, color, offset);
+        if !matches!(result, Ok(Some(_))) {
+            self.triangles.truncate(start);
         }
+        self.polygon_boundary.clear();
+        result
+    }
 
-        let area = self.polygon_signed_area();
-        if !area.is_finite() || area.abs() <= GEOM_EPS {
-            self.polygon_boundary.clear();
-            return None;
+    /// Emits one complete polygon, rolling back externally at every failure/degenerate boundary.
+    fn triangulate(&mut self, points: impl ExactSizeIterator<Item = Vec2f>, color: Color4b, offset: WidePoint) -> Result<Option<SolidTriangleRange>, NcStatus> {
+        let start = self.triangles.len();
+        if !self.prepare_polygon(points)? {
+            return Ok(None);
         }
-        if area < 0.0 {
+        // Translation cannot invalidate a partially published polygon: preflight the whole boundary.
+        for &point in &self.polygon_boundary {
+            translated(point, offset)?;
+        }
+        let area = self.polygon_signed_area()?;
+        if area == WideScalar::ZERO {
+            return Ok(None);
+        }
+        if area < WideScalar::ZERO {
             self.polygon_boundary.reverse();
         }
-
         self.triangles.reserve(self.polygon_boundary.len() - 2);
-        if self.polygon_is_convex_ccw() {
+        if self.polygon_is_convex_ccw()? {
             for index in 1..self.polygon_boundary.len() - 1 {
-                self.triangles.push(
-                    SolidTriangle::new(
-                        [self.polygon_boundary[0], self.polygon_boundary[index], self.polygon_boundary[index + 1]],
-                        color,
-                    )
-                    .translated(offset),
-                );
+                self.triangles.push(fixed_triangle(
+                    [self.polygon_boundary[0], self.polygon_boundary[index], self.polygon_boundary[index + 1]],
+                    color,
+                    offset,
+                )?);
             }
-            self.polygon_boundary.clear();
-            return SolidTriangleRange::new(start, self.triangles.len());
+            return Ok(SolidTriangleRange::new(start, self.triangles.len()));
         }
-
-        // Ear clipping repeatedly removes one convex corner whose triangle contains no other
-        // active polygon vertex. The reusable workspace therefore remains the active boundary
-        // throughout the algorithm instead of doubling as an externally visible output buffer.
         while self.polygon_boundary.len() > 3 {
-            let active_len = self.polygon_boundary.len();
+            let len = self.polygon_boundary.len();
             let mut ear = None;
-            for index in 0..active_len {
-                let previous = (index + active_len - 1) % active_len;
-                let next = (index + 1) % active_len;
-                let a = self.polygon_boundary[previous];
-                let b = self.polygon_boundary[index];
-                let c = self.polygon_boundary[next];
-                if !is_convex_ccw(a, b, c) {
+            for index in 0..len {
+                let previous = (index + len - 1) % len;
+                let next = (index + 1) % len;
+                let [a, b, c] = [self.polygon_boundary[previous], self.polygon_boundary[index], self.polygon_boundary[next]];
+                if !is_convex_ccw(a, b, c)? {
                     continue;
                 }
-
-                let contains_other = (0..active_len)
-                    .any(|probe| probe != previous && probe != index && probe != next && point_in_triangle_ccw(self.polygon_boundary[probe], a, b, c));
-                if !contains_other {
+                let mut contains = false;
+                for (probe, &point) in self.polygon_boundary.iter().enumerate() {
+                    if probe != previous && probe != index && probe != next && point_in_triangle_ccw(point, a, b, c)? {
+                        contains = true;
+                        break;
+                    }
+                }
+                if !contains {
                     ear = Some((index, [a, b, c]));
                     break;
                 }
             }
-
             let Some((index, triangle)) = ear else {
-                // A malformed or numerically unstable boundary must not leave a partial polygon
-                // in the retained triangle arena.
-                self.triangles.truncate(start);
-                self.polygon_boundary.clear();
-                return None;
+                return Ok(None);
             };
             self.polygon_boundary.remove(index);
-            self.triangles.push(SolidTriangle::new(triangle, color).translated(offset));
+            self.triangles.push(fixed_triangle(triangle, color, offset)?);
         }
-
-        let final_triangle = [self.polygon_boundary[0], self.polygon_boundary[1], self.polygon_boundary[2]];
-        self.triangles.push(SolidTriangle::new(final_triangle, color).translated(offset));
-        self.polygon_boundary.clear();
-        SolidTriangleRange::new(start, self.triangles.len())
+        self.triangles.push(fixed_triangle(
+            [self.polygon_boundary[0], self.polygon_boundary[1], self.polygon_boundary[2]],
+            color,
+            offset,
+        )?);
+        Ok(SolidTriangleRange::new(start, self.triangles.len()))
     }
 
-    /// Produces the two triangles forming one valid thick line.
-    fn line_triangles(from: Vec2f, to: Vec2f, width: f32, color: Color4b) -> Option<[SolidTriangle; 2]> {
-        if !width.is_finite() || width <= 0.0 || !point_is_finite(from) || !point_is_finite(to) {
-            return None;
+    /// Expands admitted line endpoints with a scale-aware checked rs-math3d normalization.
+    fn line_points(from: Vec2f, to: Vec2f, width: f32) -> Result<Option<[WidePoint; 4]>, NcStatus> {
+        let from = geometry::wide_fractional_point(from)?;
+        let to = geometry::wide_fractional_point(to)?;
+        let width = geometry::fractional_extent(width)?;
+        if width < geometry::Scalar::ZERO {
+            return Err(NC_E_INVALID_ARG);
         }
-
-        let delta = to - from;
-        let len_sq = delta.length_squared();
-        let (p0, p1, p2, p3) = if len_sq <= GEOM_EPS_SQ {
-            let half = width * 0.5;
-            (
-                Vec2f::new(from.x - half, from.y - half),
-                Vec2f::new(from.x + half, from.y - half),
-                Vec2f::new(from.x + half, from.y + half),
-                Vec2f::new(from.x - half, from.y + half),
-            )
+        if width == geometry::Scalar::ZERO {
+            return Ok(None);
+        }
+        let half = width
+            .try_rescale::<i64, 12>()
+            .map_err(geometry::status)?
+            .checked_div(WideScalar::from_bits(8192))
+            .map_err(geometry::status)?;
+        let delta = WidePoint::checked_sub_vv(&to, &from).map_err(geometry::status)?;
+        let normal = if delta.x == WideScalar::ZERO && delta.y == WideScalar::ZERO {
+            let a = WidePoint::new(half.checked_neg().map_err(geometry::status)?, half.checked_neg().map_err(geometry::status)?);
+            let b = WidePoint::new(half, half.checked_neg().map_err(geometry::status)?);
+            let c = WidePoint::new(half, half);
+            let d = WidePoint::new(half.checked_neg().map_err(geometry::status)?, half);
+            return Ok(Some([add(from, a)?, add(from, b)?, add(from, c)?, add(from, d)?]));
         } else {
-            // inverse_length = 1 / sqrt(delta_x^2 + delta_y^2).
-            let inv_len = len_sq.sqrt().recip();
-            let normal = Vec2f::new(-delta.y * inv_len, delta.x * inv_len) * (width * 0.5);
-            (from + normal, to + normal, to - normal, from - normal)
+            let unit = delta.checked_normalize(WideScalar::DELTA).map_err(geometry::status)?;
+            WidePoint::checked_mul_vs(&WidePoint::new(unit.y.checked_neg().map_err(geometry::status)?, unit.x), half).map_err(geometry::status)?
         };
-        Some([SolidTriangle::new([p0, p1, p2], color), SolidTriangle::new([p0, p2, p3], color)])
+        Ok(Some([add(from, normal)?, add(to, normal)?, sub(to, normal)?, sub(from, normal)?]))
     }
 
-    /// Copies a finite polygon into the reusable workspace and removes redundant vertices.
-    fn prepare_polygon(&mut self, points: impl ExactSizeIterator<Item = Vec2f>) -> bool {
+    /// Copies/quantizes once, removes exact duplicate and collinear points, and reuses one allocation.
+    fn prepare_polygon(&mut self, points: impl ExactSizeIterator<Item = Vec2f>) -> Result<bool, NcStatus> {
         self.polygon_boundary.clear();
-        // The second pass appends a simplified boundary behind the copied input, so reserve both
-        // spans up front and avoid a growth allocation halfway through tessellation.
-        // workspace_capacity = copied_point_count + simplified_point_count = point_count * 2.
-        let workspace_capacity = points.len().saturating_mul(2);
-        self.polygon_boundary.reserve(workspace_capacity);
+        self.polygon_boundary.reserve(points.len() * 2);
         for point in points {
-            if !point_is_finite(point) {
-                self.polygon_boundary.clear();
-                return false;
-            }
-            if self
-                .polygon_boundary
-                .last()
-                .map(|previous| (*previous - point).length_squared() > GEOM_EPS_SQ)
-                .unwrap_or(true)
-            {
+            let point = geometry::wide_fractional_point(point)?;
+            if self.polygon_boundary.last().is_none_or(|p| !same_point(*p, point)) {
                 self.polygon_boundary.push(point);
             }
         }
-
-        if self.polygon_boundary.len() > 1
-            && (self.polygon_boundary[0] - *self.polygon_boundary.last().expect("non-empty polygon")).length_squared() <= GEOM_EPS_SQ
-        {
+        if self.polygon_boundary.len() > 1 && same_point(self.polygon_boundary[0], *self.polygon_boundary.last().expect("nonempty boundary")) {
             self.polygon_boundary.pop();
         }
         if self.polygon_boundary.len() < 3 {
-            self.polygon_boundary.clear();
-            return false;
+            return Ok(false);
         }
-
-        // Append the simplified boundary after the copied boundary, then discard the original
-        // prefix. This reuses one allocation without requiring a second temporary vector.
-        let copied_len = self.polygon_boundary.len();
-        for index in 0..copied_len {
-            let previous = self.polygon_boundary[(index + copied_len - 1) % copied_len];
+        let copied = self.polygon_boundary.len();
+        for index in 0..copied {
+            let previous = self.polygon_boundary[(index + copied - 1) % copied];
             let current = self.polygon_boundary[index];
-            let next = self.polygon_boundary[(index + 1) % copied_len];
-            if (previous - current).length_squared() <= GEOM_EPS_SQ || (current - next).length_squared() <= GEOM_EPS_SQ {
-                continue;
-            }
-            if cross2(current - previous, next - current).abs() <= GEOM_EPS {
+            let next = self.polygon_boundary[(index + 1) % copied];
+            if same_point(current, previous) || same_point(current, next) || cross2(sub(current, previous)?, sub(next, current)?)? == WideScalar::ZERO {
                 continue;
             }
             self.polygon_boundary.push(current);
         }
-        self.polygon_boundary.drain(..copied_len);
-        if self.polygon_boundary.len() < 3 {
-            self.polygon_boundary.clear();
-            return false;
-        }
-        true
+        self.polygon_boundary.drain(..copied);
+        Ok(self.polygon_boundary.len() >= 3)
     }
 
-    /// Computes winding and signed area for the prepared polygon boundary.
-    fn polygon_signed_area(&self) -> f32 {
-        let mut area = 0.0;
+    /// Accumulates exact products on the admitted grid; no float winding cancellation is possible.
+    fn polygon_signed_area(&self) -> Result<WideScalar, NcStatus> {
+        let mut area = WideScalar::ZERO;
         for index in 0..self.polygon_boundary.len() {
-            let current = self.polygon_boundary[index];
-            let next = self.polygon_boundary[(index + 1) % self.polygon_boundary.len()];
-            area += current.x * next.y - next.x * current.y;
+            area = area
+                .checked_add(cross2(
+                    self.polygon_boundary[index],
+                    self.polygon_boundary[(index + 1) % self.polygon_boundary.len()],
+                )?)
+                .map_err(geometry::status)?;
         }
-        area * 0.5
+        Ok(area)
     }
 
-    /// Returns whether every prepared polygon corner is convex and counter-clockwise.
-    fn polygon_is_convex_ccw(&self) -> bool {
-        (0..self.polygon_boundary.len()).all(|index| {
-            is_convex_ccw(
-                self.polygon_boundary[(index + self.polygon_boundary.len() - 1) % self.polygon_boundary.len()],
+    /// Checks each corner against the exact fixed-point orientation predicate.
+    fn polygon_is_convex_ccw(&self) -> Result<bool, NcStatus> {
+        let len = self.polygon_boundary.len();
+        for index in 0..len {
+            if !is_convex_ccw(
+                self.polygon_boundary[(index + len - 1) % len],
                 self.polygon_boundary[index],
-                self.polygon_boundary[(index + 1) % self.polygon_boundary.len()],
-            )
-        })
+                self.polygon_boundary[(index + 1) % len],
+            )? {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
-    #[cfg(test)]
-    /// Returns retained triangle allocation capacity.
+    /// Existing arena reservation avoids allocation during publication of a preflighted batch.
+    pub fn reserve_triangles(&mut self, additional: usize) {
+        self.triangles.reserve(additional);
+    }
+    /// Observes retained capacity for allocation reuse tests.
     pub fn triangle_capacity(&self) -> usize {
         self.triangles.capacity()
     }
-
-    #[cfg(test)]
-    /// Returns polygon workspace allocation capacity.
+    /// Observes polygon workspace capacity without exposing its representation.
     pub fn polygon_capacity(&self) -> usize {
         self.polygon_boundary.capacity()
     }
-
     #[cfg(test)]
-    /// Reserves polygon workspace for allocation-reuse tests.
+    /// Makes allocation reuse explicit in focused tests.
     pub fn reserve_polygon_capacity(&mut self, additional: usize) {
         self.polygon_boundary.reserve(additional);
     }
 }
 
-/// Returns whether both point components are finite.
-fn point_is_finite(point: Vec2f) -> bool {
-    point.x.is_finite() && point.y.is_finite()
+/// Vector components have exact fixed equality; rs-math3d vectors intentionally omit PartialEq.
+fn same_point(a: WidePoint, b: WidePoint) -> bool {
+    a.x == b.x && a.y == b.y
 }
-
-/// Returns the signed 2D cross product.
-fn cross2(left: Vec2f, right: Vec2f) -> f32 {
-    left.x * right.y - left.y * right.x
+/// Adds working vectors with the library's checked arithmetic.
+fn add(a: WidePoint, b: WidePoint) -> Result<WidePoint, NcStatus> {
+    WidePoint::checked_add_vv(&a, &b).map_err(geometry::status)
 }
-
-/// Returns whether three points form a convex counter-clockwise corner.
-fn is_convex_ccw(previous: Vec2f, current: Vec2f, next: Vec2f) -> bool {
-    cross2(current - previous, next - current) > GEOM_EPS
+/// Subtracts before any narrowing or float conversion.
+fn sub(a: WidePoint, b: WidePoint) -> Result<WidePoint, NcStatus> {
+    WidePoint::checked_sub_vv(&a, &b).map_err(geometry::status)
 }
-
-/// Returns whether a point lies inside or on a counter-clockwise triangle.
-fn point_in_triangle_ccw(point: Vec2f, a: Vec2f, b: Vec2f, c: Vec2f) -> bool {
-    let ab = cross2(b - a, point - a);
-    let bc = cross2(c - b, point - b);
-    let ca = cross2(a - c, point - c);
-    ab >= -GEOM_EPS && bc >= -GEOM_EPS && ca >= -GEOM_EPS
+/// Applies a checked translation and converts only the final admitted rendering coordinate.
+fn translated(point: WidePoint, offset: WidePoint) -> Result<Vec2f, NcStatus> {
+    geometry::render_point(add(point, offset)?)
+}
+/// Builds rendering vertices only after fixed geometry and placement are complete.
+fn fixed_triangle(points: [WidePoint; 3], color: Color4b, offset: WidePoint) -> Result<SolidTriangle, NcStatus> {
+    Ok(SolidTriangle::new(
+        [translated(points[0], offset)?, translated(points[1], offset)?, translated(points[2], offset)?],
+        color,
+    ))
+}
+/// Delegates orientation products to rs-math3d's checked vector kernel.
+fn cross2(a: WidePoint, b: WidePoint) -> Result<WideScalar, NcStatus> {
+    Vector3::checked_cross(&Vector3::new(a.x, a.y, WideScalar::ZERO), &Vector3::new(b.x, b.y, WideScalar::ZERO))
+        .map(|v| v.z)
+        .map_err(geometry::status)
+}
+/// Exact positive winding after duplicate/collinear cleanup.
+fn is_convex_ccw(a: WidePoint, b: WidePoint, c: WidePoint) -> Result<bool, NcStatus> {
+    Ok(cross2(sub(b, a)?, sub(c, b)?)? > WideScalar::ZERO)
+}
+/// Includes a triangle's boundary using the same exact orientation owner.
+fn point_in_triangle_ccw(p: WidePoint, a: WidePoint, b: WidePoint, c: WidePoint) -> Result<bool, NcStatus> {
+    Ok(cross2(sub(b, a)?, sub(p, a)?)? >= WideScalar::ZERO
+        && cross2(sub(c, b)?, sub(p, b)?)? >= WideScalar::ZERO
+        && cross2(sub(a, c)?, sub(p, c)?)? >= WideScalar::ZERO)
 }
 
 #[cfg(test)]
@@ -408,7 +427,7 @@ mod tests {
 
     fn test_polygon(points: &[Vec2f]) -> Vec<SolidTriangle> {
         let mut geometry = SolidGeometry::new();
-        geometry.append_polygon(points, white(), Vec2f::new(0.0, 0.0));
+        geometry.append_polygon(points, white(), Vec2f::new(0.0, 0.0)).unwrap();
         geometry.triangles().to_vec()
     }
 
@@ -451,10 +470,9 @@ mod tests {
     }
 
     #[test]
-    fn degenerate_and_non_finite_polygons_emit_nothing() {
+    fn degenerate_polygons_emit_nothing() {
         for points in [
             vec![Vec2f::new(0.0, 0.0), Vec2f::new(1.0, 1.0), Vec2f::new(2.0, 2.0)],
-            vec![Vec2f::new(0.0, 0.0), Vec2f::new(f32::NAN, 1.0), Vec2f::new(2.0, 0.0)],
             vec![Vec2f::new(0.0, 0.0), Vec2f::new(1.0, 0.0)],
         ] {
             let triangles = test_polygon(&points);
@@ -465,20 +483,24 @@ mod tests {
     #[test]
     fn polygon_triangulation_reuses_solid_geometry_workspace() {
         let mut geometry = SolidGeometry::new();
-        geometry.append_polygon(
-            &[Vec2f::new(0.0, 0.0), Vec2f::new(10.0, 0.0), Vec2f::new(10.0, 10.0), Vec2f::new(0.0, 10.0)],
-            white(),
-            Vec2f::new(0.0, 0.0),
-        );
+        geometry
+            .append_polygon(
+                &[Vec2f::new(0.0, 0.0), Vec2f::new(10.0, 0.0), Vec2f::new(10.0, 10.0), Vec2f::new(0.0, 10.0)],
+                white(),
+                Vec2f::new(0.0, 0.0),
+            )
+            .unwrap();
         let capacity = geometry.polygon_capacity();
         assert_eq!(geometry.triangles().len(), 2);
 
         geometry.clear();
-        geometry.append_polygon(
-            &[Vec2f::new(0.0, 0.0), Vec2f::new(5.0, 0.0), Vec2f::new(0.0, 5.0)],
-            white(),
-            Vec2f::new(0.0, 0.0),
-        );
+        geometry
+            .append_polygon(
+                &[Vec2f::new(0.0, 0.0), Vec2f::new(5.0, 0.0), Vec2f::new(0.0, 5.0)],
+                white(),
+                Vec2f::new(0.0, 0.0),
+            )
+            .unwrap();
         assert_eq!(geometry.triangles().len(), 1);
         assert_eq!(geometry.polygon_capacity(), capacity);
     }
@@ -492,10 +514,12 @@ mod tests {
                 white(),
                 Vec2f::new(5.0, 7.0),
             )
-            .expect("valid polygon");
+            .expect("valid polygon")
+            .expect("nondegenerate polygon");
         let line = geometry
             .append_line(Vec2f::new(0.0, 20.0), Vec2f::new(10.0, 20.0), 2.0, white(), Vec2f::new(5.0, 7.0))
-            .expect("valid line");
+            .expect("valid line")
+            .expect("nonzero line");
 
         assert_eq!(polygon.as_range(), 0..2);
         assert_eq!(line.as_range(), 2..4);
@@ -518,9 +542,65 @@ mod tests {
     #[test]
     fn thick_and_zero_length_lines_emit_complete_quads() {
         for (from, to) in [(Vec2f::new(0.0, 0.0), Vec2f::new(10.0, 0.0)), (Vec2f::new(5.0, 5.0), Vec2f::new(5.0, 5.0))] {
-            let triangles = SolidGeometry::line_triangles(from, to, 2.0, white()).expect("valid line");
-            assert_eq!(triangles.len(), 2);
-            assert!(triangles.iter().all(|triangle| triangle.vertices().len() == 3));
+            let mut geometry = SolidGeometry::new();
+            geometry.append_line(from, to, 2.0, white(), Vec2f::new(0.0, 0.0)).unwrap().unwrap();
+            assert_eq!(geometry.triangles().len(), 2);
+            assert!(geometry.triangles().iter().all(|triangle| triangle.vertices().len() == 3));
         }
+    }
+
+    /// A valid large-origin half-pixel square must keep its nonzero rendered area.
+    #[test]
+    fn fixed_winding_preserves_small_geometry_at_large_origins() {
+        let triangles = test_polygon(&[
+            Vec2f::new(131_000.0, 131_000.0),
+            Vec2f::new(131_000.5, 131_000.0),
+            Vec2f::new(131_000.5, 131_000.5),
+            Vec2f::new(131_000.0, 131_000.5),
+        ]);
+        assert_eq!(triangles.len(), 2);
+        let mut area = 0.0_f64;
+        for t in triangles {
+            let [a, b, c] = t.vertices().map(|v| v.position);
+            area += ((f64::from(b.x) - f64::from(a.x)) * (f64::from(c.y) - f64::from(a.y))
+                - (f64::from(b.y) - f64::from(a.y)) * (f64::from(c.x) - f64::from(a.x)))
+            .abs();
+        }
+        assert_eq!(area, 0.5);
+    }
+
+    /// Both old counterexamples now fail admission explicitly rather than disappearing successfully.
+    #[test]
+    fn out_of_domain_geometry_and_stroke_expansion_reject_atomically() {
+        let mut geometry = SolidGeometry::new();
+        for x in [i32::MIN as f32, 1e20, f32::MAX] {
+            assert!(matches!(
+                geometry.append_line(Vec2f::new(x, 10.0), Vec2f::new(1000.0, 10.0), 2.0, white(), Vec2f::new(0.0, 0.0)),
+                Err(NC_E_OUT_OF_RANGE)
+            ));
+            assert!(geometry.is_empty());
+        }
+        assert!(matches!(
+            geometry.append_line(Vec2f::new(131_072.0, 10.0), Vec2f::new(131_072.0, 20.0), 2.0, white(), Vec2f::new(0.0, 0.0)),
+            Err(NC_E_OUT_OF_RANGE)
+        ));
+        assert!(matches!(
+            geometry.append_polygon(
+                &[Vec2f::new(0.0, 0.0), Vec2f::new(f32::NAN, 0.0), Vec2f::new(1.0, 1.0)],
+                white(),
+                Vec2f::new(0.0, 0.0)
+            ),
+            Err(NC_E_INVALID_ARG)
+        ));
+        assert!(geometry.is_empty());
+        geometry
+            .append_line(Vec2f::new(-131_000.0, 10.0), Vec2f::new(131_000.0, 10.0), 1.5, white(), Vec2f::new(0.0, 0.0))
+            .unwrap()
+            .unwrap();
+        let ys: Vec<_> = geometry.triangles().iter().flat_map(|t| t.vertices()).map(|v| v.position.y).collect();
+        assert_eq!(
+            ys.iter().copied().fold(f32::NEG_INFINITY, f32::max) - ys.iter().copied().fold(f32::INFINITY, f32::min),
+            1.5
+        );
     }
 }

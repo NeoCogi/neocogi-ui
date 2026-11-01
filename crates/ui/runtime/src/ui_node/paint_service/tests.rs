@@ -182,3 +182,70 @@ fn cancelled_views_are_empty_and_retained_painters_cannot_join_a_later_widget() 
     assert!(third.try_borrow_mut().unwrap().finish(3).unwrap().display_list.is_empty());
     frame.finish().unwrap();
 }
+
+/// Real COM calls distinguish rejected geometry from successful absence and share integer/fractional output.
+#[test]
+fn bounded_ui_geometry_rejects_before_publication_and_keeps_fractional_drawing() {
+    let local = recorder(std::rc::Rc::default(), 1);
+    let mut painter: ComPtr<IPainterAbi> = local.query().unwrap();
+    let s = scope(1);
+    let point = Point { x: 60, y: 30 };
+    let far = Point { x: i32::MIN, y: 30 };
+    assert_eq!(painter.stroke_line(s, far, point, 2, 0xffffffff), Err(neocogi_com::NC_E_OUT_OF_RANGE));
+    assert_eq!(
+        painter.stroke_line_f32(s, PaintPoint { x: 1e20, y: 30.0 }, PaintPoint { x: 60.0, y: 30.0 }, 2.0, 0xffffffff),
+        Err(neocogi_com::NC_E_OUT_OF_RANGE)
+    );
+    assert_eq!(
+        painter.fill_polygon(s, NcCopyFromBufferOffset::new(0, &[point, far, Point { x: 70, y: 35 }]), 0xffffffff),
+        Err(neocogi_com::NC_E_OUT_OF_RANGE)
+    );
+    assert_eq!(painter.stroke_line(s, point, point, -1, 0xffffffff), Err(NC_E_INVALID_ARG));
+    assert_eq!(local.try_borrow().unwrap().context.as_ref().unwrap().display_list.ops.len(), 0);
+    painter.stroke_line(s, Point { x: 50, y: 30 }, Point { x: 70, y: 30 }, 2, 0xffffffff).unwrap();
+    painter
+        .stroke_line_f32(s, PaintPoint { x: 50.5, y: 35.0 }, PaintPoint { x: 70.5, y: 35.0 }, 1.5, 0xffffffff)
+        .unwrap();
+    painter
+        .fill_polygon(
+            s,
+            NcCopyFromBufferOffset::new(0, &[Point { x: 50, y: 20 }, Point { x: 60, y: 20 }, Point { x: 50, y: 25 }]),
+            0xffffffff,
+        )
+        .unwrap();
+    let context = local.try_borrow_mut().unwrap().finish(1).unwrap();
+    assert!(!context.display_list.ops.is_empty());
+    let vertices = context.display_list.solid_geometry.triangles()[2..4].iter().flat_map(|t| t.vertices());
+    let ys: Vec<_> = vertices.map(|v| v.position.y).collect();
+    assert_eq!(
+        ys.iter().copied().fold(f32::NEG_INFINITY, f32::max) - ys.iter().copied().fold(f32::INFINITY, f32::min),
+        1.5
+    );
+    assert_eq!(
+        painter.stroke_line(PaintScope { invocation: 1, ..s }, far, point, 2, 0),
+        Err(UI_E_EXPIRED_SCOPE)
+    );
+}
+
+/// A narrowed facade clip remains a virtual-content request and never expands the visible target.
+#[test]
+fn painter_facade_clips_large_virtual_content_after_scroll_translation() {
+    let local = recorder(std::rc::Rc::default(), 1);
+    {
+        let mut owner = local.try_borrow_mut().unwrap();
+        let context = owner.context.as_mut().unwrap();
+        context.content_rect = crate::Recti::new(100, -500_000, 80, 500_100);
+        context.screen_clip = crate::Recti::new(100, 0, 80, 100);
+    }
+    let painter: ComPtr<IPainterAbi> = local.query().unwrap();
+    let scope = PaintScope {
+        invocation: 1,
+        clip: Rect { x: 0, y: 500_000, width: 80, height: 100 },
+    };
+    let facade = neocogi_ui::Painter::from_call(painter.as_com_ref(), scope);
+    let mut clipped = facade.clipped(Rect { x: 0, y: 500_020, width: 20, height: 20 }).unwrap();
+    clipped.fill(Rect { x: 0, y: 500_020, width: 20, height: 20 }, 0xffffffff).unwrap();
+    let context = local.try_borrow_mut().unwrap().finish(1).unwrap();
+    let clip = context.display_list.ops[0].clip;
+    assert_eq!((clip.x, clip.y, clip.width, clip.height), (100, 20, 20, 20));
+}

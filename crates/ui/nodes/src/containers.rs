@@ -207,7 +207,10 @@ pub(super) fn local_track(track: neocogi_ui::abi::nodes::LayoutTrack) -> Result<
     match track {
         neocogi_ui::abi::nodes::LayoutTrack::Content => Ok(crate::TrackSize::Content),
         neocogi_ui::abi::nodes::LayoutTrack::Fixed { extent } if extent >= 0 => Ok(crate::TrackSize::Fixed(extent)),
-        neocogi_ui::abi::nodes::LayoutTrack::Flex { weight } if weight.is_finite() && weight > 0.0 => Ok(crate::TrackSize::Flex(weight)),
+        neocogi_ui::abi::nodes::LayoutTrack::Flex { weight } => {
+            neocogi_ui::geometry::flex_weight(weight)?;
+            Ok(crate::TrackSize::Flex(weight))
+        }
         _ => Err(neocogi_com::NC_E_INVALID_ARG),
     }
 }

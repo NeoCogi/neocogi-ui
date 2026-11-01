@@ -516,19 +516,23 @@ impl<'a> Painter<'a> {
     /// Narrows local clipping by value; no clip stack, callback, extra COM object or Drop-time
     /// restoration is involved. The parent painter remains usable with its original clip.
     pub fn clipped(&self, rect: Rect) -> Result<Self, NcStatus> {
-        if rect.width < 0 || rect.height < 0 {
-            return Err(neocogi_com::NC_E_INVALID_ARG);
-        }
-        let parent = self.scope.clip;
-        let x = parent.x.max(rect.x);
-        let y = parent.y.max(rect.y);
-        let right = (i64::from(parent.x) + i64::from(parent.width)).min(i64::from(rect.x) + i64::from(rect.width));
-        let bottom = (i64::from(parent.y) + i64::from(parent.height)).min(i64::from(rect.y) + i64::from(rect.height));
-        let clip = Rect {
-            x,
-            y,
-            width: (right - i64::from(x)).max(0) as i32,
-            height: (bottom - i64::from(y)).max(0) as i32,
+        let requested = crate::geometry::virtual_rectangle(rect)?;
+        let parent = crate::geometry::virtual_rectangle(self.scope.clip)?;
+        let result = parent.checked_intersect(&requested).map_err(crate::geometry::status)?;
+        let clip = if let Some(r) = result {
+            Rect {
+                x: i32::try_from(r.x.to_bits() / 4096).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)?,
+                y: i32::try_from(r.y.to_bits() / 4096).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)?,
+                width: i32::try_from(r.width.to_bits() / 4096).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)?,
+                height: i32::try_from(r.height.to_bits() / 4096).map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)?,
+            }
+        } else {
+            Rect {
+                x: self.scope.clip.x.max(rect.x),
+                y: self.scope.clip.y.max(rect.y),
+                width: 0,
+                height: 0,
+            }
         };
         Ok(Self {
             interface: self.interface,
@@ -543,13 +547,22 @@ impl<'a> Painter<'a> {
         self.interface.begin_render_view(self.scope, resources)
     }
 
-    /// Records a finite solid line; the UI owns tessellation and the currently installed material.
-    pub fn stroke_line(&mut self, from: PaintPoint, to: PaintPoint, width: f32, rgba: u32) -> Result<(), NcStatus> {
+    /// Records bounded integer pixel coordinates through the shared fixed-point UI implementation.
+    pub fn stroke_line(&mut self, from: Point, to: Point, width: i32, rgba: u32) -> Result<(), NcStatus> {
         self.interface.stroke_line(self.scope, from, to, width, rgba)
     }
-    /// Records finite polygon positions with no application dependence on UI tessellation internals.
-    pub fn fill_polygon(&mut self, points: &[PaintPoint], rgba: u32) -> Result<(), NcStatus> {
+    /// Records bounded integer polygon coordinates in declaration order.
+    pub fn fill_polygon(&mut self, points: &[Point], rgba: u32) -> Result<(), NcStatus> {
         self.interface.fill_polygon(self.scope, NcCopyFromBufferOffset::new(0, points), rgba)
+    }
+
+    /// Records a finite solid line; the UI owns tessellation and the currently installed material.
+    pub fn stroke_line_f32(&mut self, from: PaintPoint, to: PaintPoint, width: f32, rgba: u32) -> Result<(), NcStatus> {
+        self.interface.stroke_line_f32(self.scope, from, to, width, rgba)
+    }
+    /// Records finite polygon positions with no application dependence on UI tessellation internals.
+    pub fn fill_polygon_f32(&mut self, points: &[PaintPoint], rgba: u32) -> Result<(), NcStatus> {
+        self.interface.fill_polygon_f32(self.scope, NcCopyFromBufferOffset::new(0, points), rgba)
     }
     /// Draws body text using the UI's current font and semantic content color.
     pub fn text(&mut self, rect: Rect, text: &str) -> Result<(), NcStatus> {

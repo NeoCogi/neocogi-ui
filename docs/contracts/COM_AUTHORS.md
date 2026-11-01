@@ -451,6 +451,65 @@ and image operations, which the runtime appends to its one display list and
 expands during the single final renderer pass.
 
 
+## UI coordinate arithmetic
+
+Visible UI coordinates use bounded integer pixels at the API: every admitted position
+lies in `[-131072, 131072]`. Window/popup rectangles and visible clips validate
+their maximum edges as well as their origins and nonnegative extents. A rectangle
+or stroke width may span 262144 pixels between the two limits. Drawable dimensions are positive and at most
+131072 per axis. Host pointer positions and scroll input are checked before enqueueing;
+rejected geometry does not publish a partial window edit or input transition.
+Localized pointer differences can span both ends of the domain and remain wide until
+conversion to the existing integer event records.
+
+The shared `neocogi_ui::geometry` policy uses rs-math3d 0.20.0. Integer pixels convert
+exactly to `Fixed<i32, 6>`. Explicit fractional drawing inputs round once to its
+1/64-pixel grid, nearest with ties to even, after validating the original finite
+value and range. `Fixed<i64, 12>` working vectors/rectangles retain products of two
+admitted coordinates exactly, including polygon winding at large origins. Geometry
+uses the library's checked vector, rectangle and scalar operations. UI hit regions
+remain half-open, even though the math library also offers inclusive containment.
+
+`Painter::stroke_line` and `fill_polygon` take existing integer `Point` values;
+`stroke_line_f32` and `fill_polygon_f32` explicitly accept fractional `PaintPoint`
+values. Colored and atlas triangle inputs are fractional drawing inputs too.
+Their positions enter the same checked fixed-point domain; colors and UVs retain
+their own representations. UI geometry, translation and stroke expansion complete
+before final positions convert to the renderer's f32 vertices. Nonfinite or negative
+width/extent inputs return `NC_E_INVALID_ARG`; excess coordinate/representation range
+returns `NC_E_OUT_OF_RANGE`. Complete external batches validate before publication.
+Primitive coordinate admission is independent of clipping: a small clip cannot
+make huge line/polygon/triangle inputs legal.
+
+Document lengths, cumulative menu positions, scroll offsets and virtual content
+measurement are not visible coordinate limits. Semantic text/frame/image rectangles,
+text-run origins and `PaintScope.clip` requests may describe those virtual contents;
+they use checked wide fixed arithmetic and cannot enlarge the runtime-owned visible
+screen clip. Their integer metadata must not be rejected merely for describing
+invisible content before scroll projection. Keep their existing wide domains,
+subtract offsets before selecting visible geometry, and narrow only the resulting
+visible position. Shared scroll ratios retain i128 intermediates when multiplying
+wide content by a finite track. Retained integer pixel records are boundary/cache
+values; common rectangle, hit and intersection arithmetic uses checked wide fixed
+values without saturated float-to-integer visibility bounds.
+
+Flex weights are dimensionless f32 configuration, converted to positive S51.12
+working values before layout. Nonfinite/nonpositive weights are invalid; a weight
+that overflows or rounds to zero is out of range. Linear/Grid propagate checked
+summary errors rather than distributing a fabricated remainder. Final cumulative
+pixel ceilings operate on exact integer ratios of the fixed weights, so thirds
+still distribute `[1, 1, 1]` across three pixels. Numeric control model values keep
+their independent floating-point range; their projection into pixel geometry uses
+checked fixed-point arithmetic.
+
+Independent 2D scenes and 3D rendering through `IRenderView` retain f32 vertices,
+matrices, quaternions and shader uniforms. UI supplies their bounded viewport and
+protected clip, without converting their world coordinates to UI coordinates. A
+scene position anchoring a UI control is projected first, then admitted into UI
+geometry. Any transform that determines widget placement, clipping or widget hit
+testing belongs to fixed-point UI math. The current painter has no matrix-transform
+operation; this contract does not add one or change generic renderer commands.
+
 ## Local custom leaves and solid drawing
 
 The skin plugin's `StyleCompiler` class supports typed palette and metric editors.
@@ -490,9 +549,10 @@ changes only drawing can return NO_CHANGE.
 
 `Painter::colored_triangles` takes local positions and packed RGBA colors. Solid
 content never needs the atlas's white-pixel location: the UI supplies it while
-executing its existing solid geometry commands. `stroke_line` and `fill_polygon`
-share that geometry path. All points must be finite; line widths are nonnegative,
-and triangle counts are multiples of three. Polygon filling retains the painter's
+executing its existing solid geometry commands. Integer `stroke_line`/`fill_polygon`
+and explicit fractional `stroke_line_f32`/`fill_polygon_f32` share the checked
+fixed-point geometry path described above. Line widths are nonnegative, and triangle
+counts are multiples of three. Polygon filling retains the painter's
 existing simple-polygon policy; applications must supply a non-self-intersecting
 boundary in order.
 
@@ -756,6 +816,14 @@ space, and fits within the owning surface's permitted clip. Width matches the
 header when the frame permits it; narrow frames can shift or reduce that width.
 Ordinary windows permit their popups across the drawable, while clipped child
 owners inherit their ancestors' content clipping.
+
+Every menu tree admits at most 64 entries and eight panel levels, counting its
+root as level one. Branch headings and separators count toward the same total as
+items; the root's diagnostic label is not an entry. The limit applies to command
+bars, context menus, choice menus and Combo definitions, across all descendants.
+The 65th entry or a ninth level returns `NC_E_OUT_OF_RANGE` before declaration,
+model, selection or live forest mutation. Documents validate the same Combo limit.
+Presentation row caps do not increase this fixed model limit.
 
 Combo and IChoiceMenu expose `max_visible_items` and `set_max_visible_items`.
 The default is ten complete direct rows per panel. The count must be positive;

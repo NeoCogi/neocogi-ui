@@ -71,7 +71,12 @@ impl Recorder {
     /// Starts one trusted invocation using the traversal's existing frames and moved buffers.
     /// Context presence is the sole liveness fact; construction cannot fail after taking buffers.
     fn new(resources: super::SharedAssets, frames: std::rc::Rc<gpu::Frames>, invocation: std::num::NonZeroU64, context: PaintContext) -> Self {
-        Self { invocation, context: Some(context), resources, frames }
+        Self {
+            invocation,
+            context: Some(context),
+            resources,
+            frames,
+        }
     }
 
     /// Transfers a completed view at its original slot or rejects unfinished/rejected work.
@@ -103,10 +108,8 @@ impl Recorder {
     fn check(&self, scope: PaintScope) -> Result<(), NcStatus> {
         if self.context.is_none() || self.invocation.get() != scope.invocation {
             Err(UI_E_EXPIRED_SCOPE)
-        } else if scope.clip.width < 0 || scope.clip.height < 0 {
-            Err(NC_E_INVALID_ARG)
         } else {
-            Ok(())
+            neocogi_ui::geometry::virtual_rectangle(scope.clip).map(|_| ())
         }
     }
     /// Validates scope and reserves aggregate intake before any caller-buffer scan or allocation.
@@ -130,10 +133,11 @@ impl Recorder {
 
     /// Permanently expires this identity and returns its frame buffers to traversal.
     fn finish(&mut self, invocation: u64) -> Result<PaintContext, NcStatus> {
-        if self.invocation.get() != invocation { return Err(UI_E_EXPIRED_SCOPE); }
+        if self.invocation.get() != invocation {
+            return Err(UI_E_EXPIRED_SCOPE);
+        }
         self.context.take().ok_or(UI_E_EXPIRED_SCOPE)
     }
-
 }
 
 /// Decodes one exhaustive contract state for a control appearance lookup.
@@ -177,8 +181,40 @@ impl IPainter for Recorder {
         context.view = Some(PendingView { slot, session });
         Ok(view)
     }
+    /// Integer coordinates are checked before any conversion or frame contribution.
+    fn stroke_line(&mut self, scope: PaintScope, from: Point, to: Point, width: i32, rgba: u32) -> Result<(), NcStatus> {
+        self.check(scope)?;
+        neocogi_ui::geometry::integer_point(crate::Vec2i::new(from.x, from.y))?;
+        neocogi_ui::geometry::integer_point(crate::Vec2i::new(to.x, to.y))?;
+        if width < 0 {
+            return Err(NC_E_INVALID_ARG);
+        }
+        neocogi_ui::geometry::integer_extent(width)?;
+        self.stroke_line_f32(
+            scope,
+            PaintPoint { x: from.x as f32, y: from.y as f32 },
+            PaintPoint { x: to.x as f32, y: to.y as f32 },
+            width as f32,
+            rgba,
+        )
+    }
+    /// Copies integer points directly into the existing fixed-point tessellation workspace.
+    fn fill_polygon(&mut self, scope: PaintScope, input: NcCopyFromBufferOffset<'_, Point>, rgba: u32) -> Result<(), NcStatus> {
+        self.check(scope)?;
+        self.context.as_mut().ok_or(UI_E_BUSY)?.display_list.reserve_polygon(input.len())?;
+        if input.offset() != 0 {
+            return Err(NC_E_INVALID_ARG);
+        }
+        for point in input.as_slice() {
+            neocogi_ui::geometry::integer_point(crate::Vec2i::new(point.x, point.y))?;
+        }
+        self.with_painter(scope, |painter| {
+            painter.fill_integer_polygon(input.as_slice(), crate::render::contract_color(rgba))
+        })
+    }
+
     /// Validates complete scalar geometry before appending anything to the frame.
-    fn stroke_line(&mut self, scope: PaintScope, from: PaintPoint, to: PaintPoint, width: f32, rgba: u32) -> Result<(), NcStatus> {
+    fn stroke_line_f32(&mut self, scope: PaintScope, from: PaintPoint, to: PaintPoint, width: f32, rgba: u32) -> Result<(), NcStatus> {
         self.reserve(scope, 0, 6)?;
         if !from.x.is_finite() || !from.y.is_finite() || !to.x.is_finite() || !to.y.is_finite() || !width.is_finite() || width < 0.0 {
             return Err(NC_E_INVALID_ARG);
@@ -193,13 +229,16 @@ impl IPainter for Recorder {
         })
     }
     /// Copies a whole finite boundary; native geometry code owns all triangulation and clipping.
-    fn fill_polygon(&mut self, scope: PaintScope, input: NcCopyFromBufferOffset<'_, PaintPoint>, rgba: u32) -> Result<(), NcStatus> {
+    fn fill_polygon_f32(&mut self, scope: PaintScope, input: NcCopyFromBufferOffset<'_, PaintPoint>, rgba: u32) -> Result<(), NcStatus> {
         self.check(scope)?;
         self.context.as_mut().ok_or(UI_E_BUSY)?.display_list.reserve_polygon(input.len())?;
         if input.offset() != 0 || input.as_slice().iter().any(|p| !p.x.is_finite() || !p.y.is_finite()) {
             return Err(NC_E_INVALID_ARG);
         }
         let points = input.as_slice();
+        for point in points {
+            neocogi_ui::geometry::fractional_point(crate::Vec2f::new(point.x, point.y))?;
+        }
         self.with_painter(scope, |painter| painter.fill_contract_polygon(points, crate::render::contract_color(rgba)))
     }
 
@@ -216,9 +255,7 @@ impl IPainter for Recorder {
     /// Retains the resource outside the command borrow; validation at submission authenticates its owner.
     fn texture(&mut self, scope: PaintScope, rect: Rect, source: TextureRegion, rgba: u32, texture: ComRef<'_, ITextureAbi>) -> Result<(), NcStatus> {
         self.reserve(scope, 0, 4)?;
-        if rect.width < 0 || rect.height < 0 {
-            return Err(NC_E_INVALID_ARG);
-        }
+        neocogi_ui::geometry::virtual_rectangle(rect)?;
         source.validate()?;
         self.check(scope)?;
         // AddRef can execute foreign code, so retain the texture before taking the paint context.
@@ -244,17 +281,13 @@ impl IPainter for Recorder {
     /// Appends a checked fill without accessing the caller's stack.
     fn fill(&mut self, scope: PaintScope, rect: Rect, rgba: u32) -> Result<(), NcStatus> {
         self.reserve(scope, 0, 54)?;
-        if rect.width < 0 || rect.height < 0 {
-            return Err(NC_E_INVALID_ARG);
-        }
+        neocogi_ui::geometry::virtual_rectangle(rect)?;
         self.with_painter(scope, |painter| painter.fill_rect(local_rect(rect), crate::render::contract_color(rgba)))
     }
     /// Appends text while its borrowed UTF-8 input remains valid for this synchronous call.
     fn text(&mut self, scope: PaintScope, rect: Rect, input: NcCopyFromBufferOffset<'_, u8>) -> Result<(), NcStatus> {
         self.reserve(scope, input.len(), input.len())?;
-        if rect.width < 0 || rect.height < 0 {
-            return Err(NC_E_INVALID_ARG);
-        }
+        neocogi_ui::geometry::virtual_rectangle(rect)?;
         let label = text(input)?;
         // Resource lookup is local and immutable; the borrow ends before returning across COM.
         let rect = local_rect(rect);
@@ -275,9 +308,7 @@ impl IPainter for Recorder {
     /// Resolves one compact semantic patch in the runtime and records it without widget-local geometry.
     fn frame(&mut self, scope: PaintScope, rect: Rect, role: WidgetFrame, state: WidgetVisualState, center_only: bool) -> Result<Rect, NcStatus> {
         self.reserve(scope, 0, 54)?;
-        if rect.width < 0 || rect.height < 0 {
-            return Err(NC_E_INVALID_ARG);
-        }
+        neocogi_ui::geometry::virtual_rectangle(rect)?;
         let role = super::mounted_node::local_frame(role)?;
         let mut patch = {
             let resources = self.resources.borrow();
@@ -297,9 +328,7 @@ impl IPainter for Recorder {
     /// Authenticates and records one atlas icon directly in the current frame operation sequence.
     fn icon(&mut self, scope: PaintScope, icon: PaintIcon, rect: Rect, rgba: u32) -> Result<(), NcStatus> {
         self.reserve(scope, 0, 6)?;
-        if rect.width < 0 || rect.height < 0 {
-            return Err(NC_E_INVALID_ARG);
-        }
+        neocogi_ui::geometry::virtual_rectangle(rect)?;
         let icon = self.resources.borrow().bundle().atlas().icon_at_index(icon.index).ok_or(NC_E_INVALID_ARG)?;
         self.with_painter(scope, |painter| painter.icon(icon, local_rect(rect), crate::render::contract_color(rgba)))
     }
@@ -353,15 +382,25 @@ impl PaintService {
 
     /// Moves the existing buffers through one unique COM allocation and revokes it on return.
     pub(super) fn paint(&self, widget: &neocogi_com::ComBox<IWidgetAbi>, ctx: &mut crate::WidgetPaintCtx<'_>) -> Result<(), NcStatus> {
-        let invocation = self.next.get().checked_add(1).and_then(std::num::NonZeroU64::new).ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
+        let invocation = self
+            .next
+            .get()
+            .checked_add(1)
+            .and_then(std::num::NonZeroU64::new)
+            .ok_or(neocogi_com::NC_E_OUT_OF_RANGE)?;
         self.next.set(invocation.get());
-        let value = Recorder::new(self.resources.clone(), self.frames.clone(), invocation, PaintContext {
-            display_list: ctx.take_display_list(),
-            content_rect: ctx.paint_content_rect(),
-            screen_clip: ctx.paint_screen_clip(),
-            view: None,
-            gpu_error: None,
-        });
+        let value = Recorder::new(
+            self.resources.clone(),
+            self.frames.clone(),
+            invocation,
+            PaintContext {
+                display_list: ctx.take_display_list(),
+                content_rect: ctx.paint_content_rect(),
+                screen_clip: ctx.paint_screen_clip(),
+                view: None,
+                gpu_error: None,
+            },
+        );
         let recorder = Recorder::into_local(value);
         let painter: ComPtr<IPainterAbi> = recorder.query()?;
         let state = WidgetPaint {
@@ -375,7 +414,14 @@ impl PaintService {
             window_active: ctx.window_active(),
         };
         let mut widget = widget.as_com_ref();
-        let result = widget.paint(PaintScope { invocation: invocation.get(), clip: state.clip }, state, painter.as_com_ref());
+        let result = widget.paint(
+            PaintScope {
+                invocation: invocation.get(),
+                clip: state.clip,
+            },
+            state,
+            painter.as_com_ref(),
+        );
         // Typed construction proves the implementation; local access uses the same gate as COM.
         // No raw implementation cast or capability from a different invocation participates.
         let harvested = recorder.try_borrow_mut()?.harvest();
@@ -417,7 +463,7 @@ mod intake_tests {
         };
         let points = vec![PaintPoint { x: f32::NAN, y: 0.0 }; MAX_POLYGON_POINTS + 1];
         assert_eq!(
-            recorder.fill_polygon(scope, NcCopyFromBufferOffset::new(0, &points), 0),
+            recorder.fill_polygon_f32(scope, NcCopyFromBufferOffset::new(0, &points), 0),
             Err(neocogi_com::NC_E_OUT_OF_RANGE)
         );
         recorder.reserve(scope, MAX_DRAW_INPUT_BYTES, 0).unwrap();

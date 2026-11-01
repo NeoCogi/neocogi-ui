@@ -12,6 +12,7 @@ neocogi-render-core.workspace = true
 neocogi-gfx-support.workspace = true
 neocogi-appearance = { workspace = true, optional = true }
 neocogi-com = { workspace = true, features = ["macros", "std"] }
+rs-math3d.workspace = true
 
 [features]
 default = []

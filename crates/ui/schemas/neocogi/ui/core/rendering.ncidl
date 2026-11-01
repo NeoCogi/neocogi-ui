@@ -1,5 +1,5 @@
 #[version(1)]
-/// Finite floating-point position used by widget-local line and polygon drawing.
+/// Explicit fractional UI input: finite, within +/-131072 pixels, rounded once to 1/64 pixel.
 struct PaintPoint {
     /// Horizontal widget-local coordinate in pixels.
     x: f32,
@@ -8,7 +8,7 @@ struct PaintPoint {
 }
 
 #[version(1)]
-/// Local solid vertex; applications never need the atlas's private white-pixel coordinates.
+/// Fractional UI vertex admitted into checked fixed-point geometry; UV-free solid color input.
 struct ColoredVertex {
     /// Horizontal widget-local position in pixels.
     x: f32,

@@ -2,6 +2,11 @@
 use crate::*;
 use neocogi_com::{ComPtr, ComRef, INcStringComPtrExt, NcCopyFromBufferOffset, NcStatus};
 
+/// Maximum entries across one complete menu tree, including branches and separators.
+pub const MAX_MENU_ENTRIES: usize = 64;
+/// Maximum menu levels including the root panel as level one.
+pub const MAX_MENU_DEPTH: usize = 8;
+
 /// Typed runtime menu service; it owns no menu topology or row state in the application.
 pub struct Menus {
     /// Projection on the same runtime identity as the factory and window manager.

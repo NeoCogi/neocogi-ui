@@ -240,10 +240,12 @@ impl Slider {
             && base.width > 0
             && range != 0.0
         {
-            // Normalize screen space in f64, then interpolate from both endpoints. The endpoint
-            // form avoids both multiplication overflow and loss of a small upper bound while
-            // cancelling a much larger negative lower bound.
-            let fraction = (f64::from(pointer_pos.x) / f64::from(base.width)).clamp(0.0, 1.0);
+            // Normalize pixel geometry in fixed-point, then interpolate the independent numeric
+            // model from both endpoints. Model values retain their supported floating-point range.
+            // Pixel geometry is fixed-point; conversion back to f64 feeds the numeric model only.
+            let fraction = rs_math3d::Fixed::<i64, 32>::try_from_ratio(i64::from(pointer_pos.x.clamp(0, base.width)), i64::from(base.width))
+                .expect("clamped pointer and positive pixel extent define a represented unit fraction")
+                .to_f64();
             value = slider_value_at_fraction(self.low, self.high, fraction);
             adjusted = true;
         }
@@ -285,11 +287,17 @@ impl Slider {
         let width = ctx.skin().metrics().thumb_size.max(0);
         let available = base.width.max(0).saturating_sub(width);
         let x = if self.low != self.high && available > 0 {
-            // Resolve the normalized numeric position in f64 before multiplying by pixel width.
-            // Exact endpoints are handled explicitly by the helper, while all interior results
-            // remain bounded in `[0, 1]` and cannot overflow the layout intermediate.
+            // Convert the normalized numeric-model fraction before scaling UI pixel geometry.
+            // Exact endpoints remain exact and no floating-point position enters layout.
             let fraction = slider_value_fraction(self.value, self.low, self.high);
-            (fraction * f64::from(available)) as i32
+            // The model's normalized fraction enters checked fixed-point geometry once.
+            let fraction = rs_math3d::Fixed::<i64, 32>::try_from_f64(fraction).expect("validated model fraction is finite in the unit interval");
+            let pixels = rs_math3d::Fixed::<i64, 32>::try_from_int(i64::from(available)).expect("a nonnegative i32 extent fits S31.32");
+            (fraction
+                .checked_mul(pixels)
+                .expect("a unit fraction cannot enlarge its represented extent")
+                .to_bits()
+                / 4_294_967_296) as i32
         } else {
             0
         };

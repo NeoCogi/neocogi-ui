@@ -74,6 +74,8 @@ pub enum SurfaceMutationError {
     ManagedLayer,
     /// A popup owner is hidden, blocked by a modal, or missing from the active parent path.
     InvalidPopupParent,
+    /// A menu exceeds the shared entry or nesting budget before forest mutation.
+    MenuLimit,
 }
 
 impl fmt::Display for SurfaceMutationError {
@@ -92,6 +94,12 @@ impl fmt::Display for SurfaceMutationError {
             }
             Self::ManagedLayer => f.write_str("this surface's layer is controlled by its structural owner"),
             Self::InvalidPopupParent => f.write_str("the popup owner is not in the active visible surface path"),
+            Self::MenuLimit => write!(
+                f,
+                "the menu exceeds {} entries or {} levels",
+                neocogi_ui::MAX_MENU_ENTRIES,
+                neocogi_ui::MAX_MENU_DEPTH
+            ),
         }
     }
 }
