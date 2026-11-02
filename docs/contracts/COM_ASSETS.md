@@ -15,7 +15,7 @@
 | `neocogi-ui-support` | Non-plugin table retention, pure geometry/text algorithms, and phase-local presentation helpers; no retained tree or concrete classes. |
 | `neocogi-ui-runtime` | Core retained layout, painting, surfaces, and menu policy. |
 | `neocogi-ui-nodes` | Built-in controls and standard compositions over one bound runtime resource source. |
-| `crates/render/plugin` and renderers | Pixel upload, GPU resources and ordered frame execution. |
+| [Platform renderer providers](https://github.com/NeoCogi/neocogi-platform/tree/master/crates/render/plugin) | Pixel upload, GPU resources and ordered frame execution. |
 
 The GFX plugin has no production dependency on either the UI facade or runtime;
 the skin plugin has no production dependency on `neocogi-ui-runtime`. UI construction
@@ -151,7 +151,7 @@ with unrelated asset catalogs.
 Standalone GFX clients can still call `gfx.create_compositor(assets)` directly.
 Cloning a compositor reference aliases one mutable session; it does not copy the
 session. Draw errors preserve complete vertex/batch coverage; direct-client
-continuation and frame cleanup follow the [render contract](RENDER_SURFACES.md).
+continuation and frame cleanup follow the [render contract](https://github.com/NeoCogi/neocogi-platform/blob/master/docs/contracts/RENDER_SURFACES.md).
 A compositor can no longer be supplied to UI construction. Migrate former
 `create_runtime(assets, compositor)` calls to `create_runtime(assets, gfx)` and remove
 the caller's compositor allocation. `UiPluginFactory` uses the pre-release v1 baseline, so rebuild

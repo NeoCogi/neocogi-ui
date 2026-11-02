@@ -10,6 +10,8 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+  NEOCOGI_PLATFORM_TOKEN: ${{ secrets.NEOCOGI_PLATFORM_TOKEN }}
 
 jobs:
   # Debugger metadata checks need no SDL or display server.
@@ -21,6 +23,10 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v6
+      - name: Companion Git transport and credentials
+        run: |
+          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global credential.https://github.com.helper '!f() { echo "username=x-access-token"; echo "password=$NEOCOGI_PLATFORM_TOKEN"; }; f'
       - name: Cargo debugger source-map metadata
         run: python3 -m unittest discover -s scripts -p test_lldb_source_map.py
 
@@ -29,6 +35,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Companion Git transport and credentials
+        run: |
+          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global credential.https://github.com.helper '!f() { echo "username=x-access-token"; echo "password=$NEOCOGI_PLATFORM_TOKEN"; }; f'
       - name: Contract dependency ownership and child toolchain checks
         run: python3 -m unittest discover -s scripts -p test_contract_checks.py
       - name: Independent event consumers and generated-only COM control
@@ -41,7 +51,6 @@ jobs:
         run: rustup component add rust-analyzer
       - name: Actual editor definitions and exact authored IDL origins
         run: python3 scripts/check-idl-navigation.py
-      - run: cargo test --locked -p neocogi-shader-compiler -p neocogi-render-gpu
       - run: cargo test --locked -p neocogi-ui-runtime -p neocogi-ui-nodes -p neocogi-ui-support
       - name: Check UI libraries and tests for warnings
         run: cargo clippy --locked -p neocogi-ui-runtime -p neocogi-ui-nodes -p neocogi-ui-support --all-targets -- -D warnings
@@ -55,6 +64,10 @@ jobs:
         features: ["", "gfx", "publisher", "builder", "save-to-rust", "builder,publisher,save-to-rust"]
     steps:
       - uses: actions/checkout@v6
+      - name: Companion Git transport and credentials
+        run: |
+          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global credential.https://github.com.helper '!f() { echo "username=x-access-token"; echo "password=$NEOCOGI_PLATFORM_TOKEN"; }; f'
       # Allocation failures run in their own executable, alongside every library feature selection.
       - run: cargo test --locked -p neocogi-gfx-impl --no-default-features --features '${{ matrix.features }}' --lib --test texture_reservation
       - name: Execute target-profile source export and compiled COM consumers
@@ -66,6 +79,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Companion Git transport and credentials
+        run: |
+          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global credential.https://github.com.helper '!f() { echo "username=x-access-token"; echo "password=$NEOCOGI_PLATFORM_TOKEN"; }; f'
       - name: Install the offscreen software OpenGL host
         run: sudo apt-get update -qq && sudo apt-get install -y libsdl2-dev libgl1-mesa-dri
       - name: Validate linked static factory selection
@@ -87,6 +104,10 @@ jobs:
         backend: [glow, vulkan, wgpu]
     steps:
       - uses: actions/checkout@v6
+      - name: Companion Git transport and credentials
+        run: |
+          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global credential.https://github.com.helper '!f() { echo "username=x-access-token"; echo "password=$NEOCOGI_PLATFORM_TOKEN"; }; f'
       - name: Install display and software GPU dependencies
         run: sudo apt-get update -qq && sudo apt-get install -y libsdl2-dev libvulkan-dev mesa-vulkan-drivers libgl1-mesa-dri xvfb
       - name: Independently package and execute the full application regression
@@ -96,9 +117,6 @@ jobs:
       - name: Native runtime and provider target profiles
         if: matrix.backend == 'vulkan'
         run: python3 scripts/test-native-build.py
-      - name: Native staging destination policy
-        if: matrix.backend == 'vulkan'
-        run: cargo test --locked -p neocogi-native-layout
       - name: Exact distributions and concurrent private artifact capture
         if: matrix.backend == 'vulkan'
         run: |
@@ -113,9 +131,9 @@ jobs:
           xvfb-run -a python3 scripts/test-native-layout.py --profile release --run
           cargo test --locked -p neocogi-demo-plugins --profile min-size --features vulkan,skin,extension
       - name: Backend-specific frame/resource checks
-        run: xvfb-run -a cargo test --locked -p neocogi-render-plugin --lib --test compiler_activation --no-default-features --features ${{ matrix.backend }} -- --include-ignored
+        run: xvfb-run -a cargo test --locked -p neocogi-ui-platform-tests --no-default-features --features ${{ matrix.backend }} -- --include-ignored --test-threads=1
       - name: Check demo and platform warnings for this backend
-        run: cargo clippy --locked -p neocogi-demo-full -p neocogi-demo-basic -p neocogi-render-plugin --all-targets --no-default-features --features dynamic,${{ matrix.backend }} -- -D warnings
+        run: cargo clippy --locked -p neocogi-demo-full -p neocogi-demo-basic -p neocogi-ui-platform-tests --all-targets --no-default-features --features dynamic,${{ matrix.backend }} -- -D warnings
 
   # These jobs validate the native loader/package shape without assuming a hosted runner has a GPU desktop.
   native-platform:
@@ -126,6 +144,10 @@ jobs:
         os: [macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v6
+      - name: Companion Git transport and credentials
+        run: |
+          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global credential.https://github.com.helper '!f() { echo "username=x-access-token"; echo "password=$NEOCOGI_PLATFORM_TOKEN"; }; f'
       - name: Install SDL on macOS
         if: runner.os == 'macOS'
         run: |
@@ -151,6 +173,10 @@ jobs:
       CARGO_TARGET_DIR: target/browser qualification
     steps:
       - uses: actions/checkout@v6
+      - name: Companion Git transport and credentials
+        run: |
+          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global credential.https://github.com.helper '!f() { echo "username=x-access-token"; echo "password=$NEOCOGI_PLATFORM_TOKEN"; }; f'
       - name: Browser producer/consumer paths and explicit override policy
         run: python3 -m unittest discover -s scripts -p test_web_paths.py
       - name: Owned HTTP readiness, occupied ports and startup failure cleanup

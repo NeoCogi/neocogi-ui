@@ -74,7 +74,7 @@ class BrowserPathTests(unittest.TestCase):
         (self.workspace / 'scripts').mkdir(parents=True)
         for script in ['web-demo.sh', 'test-browser-input.sh']:
             shutil.copyfile(ROOT / 'scripts' / script, self.workspace / 'scripts' / script)
-        for file in ['examples/full/web/index.html', 'examples/full/tests/browser-full.html', 'crates/render/plugin/tests/browser-input.html']:
+        for file in ['examples/full/web/index.html', 'examples/full/tests/browser-full.html', 'tests/platform/browser-input.html']:
             path = self.workspace / file
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('<html></html>')
@@ -115,7 +115,7 @@ class BrowserPathTests(unittest.TestCase):
         self.assertTrue(bindgen)
         self.assertTrue(all(Path(call['executable']) == selected.resolve() for call in bindgen))
         tests = [call['args'] for call in self.calls() if call['command'] == 'cargo' and call['args'][0] == 'test']
-        self.assertEqual([args[args.index('-p') + 1] for args in tests[-2:]], ['neocogi-render-plugin', 'neocogi-demo-full'])
+        self.assertEqual([args[args.index('-p') + 1] for args in tests[-2:]], ['neocogi-ui-platform-tests', 'neocogi-demo-full'])
 
     def test_default_absolute_relative_and_space_roots_agree_without_install(self) -> None:
         for value in [None, 'relative cache', str(self.base / 'absolute cache')]:

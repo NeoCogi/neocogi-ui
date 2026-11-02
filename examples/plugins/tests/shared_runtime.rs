@@ -7,8 +7,7 @@ mod interface;
 use interface::IRegistryProbeAbi;
 use neocogi_com::guid_from_qualified_name;
 
-#[path = "../../../tools/native-layout/src/profile.rs"]
-mod profile;
+use neocogi_render_core::platform::deployment as profile;
 
 /// Compiler-only artifact copying leaves only this platform filename in the test host.
 const PROBE: &str = neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_RUNTIME_PROBE_nc_cargo_runtime_probe");

@@ -25,7 +25,7 @@ fn gfx_generic_blocks_preserve_window_order_and_immutable_surface_output() {
     )
     .window("GFX generic executor", SIZE)
     .unwrap();
-    let weak = Rc::downgrade(&native.device);
+    let weak = native.probe.clone();
     let window = WindowObject::from_value(native);
     let renderer: ComPtr<IRendererAbi> = window.query().unwrap();
     let host = window.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap();
@@ -75,7 +75,7 @@ fn gfx_generic_blocks_preserve_window_order_and_immutable_surface_output() {
         .unwrap();
     fill(&mut compositor, Rect { x: 32, y: 32, width: 16, height: 16 }, 0xffff00ff);
     compositor.submit(renderer.as_com_ref()).unwrap();
-    let pixels = weak.upgrade().unwrap().access().unwrap().state.as_ref().unwrap().gpu.last_pixels().to_vec();
+    let pixels = weak.pixels().unwrap();
     let pixel = |x: usize, y: usize| &pixels[((63 - y) * 64 + x) * 4..((63 - y) * 64 + x) * 4 + 4];
     assert_eq!(pixel(2, 2), [255, 0, 0, 255]);
     assert_eq!(pixel(12, 2), [0, 255, 0, 255]);
@@ -102,14 +102,14 @@ fn gfx_generic_blocks_preserve_window_order_and_immutable_surface_output() {
     compositor.begin(SIZE, 0xff000000).unwrap();
     compositor.texture(bounds, bounds, unit, 0xffffffff, output.as_com_ref()).unwrap();
     compositor.submit(renderer.as_com_ref()).unwrap();
-    let pixels = weak.upgrade().unwrap().access().unwrap().state.as_ref().unwrap().gpu.last_pixels().to_vec();
+    let pixels = weak.pixels().unwrap();
     let pixel = |x: usize, y: usize| &pixels[((63 - y) * 64 + x) * 4..((63 - y) * 64 + x) * 4 + 4];
     assert_eq!(pixel(8, 8), [255, 0, 0, 255]);
     assert_eq!(pixel(56, 8), [0, 255, 0, 255]);
     assert_eq!(pixel(8, 56), [0, 0, 255, 255]);
     assert_eq!(pixel(56, 56), [255, 255, 0, 255]);
     drop((compositor, image, output, resources, domain, clients, broker, images, host, renderer, window));
-    assert!(weak.upgrade().is_none(), "GFX/native image caches cannot retain their own assembly");
+    assert!(!weak.is_alive(), "GFX/native image caches cannot retain their own assembly");
 }
 
 #[com_object(interfaces(IRenderStream))]
@@ -240,7 +240,7 @@ fn private_ui_image_import_retains_native_pixels_without_a_com_image_cycle() {
             .unwrap(),
     );
     let native = platform.window("private UI image import", SIZE).unwrap();
-    let device = Rc::downgrade(&native.device);
+    let device = native.probe.clone();
     let window = WindowObject::from_value(native);
     let renderer: ComPtr<IRendererAbi> = window.query().unwrap();
     let graphics = window.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap();
@@ -329,11 +329,7 @@ fn private_ui_image_import_retains_native_pixels_without_a_com_image_cycle() {
             source.as_com_ref(),
         )
         .unwrap();
-    let pixels = {
-        let native = device.upgrade().unwrap();
-        let access = native.access().unwrap();
-        access.state.as_ref().unwrap().gpu.last_pixels().to_vec()
-    };
+    let pixels = device.pixels().unwrap();
     // GL readback is bottom-up; imported immutable images retain their top-left source convention.
     let pixel = |x: usize, y: usize| &pixels[((63 - y) * 64 + x) * 4..((63 - y) * 64 + x) * 4 + 4];
     assert_eq!(pixel(8, 8), [255, 0, 0, 255]);
@@ -341,12 +337,9 @@ fn private_ui_image_import_retains_native_pixels_without_a_com_image_cycle() {
     assert_eq!(pixel(8, 56), [0, 0, 255, 255]);
     assert_eq!(pixel(56, 56), [255, 255, 0, 255]);
     drop(source);
-    assert!(
-        !device.upgrade().unwrap().textures.borrow().contains_key(&image_key),
-        "native captures must not keep public COM images alive"
-    );
+    assert!(!device.contains_image(image_key), "native captures must not keep public COM images alive");
     drop((resources, ui, client, clients, images, graphics, renderer, window));
-    assert!(device.upgrade().is_none(), "native images must not retain their driver facade");
+    assert!(!device.is_alive(), "native images must not retain their driver facade");
 }
 
 /// Asymmetry proves normalized position orientation; color clear and later UI prove confinement/order.
@@ -360,7 +353,7 @@ fn generic_pipeline_renders_in_its_root_and_preserves_surrounding_ui() {
             .unwrap(),
     );
     let native = platform.window("generic graphics acceptance", SIZE).unwrap();
-    let device = Rc::downgrade(&native.device);
+    let device = native.probe.clone();
     let unknown = WindowObject::from_value(native);
     let renderer: ComPtr<IRendererAbi> = unknown.query().unwrap();
     let clients: ComPtr<IRenderClientFactoryAbi> = unknown.query().unwrap();
@@ -427,18 +420,16 @@ fn generic_pipeline_renders_in_its_root_and_preserves_surrounding_ui() {
         block,
         &vertices,
     );
-    let owner = device.upgrade().unwrap();
-    let access = owner.access().unwrap();
-    let pixels = access.state.as_ref().unwrap().gpu.last_pixels();
+    let pixels = device.pixels().unwrap();
     let pixel = |x: usize, y: usize| &pixels[((63 - y) * 64 + x) * 4..((63 - y) * 64 + x) * 4 + 4];
     assert_eq!(pixel(4, 4), [0, 255, 0, 255]);
     assert_eq!(pixel(21, 21), [255, 0, 0, 255]); // Positive normalized Y is visually upward.
     assert_eq!(pixel(21, 42), [0, 0, 255, 255]);
     assert_eq!(pixel(31, 31), [255, 0, 255, 255]); // Later UI remains above generic work.
     assert_eq!(pixel(50, 50), [0, 255, 0, 255]);
-    drop(access);
-    drop((owner, resources, domain, broker, clients, renderer, unknown));
-    assert!(device.upgrade().is_none(), "native allocations must not retain their host through a domain");
+
+    drop((resources, domain, broker, clients, renderer, unknown));
+    assert!(!device.is_alive(), "native allocations must not retain their host through a domain");
 }
 
 /// Indexed encoded streams, packed attributes, uniforms, texture rows and update versions reach GL.
@@ -452,7 +443,7 @@ fn generic_indexed_texture_and_uniform_snapshots_reach_the_native_pipeline() {
             .unwrap(),
     );
     let native = platform.window("generic bindings acceptance", SIZE).unwrap();
-    let device = Rc::downgrade(&native.device);
+    let device = native.probe.clone();
     let unknown = WindowObject::from_value(native);
     let renderer: ComPtr<IRendererAbi> = unknown.query().unwrap();
     let clients: ComPtr<IRenderClientFactoryAbi> = unknown.query().unwrap();
@@ -617,11 +608,7 @@ fn generic_indexed_texture_and_uniform_snapshots_reach_the_native_pipeline() {
         block,
         &vertices,
     );
-    let pixels = {
-        let device = device.upgrade().unwrap();
-        let access = device.access().unwrap();
-        access.state.as_ref().unwrap().gpu.last_pixels().to_vec()
-    };
+    let pixels = device.pixels().unwrap();
     let pixel = |x: usize, y: usize| &pixels[((63 - y) * 64 + x) * 4..((63 - y) * 64 + x) * 4 + 4];
     assert_eq!(pixel(12, 12), [255, 0, 0, 255]);
     assert_eq!(pixel(12, 50), [0, 0, 255, 255]);
@@ -643,7 +630,7 @@ fn generic_depth_survives_draws_and_reset_with_independent_ordered_views() {
     )
     .window("generic depth and clears", SIZE)
     .unwrap();
-    let device = Rc::downgrade(&native.device);
+    let device = native.probe.clone();
     let window = WindowObject::from_value(native);
     let renderer: ComPtr<IRendererAbi> = window.query().unwrap();
     let controller = window
@@ -761,9 +748,7 @@ fn generic_depth_survives_draws_and_reset_with_independent_ordered_views() {
             source.as_com_ref(),
         )
         .unwrap();
-    let device = device.upgrade().unwrap();
-    let access = device.access().unwrap();
-    let pixels = access.state.as_ref().unwrap().gpu.last_pixels();
+    let pixels = device.pixels().unwrap();
     let pixel = |x: usize, y: usize| &pixels[((63 - y) * 64 + x) * 4..((63 - y) * 64 + x) * 4 + 4];
     assert_eq!(pixel(6, 6), [255, 0, 0, 255]);
     assert_eq!(pixel(54, 6), [0, 0, 255, 255]);

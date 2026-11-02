@@ -52,5 +52,5 @@ create reports. See [reported failures](../../../docs/contracts/UI_EVENT_INTERFA
 
 See the [wire and ownership contract](../../../docs/contracts/UI_EVENT_INTERFACES.md),
 [construction and lifetime rules](../../../docs/contracts/CLASS_EVENT_STREAMS.md),
-[executed Button walkthrough](../../ui/api/docs/button_events.rs), and
-[UI scheduling](../../ui/runtime/docs/EVENTS.md).
+[executed Button walkthrough](docs/button_events.rs), and
+[UI scheduling](../runtime/docs/EVENTS.md).

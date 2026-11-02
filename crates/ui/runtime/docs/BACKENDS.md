@@ -46,13 +46,13 @@ are not additional runtime boundaries.
 
 | Source | Responsibility |
 | --- | --- |
-| [crates/render/plugin](../../../render/plugin) | Plugin descriptor plus window, input, and device ownership |
-| [crates/render/core](../../../render/core) | Backend-neutral frame, texture, color, and validated upload SPI used by renderer implementations and native test fixtures |
-| [crates/render/glow](../../../render/glow) | Glow rendering shared by native OpenGL and WebGL |
-| [crates/render/vulkan](../../../render/vulkan) | Vulkan target and command execution |
-| [crates/render/wgpu](../../../render/wgpu) | WGPU rendering |
-| [crates/render/webgl](../../../render/webgl) | Browser canvas backend using the Glow renderer |
-| [crates/render/support](../../../render/support) | Shared frame preparation and resource validation |
+| [crates/render/plugin](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/plugin) | Plugin descriptor plus window, input, and device ownership |
+| [crates/render/core](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/core) | Backend-neutral frame, texture, color, and validated upload SPI used by renderer implementations and native test fixtures |
+| [crates/render/glow](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/glow) | Glow rendering shared by native OpenGL and WebGL |
+| [crates/render/vulkan](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/vulkan) | Vulkan target and command execution |
+| [crates/render/wgpu](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/wgpu) | WGPU rendering |
+| [crates/render/webgl](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/webgl) | Browser canvas backend using the Glow renderer |
+| [crates/render/support](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/support) | Shared frame preparation and resource validation |
 
 `core` is a statically linked Rust SPI, not a COM component or deployment plugin. It
 lets native test fixtures and concrete backends share renderer implementation types
@@ -71,7 +71,7 @@ Preparation authenticates every sealed block, snapshots exact immutable versions
 and realizes native allocations before acquiring a frame. Final domain checks
 follow the last foreign callback. Every draw and clear retains its immutable
 client root; viewport mapping and raster clipping are independent. See the
-[GPU contract](../../../../docs/contracts/GPU_RENDERING.md) and
+[GPU contract](https://github.com/NeoCogi/neocogi-platform/blob/master/docs/contracts/GPU_RENDERING.md) and
 [Suzanne's client-owned pipeline](../../../../examples/full/src/mesh.rs).
 
 ## Resource lifetime and thread rules

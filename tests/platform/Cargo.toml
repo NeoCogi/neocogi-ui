@@ -1,0 +1,32 @@
+[package]
+name = "neocogi-ui-platform-tests"
+version = "0.0.0"
+publish = false
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["glow"]
+glow = ["neocogi-render-plugin/glow"]
+vulkan = ["neocogi-render-plugin/vulkan"]
+wgpu = ["neocogi-render-plugin/wgpu"]
+webgl = ["neocogi-render-plugin/webgl"]
+
+[dev-dependencies]
+neocogi-render-core.workspace = true
+neocogi-render-gpu.workspace = true
+neocogi-render-plugin = { workspace = true, features = ["test-support"] }
+neocogi-shader-core.workspace = true
+neocogi-shader-compiler.workspace = true
+neocogi-ui.workspace = true
+neocogi-ui-runtime.workspace = true
+neocogi-ui-nodes.workspace = true
+neocogi-gfx = { workspace = true, features = ["builder"] }
+neocogi-gfx-support.workspace = true
+neocogi-demo-assets = { workspace = true, features = ["embed-assets"] }
+neocogi-com = { workspace = true, features = ["runtime"] }
+neocogi-com-host.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen.workspace = true
+web-sys = { workspace = true, features = ["Window", "Document", "HtmlCanvasElement", "HtmlTextAreaElement", "CssStyleDeclaration", "Element", "EventTarget", "KeyboardEvent", "CompositionEvent", "FocusEvent"] }

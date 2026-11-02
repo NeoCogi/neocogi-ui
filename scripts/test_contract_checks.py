@@ -58,6 +58,7 @@ class ContractDependencies(unittest.TestCase):
                 '[workspace.dependencies]\n'
                 'neocogi-com={version="=0.1.0-alpha.1",default-features=false}\n'
                 'neocogi-idl={version="=0.1.0-alpha.1"}\n'
+                'neocogi-render-core={git="ssh://git@github.com/NeoCogi/neocogi-platform.git",rev="0000000000000000000000000000000000000001"}\n'
             )
             for index, consumer in enumerate(consumers.CONSUMERS):
                 directory = root / str(index)
@@ -68,7 +69,8 @@ class ContractDependencies(unittest.TestCase):
                     self.assertEqual(set(data["dependencies"]), {"neocogi-com"})
                     self.assertEqual(data["dependencies"]["neocogi-com"]["features"], ["alloc"])
                     self.assertFalse(data["dependencies"]["neocogi-com"]["default-features"])
-                    self.assertEqual(set(data["build-dependencies"]), {"neocogi-idl"})
+                    self.assertEqual(set(data["build-dependencies"]), {"neocogi-idl", "neocogi-render-core"})
+                    self.assertEqual(data["build-dependencies"]["neocogi-render-core"]["rev"], "0000000000000000000000000000000000000001")
                     for dependency in (data["dependencies"]["neocogi-com"], data["build-dependencies"]["neocogi-idl"]):
                         self.assertEqual(dependency["version"], "=0.1.0-alpha.1")
                         self.assertNotIn("git", dependency)
@@ -112,8 +114,6 @@ class ChildEnvironment(unittest.TestCase):
 
     def test_cargo_network_policy_reaches_both_consumer_commands(self):
         """Fresh runners may fetch; explicit true/false reach event and facade checks."""
-        facade = json.dumps({"reason": "compiler-artifact", "target": {
-            "name": "neocogi_com", "kind": ["lib"]}, "features": []})
         for offline in (None, "true", "false"):
             caller = {} if offline is None else {"CARGO_NET_OFFLINE": offline}
             with self.subTest(offline=offline), patch.dict(os.environ, caller, clear=True):
@@ -125,12 +125,18 @@ class ChildEnvironment(unittest.TestCase):
                     root = Path(temporary)
                     (root / "Cargo.toml").write_text((Path(__file__).resolve().parents[1] / "Cargo.toml").read_text())
                     for index, consumer in enumerate((consumers.CONSUMERS[0], consumers.CONSUMERS[-1])):
+                        target = root / str(index) / "target"
+                        facade = "\n".join(json.dumps({"reason": "compiler-artifact", "target": {
+                            "name": "neocogi_com", "kind": ["lib"]}, "features": features,
+                            "filenames": [str(target / relative)]}) for features, relative in [
+                                (["macros"], "debug/deps/host.rmeta"),
+                                (["alloc"], "x86_64-unknown-linux-gnu/debug/deps/target.rmeta")])
                         with patch.object(consumers.subprocess, "run") as run, patch.object(
-                            consumers.subprocess, "check_output", return_value=facade
+                            consumers.subprocess, "check_output", side_effect=["host: x86_64-unknown-linux-gnu\n", facade]
                         ) as output:
                             consumers.check_consumer(consumer, root, root / str(index), environment)
                         launched = run if consumer.implements_objects else output
-                        launched.assert_called_once()
+                        self.assertEqual(launched.call_count, 1 if consumer.implements_objects else 2)
                         self.assertNotIn("--offline", launched.call_args.args[0])
                         self.assertEqual(launched.call_args.kwargs["env"].get("CARGO_NET_OFFLINE"), offline)
 

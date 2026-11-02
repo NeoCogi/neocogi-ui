@@ -54,11 +54,6 @@
   catalog validation. Advance module encoding to v13; preserve the single global
   shared COM runtime registry. Keep standalone COM examples independent of UI.
 
-- Reconcile open work through the direct-event implementation and consolidate
-  the COM/event adversarial assessments. Remove resolved COM9 and documentation
-  cleanup O1/O4 from the active backlog; retain original reviews in Git and keep
-  unrelated runtime/compiler findings and validation limits explicit.
-
 - Simplify event production to mutable `post(event)` with direct native update
   errors. Remove observation guards and the update context's saved error bridge;
   unobserved events are constructed and immediately discarded. Preserve committed
@@ -68,14 +63,6 @@
   immutable `IErrorEvent` status/message reports through that same queue and
   origin stack. Reporting is explicit and delivery failures still return statuses.
   The single shared COM runtime continues to own the global plugin registry.
-
-- Merge issue navigation into reviews and open work,
-  removing the redundant issues folder and linking directly to the current backlog.
-
-- Consolidate current adversarial findings, decisions, investigations and
-  simplification work in one review.
-  Archive superseded reports and make issue/optimization pages navigation only;
-  retain native probes and independent rerun evidence.
 
 - Complete the COM-only event migration: remove native widget output enums,
   conversion traits, generic constructor associations, product helper aliases and
@@ -96,13 +83,6 @@
   This supersedes the concrete generic queue migration recorded below.
 - Support recursive `WeakComBox` IDL value fields with checked exclusive ownership,
   canonical weak projections, and design descriptor version 11.
-
-- Organize repository documentation by purpose: issues, optimization opportunities,
-  contracts, experiments, measurements, architecture, guides, validation, reviews
-  and project information. Update cross-links and executable documentation paths.
-- Reconcile unresolved review findings in issues and
-  optimization opportunities, retire completed
-  reviews and superseded plans, and update ownership, event and IDL guidance.
 
 - Add `LocalCom::downgrade` and `WeakLocalCom<T>::upgrade` for construction-proven
   weak access to shared Rust implementations. Promotion preserves the existing
@@ -136,31 +116,6 @@
   Cover module scaffolding/generation/build and real factory delivery through
   cargo-neocogi, including allocation-free contract builds. Earlier observer and
   callback entries below record superseded designs, not supported compatibility APIs.
-
-- Put private composite dispatch on `IWidget` and remove `IEventOwner`, the
-  view/controller mount pair and separate retirement lifecycle. FileDialog owns
-  its inline layout, model and receiver in one allocation. The application uses
-  a borrowed dispatcher without attachment methods. Defer busy widget close
-  until active calls return, preserving descendant-first cleanup and stopping
-  stale snapshot delivery. Rename document `prepare` to `compile`; metadata
-  releases ordinary references while reload explicitly closes rejected candidates.
-  Finding 09 in the COM/UI review is fixed, with real COM lifecycle regressions.
-
-- Share Rust binding-path validation through COM core and its existing facade.
-  IDL publication and widget catalogs now enforce one bounded grammar, including
-  raw identifiers and optional absolute paths. Reject malformed interface and
-  nested-value paths with widget/field diagnostics before form export. Retain
-  immutable validated registry metadata and compile real COM-catalog-generated
-  forms in a downstream regression. Remove the inspector's duplicate version
-  checker. Finding 07 in the COM/UI adversarial review is fixed.
-
-- Complete nested event inspection for COM-discovered custom widgets and built-in
-  controls. Show enum payload fields, records, collection element types and flags
-  from the existing type graph; mark recursive/shared references and bound display
-  rows and depth with explicit notices. Add actual inspector-control assertions
-  after independent plugin discovery and recursive catalog COM transport. Fix the
-  custom-toolbox rendering crash by using the registered palette for canvas
-  labels and drawing. Finding 06 in the COM/UI adversarial review is fixed.
 
 - Make IDL collection ownership explicit with `Vec<T>`, `Slice<T>` / `[T]`, and
   `Array<T, N>` / `[T; N]`. Support recursively copied arrays in methods and

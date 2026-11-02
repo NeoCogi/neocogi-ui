@@ -1110,7 +1110,7 @@ neither a callback nor a GPU completion signal. Pipelines retain their shader ar
 independently of public shader owners.
 
 Native completion, abandonment and maintenance follow the canonical
-[GPU lifecycle contract](GPU_RENDERING.md#immutable-native-preparation-data-and-identity).
+[GPU lifecycle contract](https://github.com/NeoCogi/neocogi-platform/blob/master/docs/contracts/GPU_RENDERING.md#immutable-native-preparation-data-and-identity).
 Public owner expiry alone never establishes that the driver has finished using
 an allocation. Maintenance may fence or flush work already issued, including on
 frame destruction; it adds neither a draw nor presentation.
@@ -1132,7 +1132,7 @@ lighting belong to the [example](../../examples/full/src/mesh.rs); the
 Graphics resource changes affect paint; measurement or routing changes still require
 conservative invalidation and the ordinary widget update contract.
 
-[GPU_RENDERING.md](GPU_RENDERING.md) specifies the shader profile, typed source helpers,
+[GPU_RENDERING.md](https://github.com/NeoCogi/neocogi-platform/blob/master/docs/contracts/GPU_RENDERING.md) specifies the shader profile, typed source helpers,
 version capture, resource/work quotas and native admission boundary. No COM graphics
 method lends an active GL context, Vulkan command buffer, WGPU encoder or render pass.
 

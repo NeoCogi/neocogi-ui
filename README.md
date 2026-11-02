@@ -1,9 +1,13 @@
 # NeoCogi UI
 
 A standalone Rust workspace for NeoCogi's retained UI library, built-in widgets,
-document loading, rendering, resources, themes, and UI examples. Components use
+document loading, composition, resources, themes, and UI examples. Components use
 typed COM interfaces with independently deployable UI runtime, node, renderer,
 GFX, and skin providers.
+
+[NeoCogi Platform](https://github.com/NeoCogi/neocogi-platform) supplies native/browser
+platform services, generic graphics resources, shader compilation and renderer
+backends through the exact revision pinned by this workspace.
 
 See [UI and COM history](docs/project/HISTORY.md) for the matching dependency
 revisions throughout the commit history.
@@ -17,11 +21,10 @@ revisions throughout the commit history.
 | `crates/ui/nodes` | Built-in widgets, containers and file dialogs |
 | `crates/ui/support` | Presentation algorithms and drawing helpers |
 | `crates/ui/document`, `crates/ui/design` | Runtime document loading, serialization and extension manifests |
-| `crates/shader` | CPU shader compiler provider and owned portable shader contracts |
-| `crates/render`, `crates/platform` | Renderer providers, platform contracts and native/browser input |
 | `crates/gfx`, `crates/skin`, `crates/appearance` | Images, fonts, resource bundles, themes and appearance |
 | `examples` | Full/basic/smoke applications, runtime loading and an independent UI extension |
-| `tools` | Asset export and native artifact staging |
+| `tools` | Asset export |
+| `tests/platform` | UI/GFX integration against platform/backend contracts |
 | `docs` | UI contracts, architecture, deployment and attribution |
 
 The [COM SDK, host implementation, IDL compiler and inspector](https://github.com/NeoCogi/neocogi-com)
@@ -59,7 +62,6 @@ The [WebGL guide](docs/guides/WEB.md) covers input and browser validation.
 ```sh
 python3 -m unittest discover -s scripts -p 'test_*.py'
 cargo test --locked -p neocogi-ui -p neocogi-ui-document -p neocogi-ui-runtime -p neocogi-ui-nodes -p neocogi-ui-support -p neocogi-ui-design --features neocogi-com/runtime --all-targets
-cargo test --locked -p neocogi-native-layout
 ```
 
 [UI testing](crates/ui/runtime/docs/TESTING.md) and
@@ -165,7 +167,7 @@ explicit widget/app responsibilities. Read [COM_AUTHORS.md](docs/contracts/COM_A
 for the complete requirements and examples. Local custom leaves implement
 `LeafContent`; custom graphics use restricted GPU resource factories and scoped
 render views. Clients define their own vertex layouts, shaders and uniform bytes.
-[GPU rendering contracts](docs/contracts/GPU_RENDERING.md) describe lifetime,
+[GPU rendering contracts](https://github.com/NeoCogi/neocogi-platform/blob/master/docs/contracts/GPU_RENDERING.md) describe lifetime,
 validation and viewport authority. Native GPU types stay inside their renderer plugin.
 
 The [documentation index](docs/README.md) links authoring, assets, deployment and

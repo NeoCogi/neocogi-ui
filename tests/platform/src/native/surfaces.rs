@@ -30,7 +30,7 @@ fn independent_surface_snapshots_keep_orientation_and_device_lifetime() {
     )
     .window("immutable generic outputs", SIZE)
     .unwrap();
-    let weak = Rc::downgrade(&native.device);
+    let weak = native.probe.clone();
     let window = WindowObject::from_value(native);
     let host = window.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap();
     let renderer: ComPtr<IRendererAbi> = window.query().unwrap();
@@ -91,7 +91,7 @@ fn independent_surface_snapshots_keep_orientation_and_device_lifetime() {
         .texture(full, Rect { x: 32, y: 0, ..bounds }, TextureRegion::FULL, 0xffffffff, new.as_com_ref())
         .unwrap();
     compositor.submit(renderer.as_com_ref()).unwrap();
-    let pixels = weak.upgrade().unwrap().access().unwrap().state.as_ref().unwrap().gpu.last_pixels().to_vec();
+    let pixels = weak.pixels().unwrap();
     let pixel = |x: usize, y: usize| &pixels[((63 - y) * 64 + x) * 4..((63 - y) * 64 + x) * 4 + 4];
     assert_eq!(pixel(4, 4), [255, 0, 0, 255]);
     assert_eq!(pixel(24, 4), [0, 255, 0, 255]);
@@ -99,12 +99,12 @@ fn independent_surface_snapshots_keep_orientation_and_device_lifetime() {
     assert_eq!(pixel(24, 24), [255, 255, 0, 255]);
     assert_eq!(pixel(40, 4), [255, 0, 255, 255]);
     assert_eq!(pixel(40, 40), [51, 51, 51, 255]);
-    let physical = Rc::downgrade(&weak.upgrade().unwrap().access().unwrap().state().gpu.core());
+    let physical = weak.clone();
     drop((compositor, source, renderer, images, host, window));
-    assert!(weak.upgrade().is_none(), "completed images cannot retain their driver facade");
-    assert!(physical.upgrade().is_some(), "completed images retain only actual native lifetime");
+    assert!(!weak.is_alive(), "completed images cannot retain their driver facade");
+    assert!(physical.native_alive(), "completed images retain only actual native lifetime");
     drop((old, new));
-    assert!(physical.upgrade().is_none(), "final image release tears down the physical owner");
+    assert!(!physical.native_alive(), "final image release tears down the physical owner");
 }
 
 #[com_object(interfaces(IRenderHost))]
@@ -145,7 +145,6 @@ impl IRenderHost for QuotaHost {
 #[test]
 #[ignore = "requires native GL; run with SDL_VIDEODRIVER=offscreen"]
 fn gfx_maintenance_precedes_geometry_admission_at_exact_quota_pressure() {
-    use glow::HasContext;
     let _session = native_session();
     let native = PlatformObject::new(
         nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
@@ -154,7 +153,7 @@ fn gfx_maintenance_precedes_geometry_admission_at_exact_quota_pressure() {
     )
     .window("GFX pre-admission retirement", SIZE)
     .unwrap();
-    let device = native.device.clone();
+    let device = native.probe.clone();
     let window = WindowObject::from_value(native);
     let renderer: ComPtr<IRendererAbi> = window.query().unwrap();
     let captured = Rc::new(RefCell::new(None));
@@ -177,15 +176,10 @@ fn gfx_maintenance_precedes_geometry_admission_at_exact_quota_pressure() {
         )
         .unwrap();
     host.prepare_ui_texture(resources.as_com_ref(), texture.as_com_ref()).unwrap();
-    let core = device.access().unwrap().state().gpu.core();
-    core.current().unwrap();
-    // SAFETY: This actual selected GL context owns all submitted initialization below.
-    unsafe {
-        core.dispatch().finish();
-    }
+    device.finish().unwrap();
     host.maintain().unwrap();
     drop(texture);
-    let before = device.logical.live_bytes(resources.as_com_ref()).unwrap();
+    let before = device.logical().unwrap().live_bytes(resources.as_com_ref()).unwrap();
     // The next six UI vertices require exactly 120 bytes. Leave only 116 while the native
     // texture's 4-byte retirement packet is queued; no CPU zero payload is allocated for padding.
     let padding = resources
@@ -197,7 +191,7 @@ fn gfx_maintenance_precedes_geometry_admission_at_exact_quota_pressure() {
             neocogi_render_core::source::initial(None).borrow().unwrap(),
         )
         .unwrap();
-    assert_eq!(8 * 1024 * 1024 - device.logical.live_bytes(resources.as_com_ref()).unwrap(), 116);
+    assert_eq!(8 * 1024 * 1024 - device.logical().unwrap().live_bytes(resources.as_com_ref()).unwrap(), 116);
     let vertex = |x, y| RenderVertex { x, y, u: 0., v: 0., rgba: 0xffffffff };
     let vertices = [
         vertex(0., 0.),

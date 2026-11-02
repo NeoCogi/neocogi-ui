@@ -17,12 +17,12 @@ fn raw_identifier_catalog_paths_compile_in_exported_forms() {
     fs::write(directory.join("Cargo.toml"), "[workspace]\nmembers=['contracts','app']\nresolver='3'\n").unwrap();
     // The provider and application share source, not a Cargo graph owner.
     for (source_root, namespace) in [
-        ("crates/render/schemas", "neocogi/renderer"),
-        ("crates/platform/schemas", "neocogi/platform"),
-        ("crates/gfx/schemas", "neocogi/gfx"),
-        ("crates/ui/schemas", "neocogi/ui/core"),
+        (Path::new(neocogi_render_core::SCHEMA_ROOT).to_path_buf(), "neocogi/renderer"),
+        (Path::new(neocogi_render_core::SCHEMA_ROOT).to_path_buf(), "neocogi/platform"),
+        (root.join("crates/gfx/schemas"), "neocogi/gfx"),
+        (root.join("crates/ui/schemas"), "neocogi/ui/core"),
     ] {
-        let module = neocogi_idl::cargo::ModuleSources::load(&root.join(source_root), Path::new(namespace)).unwrap();
+        let module = neocogi_idl::cargo::ModuleSources::load(&source_root, Path::new(namespace)).unwrap();
         for (relative, text) in module.parts() {
             let source = directory.join("idl").join(relative);
             fs::create_dir_all(source.parent().unwrap()).unwrap();

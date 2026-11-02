@@ -64,7 +64,7 @@ class BrowserServerTests(unittest.TestCase):
         self.workspace = self.base / 'workspace with spaces'
         (self.workspace / 'scripts').mkdir(parents=True)
         shutil.copyfile(ROOT / 'scripts/test-browser-input.sh', self.workspace / 'scripts/test-browser-input.sh')
-        for suite, file in [('input', 'crates/render/plugin/tests/browser-input.html'),
+        for suite, file in [('input', 'tests/platform/browser-input.html'),
                             ('full', 'examples/full/tests/browser-full.html')]:
             fixture = self.workspace / file
             fixture.parent.mkdir(parents=True, exist_ok=True)
@@ -201,7 +201,7 @@ class BrowserServerTests(unittest.TestCase):
                 process.communicate(timeout=5)
 
     def test_failed_browser_result_still_cleans_up_real_server(self) -> None:
-        fixture = self.workspace / 'crates/render/plugin/tests/browser-input.html'
+        fixture = self.workspace / 'tests/platform/browser-input.html'
         fixture.write_text('<pre id="result">FAIL</pre>')
         result = self.run_suite('input', self.free_port())
         self.assertNotEqual(result.returncode, 0, result.stdout)

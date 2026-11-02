@@ -28,7 +28,7 @@ For a headless Glow smoke run, set `SDL_VIDEODRIVER=offscreen`.
 Use `vulkan` or `wgpu` for the other native renderers. The same crate also compiles
 for `wasm32-unknown-unknown`; static applications register its descriptor explicitly.
 
-The contracts live in [the demo IDL module](../../examples/schemas/neocogi/demo.ncidl).
+The contracts live in [the demo IDL module](../schemas/neocogi/demo.ncidl).
 `interface Counter: IWidget + ILeafLayout + IWidgetProbe`
 is the concrete counter contract; `IInset: IContainer` is a reusable capability.
 The registered `ExtensionProvider` factory constructs both with a typed
@@ -49,7 +49,7 @@ common `IActivatedEvent` or custom `ICounterChangedEvent` interface. Both move
 through the same `IEventReceiver` after state commits. Factories transfer widget
 `ComBox` owners; destruction releases descendants and receiver references.
 
-The [acceptance host](../../examples/smoke/src/extension.rs) uses `events::channel()`.
+The [acceptance host](../smoke/src/extension.rs) uses `events::channel()`.
 Its handler queries the public event interfaces and reads their getters after
 traversal returns. `CounterAbi::EVENT_SOURCE.events` identifies ordinary interfaces; UI derives their getter
 metadata to authoring tools. `ExtensionProvider` implements `IDesignWidgetCatalog`;

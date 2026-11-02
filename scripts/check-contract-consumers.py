@@ -2,7 +2,8 @@
 """Execute independent UI event consumers and generated-only COM SDK controls.
 
 Event consumers use ordinary library APIs. Generated-only controls compile
-shared IDL in their own workspace without a contract package or COM macros. Direct owner declarations are checked separately: a mandatory
+shared IDL in their own workspace without a target contract package or target COM
+macros. Host build tools can use both. Direct owner declarations are checked separately: a mandatory
 transitive package can otherwise supply a missing macro feature. Python 3.11+
 and the workspace-selected Rust toolchain are required. Commands run sequentially.
 """
@@ -14,7 +15,7 @@ import subprocess
 import tempfile
 import tomllib
 
-from contract_check_support import child_environment, registry_dependency
+from contract_check_support import child_environment, registry_dependency, workspace_dependency
 
 
 @dataclass(frozen=True)
@@ -90,9 +91,9 @@ def write_consumer(consumer, repository, directory):
                 '[workspace]\n[dependencies]\n')
     if consumer.generated_module:
         manifest += registry_dependency(repository, "neocogi-com", ["alloc"])
-        manifest += '[build-dependencies]\n' + registry_dependency(repository, "neocogi-idl")
+        manifest += '[build-dependencies]\n' + registry_dependency(repository, "neocogi-idl") + workspace_dependency(repository, "neocogi-render-core")
         (directory / "build.rs").write_text(
-            'fn main() { for module in neocogi_idl::cargo::SharedSources::new(' + json.dumps(str(repository / "crates/render/schemas")) + ')'
+            'fn main() { for module in neocogi_idl::cargo::SharedSources::new(neocogi_render_core::SCHEMA_ROOT)'
             '.module(' + json.dumps(consumer.generated_module) + ', "contract_consumer_check::contract").build().unwrap() {'
             'println!("cargo::rustc-env=CONSUMER_BINDINGS={}", module.include.display()); } }\n')
         prefix = 'extern crate self as contract_consumer_check;\nmod contract { include!(env!("CONSUMER_BINDINGS")); }\n'
@@ -112,12 +113,18 @@ def check_consumer(consumer, repository, directory, environment):
     if consumer.implements_objects:
         subprocess.run(command, cwd=directory, env=environment, check=True)
     else:
-        output = subprocess.check_output(command + ["--message-format=json"], cwd=directory,
+        # Separate host build artifacts even when the target is this same machine.
+        # The schema package legitimately enables host macros; target definitions do not.
+        compiler = subprocess.check_output(["rustc", "-vV"], env=environment, text=True)
+        triple = next(line.removeprefix("host: ") for line in compiler.splitlines() if line.startswith("host: "))
+        target_root = Path(environment.get("CARGO_TARGET_DIR", directory / "target")).resolve() / triple
+        output = subprocess.check_output(command + ["--target", triple, "--message-format=json"], cwd=directory,
                                          env=environment, text=True)
         # Dependency proc macros used by the host IDL compiler are irrelevant.
         # The target facade artifact reports its actual selected feature set.
         facades = [record for line in output.splitlines() if (record := json.loads(line)).get("reason") == "compiler-artifact"
-                   and record["target"]["name"] == "neocogi_com" and record["target"]["kind"] == ["lib"]]
+                   and record["target"]["name"] == "neocogi_com" and record["target"]["kind"] == ["lib"]
+                   and any(Path(filename).is_relative_to(target_root) for filename in record["filenames"])]
         if not facades or any("macros" in record["features"] for record in facades):
             raise ValueError("generated-only consumer must compile the facade without COM macros")
         print(json.dumps({"package": consumer.package, "facade_features": [row["features"] for row in facades]}), flush=True)

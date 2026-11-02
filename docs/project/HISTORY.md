@@ -5,12 +5,12 @@ through corresponding revisions. Each historical UI commit that uses COM pins
 its SDK/compiler dependencies to the matching commit in
 `git@github.com:NeoCogi/neocogi-com.git`.
 
-The [revision ledger](COM_HISTORY.tsv) covers the complete **1,413-commit** ancestry
-through independently fixed baseline `ec991e5f0918d936c12d77cb136c16a97623c294`.
+The [revision ledger](COM_HISTORY.tsv) covers the complete **1,395-commit** ancestry
+through independently fixed baseline `72e5b4481fef861777ffc1f42e1153ce8d2e99e4`.
 The auditor requires that baseline to exist as a commit and remain an ancestor of
 HEAD; its coverage boundary cannot be inferred from an editable ledger tail.
-It records **570 UI-to-COM links across 268 COM revisions**. A `-` marks each of
-the 843 early UI commits before COM was introduced. Historical package names,
+It records **568 UI-to-COM links across 268 COM revisions**. A `-` marks each of
+the 827 early UI commits before COM was introduced. Historical package names,
 versions, features, default-feature selections and artifact policies are retained;
 SDK dependency paths become exact Git sources. Workspace selections include
 only the packages present in the UI repository.
@@ -65,3 +65,20 @@ Older COM revisions predate its standalone workspace manifest. Exact historical
 linkage and matching SDK contents are verified; independent buildability of every
 archived UI/COM pair is not claimed. Current UI builds use the packaged COM revision
 and the committed lockfile.
+
+## Platform companions
+
+[NeoCogi Platform](https://github.com/NeoCogi/neocogi-platform) supplies the
+platform and generic graphics contracts. Each modern UI revision pins its exact
+platform commit in Cargo dependencies and a `NeoCogi-Platform-Commit` trailer.
+Both repositories retain `NeoCogi-Revision-ID` correlation identifiers and
+reciprocal companion links in `refs/notes/neocogi-companions`.
+
+```sh
+git fetch origin refs/notes/neocogi-companions:refs/notes/neocogi-companions
+git log --show-notes=neocogi-companions
+```
+
+Use the platform commit selected by that UI revision, including its dependency
+versions. Notes provide navigation; Cargo's exact source/revision pin controls
+the build. Backend-only changes may leave a UI source snapshot unchanged.

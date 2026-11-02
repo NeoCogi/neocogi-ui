@@ -42,11 +42,11 @@ application channels and whole-module IDL identity are deliberate policies.
 ## Resources and authoring
 
 - [Immutable assets and themes](COM_ASSETS.md).
-- [Independent render surfaces](RENDER_SURFACES.md).
+- [Independent render surfaces](https://github.com/NeoCogi/neocogi-platform/blob/master/docs/contracts/RENDER_SURFACES.md).
 - [Document resource admission](DOCUMENT_RESOURCE_ADMISSION.md).
 - [Reload generation identity](RELOAD_GENERATION_IDENTITY.md).
 - [Plugin-owned designer settings](PLUGIN_DESIGNER_SETTINGS.md).
 
 Contracts describe accepted behavior and its ownership and failure boundaries.
 
-- [Portable shader compilation](SHADER_COMPILATION.md): owned code/reflection, compiler activation, bounded import and renderer handoff.
+- [Portable shader compilation](https://github.com/NeoCogi/neocogi-platform/blob/master/docs/contracts/SHADER_COMPILATION.md): owned code/reflection, compiler activation, bounded import and renderer handoff.

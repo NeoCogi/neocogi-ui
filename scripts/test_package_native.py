@@ -176,10 +176,11 @@ def recipe_fixture(directory):
         (fixture / "Cargo.toml").write_text('[workspace]\nmembers=["app","assets"]\nresolver="3"\n')
         for name in ("app", "assets"):
             (fixture / name / "src").mkdir(parents=True)
-        layout = (ROOT / "tools/native-layout").as_posix()
+        from contract_check_support import workspace_dependency
+        layout = workspace_dependency(ROOT, "neocogi-native-layout")
         (fixture / "app/Cargo.toml").write_text('[package]\nname="recipe-fixture"\nversion="0.0.0"\nedition="2024"\n[dependencies]\nneocogi-demo-assets={path="../assets"}\n')
         (fixture / "app/src/main.rs").write_text('fn main(){neocogi_demo_assets::ready();}\n')
-        (fixture / "assets/Cargo.toml").write_text('[package]\nname="neocogi-demo-assets"\nversion="0.0.0"\nedition="2024"\n[dependencies]\nneocogi-native-layout={path=' + json.dumps(layout) + '}\n')
+        (fixture / "assets/Cargo.toml").write_text('[package]\nname="neocogi-demo-assets"\nversion="0.0.0"\nedition="2024"\n[dependencies]\n' + layout)
         (fixture / "assets/src/lib.rs").write_text('include!(concat!(env!("OUT_DIR"),"/resources.rs"));\npub fn ready(){}\n')
         (fixture / "assets/required.txt").write_text("required")
         (fixture / "assets/optional.txt").write_text("optional")

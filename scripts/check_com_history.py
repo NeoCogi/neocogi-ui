@@ -18,7 +18,7 @@ import tomllib
 
 COM_URL = "ssh://git@github.com/NeoCogi/neocogi-com.git"
 COM_REPOSITORY = "git@github.com:NeoCogi/neocogi-com.git"
-HISTORICAL_BASELINE = "ec991e5f0918d936c12d77cb136c16a97623c294"
+HISTORICAL_BASELINE = "72e5b4481fef861777ffc1f42e1153ce8d2e99e4"
 """Independent end of the complete initial ledger; never inferred from ledger input."""
 REVISION = re.compile(r"[0-9a-f]{40}")
 EXACT_VERSION = re.compile(r"=[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?")

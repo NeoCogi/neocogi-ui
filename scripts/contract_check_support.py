@@ -46,3 +46,12 @@ def child_environment(repository):
     if "CARGO_TARGET_DIR" in environment:
         environment["CARGO_TARGET_DIR"] = str(Path(environment["CARGO_TARGET_DIR"]).resolve())
     return environment
+
+
+def workspace_dependency(repository, package):
+    """Carry an ordinary dependency's exact source into an independent fixture."""
+    with (repository / "Cargo.toml").open("rb") as source:
+        dependency = dict(tomllib.load(source)["workspace"]["dependencies"][package])
+    if "path" in dependency:
+        dependency["path"] = str((repository / dependency["path"]).resolve())
+    return package + "={" + ",".join(key + "=" + json.dumps(value) for key, value in dependency.items()) + "}\n"

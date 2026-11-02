@@ -96,7 +96,7 @@ The widget defines its own encoded streams, shader inputs and primitive draws;
 the runtime supplies its committed visible client root and ordered contribution.
 Finish seals the contribution, while paint return revokes escaped views. Native
 contexts, command encoders and render passes remain inside the renderer plugin.
-See [GPU rendering](../../../../docs/contracts/GPU_RENDERING.md) for the complete
+See [GPU rendering](https://github.com/NeoCogi/neocogi-platform/blob/master/docs/contracts/GPU_RENDERING.md) for the complete
 ownership, validation, viewport and work-budget rules.
 
 ## Implementation boundaries
@@ -109,10 +109,10 @@ ownership, validation, viewport and work-budget rules.
 | `render/painter.rs` | Private built-in geometry recording |
 | `render/display_list.rs` | Owned ordered operations and reusable geometry |
 | `render/compositor.rs` | Thin production replay into the GFX compositor |
-| [crates/render/core](../../../render/core) | Backend-neutral frame contracts, texture identity, color, and upload validation |
-| [crates/render/plugin](../../../render/plugin) | Backend plugin identity, window/device ownership, and checked COM GPU submission |
+| [crates/render/core](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/core) | Backend-neutral frame contracts, texture identity, color, and upload validation |
+| [crates/render/plugin](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/plugin) | Backend plugin identity, window/device ownership, and checked COM GPU submission |
 | [crates/render/{glow,vulkan,wgpu,webgl}](BACKENDS.md#backend-sources) | Concrete GPU implementations linked into one selected plugin |
-| [crates/render/support](../../../render/support) | Shared frame preparation and resource validation |
+| [crates/render/support](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/support) | Shared frame preparation and resource validation |
 
 A backend acquires one exclusive frame through `RendererBackend::frame`. Its quad and
 triangle methods may batch geometry, `flush` preserves operation order, and consuming

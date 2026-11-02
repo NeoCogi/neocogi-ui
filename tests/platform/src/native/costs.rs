@@ -1,35 +1,15 @@
 //! Explicit, non-asserting measurements of real UI recording and native execution.
 use super::*;
 use std::time::Instant;
-pub(crate) mod calls;
-
-/// Owned metadata for one measurement; never enters a renderer ABI.
-pub(crate) struct Sample {
-    /// Window/assets/UI/client construction, including CPU shader compilation.
-    pub(crate) setup_ns: u128,
-    /// Real retained painting into authenticated immutable blocks.
-    pub(crate) record_ns: u128,
-    /// Includes a separately owned procedural client contribution.
-    pub(crate) mixed: bool,
-    /// Actual admitted commands in painter order.
-    pub(crate) commands: usize,
-    /// Actual draws, excluding regional clears.
-    pub(crate) draws: usize,
-    /// Distinct logical vertex/index versions.
-    pub(crate) buffers: usize,
-    /// Distinct logical sampled image versions.
-    pub(crate) textures: usize,
-    /// Distinct logical pipelines; native links are counted separately.
-    pub(crate) pipelines: usize,
-}
+use nc_render::testing::Sample;
 
 #[com_object(interfaces(IRenderer))]
 /// Captures authentic blocks after real UI paint without substituting a fake GPU host.
 struct Capture {
     /// Same logical device as the production window authenticates all stream observers.
-    logical: neocogi_render_gpu::GpuDevice<gpu::Backend>,
+    logical: neocogi_render_gpu::GpuDevice<NativeBackend>,
     /// Only a synchronous COM receiver needs interior mutability; no outward borrow is retained.
-    blocks: Rc<RefCell<Vec<Rc<neocogi_render_gpu::record::Block<gpu::Backend>>>>>,
+    blocks: Rc<RefCell<Vec<Rc<neocogi_render_gpu::record::Block<NativeBackend>>>>>,
 }
 impl neocogi_render_core::abi::IRenderDriverBound for Capture {
     fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
@@ -63,7 +43,6 @@ fn measure_ui_and_mixed_client_costs() {
         runtime.register_plugin_descriptor(nc_ui_nodes::plugin_descriptor()).unwrap();
     }
     for mixed in [false, true] {
-        calls::take();
         let setup = Instant::now();
         let native = PlatformObject::new(
             nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
@@ -72,7 +51,7 @@ fn measure_ui_and_mixed_client_costs() {
         )
         .window("native costs", SIZE)
         .unwrap();
-        let device = native.device.clone();
+        let device = native.probe.clone();
         let window = WindowObject::from_value(native);
         let platform: ComPtr<IPlatformWindowAbi> = window.query().unwrap();
         let host = platform.graphics_host().unwrap();
@@ -95,7 +74,7 @@ fn measure_ui_and_mixed_client_costs() {
         ui.update(SIZE).unwrap();
         let captured = Rc::new(RefCell::new(Vec::new()));
         let capture = Capture::from_value(Capture {
-            logical: device.logical.clone(),
+            logical: device.logical().unwrap(),
             blocks: captured.clone(),
         });
         let receiver: ComPtr<IRendererAbi> = capture.query().unwrap();
@@ -117,7 +96,7 @@ fn measure_ui_and_mixed_client_costs() {
             )
         });
         if let Some(client) = &client {
-            blocks.push(device.logical.block_snapshot(client.as_com_ref()).unwrap());
+            blocks.push(device.logical().unwrap().block_snapshot(client.as_com_ref()).unwrap());
         }
         let setup_ns = setup.elapsed().as_nanos();
         let mut commands = 0;
@@ -143,19 +122,20 @@ fn measure_ui_and_mixed_client_costs() {
                 }
             }
         }
-        let mut access = device.access().unwrap();
-        access.state().gpu.measure(
-            &blocks,
-            Sample {
-                setup_ns,
-                record_ns,
-                mixed,
-                commands,
-                draws,
-                buffers: buffers.len(),
-                textures: textures.len(),
-                pipelines: pipelines.len(),
-            },
-        );
+        device
+            .measure(
+                &blocks,
+                Sample {
+                    setup_ns,
+                    record_ns,
+                    mixed,
+                    commands,
+                    draws,
+                    buffers: buffers.len(),
+                    textures: textures.len(),
+                    pipelines: pipelines.len(),
+                },
+            )
+            .unwrap();
     }
 }

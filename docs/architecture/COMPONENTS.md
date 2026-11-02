@@ -1,7 +1,9 @@
 # Component and plugin boundaries
 
-NeoCogi separates public responsibilities without turning every COM class into
-its own deployment unit:
+NeoCogi UI owns frontend protocols and composition.
+[NeoCogi Platform](https://github.com/NeoCogi/neocogi-platform) owns the platform,
+renderer, shader and native deployment packages consumed by this workspace.
+Public responsibilities retain their independent deployment contracts:
 
 | Responsibility | Contract | Deployable implementation |
 | --- | --- | --- |
@@ -177,6 +179,6 @@ WGPU's checked native translator legitimately has its own Naga dependency.
 
 Compiler reflection calls occur only during creation. No compiler object is
 retained in pipeline snapshots or called during drawing/completion. See the
-[shader contract](../contracts/SHADER_COMPILATION.md) for ownership, quota,
+[shader contract](https://github.com/NeoCogi/neocogi-platform/blob/master/docs/contracts/SHADER_COMPILATION.md) for ownership, quota,
 coordinate semantics and diagnostic behavior. Artifact and timing improvements
 must be measured; extracting the provider alone establishes no size/speed claim.
