@@ -40,6 +40,10 @@ SDL2 and the libraries for their selected graphics backend; see
 [backend prerequisites](crates/ui/runtime/docs/BACKENDS.md).
 The checked-in lockfile fixes the standalone dependency graph.
 
+Platform dependencies use exact SSH Git revisions. Local Cargo fetches use Git's
+SSH configuration and agent. CI fetches public companion repositories over
+anonymous HTTPS while preserving the same locked source and revision.
+
 ```sh
 cargo fetch --locked
 cargo run --locked -p neocogi-demo-basic --bin neocogi-demo-calculator

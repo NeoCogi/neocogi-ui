@@ -1,3 +1,7 @@
+[net]
+# Companion Git dependencies use the caller's ordinary SSH configuration and agent.
+git-fetch-with-cli = true
+
 [unstable]
 # Native development compositions use Cargo-provided cdylib artifacts.
 bindeps = true
