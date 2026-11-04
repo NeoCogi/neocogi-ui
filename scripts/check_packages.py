@@ -20,7 +20,7 @@ import tomllib
 from package_inputs import reconcile
 
 ROOT = Path(__file__).resolve().parents[1]
-RELEASE = "0.1.0-alpha.1"
+RELEASE = tomllib.loads((ROOT / "Cargo.toml").read_text())["workspace"]["package"]["version"]
 SCHEMA_OWNER = "neocogi-ui-build"
 SAMPLE_OWNER = "neocogi-ui-samples"
 

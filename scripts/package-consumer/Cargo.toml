@@ -7,14 +7,14 @@ publish = false
 [dependencies]
 neocogi-com = { version = "=0.1.0", default-features = false, features = ["std", "macros", "runtime"] }
 neocogi-com-host = "=0.1.0"
-neocogi-ui = "=0.1.0-alpha.1"
-neocogi-ui-runtime = "=0.1.0-alpha.1"
-neocogi-ui-nodes = "=0.1.0-alpha.1"
-neocogi-ui-support = { version = "=0.1.0-alpha.1", features = ["test-support"] }
-neocogi-gfx = "=0.1.0-alpha.1"
-neocogi-gfx-support = { version = "=0.1.0-alpha.1", features = ["test-support"] }
-neocogi-appearance = "=0.1.0-alpha.1"
-neocogi-skin = "=0.1.0-alpha.1"
+neocogi-ui = "=0.1.0-alpha.2"
+neocogi-ui-runtime = "=0.1.0-alpha.2"
+neocogi-ui-nodes = "=0.1.0-alpha.2"
+neocogi-ui-support = { version = "=0.1.0-alpha.2", features = ["test-support"] }
+neocogi-gfx = "=0.1.0-alpha.2"
+neocogi-gfx-support = { version = "=0.1.0-alpha.2", features = ["test-support"] }
+neocogi-appearance = "=0.1.0-alpha.2"
+neocogi-skin = "=0.1.0-alpha.2"
 
 [build-dependencies]
-neocogi-ui-build = "=0.1.0-alpha.1"
+neocogi-ui-build = "=0.1.0-alpha.2"

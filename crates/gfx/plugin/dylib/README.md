@@ -2,7 +2,7 @@
 
 Final dynamic entrypoint for neocogi-gfx.
 
-This package is part of the NeoCogi UI `0.1.0-alpha.1` release.
+This package is part of the NeoCogi UI `0.1.0-alpha.2` release.
 Use matching UI and Platform packages when building hosts and providers.
 The packaged sources build independently of the repository checkout.
 

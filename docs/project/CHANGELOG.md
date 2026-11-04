@@ -1,7 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-alpha.2
 
+- Advance all workspace packages, exact internal requirements and provider
+  descriptors to `0.1.0-alpha.2`.
+- Restore wheel zoom routing for Suzanne and the grid, with proportional pixel
+  deltas and checked camera limits.
+- Reduce rendering overhead with checked 2D orientation, cached ear geometry,
+  bulk vertex packing and exact glyph-coordinate caching.
 - Use published Platform `0.1.0-alpha.2`, COM/IDL `0.1.0` and rs-math3d `0.20.1`.
   Retain streamed UI vertex/frame buffers and Suzanne's camera buffer across
   frames, upload synchronously and bind explicit uniform ranges. Keep immutable

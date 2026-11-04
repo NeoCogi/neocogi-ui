@@ -1,6 +1,6 @@
 # Releasing NeoCogi UI
 
-The coordinated release is **0.1.0-alpha.1**. All workspace packages inherit
+The coordinated release is **0.1.0-alpha.2**. All workspace packages inherit
 one version, and internal production/build dependencies specify the same exact
 registry version alongside their development paths. Test-only peers use local
 paths without versions so Cargo omits their cyclic registry edges on publication.
@@ -49,7 +49,7 @@ independent evidence that a checkout build cannot provide:
 ```sh
 python3 scripts/package_inputs.py --check
 python3 -m unittest discover -s scripts -p test_release_packages.py
-python3 scripts/check_packages.py --publish-dry-run --stable-toolchain stable --output /tmp/neocogi-ui-alpha1-archives
+python3 scripts/check_packages.py --publish-dry-run --stable-toolchain stable --output /tmp/neocogi-ui-alpha2-archives
 ```
 
 Use `python3 scripts/package_inputs.py` after changing a canonical package input.

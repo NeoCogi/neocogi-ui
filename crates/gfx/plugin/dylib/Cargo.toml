@@ -19,5 +19,5 @@ default = []
 builder = ["provider/builder"]
 
 [dependencies]
-provider = { package = "neocogi-gfx", path = "..", default-features = false, version = "=0.1.0-alpha.1" }
+provider = { package = "neocogi-gfx", path = "..", default-features = false, version = "=0.1.0-alpha.2" }
 neocogi-com = { workspace = true, default-features = false, features = ["std"] }

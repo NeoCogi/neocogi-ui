@@ -2,7 +2,7 @@
   "dev-dependencies": {
     "neocogi-ui-support": {
       "default-features": false,
-      "version": "=0.1.0-alpha.1"
+      "version": "=0.1.0-alpha.2"
     }
   },
   "package": "neocogi-skin-authoring",

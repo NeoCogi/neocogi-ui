@@ -3,7 +3,8 @@
 UI revision `985551d3` selects published `rs-math3d = 0.20.1`, the complete
 Platform `0.1.0-alpha.2` cohort, and its required COM/host/IDL `0.1.0` SDK.
 The lockfile contains registry sources and checksums, with no source patches.
-The UI workspace version remains `0.1.0-alpha.1`.
+The UI workspace version was `0.1.0-alpha.1` at that implementation revision;
+release preparation subsequently advances the UI cohort to `0.1.0-alpha.2`.
 
 ## Rendering contract
 

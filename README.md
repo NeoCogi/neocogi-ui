@@ -9,7 +9,7 @@ GFX, and skin providers.
 platform services, generic graphics resources, shader compilation and renderer
 backends through the published crates.io release `0.1.0-alpha.2`.
 
-The coordinated UI release is `0.1.0-alpha.1`. See the
+The coordinated UI release is `0.1.0-alpha.2`. See the
 [release guide](docs/project/RELEASING.md) for archive qualification and publishing.
 
 See [UI and COM history](docs/project/HISTORY.md) for the matching dependency
@@ -63,7 +63,7 @@ The checked-in lockfile fixes the standalone dependency graph.
 
 Platform packages use exact `=0.1.0-alpha.2` registry requirements, COM/IDL use
 `=0.1.0`, and `rs-math3d` uses `=0.20.1`. Internal production/build dependencies
-use the exact UI release `=0.1.0-alpha.1`; test-only
+use the exact UI release `=0.1.0-alpha.2`; test-only
 peer links are omitted from publication and restored from packaged test metadata
 by the archive qualifier.
 Cargo downloads their checked packages from crates.io; builds require no GitHub
@@ -104,7 +104,7 @@ Use the exact matching registry versions when integrating the alpha release:
 
 ```toml
 [dependencies]
-neocogi-ui = { version = "=0.1.0-alpha.1" }
+neocogi-ui = { version = "=0.1.0-alpha.2" }
 neocogi-com = { version = "=0.1.0" }
 ```
 

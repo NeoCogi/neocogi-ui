@@ -34,15 +34,15 @@ neocogi-render-core.workspace = true
 neocogi-demo-assets.workspace = true
 neocogi-ui.workspace = true
 neocogi-com = { workspace = true, features = ["std", "macros"] }
-neocogi-ui-runtime = { path = "../../crates/ui/runtime", optional = true , version = "=0.1.0-alpha.1" }
+neocogi-ui-runtime = { path = "../../crates/ui/runtime", optional = true , version = "=0.1.0-alpha.2" }
 neocogi-ui-nodes = { workspace = true, optional = true }
 neocogi-platform-plugin = { workspace = true, optional = true }
 neocogi-gfx = { workspace = true, optional = true, default-features = false }
 neocogi-skin = { workspace = true, optional = true, default-features = false }
-neocogi-example-ui-extension = { path = "../../examples/ui-extension", optional = true , version = "=0.1.0-alpha.1" }
+neocogi-example-ui-extension = { path = "../../examples/ui-extension", optional = true , version = "=0.1.0-alpha.2" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-neocogi-demo-plugins = { path = "../plugins", optional = true , version = "=0.1.0-alpha.1" }
+neocogi-demo-plugins = { path = "../plugins", optional = true , version = "=0.1.0-alpha.2" }
 neocogi-com = { workspace = true, features = ["runtime"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

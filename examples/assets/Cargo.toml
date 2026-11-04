@@ -31,5 +31,5 @@ neocogi-gfx-impl = { workspace = true, optional = true, features = ["builder", "
 neocogi-skin-impl = { workspace = true, optional = true, features = ["builder", "theme-json"] }
 
 # Host-only resource closure discovery reuses the authoring schema/path visitor.
-neocogi-skin-authoring = { path = "../../crates/skin/authoring", optional = true, default-features = false, version = "=0.1.0-alpha.1" }
+neocogi-skin-authoring = { path = "../../crates/skin/authoring", optional = true, default-features = false, version = "=0.1.0-alpha.2" }
 serde_json.workspace = true

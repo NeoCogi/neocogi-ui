@@ -1,7 +1,7 @@
 # neocogi-ui-build
 
 Canonical UI, GFX and Skin interface sources and Cargo build helpers for the
-NeoCogi UI `0.1.0-alpha.1` release. This is the only authored owner of those IDL
+NeoCogi UI `0.1.0-alpha.2` release. This is the only authored owner of those IDL
 files; the matching `neocogi-platform-build` package supplies Platform and COM.
 
 Use it as a build dependency with the exact release version. `sources(&[])`
