@@ -1,9 +1,13 @@
 [package]
 name = "neocogi-ui-samples"
-version = "0.0.0"
-publish = false
+version.workspace = true
+publish = ["crates-io"]
+readme = "README.md"
+include = ["Cargo.toml", "README.md", "LICENSE", "src/**", "build.rs", "schemas/**"]
 edition.workspace = true
+authors.workspace = true
 license.workspace = true
+description = "Reusable NeoCogi sample widget contracts and event constructors"
 repository.workspace = true
 
 [dependencies]
@@ -11,5 +15,5 @@ neocogi-ui.workspace = true
 neocogi-com = { workspace = true, features = ["std", "macros"] }
 
 [build-dependencies]
-neocogi-platform-build.workspace = true
+neocogi-ui-build.workspace = true
 neocogi-idl.workspace = true

@@ -1,6 +1,8 @@
-//! Generates this library's bindings from subsystem-owned shared sources.
-#[path = "../../scripts/idl_build.rs"]
-mod shared_idl;
+//! Generate the reusable example contract against the same packaged UI interfaces.
 fn main() {
-    shared_idl::build(shared_idl::sources("../..", &["neocogi.demo"]));
+    let request = neocogi_ui_build::sources(&[])
+        .expect("prepare UI sources")
+        .include_root("schemas")
+        .module("neocogi.demo", "neocogi_ui_samples::abi");
+    neocogi_ui_build::build(request).expect("generate sample bindings");
 }

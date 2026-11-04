@@ -1,12 +1,14 @@
 [package]
 name = "neocogi-appearance"
-version = "0.0.0"
+version.workspace = true
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Pure typed appearance compilation shared by NeoCogi GFX construction and Skin"
-publish = false
+publish = ["crates-io"]
+include = ["Cargo.toml", "README.md", "LICENSE", "src/**", "build.rs", "docs/**", "tests/**", "schemas/**", "EVENTS.md"]
+readme = "README.md"
 
 [dependencies]
 neocogi-com = { workspace = true, features = ["alloc"] }
@@ -14,5 +16,5 @@ neocogi-render-core.workspace = true
 neocogi-gfx-support.workspace = true
 
 [build-dependencies]
-neocogi-platform-build.workspace = true
+neocogi-ui-build.workspace = true
 neocogi-idl.workspace = true

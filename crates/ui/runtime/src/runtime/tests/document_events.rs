@@ -6,7 +6,7 @@ use neocogi_ui_document::{Document, DocumentEvent, EventBindings, CustomWidgetRe
 /// Optional generated fields remain ordinary checked widget conveniences.
 #[allow(dead_code)]
 mod generated {
-    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../document/tests/fixtures/shared_bindings.rs"));
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/package-inputs/document/shared_bindings.rs"));
 }
 
 fn key(ui: &neocogi_ui::Ui, key: KeyCode) {
@@ -37,7 +37,7 @@ fn shared_document_receiver_rejects_foreign_and_replaced_forms_before_dispatch()
         .unwrap();
     let document = Document::from_json(include_bytes!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../document/tests/fixtures/shared.ui.json"
+        "/tests/package-inputs/document/shared.ui.json"
     )))
     .unwrap();
     let custom = CustomWidgetRegistry::new();

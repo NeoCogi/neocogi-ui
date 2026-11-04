@@ -52,11 +52,11 @@ pub mod export;
 
 /// Test inputs share the demo's names and file paths without its runtime loader dependency.
 #[cfg(all(test, feature = "builder"))]
-#[path = "../../../../examples/assets/src/recipe_data.rs"]
+#[path = "../tests/package-inputs/recipe_data.rs"]
 mod recipe_data;
 /// The same recipe exercises both direct and COM construction in asset tests.
 #[cfg(all(test, feature = "builder"))]
-#[path = "../../../../examples/assets/src/recipe.rs"]
+#[path = "../tests/package-inputs/recipe.rs"]
 mod test_recipe;
 
 /// Immutable test data does not enable any optional production feature.

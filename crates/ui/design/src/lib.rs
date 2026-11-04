@@ -705,7 +705,7 @@ mod tests {
                 ty: DesignValueType::Sequence(Box::new(DesignValueType::Named("example.Tree".into()))),
             }]),
         };
-        assert!(validate_value_graph(&[tree.clone()], &[]).is_ok());
+        assert!(validate_value_graph(std::slice::from_ref(&tree), &[]).is_ok());
         let encoded = serde_json::to_vec(&tree).unwrap();
         assert_eq!(serde_json::from_slice::<DesignType>(&encoded).unwrap(), tree);
         let mut invalid = tree.clone();

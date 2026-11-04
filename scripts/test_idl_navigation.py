@@ -72,7 +72,7 @@ class NavigationProbe(unittest.TestCase):
         field = next(probe for probe in navigation.PROBES if probe.marker == "field")
         with tempfile.TemporaryDirectory() as temporary:
             repository = Path(temporary)
-            file = repository / "crates/ui/schemas/neocogi/ui/nodes/layout.ncidl"
+            file = repository / "crates/build/schemas/neocogi/ui/nodes/layout.ncidl"
             file.parent.mkdir(parents=True)
             file.write_text("enum Earlier: u8 {\n    Fixed {\n        extent: i32,\n    },\n}\n"
                             "enum LayoutTrack: u8 {\n    Fixed {\n        extent: i32,\n    },\n}\n")
@@ -115,6 +115,10 @@ class DefinitionResults(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             generated = Path(temporary) / "module_0123456789abcdef0123456789abcdef.rs"
             generated.write_text("pub enum Track {\n Fixed { extent: i32 },\n}\n")
+            canonical = expected_file
+            expected_file = generated.parent / "neocogi-ui-sources/neocogi/ui/nodes" / probe.file
+            expected_file.parent.mkdir(parents=True)
+            expected_file.write_bytes(canonical.read_bytes())
             mapping = {
                 "schema": 2, "module": "neocogi.ui.nodes", "generated_file": generated.name,
                 "sources": [{"module": "neocogi.ui.nodes", "location": str(expected_file)}],
@@ -125,6 +129,15 @@ class DefinitionResults(unittest.TestCase):
             sidecar = generated.with_suffix(".rs.map")
             sidecar.write_text(json.dumps(mapping))
             navigation.validate_definition(REPOSITORY, probe, result)
+            expected_file.write_bytes(b"stale declaration")
+            with self.assertRaisesRegex(ValueError, "wrong authored origin"):
+                navigation.validate_definition(REPOSITORY, probe, result)
+            expected_file.write_bytes(canonical.read_bytes())
+            mapping["sources"][0]["location"] = str(canonical)
+            sidecar.write_text(json.dumps(mapping))
+            with self.assertRaisesRegex(ValueError, "wrong authored origin"):
+                navigation.validate_definition(REPOSITORY, probe, result)
+            mapping["sources"][0]["location"] = str(expected_file)
             mapping["module"] = "neocogi.ui.core"
             sidecar.write_text(json.dumps(mapping))
             with self.assertRaisesRegex(ValueError, "unexpected generated map identity"):

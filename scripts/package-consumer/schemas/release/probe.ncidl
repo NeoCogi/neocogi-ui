@@ -1,0 +1,9 @@
+extern neocogi.ui.core;
+use neocogi.ui.core::IEvent;
+
+#[version(1)]
+/// Independently generated immutable event checks the inherited published event ABI.
+interface IReleaseEvent: IEvent {
+    /// Copied release consumer observation.
+    fn value(&self) -> Result<u32>;
+}

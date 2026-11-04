@@ -243,7 +243,7 @@ fn assert_frame(capture: &Capture, textures: usize) {
         vertices[..3].iter().map(|v| (v.x, v.y, v.rgba)).collect::<Vec<_>>(),
         [(0., 0., 0xff0000ff), (1., 0., 0xff0000ff), (0., 1., 0xff0000ff)]
     );
-    for quad in vertices[3..].chunks_exact(4) {
+    for quad in vertices[3..].as_chunks::<4>().0 {
         assert_eq!(
             quad.iter().map(|v| (v.x, v.y, v.u, v.v, v.rgba)).collect::<Vec<_>>(),
             [

@@ -1,5 +1,5 @@
 //! UI catalog paths survive real form export and generated COM calls.
-#[path = "../../../../scripts/com_dependencies.rs"]
+#[path = "package-inputs/com_dependencies.rs"]
 mod com_dependencies;
 use std::path::Path;
 /// Builds an IDL owner, discovers its COM catalog, then compiles a downstream form.
@@ -19,8 +19,8 @@ fn raw_identifier_catalog_paths_compile_in_exported_forms() {
     for (source_root, namespace) in [
         (Path::new(env!("OUT_DIR")).join("neocogi-shared-sources"), "neocogi/renderer"),
         (Path::new(env!("OUT_DIR")).join("neocogi-shared-sources"), "neocogi/platform"),
-        (root.join("crates/gfx/schemas"), "neocogi/gfx"),
-        (root.join("crates/ui/schemas"), "neocogi/ui/core"),
+        (Path::new(env!("OUT_DIR")).join("neocogi-ui-sources"), "neocogi/gfx"),
+        (Path::new(env!("OUT_DIR")).join("neocogi-ui-sources"), "neocogi/ui/core"),
     ] {
         let module = neocogi_idl::cargo::ModuleSources::load(&source_root, Path::new(namespace)).unwrap();
         for (relative, text) in module.parts() {

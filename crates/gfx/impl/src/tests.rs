@@ -241,7 +241,7 @@ fn incomplete_png_rejection_preserves_the_builder_transaction() {
     };
     let draft = derive();
     let control = derive();
-    let png = include_bytes!("../../../../assets/WHITE.png");
+    let png = include_bytes!("../tests/package-inputs/assets/WHITE.png");
     let name = NcCopyFromBufferOffset::new(0, b"complete-png");
     for end in 0..png.len() {
         assert_eq!(
@@ -291,7 +291,7 @@ fn artwork_names_are_allocated_inside_the_owned_builder_namespace() {
             },
         )
         .unwrap();
-    let png = include_bytes!("../../../../assets/WHITE.png");
+    let png = include_bytes!("../tests/package-inputs/assets/WHITE.png");
     let occupied = ["0", "1", "3", "9999", "01", "+2", "unrelated", "99999999999999999999999999999999999"];
     for suffix in occupied {
         let name = format!("@neocogi-theme-image/{suffix}");

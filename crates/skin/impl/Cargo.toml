@@ -1,12 +1,14 @@
 [package]
 name = "neocogi-skin-impl"
-version = "0.0.0"
+version.workspace = true
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Private style and external-theme implementation for the NeoCogi Skin plugin"
-publish = false
+description = "Style and external-theme implementation for the NeoCogi Skin plugin"
+publish = ["crates-io"]
+include = ["Cargo.toml", "README.md", "LICENSE", "src/**", "build.rs", "docs/**", "tests/**", "schemas/**", "EVENTS.md"]
+readme = "README.md"
 
 [lib]
 # The deployable Skin crate wraps this implementation library without another DSO.

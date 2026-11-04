@@ -9,6 +9,9 @@ GFX, and skin providers.
 platform services, generic graphics resources, shader compilation and renderer
 backends through the published crates.io release `0.1.0-alpha.1`.
 
+The coordinated UI release is `0.1.0-alpha.1`. See the
+[release guide](docs/project/RELEASING.md) for archive qualification and publishing.
+
 See [UI and COM history](docs/project/HISTORY.md) for the matching dependency
 revisions throughout the commit history.
 
@@ -16,6 +19,7 @@ revisions throughout the commit history.
 
 | Directory | Purpose |
 | --- | --- |
+| `crates/build` | Packaged UI/GFX/Skin IDL sources and build helpers |
 | `crates/ui/api` | Typed application clients and shared UI bindings |
 | `crates/ui/runtime` | Retained forest, windows, surfaces, menus and dispatch |
 | `crates/ui/nodes` | Built-in widgets, containers and file dialogs |
@@ -64,6 +68,7 @@ The [WebGL guide](docs/guides/WEB.md) covers input and browser validation.
 ## Validation
 
 ```sh
+python3 scripts/package_inputs.py --check
 python3 -m unittest discover -s scripts -p 'test_*.py'
 cargo test --locked -p neocogi-ui -p neocogi-ui-document -p neocogi-ui-runtime -p neocogi-ui-nodes -p neocogi-ui-support -p neocogi-ui-design --features neocogi-com/runtime --all-targets
 ```
@@ -74,12 +79,11 @@ native rendering, and browser checks.
 
 ## Typed application code
 
-Depend on the local facade while using this pre-alpha checkout. These paths
-assume the repository is cloned into a sibling directory named `neocogi-ui`:
+Use the exact matching registry versions when integrating the alpha release:
 
 ```toml
 [dependencies]
-neocogi-ui = { path = "../neocogi-ui/crates/ui/api" }
+neocogi-ui = { version = "=0.1.0-alpha.1" }
 neocogi-com = { version = "=0.1.0-alpha.1" }
 ```
 

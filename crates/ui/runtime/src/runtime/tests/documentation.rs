@@ -1,10 +1,10 @@
 //! Public walkthroughs run against real providers instead of copied test examples.
-#[path = "../../../../../../scripts/com_dependencies.rs"]
+#[path = "../../../tests/package-inputs/com_dependencies.rs"]
 mod com_dependencies;
 
 use std::{fs, path::Path, process::Command};
 
-#[path = "../../../../api/docs/button_events.rs"]
+#[path = "../../../tests/package-inputs/button_events.rs"]
 mod button_events;
 
 /// The exact rustdoc source must mount, deliver, and expire its weak event origin.
@@ -28,7 +28,7 @@ fn example<'a>(document: &'a str, label: &str) -> &'a str {
 /// They execute real input, owned events, weak-origin expiry and stale-form filtering.
 #[test]
 fn documented_onboarding_reload_and_event_dispatch_execute() {
-    let readme = include_str!("../../../../document/README.md");
+    let readme = include_str!("../../../tests/package-inputs/document.md");
     let document = neocogi_ui_document::Document::new("README events");
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").canonicalize().unwrap();
     let project = tempfile::tempdir().unwrap();
@@ -67,7 +67,7 @@ fn documented_onboarding_reload_and_event_dispatch_execute() {
         implementation = implementation.replace(&marker, example(readme, label));
     }
     let mut onboarding = include_str!("fixtures/application_readme.rs").to_owned();
-    let root_readme = include_str!("../../../../../../README.md");
+    let root_readme = include_str!("../../../tests/package-inputs/application.md");
     for label in ["application-install", "application-events", "application-update"] {
         let marker = format!("/* checked-example: {label} */");
         assert!(onboarding.contains(&marker), "fixture must exercise {label}");

@@ -28,7 +28,7 @@ For a headless Glow smoke run, set `SDL_VIDEODRIVER=offscreen`.
 Use `vulkan` or `wgpu` for the other native renderers. The same crate also compiles
 for `wasm32-unknown-unknown`; static applications register its descriptor explicitly.
 
-The contracts live in [the demo IDL module](../schemas/neocogi/demo.ncidl).
+The contracts live in [the demo IDL module](../ui-samples/schemas/neocogi/demo.ncidl).
 `interface Counter: IWidget + ILeafLayout + IWidgetProbe`
 is the concrete counter contract; `IInset: IContainer` is a reusable capability.
 The registered `ExtensionProvider` factory constructs both with a typed

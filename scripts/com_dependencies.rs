@@ -11,7 +11,7 @@
 /// SDK version or enabling the facade's default macro/runtime features.
 pub fn dependency(package: &str, features: &[&str]) -> String {
     let prefix = format!("{package} = ");
-    let declaration = include_str!("../Cargo.toml")
+    let declaration = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/package-inputs/workspace.toml"))
         .lines()
         .find(|line| line.starts_with(&prefix))
         .expect("COM dependency is declared in the workspace");

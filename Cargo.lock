@@ -767,18 +767,18 @@ dependencies = [
 
 [[package]]
 name = "neocogi-appearance"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-com",
  "neocogi-gfx-support",
  "neocogi-idl",
- "neocogi-platform-build",
  "neocogi-render-core",
+ "neocogi-ui-build",
 ]
 
 [[package]]
 name = "neocogi-asset-tools"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-gfx-impl",
  "png",
@@ -786,7 +786,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-cargo-runtime-probe"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-com",
  "neocogi-idl",
@@ -830,7 +830,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-demo-assets"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-com",
  "neocogi-gfx-impl",
@@ -844,7 +844,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-demo-basic"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-com",
  "neocogi-com-host",
@@ -856,7 +856,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-demo-full"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-com",
  "neocogi-com-host",
@@ -873,7 +873,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-demo-host"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-com",
  "neocogi-demo-assets",
@@ -893,7 +893,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-demo-plugins"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "libloading",
  "neocogi-cargo-runtime-probe",
@@ -914,7 +914,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-demo-smoke"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-com",
  "neocogi-com-host",
@@ -931,7 +931,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-example-ui-extension"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-com",
  "neocogi-ui",
@@ -941,7 +941,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-example-ui-extension-dylib"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-com",
  "neocogi-example-ui-extension",
@@ -949,7 +949,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-gfx"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-com",
  "neocogi-gfx-impl",
@@ -958,7 +958,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-gfx-dylib"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-com",
  "neocogi-gfx",
@@ -966,7 +966,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-gfx-impl"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "fontdue",
  "miniz_oxide 0.8.9",
@@ -985,15 +985,15 @@ dependencies = [
 
 [[package]]
 name = "neocogi-gfx-support"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "miniz_oxide 0.8.9",
  "neocogi-com",
  "neocogi-idl",
- "neocogi-platform-build",
  "neocogi-render-core",
  "neocogi-render-gpu",
  "neocogi-shader-compiler",
+ "neocogi-ui-build",
  "rs-math3d",
 ]
 
@@ -1122,7 +1122,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-runtime-ui-example"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-com",
  "neocogi-com-host",
@@ -1172,7 +1172,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-skin"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-appearance",
  "neocogi-com",
@@ -1182,7 +1182,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-skin-authoring"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-appearance",
  "neocogi-com",
@@ -1196,7 +1196,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-skin-dylib"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-com",
  "neocogi-skin",
@@ -1204,7 +1204,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-skin-impl"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-appearance",
  "neocogi-com",
@@ -1219,24 +1219,32 @@ dependencies = [
 
 [[package]]
 name = "neocogi-ui"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-appearance",
  "neocogi-com",
  "neocogi-com-host",
  "neocogi-gfx-support",
  "neocogi-idl",
- "neocogi-platform-build",
  "neocogi-render-core",
- "neocogi-ui-design",
+ "neocogi-ui-build",
  "rs-math3d",
  "tempfile",
  "trybuild",
 ]
 
 [[package]]
+name = "neocogi-ui-build"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "neocogi-idl",
+ "neocogi-platform-build",
+ "tempfile",
+]
+
+[[package]]
 name = "neocogi-ui-design"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-com",
  "neocogi-ui",
@@ -1246,7 +1254,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-ui-document"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-com",
  "neocogi-com-host",
@@ -1260,7 +1268,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-ui-nodes"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "bitflags 2.13.2",
  "neocogi-com",
@@ -1274,7 +1282,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-ui-nodes-dylib"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-com",
  "neocogi-ui-nodes",
@@ -1282,7 +1290,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-ui-platform-tests"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-com",
  "neocogi-com-host",
@@ -1303,22 +1311,21 @@ dependencies = [
 
 [[package]]
 name = "neocogi-ui-runtime"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "bitflags 2.13.2",
  "neocogi-appearance",
  "neocogi-com",
  "neocogi-com-host",
- "neocogi-demo-assets",
  "neocogi-gfx-impl",
  "neocogi-gfx-support",
  "neocogi-idl",
- "neocogi-platform-build",
  "neocogi-render-core",
  "neocogi-render-gpu",
  "neocogi-shader-compiler",
  "neocogi-skin-impl",
  "neocogi-ui",
+ "neocogi-ui-build",
  "neocogi-ui-document",
  "neocogi-ui-nodes",
  "neocogi-ui-support",
@@ -1329,7 +1336,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-ui-runtime-dylib"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-com",
  "neocogi-ui-runtime",
@@ -1337,17 +1344,17 @@ dependencies = [
 
 [[package]]
 name = "neocogi-ui-samples"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "neocogi-com",
  "neocogi-idl",
- "neocogi-platform-build",
  "neocogi-ui",
+ "neocogi-ui-build",
 ]
 
 [[package]]
 name = "neocogi-ui-support"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "bitflags 2.13.2",
  "neocogi-appearance",

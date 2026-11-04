@@ -1,12 +1,14 @@
 [package]
 name = "neocogi-gfx-support"
-version = "0.0.0"
+version.workspace = true
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Non-plugin Rust support for portable NeoCogi GFX bundles"
-publish = false
+publish = ["crates-io"]
+include = ["Cargo.toml", "README.md", "LICENSE", "src/**", "build.rs", "docs/**", "tests/**", "schemas/**", "EVENTS.md"]
+readme = "README.md"
 
 [features]
 default = []
@@ -23,5 +25,5 @@ neocogi-com = { workspace = true, default-features = false, features = ["macros"
 miniz_oxide = { workspace = true, optional = true }
 
 [build-dependencies]
-neocogi-platform-build.workspace = true
+neocogi-ui-build.workspace = true
 neocogi-idl.workspace = true

@@ -1,6 +1,6 @@
 [package]
 name = "neocogi-example-ui-extension-dylib"
-version = "0.0.0"
+version.workspace = true
 publish = false
 edition.workspace = true
 license.workspace = true
@@ -15,5 +15,5 @@ crate-type = ["cdylib"]
 default = []
 
 [dependencies]
-provider = { package = "neocogi-example-ui-extension", path = "..", default-features = false }
+provider = { package = "neocogi-example-ui-extension", path = "..", default-features = false, version = "=0.1.0-alpha.1" }
 neocogi-com = { workspace = true, default-features = false, features = ["std"] }

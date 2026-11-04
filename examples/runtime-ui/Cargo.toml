@@ -2,7 +2,7 @@
 # Installed executable names are declared explicitly below.
 autobins = false
 name = "neocogi-runtime-ui-example"
-version = "0.0.0"
+version.workspace = true
 publish = false
 edition.workspace = true
 license.workspace = true

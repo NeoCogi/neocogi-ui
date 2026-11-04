@@ -54,10 +54,10 @@ Ask the asset compiler for an immutable candidate in the UI's current catalog, t
 the same transactional asset boundary used for a complete theme replacement:
 
 ```rust,no_run
-use neocogi_ui::{FlatPalette, Ui};
+use neocogi_ui::{FlatPalette, RenderError, Ui};
 use neocogi_appearance::skin::{StyleCompilerAbi, PaletteEdit};
-use neocogi_com::{ComRef, NcStatus};
-fn customize(ui: &mut Ui, compiler: ComRef<'_, StyleCompilerAbi>) -> Result<(), NcStatus> {
+use neocogi_com::ComRef;
+fn customize(ui: &mut Ui, compiler: ComRef<'_, StyleCompilerAbi>) -> Result<(), RenderError> {
     let mut metrics = ui.assets()?.metrics()?;
     metrics.padding = 8;
     let current = ui.assets()?;
@@ -68,7 +68,9 @@ fn customize(ui: &mut Ui, compiler: ComRef<'_, StyleCompilerAbi>) -> Result<(), 
 
 `PaletteEdit::Flat` regenerates the complete flat visual catalog. Use
 `PaletteEdit::Preserve` to change metrics while retaining image-backed appearance
-families. Derivation does not install the candidate. An installation error preserves
+families. The example returns the owned `RenderError`, preserving the original
+status and rendering detail if installation fails. Derivation does not install
+the candidate. An installation error preserves
 the old CPU and GPU resources. Successful installation requires a subsequent UI
 update before rendering. The full demo's style editor shows concrete handlers for
 all palette roles and metrics.

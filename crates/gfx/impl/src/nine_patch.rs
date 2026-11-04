@@ -324,7 +324,7 @@ mod tests {
             };
             let cells: Vec<_> = expand(destination, draw, white, &icons).unwrap().visible_cells().collect();
             assert_eq!(cells.len(), original_cells * 2);
-            for pair in cells.chunks_exact(2) {
+            for pair in cells.as_chunks::<2>().0 {
                 assert_eq!(components(pair[0].destination), components(pair[1].destination));
                 assert_eq!(pair[0].rgba, 0xffffffff);
                 assert_eq!(pair[1].rgba, u32::from_le_bytes([255, 192, 203, 128]));

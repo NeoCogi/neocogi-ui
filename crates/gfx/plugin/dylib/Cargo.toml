@@ -1,8 +1,11 @@
 [package]
 name = "neocogi-gfx-dylib"
-version = "0.0.0"
-publish = false
+version.workspace = true
+publish = ["crates-io"]
+include = ["Cargo.toml", "README.md", "LICENSE", "src/**", "build.rs", "docs/**", "tests/**", "schemas/**", "EVENTS.md"]
+readme = "README.md"
 edition.workspace = true
+authors.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Final dynamic entrypoint for neocogi-gfx"
@@ -16,5 +19,5 @@ default = []
 builder = ["provider/builder"]
 
 [dependencies]
-provider = { package = "neocogi-gfx", path = "..", default-features = false }
+provider = { package = "neocogi-gfx", path = "..", default-features = false, version = "=0.1.0-alpha.1" }
 neocogi-com = { workspace = true, default-features = false, features = ["std"] }

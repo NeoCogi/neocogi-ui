@@ -1,12 +1,14 @@
 [package]
 name = "neocogi-gfx"
-version = "0.0.0"
+version.workspace = true
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "NeoCogi CPU image decoding and portable resource-baking plugin"
-publish = false
+publish = ["crates-io"]
+include = ["Cargo.toml", "README.md", "LICENSE", "src/**", "build.rs", "docs/**", "tests/**", "schemas/**", "EVENTS.md"]
+readme = "README.md"
 
 [lib]
 # Reusable implementation; the dylib subpackage alone owns the native loader export.

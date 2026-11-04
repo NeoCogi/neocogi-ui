@@ -134,7 +134,7 @@ use std::fs;
 /// Installs one repository-bundled theme through the same filesystem and PNG path as Context.
 fn install_bundled_theme(relative_path: &str) -> (TestTheme, usize) {
     // Resolve from the Cargo manifest so tests remain independent of the process working dir.
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").join(relative_path);
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/package-inputs").join(relative_path);
     let loaded = load(path.as_path(), &test_atlas()).expect("bundled theme must load through the complete entry point");
     let loaded = TestTheme::new(loaded);
     let image_count = loaded
@@ -158,7 +158,7 @@ fn install_definition(document: ThemeDocument, base: &AssetData) -> LoadedTheme 
 /// the loader itself.
 #[test]
 fn in_memory_theme_uses_the_supplied_asset_provider() {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../themes/windows-95/theme.json");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/package-inputs/themes/windows-95/theme.json");
     let definition = fs::read(&path).expect("read bundled theme definition for test");
     let loaded = load_bytes(path.as_path(), definition.as_slice(), &test_atlas(), &mut FileAssets)
         .expect("in-memory theme must resolve every asset through the supplied provider");
@@ -178,7 +178,7 @@ fn in_memory_theme_uses_the_supplied_asset_provider() {
 /// Offline export and plugin-facing loading execute one recipe into byte-for-byte equivalent data.
 #[test]
 fn offline_and_supplied_gfx_entrypoints_publish_equivalent_complete_revisions() {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../themes/windows-95/theme.json");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/package-inputs/themes/windows-95/theme.json");
     let base = test_atlas();
     let offline = load(path.as_path(), &base).expect("offline entrypoint must execute the theme recipe");
 
@@ -883,7 +883,7 @@ fn bundled_mac_os_9_theme_reuses_shared_png_regions() {
 /// Migration and serialization must preserve every shipped resource reference and compiled pixel.
 #[test]
 fn shipped_documents_round_trip_without_anchoring_authored_paths() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../themes");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/package-inputs/themes");
     let base = test_atlas().into_bundle().unwrap();
     let loader: ComPtr<AssetLoaderAbi> = AssetLoaderObject::from_value(AssetLoaderObject::default()).query().unwrap();
     let publisher: ComPtr<AssetPublisherAbi> = AssetPublisherObject::from_value(AssetPublisherObject::default()).query().unwrap();
@@ -1049,7 +1049,7 @@ fn live_compiler_reuses_resources_and_never_accumulates_generated_images() {
             FileAssets.read(path)
         }
     }
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../themes/windows-95/theme.json");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/package-inputs/themes/windows-95/theme.json");
     let mut document = ThemeDocument::from_bytes(&path, &fs::read(&path).unwrap()).unwrap();
     let base = test_atlas().into_bundle().unwrap();
     let loader = AssetLoaderObject::from_value(AssetLoaderObject::default()).query().unwrap();

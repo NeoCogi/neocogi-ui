@@ -1,9 +1,11 @@
 [package]
 name = "neocogi-ui-runtime"
-version = "0.0.0"
+version.workspace = true
+publish = ["crates-io"]
+include = ["Cargo.toml", "README.md", "LICENSE", "src/**", "build.rs", "docs/**", "tests/**", "schemas/**", "EVENTS.md"]
 authors.workspace = true
 edition.workspace = true
-readme.workspace = true
+readme = "README.md"
 license.workspace = true
 description = "Deployable core retained UI runtime, scoped services, surfaces and menus"
 repository.workspace = true
@@ -11,7 +13,7 @@ categories = ["gui", "rendering"]
 
 
 [build-dependencies]
-neocogi-platform-build.workspace = true
+neocogi-ui-build.workspace = true
 neocogi-idl.workspace = true
 
 [lib]
@@ -36,7 +38,6 @@ neocogi-ui-nodes.workspace = true
 neocogi-ui-support = { workspace = true, features = ["test-support"] }
 neocogi-com = { workspace = true, features = ["runtime"] }
 neocogi-com-host.workspace = true
-neocogi-demo-assets = { workspace = true, features = ["embed-assets"] }
 neocogi-gfx-impl = { workspace = true, features = ["publisher"] }
 neocogi-skin-impl.workspace = true
 neocogi-gfx-support = { workspace = true, features = ["test-support"] }

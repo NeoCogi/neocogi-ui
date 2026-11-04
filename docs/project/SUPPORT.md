@@ -1,7 +1,7 @@
 # Support and compatibility
 
-NeoCogi UI uses version **0.0.0** across its workspace packages and is
-pre-alpha, intended for experimentation and early integration. This page records
+NeoCogi UI uses version **0.1.0-alpha.1** across its workspace packages and is
+an alpha release, intended for experimentation and early integration. This page records
 what downstream users can rely on without implying guarantees the project does
 not yet make.
 
@@ -17,7 +17,8 @@ artifact dependencies. External COM/IDL consumers retain the Rust 1.85 floor.
 The upstream Rust task runner owns compiler-floor, extracted-archive and
 independent host/provider checks. UI CI checks the pinned SDK through
 its own UI, renderer and application consumers. UI and renderer dependency
-versions are not covered by the COM compiler floor.
+versions are not covered by the COM compiler floor. The UI archive consumer is
+separately exercised with current stable Rust; this does not establish an MSRV.
 
 The [native guide](../guides/COM_NATIVE.md) documents ordinary Cargo application
 builds and their current constraints. IDL generation is an in-process Cargo
@@ -38,13 +39,14 @@ CI checks actual Chromium input and lifecycle behavior. macOS/Windows native Car
 jobs are configured, but local Linux results do not establish those OSes' runtime
 behavior. The [native guide](../guides/COM_NATIVE.md) records dependencies and driver limits;
 the [browser guide](../guides/WEB.md) records text input and native-filesystem restrictions.
-GitHub Pages publication is a separate trusted deployment workflow.
+The [release guide](RELEASING.md) defines the independent archive and consumer
+checks. GitHub Pages publication is a separate trusted deployment workflow.
 
 ## API compatibility
 
-During pre-alpha, APIs and data formats may change whenever a simpler, consistent design warrants
-it. There is no compatibility or long-term-support commitment. Pin the checkout revision used by
-your application and every plugin together, and review the [changelog](CHANGELOG.md) before upgrading. The manifest version
+During the alpha series, APIs and data formats may change whenever a simpler, consistent design warrants
+it. There is no compatibility or long-term-support commitment. Pin the same exact release for
+your application and every plugin, and review the [changelog](CHANGELOG.md) before upgrading. The manifest version
 is not a promise that the unreleased checkout matches a published package.
 
 The COM SDK, host implementation and IDL compiler use the exact published

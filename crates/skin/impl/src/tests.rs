@@ -70,7 +70,7 @@ fn bundled_themes_cross_only_typed_gfx_capabilities() {
     let loader: ComPtr<ThemeLoaderAbi> = ThemeLoaderObject::from_value(ThemeLoaderObject::new(assets.as_com_ref(), publisher.as_com_ref()).unwrap())
         .query()
         .unwrap();
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/package-inputs");
     for theme_name in ["windows-3.11", "windows-95", "mac-os-9"] {
         let path = NativePath::new(&root.join("themes").join(theme_name).join("theme.json"));
         let source = loader.load_theme(path.as_interface(), base.as_com_ref()).unwrap();
@@ -119,7 +119,7 @@ fn original_application_artwork_names_survive_first_and_repeated_theme_loads() {
         .query()
         .unwrap();
     let temporary = tempfile::tempdir().unwrap();
-    let white = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../assets/WHITE.png");
+    let white = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/package-inputs/assets/WHITE.png");
     for name in ["first.png", "second.png"] {
         std::fs::copy(&white, temporary.path().join(name)).unwrap();
     }
@@ -188,7 +188,7 @@ fn original_application_artwork_names_survive_first_and_repeated_theme_loads() {
     builder
         .add_icon_bytes(
             NcCopyFromBufferOffset::new(0, b"@neocogi-theme-image/2"),
-            NcCopyFromBufferOffset::new(0, include_bytes!("../../../../assets/WHITE.png")),
+            NcCopyFromBufferOffset::new(0, include_bytes!("../tests/package-inputs/assets/WHITE.png")),
         )
         .unwrap();
 }

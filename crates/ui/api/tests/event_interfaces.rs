@@ -1,5 +1,5 @@
 //! Common IDL event transport preserves typed snapshots and both weak ownership kinds.
-#[path = "../../../../scripts/com_dependencies.rs"]
+#[path = "package-inputs/com_dependencies.rs"]
 mod com_dependencies;
 #[path = "support/event_support.rs"]
 mod event_support;

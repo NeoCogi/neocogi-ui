@@ -1,5 +1,5 @@
 //! Canonical getter ancestry must survive local generic projections and catalog transport.
-#[path = "../../../../scripts/com_dependencies.rs"]
+#[path = "package-inputs/com_dependencies.rs"]
 mod com_dependencies;
 #[path = "support/event_support.rs"]
 mod event_support;

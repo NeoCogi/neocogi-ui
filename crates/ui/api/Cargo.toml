@@ -1,6 +1,9 @@
 [package]
 name = "neocogi-ui"
-version = "0.0.0"
+version.workspace = true
+publish = ["crates-io"]
+include = ["Cargo.toml", "README.md", "LICENSE", "src/**", "build.rs", "docs/**", "tests/**", "schemas/**", "EVENTS.md"]
+readme = "README.md"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -25,7 +28,6 @@ runtime = ["neocogi-com/runtime"]
 
 [dev-dependencies]
 neocogi-idl.workspace = true
-neocogi-ui-design.workspace = true
 tempfile.workspace = true
 trybuild.workspace = true
 
@@ -34,5 +36,5 @@ trybuild.workspace = true
 neocogi-com-host.workspace = true
 
 [build-dependencies]
-neocogi-platform-build.workspace = true
+neocogi-ui-build.workspace = true
 neocogi-idl.workspace = true

@@ -1,10 +1,14 @@
 [package]
 name = "neocogi-ui-document"
-version = "0.0.0"
+version.workspace = true
+publish = ["crates-io"]
+include = ["Cargo.toml", "README.md", "LICENSE", "src/**", "build.rs", "docs/**", "tests/**", "schemas/**", "EVENTS.md"]
+readme = "README.md"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Typed NeoCogi UI documents, component reconstruction and reload"
 
 [dependencies]
 neocogi-ui.workspace = true

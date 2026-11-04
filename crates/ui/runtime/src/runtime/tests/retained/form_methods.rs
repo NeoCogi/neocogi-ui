@@ -4,13 +4,13 @@ use super::*;
 /// This fixture is checked against current generator output by the document test suite.
 #[allow(dead_code)]
 mod generated {
-    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../document/tests/fixtures/full_bindings.rs"));
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/package-inputs/document/full_bindings.rs"));
 }
 
 /// A single-button generated contract permits a complete application handler in this fixture.
 #[allow(dead_code)]
 mod button_form {
-    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../document/tests/fixtures/empty_bindings.rs"));
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/package-inputs/document/empty_bindings.rs"));
 }
 
 /// All former named setter operations are callable through compiled concrete form fields.
@@ -21,7 +21,7 @@ fn generated_form_fields_preserve_widget_validation_silence_and_reload_lifetime(
     let mut slot = slot(&mut ids, &fixture.ui);
     let document = Document::from_json(include_bytes!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../document/tests/fixtures/bindings.ui.json"
+        "/tests/package-inputs/document/bindings.ui.json"
     )))
     .unwrap();
     let (send, events) = std::sync::mpsc::channel();
@@ -120,7 +120,7 @@ fn generated_event_handler_uses_widget_methods_after_receiving_the_user_event() 
     let mut fixture = Headless::standard();
     let mut ids = ReloadIds::new();
     let mut slot = slot(&mut ids, &fixture.ui);
-    let document = Document::from_json(include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../document/tests/fixtures/empty.ui.json"))).unwrap();
+    let document = Document::from_json(include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/package-inputs/document/empty.ui.json"))).unwrap();
     let (send, events) = std::sync::mpsc::channel();
     slot.reload(
         &document,

@@ -4,12 +4,11 @@ use neocogi_idl::{Module, ResolvedModules, ModuleGraphError};
 
 /// Loads each contract owner, preserving its complete authored ABI fingerprint.
 pub fn resolve(mut consumers: Vec<Module>) -> Result<ResolvedModules, ModuleGraphError> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     for (source_root, path) in [
         (Path::new(env!("OUT_DIR")).join("neocogi-shared-sources"), "neocogi/renderer"),
         (Path::new(env!("OUT_DIR")).join("neocogi-shared-sources"), "neocogi/platform"),
-        (root.join("crates/gfx/schemas"), "neocogi/gfx"),
-        (root.join("crates/ui/schemas"), "neocogi/ui/core"),
+        (Path::new(env!("OUT_DIR")).join("neocogi-ui-sources"), "neocogi/gfx"),
+        (Path::new(env!("OUT_DIR")).join("neocogi-ui-sources"), "neocogi/ui/core"),
     ] {
         consumers.push(neocogi_idl::cargo::ModuleSources::load(&source_root, Path::new(path)).unwrap().parse().unwrap());
     }

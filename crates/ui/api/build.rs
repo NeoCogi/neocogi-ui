@@ -1,6 +1,7 @@
-//! Generates this library's bindings from subsystem-owned shared sources.
-#[path = "../../../scripts/idl_build.rs"]
-mod shared_idl;
+//! Generate this consumer's bindings from packaged, subsystem-owned interface sources.
+use neocogi_ui_build::{Module, build, sources};
 fn main() {
-    shared_idl::build(shared_idl::sources("../../..", &["neocogi.ui.core", "neocogi.ui.nodes", "neocogi.ui.document"]));
+    sources(&[Module::UiCore, Module::UiNodes, Module::UiDocument])
+        .and_then(build)
+        .expect("generate UI bindings");
 }

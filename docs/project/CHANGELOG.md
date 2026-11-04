@@ -1,6 +1,20 @@
 # Changelog
 
-## 0.0.0 (unreleased)
+## 0.1.0-alpha.1
+
+- Coordinate all workspace package versions at `0.1.0-alpha.1` and use exact
+  internal registry requirements. Enable the reusable libraries, providers,
+  provider DLLs and sample contracts for crates.io; keep application compositions
+  and test/tool executables private.
+- Package the canonical UI, GFX and Skin IDL sources in `neocogi-ui-build`.
+  Consumers generate bindings from owned Cargo output directories without a
+  sibling repository or a shared build script. Ship package-owned test inputs
+  and license notices with explicit freshness checks.
+- Qualify the actual normalized archives outside the checkout, including all
+  optional features, generated COM calls, retained event ownership, rendering
+  and independently loaded provider DLLs. See [releasing](RELEASING.md).
+
+## Earlier development (0.0.0, unreleased)
 
 - Consume all NeoCogi Platform packages from crates.io at exactly `0.1.0-alpha.1`.
   Use the `nc_platform` assembly and packaged build-time IDL sources. Bind UI/GFX

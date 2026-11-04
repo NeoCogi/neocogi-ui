@@ -123,7 +123,7 @@ fn appearance_revision(base: ComRef<'_, IAssetBundleAbi>) -> ComPtr<IAssetBundle
 /// Construction, successful installation, failed upload, and closure affect only their own UI.
 #[test]
 fn shared_graphics_service_keeps_runtime_resources_independent() {
-    let base = neocogi_demo_assets::load_bundle(host_runtime()).unwrap();
+    let base = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)]).into_bundle().unwrap();
     // Rebuild one image deliberately: this isolation regression must still distinguish
     // two atlas identities now that ordinary appearance edits preserve the same image.
     let styled = appearance_revision(base.as_com_ref());
@@ -175,8 +175,8 @@ fn shared_graphics_service_keeps_runtime_resources_independent() {
 /// replacing its namespace with another UI's catalog.
 #[test]
 fn shared_factory_supports_independent_catalogs() {
-    let base = neocogi_demo_assets::load_bundle(host_runtime()).unwrap();
-    let unrelated = neocogi_demo_assets::load_bundle(host_runtime()).unwrap();
+    let base = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)]).into_bundle().unwrap();
+    let unrelated = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)]).into_bundle().unwrap();
     assert_ne!(base.catalog().unwrap().as_raw().object, unrelated.catalog().unwrap().as_raw().object);
     let gfx = neocogi_ui_support::test_support::gfx_factory(host_runtime());
     let mut first = create_ui(base.as_com_ref(), gfx.as_com_ref());
@@ -196,7 +196,7 @@ fn shared_factory_supports_independent_catalogs() {
 /// Reusing the same bundle must still allocate independent frame state for every factory call.
 #[test]
 fn standalone_compositor_frame_does_not_block_runtime_construction_or_rendering() {
-    let assets = neocogi_demo_assets::load_bundle(host_runtime()).unwrap();
+    let assets = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)]).into_bundle().unwrap();
     let gfx = neocogi_ui_support::test_support::gfx_factory(host_runtime());
     let mut standalone = gfx.create_compositor(assets.as_com_ref()).unwrap();
     standalone.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
@@ -216,7 +216,7 @@ fn standalone_compositor_frame_does_not_block_runtime_construction_or_rendering(
 /// A production runtime must delegate final expansion and submit exactly one bulk renderer frame.
 #[test]
 fn production_runtime_uses_the_gfx_compositor() {
-    let assets = neocogi_demo_assets::load_bundle(host_runtime()).expect("embedded test assets must load");
+    let assets = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)]).into_bundle().expect("valid complete fixture assets");
     let gfx = neocogi_ui_support::test_support::gfx_factory(host_runtime());
     let mut runtime = nc_ui::create_runtime_from_assets(assets.as_com_ref(), gfx.as_com_ref()).expect("matching UI and GFX resources must create a runtime");
     runtime.set_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
@@ -285,7 +285,7 @@ impl Drop for ReportedFailure {
 #[test]
 fn operation_errors_survive_renderers_later_failures_and_successful_retry() {
     use neocogi_render_core::abi::{RenderError, RENDER_E_BACKEND};
-    let assets = neocogi_demo_assets::load_bundle(host_runtime()).unwrap();
+    let assets = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)]).into_bundle().unwrap();
     let gfx = neocogi_ui_support::test_support::gfx_factory(host_runtime());
     let ui = create_ui(assets.as_com_ref(), gfx.as_com_ref());
     let mut errors = Vec::new();

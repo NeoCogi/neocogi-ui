@@ -1,5 +1,5 @@
 //! Compile and execute generated message delivery through real COM entry points.
-#[path = "../../../../scripts/com_dependencies.rs"]
+#[path = "package-inputs/com_dependencies.rs"]
 mod com_dependencies;
 
 #[path = "support/event_support.rs"]
@@ -96,7 +96,9 @@ fn concrete_messages_cross_com_and_acquire_consumer_ownership() {
 
     fs::write(
         project.path().join("src/lib.rs"),
-        generated
+        // Compiler diagnostics are errors even when Cargo itself reports benign
+        // registry-resolution notices in an extracted-package qualification.
+        String::from("#![deny(warnings)]\n") + &generated
             + "\nextern crate self as example_messages_contracts;\npub mod consumer;\npub mod relocated { pub use super::*; }\npub mod relocated_consumer;\n"
             + include_str!("fixtures/messages.rs"),
     )
@@ -114,11 +116,6 @@ fn concrete_messages_cross_com_and_acquire_consumer_ownership() {
         output.status.success(),
         "{}\n{}",
         String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert!(
-        !String::from_utf8_lossy(&output.stderr).contains("warning:"),
-        "{}",
         String::from_utf8_lossy(&output.stderr)
     );
 }

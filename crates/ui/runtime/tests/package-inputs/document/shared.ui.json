@@ -1,0 +1,95 @@
+{
+  "version": 7,
+  "name": "shared queues",
+  "root": {
+    "key": "root",
+    "widget": {
+      "Linear": {
+        "direction": "Down",
+        "cross": "Stretch"
+      }
+    },
+    "style": {
+      "options": null,
+      "font": null,
+      "icon": null,
+      "image": null,
+      "fit_image": false
+    },
+    "children": [
+      {
+        "edge": {
+          "Linear": {
+            "main": "Content",
+            "cross": null
+          }
+        },
+        "node": {
+          "key": "first",
+          "widget": {
+            "Button": {
+              "text": "first"
+            }
+          },
+          "style": {
+            "options": null,
+            "font": null,
+            "icon": null,
+            "image": null,
+            "fit_image": false
+          },
+          "children": []
+        }
+      },
+      {
+        "edge": {
+          "Linear": {
+            "main": "Content",
+            "cross": null
+          }
+        },
+        "node": {
+          "key": "second",
+          "widget": {
+            "Button": {
+              "text": "second"
+            }
+          },
+          "style": {
+            "options": null,
+            "font": null,
+            "icon": null,
+            "image": null,
+            "fit_image": false
+          },
+          "children": []
+        }
+      },
+      {
+        "edge": {
+          "Linear": {
+            "main": "Content",
+            "cross": null
+          }
+        },
+        "node": {
+          "key": "text",
+          "widget": {
+            "Textbox": {
+              "text": ""
+            }
+          },
+          "style": {
+            "options": null,
+            "font": null,
+            "icon": null,
+            "image": null,
+            "fit_image": false
+          },
+          "children": []
+        }
+      }
+    ]
+  },
+  "outputs": []
+}

@@ -2,6 +2,7 @@
 resolver = "3"
 exclude = ["target", "tmp"]
 members = [
+    "crates/build",
     "crates/ui/design",
     "crates/ui/document",
     "crates/gfx/support",
@@ -35,37 +36,38 @@ members = [
 default-members = ["crates/ui/api"]
 
 [workspace.package]
+version = "0.1.0-alpha.1"
 authors = ["Raja Lehtihet", "Wael El Oraiby"]
 edition = "2024"
 license = "BSD-3-Clause AND MIT AND OFL-1.1 AND Apache-2.0 AND CC0-1.0"
-readme = "README.md"
 repository = "https://github.com/NeoCogi/neocogi-ui"
 
 [workspace.dependencies]
+neocogi-ui-build = { path = "crates/build", version = "=0.1.0-alpha.1" }
 neocogi-platform-build = { version = "=0.1.0-alpha.1" }
 neocogi-native-layout-core = { version = "=0.1.0-alpha.1" }
 neocogi-shader-core = { version = "=0.1.0-alpha.1" }
 neocogi-shader-compiler = { version = "=0.1.0-alpha.1", default-features = false }
-neocogi-ui-samples = { path = "examples/ui-samples" }
-neocogi-ui-design = { path = "crates/ui/design" }
-neocogi-ui-document = { path = "crates/ui/document" }
-neocogi-gfx-support = { path = "crates/gfx/support" }
-neocogi-gfx-impl = { path = "crates/gfx/impl", version = "0.0.0", default-features = false }
-neocogi-gfx = { path = "crates/gfx/plugin", default-features = false }
-neocogi-appearance = { path = "crates/appearance", version = "0.0.0" }
-neocogi-skin-authoring = { path = "crates/skin/authoring", default-features = false }
-neocogi-skin-impl = { path = "crates/skin/impl", version = "0.0.0", default-features = false }
-neocogi-skin = { path = "crates/skin/plugin", default-features = false }
+neocogi-ui-samples = { path = "examples/ui-samples", version = "=0.1.0-alpha.1" }
+neocogi-ui-design = { path = "crates/ui/design", version = "=0.1.0-alpha.1" }
+neocogi-ui-document = { path = "crates/ui/document", version = "=0.1.0-alpha.1" }
+neocogi-gfx-support = { path = "crates/gfx/support", version = "=0.1.0-alpha.1" }
+neocogi-gfx-impl = { path = "crates/gfx/impl", default-features = false, version = "=0.1.0-alpha.1" }
+neocogi-gfx = { path = "crates/gfx/plugin", default-features = false, version = "=0.1.0-alpha.1" }
+neocogi-appearance = { path = "crates/appearance", version = "=0.1.0-alpha.1" }
+neocogi-skin-authoring = { path = "crates/skin/authoring", default-features = false, version = "=0.1.0-alpha.1" }
+neocogi-skin-impl = { path = "crates/skin/impl", default-features = false, version = "=0.1.0-alpha.1" }
+neocogi-skin = { path = "crates/skin/plugin", default-features = false, version = "=0.1.0-alpha.1" }
 neocogi-com = { version = "=0.1.0-alpha.1", default-features = false }
 neocogi-com-host = { version = "=0.1.0-alpha.1", default-features = false }
 neocogi-native-layout = { version = "=0.1.0-alpha.1" }
 neocogi-idl = { version = "=0.1.0-alpha.1" }
-neocogi-ui = { path = "crates/ui/api", version = "0.0.0", default-features = false }
-neocogi-ui-support = { path = "crates/ui/support", version = "0.0.0", default-features = false }
-neocogi-ui-runtime = { path = "crates/ui/runtime", version = "0.0.0", default-features = false }
-neocogi-ui-nodes = { path = "crates/ui/nodes", version = "0.0.0", default-features = false }
-neocogi-demo-assets = { path = "examples/assets", default-features = false }
-neocogi-demo-host = { path = "examples/host", default-features = false }
+neocogi-ui = { path = "crates/ui/api", default-features = false, version = "=0.1.0-alpha.1" }
+neocogi-ui-support = { path = "crates/ui/support", default-features = false, version = "=0.1.0-alpha.1" }
+neocogi-ui-runtime = { path = "crates/ui/runtime", default-features = false, version = "=0.1.0-alpha.1" }
+neocogi-ui-nodes = { path = "crates/ui/nodes", default-features = false, version = "=0.1.0-alpha.1" }
+neocogi-demo-assets = { path = "examples/assets", default-features = false, version = "=0.1.0-alpha.1" }
+neocogi-demo-host = { path = "examples/host", default-features = false, version = "=0.1.0-alpha.1" }
 neocogi-render-gpu = { version = "=0.1.0-alpha.1" }
 neocogi-render-core = { version = "=0.1.0-alpha.1" }
 neocogi-render-support = { version = "=0.1.0-alpha.1" }

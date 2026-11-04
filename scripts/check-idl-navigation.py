@@ -108,7 +108,7 @@ def expected_origin(repository, probe):
     anchors to that declaration so another enum's Fixed/extent cannot substitute
     for LayoutTrack's member. This is fixture expectation lookup, not an IDL parser.
     """
-    path = repository / "crates/ui/schemas/neocogi/ui/nodes" / probe.file
+    path = repository / "crates/build/schemas/neocogi/ui/nodes" / probe.file
     text = path.read_text(encoding="utf-8")
     if text.count(probe.declaration) != 1:
         raise ValueError("expected authored declaration is ambiguous: " + probe.declaration)
@@ -175,8 +175,13 @@ def validate_definition(repository, probe, result):
     origin = lookup(mapping, position)["original"]
     owner = mapping["sources"][origin["source"]]
     authored = (generated.parent / owner["location"]).resolve()
-    expected_file, expected_range = expected_origin(repository, probe)
-    if owner["module"] != "neocogi.ui.nodes" or authored != expected_file or origin["range"] != expected_range:
+    canonical, expected_range = expected_origin(repository, probe)
+    # The packaged helper reconstructs authoritative bytes in this consumer's
+    # output, so editor origins survive installing crates without this checkout.
+    expected_file = generated.parent / "neocogi-ui-sources/neocogi/ui/nodes" / probe.file
+    if (owner["module"] != "neocogi.ui.nodes" or authored != expected_file
+            or not authored.is_file() or authored.read_bytes() != canonical.read_bytes()
+            or origin["range"] != expected_range):
         raise ValueError(f"wrong authored origin for {probe.marker}: {authored}:{origin['range']}; expected {expected_file}:{expected_range}")
     return {"probe": probe.marker, "symbol": probe.symbol, "rust": str(generated),
             "position": position, "idl": str(authored), "origin": origin["range"]}

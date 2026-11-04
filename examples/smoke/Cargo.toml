@@ -3,7 +3,7 @@
 autobins = false
 name = "neocogi-demo-smoke"
 default-run = "neocogi-demo-smoke"
-version = "0.0.0"
+version.workspace = true
 authors.workspace = true
 edition.workspace = true
 license.workspace = true

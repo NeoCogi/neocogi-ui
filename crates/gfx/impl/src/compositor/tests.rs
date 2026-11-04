@@ -263,7 +263,7 @@ fn compositor_source_shrink_overlays_pink_and_preserves_valid_frame_work() {
         compositor.submit(renderer.as_com_ref()).unwrap();
         let vertices = capture.vertices.borrow();
         assert_eq!(vertices.len(), 24);
-        for (index, quad) in vertices.chunks_exact(6).enumerate() {
+        for (index, quad) in vertices.as_chunks::<6>().0.iter().enumerate() {
             let expected_color = if index % 2 == 0 {
                 0xff000000
             } else {
@@ -296,7 +296,7 @@ fn compositor_source_shrink_overlays_pink_and_preserves_valid_frame_work() {
     compositor.submit(renderer.as_com_ref()).unwrap();
     let clipped = capture.vertices.borrow();
     assert_eq!(clipped.len(), 24);
-    for (index, quad) in clipped.chunks_exact(6).enumerate() {
+    for (index, quad) in clipped.as_chunks::<6>().0.iter().enumerate() {
         let expected = if index < 2 { (20.0, 0.0, 50.0, 20.0) } else { (50.0, 0.0, 80.0, 20.0) };
         assert_eq!(quad_bounds(quad), expected);
     }
@@ -734,7 +734,7 @@ fn glyph_acceleration_preserves_unicode_fallback_and_revision_publication() {
         compositor.submit(renderer.as_com_ref()).unwrap();
         let vertices = capture.vertices.borrow();
         assert_eq!(vertices.len(), 24);
-        let positions = vertices.chunks_exact(6).map(|quad| quad[0].x).collect::<Vec<_>>();
+        let positions = vertices.as_chunks::<6>().0.iter().map(|quad| quad[0].x).collect::<Vec<_>>();
         assert_eq!(positions, expected, "both missing characters use the underscore advance");
     }
 }
