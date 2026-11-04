@@ -57,6 +57,8 @@ The replacement coverage is organized by observable behavior:
 | Text fallback/newlines, nine-patches, triangle attributes and both windings, hidden draws and extreme integer rectangles | `src/render/compositor/tests.rs` |
 | Atomic asset installation, catalog identity, measurement revision and failed upload | `src/assets/tests.rs` |
 | Shared factory with distinct resource revisions or unrelated catalogs, failed/successful installation, independent closure, and overlapping standalone frames | `tests/compositor_boundary.rs` |
+| Owned failure text/status through UI and GFX, renderer destruction, later failures and successful retry | `tests/compositor_boundary.rs` |
+| Explicit compositor permissions and image-group rejection at the window framebuffer | GFX `src/compositor/tests.rs` and `tests/platform/src/native/generic_gpu.rs` |
 | File-picker lifecycle and callback transactions | Nodes `src/dialogs/tests.rs` |
 
 Tests specific to deleted weak native handles, legacy texture IDs, native callback

@@ -69,16 +69,22 @@ and the committed lockfile.
 ## Platform companions
 
 [NeoCogi Platform](https://github.com/NeoCogi/neocogi-platform) supplies the
-platform and generic graphics contracts. Each modern UI revision pins its exact
-platform commit in Cargo dependencies and a `NeoCogi-Platform-Commit` trailer.
-Both repositories retain `NeoCogi-Revision-ID` correlation identifiers and
-reciprocal companion links in `refs/notes/neocogi-companions`.
+platform and generic graphics contracts. Historical Git-based UI revisions pin
+their exact platform commit in Cargo dependencies and a `NeoCogi-Platform-Commit`
+trailer. Those snapshots retain their `NeoCogi-Revision-ID` correlation identifiers
+and reciprocal companion links in `refs/notes/neocogi-companions`.
+
+The current UI consumes the published Platform crates at exactly `0.1.0-alpha.1`.
+Its root manifests and registry checksums in `Cargo.lock` control that selection;
+a Platform Git companion trailer is not required for a registry release. See the
+[dependency guide](../guides/COM_DEPENDENCY.md) for source ownership and updates.
 
 ```sh
 git fetch origin refs/notes/neocogi-companions:refs/notes/neocogi-companions
 git log --show-notes=neocogi-companions
 ```
 
-Use the platform commit selected by that UI revision, including its dependency
-versions. Notes provide navigation; Cargo's exact source/revision pin controls
-the build. Backend-only changes may leave a UI source snapshot unchanged.
+Use the Platform source selected by the UI revision, including its dependency
+versions. Historical Git pins still select their recorded commits; registry pins
+select the exact published release. Notes provide navigation and never override
+Cargo's selected source. Backend-only changes may leave a UI source snapshot unchanged.

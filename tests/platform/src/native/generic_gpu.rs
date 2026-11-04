@@ -93,6 +93,13 @@ fn gfx_generic_blocks_preserve_window_order_and_immutable_surface_output() {
     compositor.texture(bounds, bounds, unit, 0xffffffff, image.as_com_ref()).unwrap();
     compositor.submit(preview.as_com_ref()).unwrap();
     let output = surface.completed_image().unwrap();
+    // An image-bound compositor cannot acquire/present the window framebuffer. Rejection ends
+    // the GFX frame while preserving the last independently completed immutable image.
+    compositor.begin(SIZE, 0xff112233).unwrap();
+    compositor.texture(bounds, bounds, unit, 0xffffffff, image.as_com_ref()).unwrap();
+    let error = compositor.submit(renderer.as_com_ref()).unwrap_err();
+    assert_eq!(error.status, RENDER_E_OWNER);
+    assert_eq!(identity(&surface.completed_image().unwrap()).unwrap(), identity(&output).unwrap());
     compositor.begin(SIZE, 0xff000000).unwrap();
     compositor
         .render_view(graphics(&resources, &broker, RenderViewRoot { client: root, target: root }))

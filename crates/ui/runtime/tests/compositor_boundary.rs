@@ -251,3 +251,70 @@ fn host_runtime() -> neocogi_com::Runtime {
     // SAFETY: this explicit host owns the complete immutable process-lived graph.
     unsafe { neocogi_com::Runtime::__from_host_api(neocogi_com_host::initialize_process()) }.expect("compatible test host")
 }
+
+#[com_object(interfaces(IRenderer))]
+/// A real COM renderer publishes a different owned native failure for each fixture instance.
+struct ReportedFailure {
+    /// Immutable operation data is copied into the result rather than borrowed by the UI.
+    error: neocogi_render_core::abi::RenderError,
+    /// Proves that returned failures do not retain the renderer or its device facade.
+    dropped: Rc<Cell<bool>>,
+}
+impl neocogi_render_core::abi::IRenderDriverBound for ReportedFailure {
+    /// The fixture consumes authentic CPU blocks without publishing native resources.
+    fn driver_identity(&self) -> Result<ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, NcStatus> {
+        Err(neocogi_com::NC_E_NOINTERFACE)
+    }
+}
+impl IRenderer for ReportedFailure {
+    /// Validate the production stream before publishing this invocation's independent failure.
+    fn render_result(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+        let blocks = neocogi_gfx_support::testing::blocks(info, stream)?;
+        assert!(blocks.iter().any(|block| !block.commands().is_empty()));
+        Ok(neocogi_render_core::abi::operation_result(Err(self.error.clone())))
+    }
+}
+impl Drop for ReportedFailure {
+    /// Observation retains no COM owner and can be checked after the native-shaped boundary is gone.
+    fn drop(&mut self) {
+        self.dropped.set(true);
+    }
+}
+
+/// Native -> GFX -> UI must preserve exact status/text through repeated failures and successful retry.
+#[test]
+fn operation_errors_survive_renderers_later_failures_and_successful_retry() {
+    use neocogi_render_core::abi::{RenderError, RENDER_E_BACKEND};
+    let assets = neocogi_demo_assets::load_bundle(host_runtime()).unwrap();
+    let gfx = neocogi_ui_support::test_support::gfx_factory(host_runtime());
+    let ui = create_ui(assets.as_com_ref(), gfx.as_com_ref());
+    let mut errors = Vec::new();
+    for (status, message) in [
+        (RENDER_E_BACKEND, "original GPU submission failed: é"),
+        (NC_E_OUT_OF_MEMORY, "a later resource retirement failed"),
+    ] {
+        let dropped = Rc::new(Cell::new(false));
+        let renderer: ComPtr<IRendererAbi> = ReportedFailure::from_value(ReportedFailure {
+            error: RenderError::new(status, message),
+            dropped: dropped.clone(),
+        })
+        .query()
+        .unwrap();
+        let error = ui.render(SIZE, renderer.as_com_ref()).unwrap_err();
+        drop(renderer);
+        assert!(dropped.get(), "an operation error cannot retain its renderer");
+        assert_eq!(error.status, status);
+        assert_eq!(error.message, message);
+        errors.push(error);
+    }
+    let observation = Rc::new(Observation::default());
+    let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { observation: observation.clone() })
+        .query()
+        .unwrap();
+    assert_frame(&ui, assets.as_com_ref(), renderer.as_com_ref(), &observation);
+    drop((renderer, ui, gfx, assets));
+    assert_eq!(errors[0].status, RENDER_E_BACKEND);
+    assert_eq!(errors[0].message, "original GPU submission failed: é");
+    assert_eq!(errors[1].status, NC_E_OUT_OF_MEMORY);
+    assert_eq!(errors[1].message, "a later resource retirement failed");
+}

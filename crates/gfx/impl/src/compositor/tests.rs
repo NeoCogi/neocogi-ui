@@ -10,6 +10,8 @@ use neocogi_render_core::abi::{IRenderer, IRendererVtblFor};
 struct UploadProbe {
     /// Every attempted native preparation, including injected failures.
     calls: std::cell::Cell<u32>,
+    /// Exact delegated authority requested by the real compositor during group creation.
+    permissions: std::cell::Cell<Option<neocogi_render_core::abi::RenderClientPermissions>>,
     /// Simulates a recoverable native allocation failure before candidate publication.
     fail: std::cell::Cell<bool>,
 }
@@ -64,6 +66,10 @@ fn compositor_prepares_only_changed_atlases_and_publishes_revisions_atomically()
     .unwrap();
     compositor.bind_render_host(host.as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
     assert_eq!(probe.calls.get(), 1);
+    let permissions = probe.permissions.get().expect("the compositor must create an explicit resource group");
+    assert!(permissions.write_color && permissions.write_resources && permissions.import_images);
+    assert!(!permissions.read_depth && !permissions.write_depth && !permissions.clear_depth && !permissions.initialize_depth);
+    assert!(!permissions.clear_color, "UI submission delegates no attachment-clear authority");
     let mut tables = neocogi_gfx_support::AssetTables::read(bundle.as_com_ref()).unwrap();
     tables.metrics.spacing += 1;
     let same_image = tables.into_revision(bundle.as_com_ref()).unwrap();
@@ -736,6 +742,7 @@ fn glyph_acceleration_preserves_unicode_fallback_and_revision_publication() {
 /// Delegates group creation while retaining the fixture's upload/quota observations.
 impl neocogi_render_core::abi::IRenderClientFactory for UploadHost {
     fn create_client(&self, limits: neocogi_render_core::abi::RenderClientLimits, surface: ComRef<'_, neocogi_render_core::abi::IRenderSurfaceAbi>, permissions: neocogi_render_core::abi::RenderClientPermissions) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::IRenderClientDomainAbi>, NcStatus> {
+        self.probe.permissions.set(Some(permissions));
         self.inner.query::<neocogi_render_core::abi::IRenderClientFactoryAbi>()?.create_client(limits, surface, permissions)
     }
 }
