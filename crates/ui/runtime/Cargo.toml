@@ -31,18 +31,20 @@ bitflags.workspace = true
 rs-math3d.workspace = true
 
 [dev-dependencies]
+# Cargo omits these cyclic local peer links on publication.
+# package_inputs.py preserves exact archive-test requirements separately.
 neocogi-shader-compiler.workspace = true
 neocogi-render-gpu = {workspace=true,features=["test-support"]}
-neocogi-ui-document.workspace = true
-neocogi-ui-nodes.workspace = true
-neocogi-ui-support = { workspace = true, features = ["test-support"] }
+neocogi-ui-document = { path = "../document" }
+neocogi-ui-nodes = { path = "../nodes", default-features = false }
+neocogi-ui-support = { path = "../support", features = ["test-support"], default-features = false }
 neocogi-com = { workspace = true, features = ["runtime"] }
 neocogi-com-host.workspace = true
-neocogi-gfx-impl = { workspace = true, features = ["publisher"] }
-neocogi-skin-impl.workspace = true
-neocogi-gfx-support = { workspace = true, features = ["test-support"] }
-neocogi-appearance.workspace = true
-neocogi-ui.workspace = true
+neocogi-gfx-impl = { path = "../../gfx/impl", features = ["publisher"], default-features = false }
+neocogi-skin-impl = { path = "../../skin/impl", default-features = false }
+neocogi-gfx-support = { path = "../../gfx/support", features = ["test-support"] }
+neocogi-appearance = { path = "../../appearance" }
+neocogi-ui = { path = "../api", default-features = false }
 tempfile.workspace = true
 trybuild.workspace = true
 

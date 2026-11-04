@@ -1,0 +1,44 @@
+{
+  "dev-dependencies": {
+    "neocogi-appearance": {
+      "version": "=0.1.0-alpha.1"
+    },
+    "neocogi-gfx-impl": {
+      "default-features": false,
+      "features": [
+        "publisher"
+      ],
+      "version": "=0.1.0-alpha.1"
+    },
+    "neocogi-gfx-support": {
+      "features": [
+        "test-support"
+      ],
+      "version": "=0.1.0-alpha.1"
+    },
+    "neocogi-skin-impl": {
+      "default-features": false,
+      "version": "=0.1.0-alpha.1"
+    },
+    "neocogi-ui": {
+      "default-features": false,
+      "version": "=0.1.0-alpha.1"
+    },
+    "neocogi-ui-document": {
+      "version": "=0.1.0-alpha.1"
+    },
+    "neocogi-ui-nodes": {
+      "default-features": false,
+      "version": "=0.1.0-alpha.1"
+    },
+    "neocogi-ui-support": {
+      "default-features": false,
+      "features": [
+        "test-support"
+      ],
+      "version": "=0.1.0-alpha.1"
+    }
+  },
+  "package": "neocogi-ui-runtime",
+  "schema": 1
+}

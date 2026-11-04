@@ -25,4 +25,6 @@ serde = { workspace = true, features = ["rc"] }
 serde_json.workspace = true
 
 [dev-dependencies]
-neocogi-ui-support.workspace = true
+# Cargo omits these cyclic local peer links on publication.
+# package_inputs.py preserves exact archive-test requirements separately.
+neocogi-ui-support = { path = "../../ui/support", default-features = false }

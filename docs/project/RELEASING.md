@@ -1,8 +1,10 @@
 # Releasing NeoCogi UI
 
 The coordinated release is **0.1.0-alpha.1**. All workspace packages inherit
-one version, and internal dependencies specify the same exact registry version
-alongside their development paths. Platform, COM and IDL dependencies also use
+one version, and internal production/build dependencies specify the same exact
+registry version alongside their development paths. Test-only peers use local
+paths without versions so Cargo omits their cyclic registry edges on publication.
+Platform, COM and IDL dependencies also use
 exact `=0.1.0-alpha.1` registry requirements. Rebuild hosts and providers together;
 pre-release wire compatibility across revisions is not promised.
 
@@ -47,33 +49,55 @@ independent evidence that a checkout build cannot provide:
 ```sh
 python3 scripts/package_inputs.py --check
 python3 -m unittest discover -s scripts -p test_release_packages.py
-python3 scripts/check_packages.py --stable-toolchain stable --output /tmp/neocogi-ui-alpha1-archives
+python3 scripts/check_packages.py --publish-dry-run --stable-toolchain stable --output /tmp/neocogi-ui-alpha1-archives
 ```
 
 Use `python3 scripts/package_inputs.py` after changing a canonical package input.
 `--allow-dirty` is available during development; final qualification must use a
-clean committed tree. `--offline` is useful after all pinned dependencies are
-cached. The output directory must not already exist.
+clean committed tree, including qualification tooling and CI changes. `--offline` is useful after all pinned dependencies are
+cached, using package mode without `--publish-dry-run`: Cargo's publisher needs
+registry access even when all dependencies are cached. The output directory must
+not already exist.
 
-The gate creates real Cargo `.crate` archives, inspects normalized manifests,
+With `--publish-dry-run` the gate uses Cargo's multi-package publisher in its
+explicit nonuploading mode to create real `.crate` archives. Without that option
+it uses `cargo package`. It then inspects normalized manifests,
 rejects path/Git/unversioned dependencies and escaped or linked archive members,
 and verifies schema ownership, package READMEs and license notices. It extracts
 all selected packages into a temporary workspace outside the checkout. Builds
 and tests enable every library feature. The independent acceptance application
 emits its own derived event contract, calls real COM methods, activates the GFX,
-UI runtime and node providers, processes button input, authenticates rendered
-blocks and retains an owned event after widget removal. It runs with both linked
+Skin, UI runtime and node providers, derives a real appearance revision,
+processes button input, authenticates rendered blocks and retains an owned event after widget removal. It runs with both linked
 providers and separately compiled provider DLLs, checking the full prerelease
 version in each descriptor. The optional stable run verifies a consumer without
 the development workspace's nightly Cargo settings; it does not establish an MSRV.
+
+Cargo's workspace publisher rejects cycles that pass through dev dependencies.
+Repository tests deliberately exercise peers in both directions. Keep those
+links path-only; do not publish those cyclic dev-dependency entries. The explicit
+input generator derives their exact registry requirements and feature policies
+into each owning archive's `tests/package-inputs/dependencies.json`. Freshness
+checks keep the original manifest authoritative. This follows Cargo's
+[documented omission of versionless dev dependencies](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#development-dependencies).
+
+The qualifier first builds every unmodified normalized production archive and
+runs the linked/DLL/stable consumers. Only afterward does it restore the archived
+test-only declarations to the temporary extracted manifests and execute unit,
+integration and documentation tests. Production dependencies and source bytes
+are never edited. Thus the release has an acyclic upload graph while all existing
+regressions remain executable from the complete archived source set through this
+test preparation step. A plain `cargo test` against an individual normalized
+archive does not include the omitted peer links.
 
 Before the first upload, unpublished same-version peers are resolved with
 explicit temporary registry patches. Packaging uses checkout paths only to
 resolve metadata; no code is compiled there. Every internal implementation used
 by subsequent compilation, tests and nested fixture consumers comes from an
 inspected archive. Temporary Cargo configuration is scoped to the run; the
-caller's global configuration is not modified. This permits cyclic test-only
-dependencies without requiring packages to be prematurely uploaded. All Cargo
+caller's global configuration is not modified. The production publication graph
+excludes cyclic test-only edges; the later
+archive-test phase restores them without requiring premature uploads. All Cargo
 commands share one target directory sequentially, and internal artifacts are
 invalidated before using normalized archive timestamps.
 

@@ -6,6 +6,7 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import check_packages as packages
 import package_inputs
@@ -35,6 +36,49 @@ class ReleaseSelection(unittest.TestCase):
             current = metadata()
             current["packages"][0]["dependencies"] = [{"name": name, "path": "/local", "kind": "dev", "req": requirement}]
             with self.subTest(name=name), self.assertRaises(ValueError): packages.release_packages(current)
+
+    def test_only_local_test_peers_may_omit_the_registry_version(self):
+        current = metadata()
+        current["packages"][0]["dependencies"] = [{"name": packages.SCHEMA_OWNER, "path": "/local", "kind": "dev", "req": "*"}]
+        self.assertEqual(set(packages.release_packages(current)), {packages.SCHEMA_OWNER})
+        current["packages"][0]["dependencies"][0]["kind"] = None
+        with self.assertRaises(ValueError): packages.release_packages(current)
+
+    def test_publication_preflight_is_explicitly_nonuploading_and_selective(self):
+        for preflight in [False, True]:
+            command = packages.archive_command(["cargo", "+nightly"], {"peer", "owner"}, [] if preflight else ["--offline"],
+                                               Path("/temporary resolution/config.toml"),
+                                               allow_dirty=False, publish_dry_run=preflight)
+            self.assertEqual(command[:4] if preflight else command[:3],
+                             ["cargo", "+nightly", "publish", "--dry-run"] if preflight else ["cargo", "+nightly", "package"])
+            self.assertEqual(command[-4:], ["-p", "owner", "-p", "peer"])
+            self.assertNotIn("--allow-dirty", command)
+            self.assertIn("/temporary resolution/config.toml", command)
+            self.assertIn("--no-verify", command)
+
+
+class CommittedQualification(unittest.TestCase):
+    """Uncommitted tooling outside public package directories still invalidates release evidence."""
+    def test_dirty_tooling_fails_before_preparing_or_building_packages(self):
+        with patch.object(packages, "run", return_value=" M scripts/check_packages.py\n") as run, patch.object(packages, "reconcile") as prepare:
+            with self.assertRaisesRegex(ValueError, "clean committed tree"):
+                packages.qualify()
+            run.assert_called_once_with(["git", "status", "--porcelain"], capture=True)
+            prepare.assert_not_called()
+
+    def test_explicit_development_override_reaches_preparation(self):
+        with patch.object(packages, "run") as run, patch.object(packages, "reconcile", side_effect=RuntimeError("preparation boundary")) as prepare:
+            with self.assertRaisesRegex(RuntimeError, "preparation boundary"):
+                packages.qualify(allow_dirty=True)
+            run.assert_not_called()
+            prepare.assert_called_once_with(check=True)
+
+    def test_offline_publication_preflight_fails_before_registry_or_source_work(self):
+        with patch.object(packages, "run") as run, patch.object(packages, "reconcile") as prepare:
+            with self.assertRaisesRegex(ValueError, "needs registry access"):
+                packages.qualify(offline=True, publish_dry_run=True)
+            run.assert_not_called()
+            prepare.assert_not_called()
 
 
 class ArchiveAdmission(unittest.TestCase):
@@ -94,18 +138,47 @@ class ProviderArtifacts(unittest.TestCase):
             packages.provider_libraries(json.dumps(library))
 
 
+class ArchivedTestLinks(unittest.TestCase):
+    """Publication omits test cycles; test restoration cannot rewrite production dependencies."""
+    def test_exact_test_links_restore_without_changing_production_or_source_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            manifest = directory / "Cargo.toml"
+            original = '[package]\nname="owner"\nversion="' + packages.RELEASE + '"\n[dependencies]\nproduction="1"\n'
+            manifest.write_text(original)
+            sidecar = directory / "tests/package-inputs/dependencies.json"
+            sidecar.parent.mkdir(parents=True)
+            declaration = {"schema": 1, "package": "owner", "dev-dependencies": {
+                "peer": {"version": "=" + packages.RELEASE, "features": ["test-support"], "default-features": False}}}
+            sidecar.write_text(json.dumps(declaration))
+            packages.restore_test_dependencies(directory, "owner", {"peer"})
+            import tomllib
+            result = tomllib.loads(manifest.read_text())
+            self.assertEqual(result["dependencies"], {"production": "1"})
+            self.assertEqual(result["dev-dependencies"], declaration["dev-dependencies"])
+            self.assertEqual(json.loads(sidecar.read_text()), declaration)
+            for invalid in [{"path": "/checkout"}, {"version": "1"}, {"package": "private"}]:
+                manifest.write_text(original)
+                changed = copy.deepcopy(declaration)
+                changed["dev-dependencies"]["peer"].update(invalid)
+                sidecar.write_text(json.dumps(changed))
+                with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                    packages.restore_test_dependencies(directory, "owner", {"peer"})
+                self.assertEqual(manifest.read_text(), original)
+
+
 class DerivedInputs(unittest.TestCase):
     """A changed canonical fixture cannot silently publish stale or unclaimed derived bytes."""
     def test_repair_freshness_and_pruning_are_scoped_to_owned_outputs(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            files = {"LICENSE": "project", "LICENSES/MIT": "notice", "Cargo.toml": "pins", "README.md": "application",
+            files = {"LICENSE": "project", "LICENSES/MIT": "notice", "Cargo.toml": '[workspace.package]\nversion="' + packages.RELEASE + '"\n', "README.md": "application",
                      "assets/WHITE.png": "pixels", "themes/classic/theme.json": "theme",
                      "examples/ui-samples/Cargo.toml": '[package]\nname="sample"\npublish=false\n',
                      "examples/assets/src/recipe.rs": "recipe", "examples/assets/src/recipe_data.rs": "data",
                      "scripts/com_dependencies.rs": "helper", "crates/ui/api/docs/button_events.rs": "walkthrough",
                      "crates/ui/document/README.md": "document", "crates/ui/document/tests/fixtures/view.rs": "binding",
-                     "crates/gfx/impl/Cargo.toml": '[package]\nname="fixture"\npublish=["crates-io"]\n'}
+                     "crates/gfx/impl/Cargo.toml": '[package]\nname="fixture"\npublish=["crates-io"]\n[dev-dependencies]\npeer={path="../peer",features=["test-support"]}\n'}
             for name, contents in files.items():
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -113,6 +186,8 @@ class DerivedInputs(unittest.TestCase):
             package_inputs.reconcile(check=False, root=root)
             self.assertEqual(package_inputs.reconcile(check=True, root=root), [])
             owned = root / "crates/gfx/impl/tests/package-inputs"
+            links = json.loads((owned / "dependencies.json").read_text())
+            self.assertEqual(links["dev-dependencies"]["peer"], {"version": "=" + packages.RELEASE, "features": ["test-support"]})
             stale = owned / "stale"
             stale.write_text("unclaimed")
             (root / "assets/WHITE.png").write_text("new pixels")

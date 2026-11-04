@@ -25,6 +25,8 @@ bitflags.workspace = true
 rs-math3d.workspace = true
 
 [dev-dependencies]
-neocogi-appearance.workspace = true
+# Cargo omits these cyclic local peer links on publication.
+# package_inputs.py preserves exact archive-test requirements separately.
+neocogi-appearance = { path = "../../appearance" }
 neocogi-com = { workspace = true, features = ["runtime"] }
 neocogi-com-host.workspace = true

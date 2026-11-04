@@ -7,6 +7,7 @@ derived files before package qualification. Published production code never read
 these fixtures; archived tests can use them without a neighboring checkout.
 """
 import argparse
+import json
 from pathlib import Path
 import tomllib
 
@@ -20,7 +21,7 @@ def release_directories(root=ROOT):
 
 
 def fixture_sources(root=ROOT):
-    """Map each derived subtree to exact source bytes; mappings own no authored inputs."""
+    """Derive fixture bytes and exact test-only peer links from their authoritative inputs."""
     result = {}
     for relative in ["crates/gfx/impl", "crates/skin/impl", "crates/skin/authoring"]:
         destination = root / relative / "tests/package-inputs"
@@ -36,6 +37,20 @@ def fixture_sources(root=ROOT):
             files.update({"button_events.rs": root / "crates/ui/api/docs/button_events.rs", "document.md": root / "crates/ui/document/README.md", "application.md": root / "README.md"})
             files.update({"document/" + source.name: source for source in (root / "crates/ui/document/tests/fixtures").iterdir() if source.is_file()})
         result[root / relative / "tests/package-inputs"] = files
+    result = {directory: {name: source.read_bytes() for name, source in files.items()} for directory, files in result.items()}
+    for directory in release_directories(root):
+        manifest = tomllib.loads((directory / "Cargo.toml").read_text())
+        peers = {}
+        for name, dependency in manifest.get("dev-dependencies", {}).items():
+            if not isinstance(dependency, dict) or "path" not in dependency or "version" in dependency:
+                continue
+            version = tomllib.loads((root / "Cargo.toml").read_text())["workspace"]["package"]["version"]
+            peers[name] = {key: value for key, value in dependency.items() if key not in {"path", "workspace"}}
+            peers[name]["version"] = "=" + version
+        if peers:
+            result.setdefault(directory / "tests/package-inputs", {})["dependencies.json"] = (
+                json.dumps({"schema": 1, "package": manifest["package"]["name"], "dev-dependencies": peers}, indent=2, sort_keys=True) + "\n"
+            ).encode()
     return result
 
 
@@ -56,9 +71,8 @@ def reconcile(*, check, root=ROOT):
             if source.is_file() and str(source.relative_to(directory)) not in sources:
                 differences.append(str(source.relative_to(root)))
                 if not check: source.unlink()
-        for name, source in sources.items():
+        for name, expected in sources.items():
             destination = directory / name
-            expected = source.read_bytes()
             if not destination.exists() or destination.read_bytes() != expected:
                 differences.append(str(destination.relative_to(root)))
                 if not check:

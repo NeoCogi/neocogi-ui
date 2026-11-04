@@ -54,7 +54,8 @@ def release_packages(metadata):
                 continue
             if dependency["name"] not in selected:
                 raise ValueError(f"release depends on private package: {package['name']} -> {dependency['name']}")
-            if dependency["req"] != "=" + RELEASE:
+            expected = "*" if dependency.get("kind") == "dev" else "=" + RELEASE
+            if dependency["req"] != expected:
                 raise ValueError(f"internal dependency is not exact: {package['name']} -> {dependency['name']}")
     return selected
 
@@ -116,8 +117,49 @@ def provider_libraries(artifacts):
     return libraries
 
 
-def qualify(*, offline=False, allow_dirty=False, stable=None, output=None):
+def restore_test_dependencies(directory, package, selected):
+    """Restore only archived test links after unmodified production/consumer qualification.
+
+    Cargo strips path-only dev dependencies to make first-publication order
+    acyclic. Their derived, package-owned sidecar retains exact test requirements;
+    no implementation source or production dependency is changed here.
+    """
+    sidecar = directory / "tests/package-inputs/dependencies.json"
+    if not sidecar.exists():
+        return
+    declarations = json.loads(sidecar.read_text())
+    if declarations.get("schema") != 1 or declarations.get("package") != package:
+        raise ValueError("invalid archived test dependency identity")
+    manifest = directory / "Cargo.toml"
+    original = tomllib.loads(manifest.read_text()).get("dev-dependencies", {})
+    additions = []
+    for name, dependency in declarations["dev-dependencies"].items():
+        peer = dependency.get("package", name)
+        if (peer not in selected or name in original or dependency.get("version") != "=" + RELEASE
+                or set(dependency) - {"version", "features", "default-features", "package"}):
+            raise ValueError(f"invalid archived test dependency: {package} -> {name}")
+        additions.append("\n[dev-dependencies." + json.dumps(name) + "]\n")
+        for key, value in dependency.items(): additions.append(key + "=" + json.dumps(value) + "\n")
+    manifest.write_text(manifest.read_text() + "".join(additions))
+
+
+def archive_command(cargo, packages, flags, resolution, *, allow_dirty, publish_dry_run):
+    """Construct a package or nonuploading publish preflight over exactly the admitted release."""
+    command = [*cargo, "publish", "--dry-run"] if publish_dry_run else [*cargo, "package"]
+    command += ["--locked", "--no-verify", *flags, "--config", str(resolution)]
+    if allow_dirty: command.append("--allow-dirty")
+    for name in sorted(packages): command += ["-p", name]
+    return command
+
+
+def qualify(*, offline=False, allow_dirty=False, stable=None, output=None, publish_dry_run=False):
     """Build actual archives, inspect them and execute only extracted internal implementation code."""
+    if offline and publish_dry_run:
+        raise ValueError("Cargo publication preflight needs registry access; omit --offline or use package mode")
+    if not allow_dirty and run(["git", "status", "--porcelain"], capture=True).strip():
+        raise ValueError("release qualification requires a clean committed tree; --allow-dirty is for development")
+    if output and output.resolve().exists():
+        raise ValueError(f"release output already exists: {output.resolve()}")
     reconcile(check=True)
     flags = ["--offline"] if offline else []
     toolchain = tomllib.loads((ROOT / "rust-toolchain.toml").read_text())["toolchain"]["channel"]
@@ -129,16 +171,18 @@ def qualify(*, offline=False, allow_dirty=False, stable=None, output=None):
         outside = Path(temporary)
         resolution = outside / "packaging.toml"
         resolution.write_text(patch_configuration(packages, {name: Path(p["manifest_path"]).parent for name, p in packages.items()}))
-        command = [*cargo, "package", "--locked", "--no-verify", *flags, "--config", str(resolution)]
-        if allow_dirty: command.append("--allow-dirty")
-        for name in sorted(packages): command += ["-p", name]
+        command = archive_command(cargo, packages, flags, resolution, allow_dirty=allow_dirty, publish_dry_run=publish_dry_run)
         # No checkout code is compiled here. This resolution-only patch handles
         # legitimate cyclic dev-test edges before registry versions are uploaded.
         run(command)
+        # The pinned workspace publisher retains its upload candidates separately
+        # from `cargo package` output; never inspect stale candidates from the other mode.
+        archive_directory = target / "package"
+        if publish_dry_run: archive_directory /= "tmp-crate"
         locations = {}
         inventory = {}
         for name, package in sorted(packages.items()):
-            archive = target / "package" / f"{name}-{RELEASE}.crate"
+            archive = archive_directory / f"{name}-{RELEASE}.crate"
             prefix = archive_manifest(archive, package)
             relative = Path(package["manifest_path"]).parent.relative_to(ROOT)
             parent = outside / relative.parent
@@ -170,22 +214,24 @@ def qualify(*, offline=False, allow_dirty=False, stable=None, output=None):
         run(clean)
         # These commands have no repository .cargo/config.toml, scripts, assets,
         # authored schemas or source paths outside the extracted release set.
-        artifacts = run([*cargo, "build", "--workspace", "--all-targets", "--all-features", "--message-format=json", *flags], cwd=outside, env=environment, capture=True)
+        artifacts = run([*cargo, "build", "--workspace", "--lib", "--bins", "--all-features", "--message-format=json", *flags], cwd=outside, env=environment, capture=True)
         libraries = provider_libraries(artifacts)
         run([*cargo, "run", "-p", "neocogi-ui-package-consumer", *flags], cwd=outside, env=environment)
-        required = ["neocogi-gfx-dylib", "neocogi-ui-runtime-dylib", "neocogi-ui-nodes-dylib"]
+        required = ["neocogi-gfx-dylib", "neocogi-skin-dylib", "neocogi-ui-runtime-dylib", "neocogi-ui-nodes-dylib"]
         if any(name not in libraries for name in required):
             raise ValueError("real archived provider libraries missing from Cargo artifact output")
         run([*cargo, "run", "-p", "neocogi-ui-package-consumer", *flags, "--", *[libraries[name] for name in required]], cwd=outside, env=environment)
+        run([*cargo, "clippy", "-p", "neocogi-ui-package-consumer", "--all-targets", *flags, "--", "-D", "warnings"], cwd=outside, env=environment)
         if stable:
             stable_environment = dict(environment, RUSTUP_TOOLCHAIN=stable)
             run(["cargo", "+" + stable, "run", "-p", "neocogi-ui-package-consumer", *flags], cwd=outside, env=stable_environment)
+        for name, directory in locations.items():
+            restore_test_dependencies(directory, name, packages)
         run([*cargo, "test", "--workspace", "--all-features", *flags], cwd=outside, env=environment)
         if output:
             output = output.resolve()
-            if output.exists(): raise ValueError(f"release output already exists: {output}")
             output.mkdir(parents=True)
-            for filename in inventory: shutil.copyfile(target / "package" / filename, output / filename)
+            for filename in inventory: shutil.copyfile(archive_directory / filename, output / filename)
             (output / "SHA256SUMS").write_text("".join(digest + "  " + name + "\n" for name, digest in sorted(inventory.items())))
     print(f"PASS: {len(packages)} inspected archives, extracted tests and static/dynamic external consumers", flush=True)
 
@@ -196,9 +242,11 @@ def main():
     parser.add_argument("--offline", action="store_true")
     parser.add_argument("--allow-dirty", action="store_true")
     parser.add_argument("--stable-toolchain")
+    parser.add_argument("--publish-dry-run", action="store_true", help="Use Cargo publish --dry-run to create archives; never upload")
     parser.add_argument("--output", type=Path)
     options = parser.parse_args()
-    qualify(offline=options.offline, allow_dirty=options.allow_dirty, stable=options.stable_toolchain, output=options.output)
+    qualify(offline=options.offline, allow_dirty=options.allow_dirty, stable=options.stable_toolchain,
+            output=options.output, publish_dry_run=options.publish_dry_run)
 
 
 if __name__ == "__main__":

@@ -26,10 +26,12 @@ bitflags.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
 
 [dev-dependencies]
+# Cargo omits these cyclic local peer links on publication.
+# package_inputs.py preserves exact archive-test requirements separately.
 # Direct algorithm tests use the real host and its native scoped-dispatch driver.
-neocogi-ui-runtime = { workspace = true, features = ["test-support"] }
-neocogi-ui-support = { workspace = true, features = ["test-support"] }
-neocogi-ui.workspace = true
+neocogi-ui-runtime = { path = "../runtime", features = ["test-support"], default-features = false }
+neocogi-ui-support = { path = "../support", features = ["test-support"], default-features = false }
+neocogi-ui = { path = "../api", default-features = false }
 neocogi-com = { workspace = true, features = ["runtime"] }
 neocogi-com-host.workspace = true
 tempfile.workspace = true

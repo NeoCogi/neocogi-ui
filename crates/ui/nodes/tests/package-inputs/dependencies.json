@@ -1,0 +1,24 @@
+{
+  "dev-dependencies": {
+    "neocogi-ui": {
+      "default-features": false,
+      "version": "=0.1.0-alpha.1"
+    },
+    "neocogi-ui-runtime": {
+      "default-features": false,
+      "features": [
+        "test-support"
+      ],
+      "version": "=0.1.0-alpha.1"
+    },
+    "neocogi-ui-support": {
+      "default-features": false,
+      "features": [
+        "test-support"
+      ],
+      "version": "=0.1.0-alpha.1"
+    }
+  },
+  "package": "neocogi-ui-nodes",
+  "schema": 1
+}

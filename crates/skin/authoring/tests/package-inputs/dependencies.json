@@ -1,0 +1,10 @@
+{
+  "dev-dependencies": {
+    "neocogi-ui-support": {
+      "default-features": false,
+      "version": "=0.1.0-alpha.1"
+    }
+  },
+  "package": "neocogi-skin-authoring",
+  "schema": 1
+}

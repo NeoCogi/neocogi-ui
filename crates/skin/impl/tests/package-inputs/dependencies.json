@@ -1,0 +1,22 @@
+{
+  "dev-dependencies": {
+    "neocogi-gfx-impl": {
+      "default-features": false,
+      "features": [
+        "builder",
+        "publisher"
+      ],
+      "version": "=0.1.0-alpha.1"
+    },
+    "neocogi-ui": {
+      "default-features": false,
+      "version": "=0.1.0-alpha.1"
+    },
+    "neocogi-ui-support": {
+      "default-features": false,
+      "version": "=0.1.0-alpha.1"
+    }
+  },
+  "package": "neocogi-skin-impl",
+  "schema": 1
+}

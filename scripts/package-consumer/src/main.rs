@@ -41,7 +41,12 @@ impl IRenderer for Renderer {
 fn register(runtime: neocogi_com::Runtime) -> Result<(), NcStatus> {
     let libraries: Vec<_> = std::env::args_os().skip(1).collect();
     if libraries.is_empty() {
-        for descriptor in [nc_gfx::plugin_descriptor(), nc_ui::plugin_descriptor(), nc_ui_nodes::plugin_descriptor()] {
+        for descriptor in [
+            nc_gfx::plugin_descriptor(),
+            nc_skin::plugin_descriptor(),
+            nc_ui::plugin_descriptor(),
+            nc_ui_nodes::plugin_descriptor(),
+        ] {
             // SAFETY: all selected descriptors and executable code are linked for process lifetime.
             unsafe {
                 runtime.register_plugin_descriptor(descriptor)?;
@@ -63,7 +68,7 @@ fn register(runtime: neocogi_com::Runtime) -> Result<(), NcStatus> {
 fn run(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn std::error::Error>> {
     register(runtime)?;
     let plugins = runtime.plugins()?;
-    assert_eq!(plugins.len(), 3);
+    assert_eq!(plugins.len(), 4);
     for plugin in plugins {
         assert_eq!(plugin.version, "0.1.0-alpha.1");
     }
@@ -75,6 +80,10 @@ fn run(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn std::error::Error>> 
     assert!(owned.query_ref::<contracts::IReleaseEventAbi>().is_ok());
     let assets = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)]).into_bundle()?;
     let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+    let skin = runtime.acquire_plugin_root::<neocogi_appearance::skin::SkinPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.skin.runtime"))?;
+    let publisher = gfx.asset_publisher()?;
+    let compiler = skin.style_compiler(publisher.as_com_ref())?;
+    let assets = compiler.derive_style(assets.as_com_ref(), assets.metrics()?, neocogi_appearance::skin::PaletteEdit::Preserve)?;
     let factory = runtime.acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
     let mut core = factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
     core.set_render_host(

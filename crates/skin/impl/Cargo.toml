@@ -28,7 +28,9 @@ neocogi-render-core.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
 
 [dev-dependencies]
+# Cargo omits these cyclic local peer links on publication.
+# package_inputs.py preserves exact archive-test requirements separately.
 tempfile.workspace = true
-neocogi-gfx-impl = { workspace = true, features = ["builder", "publisher"] }
-neocogi-ui.workspace = true
-neocogi-ui-support.workspace = true
+neocogi-gfx-impl = { path = "../../gfx/impl", features = ["builder", "publisher"], default-features = false }
+neocogi-ui = { path = "../../ui/api", default-features = false }
+neocogi-ui-support = { path = "../../ui/support", default-features = false }

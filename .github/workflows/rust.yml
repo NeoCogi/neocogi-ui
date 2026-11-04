@@ -24,6 +24,19 @@ jobs:
       - name: Cargo debugger source-map metadata
         run: python3 -m unittest discover -s scripts -p test_lldb_source_map.py
 
+  release-archives:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Derived license and test input freshness
+        run: python3 scripts/package_inputs.py --check
+      - name: Archive policy and fixture regressions
+        run: python3 -m unittest discover -s scripts -p test_release_packages.py
+      - name: Install current stable for the independent consumer
+        run: rustup toolchain install stable --profile minimal
+      - name: Qualify normalized archives, all features and independent linked/DLL consumers
+        run: python3 scripts/check_packages.py --publish-dry-run --stable-toolchain stable
+
   # The UI consumes resolved resources; optional construction features belong to assets.
   ui:
     runs-on: ubuntu-latest

@@ -45,6 +45,9 @@ SDL2 and the libraries for their selected graphics backend; see
 The checked-in lockfile fixes the standalone dependency graph.
 
 All Platform and COM packages use exact `=0.1.0-alpha.1` registry requirements.
+Internal production/build dependencies use that exact UI release too; test-only
+peer links are omitted from publication and restored from packaged test metadata
+by the archive qualifier.
 Cargo downloads their checked packages from crates.io; builds require no GitHub
 credentials or companion checkout.
 
