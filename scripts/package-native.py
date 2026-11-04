@@ -20,6 +20,8 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 RESOURCE_ENV = "NEOCOGI_RESOURCE_FILES"
 LIBRARY_SUFFIXES = {".so", ".dll", ".dylib"}
+# Platform owns these reserved root names for build-time resource ownership and locking.
+STAGING_METADATA = frozenset({".neocogi-layout.json", ".neocogi-layout.lock"})
 
 
 def cargo_options(args):
@@ -156,6 +158,24 @@ def inspect_loader(path):
         raise ValueError(f"COM services must be supplied by the executable's host: {path.name}")
 
 
+def discard_staging_metadata(app, expected):
+    """Remove only Platform's build receipts after Cargo and all its compiler children exit.
+
+    Each invocation owns this fresh candidate exclusively. Its lock inode can now be
+    discarded safely; shared Cargo outputs keep their receipts and persistent locks.
+    Authored paths cannot claim these reserved roots, and malformed metadata shapes
+    must fail rather than disappearing before the ordinary exact-membership check.
+    """
+    for name in STAGING_METADATA:
+        if any(path == name or path.startswith(name + "/") for path in expected):
+            raise ValueError(f"application files claim reserved staging metadata: {name}")
+        path = app / name
+        if path.is_symlink() or (path.exists() and not path.is_file()):
+            raise ValueError(f"staging metadata must be a regular file: {name}")
+    for name in STAGING_METADATA:
+        (app / name).unlink(missing_ok=True)
+
+
 def validate_candidate(app, executable, expected, libraries):
     """Require exact membership, private-path-free binaries and relocatable loader metadata."""
     paths = list(app.rglob("*"))
@@ -224,6 +244,7 @@ def package(args):
         app.mkdir()
         export.mkdir()
         executable, expected, libraries = build_candidate(args, selected, assets, app, export)
+        discard_staging_metadata(app, expected)
         validate_candidate(app, executable, expected, libraries)
         with destination_lock(destination):
             if os.path.lexists(destination):

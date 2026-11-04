@@ -180,6 +180,11 @@ The destination must not exist. Cargo exports the selected executable into priva
 scratch while holding its build lock; the production macros stage selected DLLs
 and recipe resources there. The packager checks exact file membership, private
 paths and native loader metadata, then publishes the complete directory by rename.
+After Cargo exits, it removes only Platform's reserved root `.neocogi-layout.json`
+ownership receipt and `.neocogi-layout.lock` from that private candidate. They are
+build coordination state, not application inputs. Shared build outputs retain them;
+authored claims, symlinks and directories at those reserved names fail packaging.
+Other unexpected files still fail exact membership checks.
 It requires `readelf` for ELF, `llvm-readobj` for PE or `otool` for Mach-O inspection.
 Move that directory as a unit to relocate the application. Compiler caches and debug
 unremapping sidecars stay on the build machine. Workspace profiles use

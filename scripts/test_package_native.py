@@ -49,6 +49,56 @@ class Admission(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     packager.validate_candidate(app, "app", {"app"}, set())
 
+    def test_only_root_staging_metadata_is_discarded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = Path(directory)
+            expected = {"app", "assets/.neocogi-layout.json"}
+            for name in expected | {".neocogi-layout.json", ".neocogi-layout.lock", ".neocogi-unexpected"}:
+                path = app / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(name)
+            packager.discard_staging_metadata(app, expected)
+            self.assertEqual(files(app), expected | {".neocogi-unexpected"})
+            self.assertEqual((app / "assets/.neocogi-layout.json").read_text(), "assets/.neocogi-layout.json")
+            with self.assertRaisesRegex(ValueError, "unexpected=.*neocogi-unexpected"):
+                packager.validate_candidate(app, "app", expected, set())
+            # Compositions without receipts, including a repeated finalization, are valid too.
+            packager.discard_staging_metadata(app, expected)
+
+    def test_staging_metadata_cannot_hide_authored_files_or_directories(self):
+        for name in (".neocogi-layout.json", ".neocogi-layout.lock"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                app = Path(directory)
+                path = app / name
+                path.write_text("retained")
+                for expected in ({name}, {name + "/child"}):
+                    with self.assertRaisesRegex(ValueError, "reserved staging metadata"):
+                        packager.discard_staging_metadata(app, expected)
+                    self.assertEqual(path.read_text(), "retained")
+                path.unlink()
+                path.mkdir()
+                with self.assertRaisesRegex(ValueError, "regular file"):
+                    packager.discard_staging_metadata(app, set())
+                self.assertTrue(path.is_dir())
+
+    @unittest.skipUnless(os.name == 'posix', 'symlink fixture requires POSIX')
+    def test_staging_metadata_symlink_is_rejected_without_touching_its_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = root / "app"
+            app.mkdir()
+            target = root / "retained"
+            target.write_text("retained")
+            for name in (".neocogi-layout.json", ".neocogi-layout.lock"):
+                with self.subTest(name=name):
+                    link = app / name
+                    link.symlink_to(target)
+                    with self.assertRaisesRegex(ValueError, "regular file"):
+                        packager.discard_staging_metadata(app, set())
+                    self.assertTrue(link.is_symlink())
+                    self.assertEqual(target.read_text(), "retained")
+                    link.unlink()
+
 
 def selection(output, kind="basic", backend="glow", embedded=False, monolith=False):
     """Use the same public arguments as the documented packaging command."""
@@ -115,6 +165,7 @@ def production(directory):
         ("smoke", "smoke", "glow", False, False),
     ):
         built[name] = packager.package(selection(directory / name, kind, backend, embedded, monolith))
+        assert not ({".neocogi-layout.json", ".neocogi-layout.lock"} & files(built[name]))
     assert files(built["full-a"]) == files(built["full-b"])
     assert files(built["basic-a"]) == files(built["basic-b"])
     assert not any(name.startswith("themes/") or "FACEPALM" in name or name.endswith(".obj") for name in files(built["basic-a"]))
