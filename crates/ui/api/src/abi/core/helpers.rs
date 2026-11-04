@@ -85,7 +85,7 @@ pub const UI_E_EXPIRED_SCOPE: NcStatus = NcStatus::from_code(-1003);
 /// Painting requires update/layout to be synchronized after a mutation or resize.
 pub const UI_E_UPDATE_REQUIRED: NcStatus = NcStatus::from_code(-1004);
 
-/// Backend failure; diagnostics belong to the platform implementation.
+/// Backend failure; the operation's returned `RenderError` owns its status and detail.
 pub const UI_E_RENDER: NcStatus = NcStatus::from_code(-1005);
 
 /// A live surface rejects the requested structural, modal or managed-layer operation.

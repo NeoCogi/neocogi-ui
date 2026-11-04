@@ -6,8 +6,8 @@ use neocogi_idl::{Module, ResolvedModules, ModuleGraphError};
 pub fn resolve(mut consumers: Vec<Module>) -> Result<ResolvedModules, ModuleGraphError> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     for (source_root, path) in [
-        (Path::new(neocogi_render_core::SCHEMA_ROOT).to_path_buf(), "neocogi/renderer"),
-        (Path::new(neocogi_render_core::SCHEMA_ROOT).to_path_buf(), "neocogi/platform"),
+        (Path::new(env!("OUT_DIR")).join("neocogi-shared-sources"), "neocogi/renderer"),
+        (Path::new(env!("OUT_DIR")).join("neocogi-shared-sources"), "neocogi/platform"),
         (root.join("crates/gfx/schemas"), "neocogi/gfx"),
         (root.join("crates/ui/schemas"), "neocogi/ui/core"),
     ] {

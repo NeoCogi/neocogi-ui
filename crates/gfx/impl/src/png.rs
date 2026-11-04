@@ -132,8 +132,9 @@ impl PngDecoder for PngDecoderObject {
         // Transfer the decoded allocation into a source; the factory finishes bounded reads before native upload.
         target
             .create_texture(image.size, neocogi_render_core::source::initial_bytes(image.pixels).borrow()?)
-            .inspect_err(|status| {
-                self.diagnostic.failure(status);
+            .map_err(|error| {
+                self.diagnostic.failure(&error);
+                error.status
             })
     }
 }
@@ -235,19 +236,22 @@ mod tests {
     }
     impl ITextureFactory for Factory {
         /// Validates normalized RGBA pixels and deliberately calls back before returning.
-        fn create_texture(
+        fn create_texture_result(
             &self,
             size: Size,
             pixels: neocogi_com::NcValueRef<'_, neocogi_render_core::abi::InitialGpuData>,
-        ) -> Result<ComPtr<ITextureAbi>, NcStatus> {
-            self.calls.set(self.calls.get() + 1);
-            let pixels = neocogi_render_core::source::read_initial(pixels, size.width as usize * size.height as usize * 4)?.unwrap();
-            assert!(pixels.iter().all(|channel| *channel == 255));
-            self.diagnostics.diagnostic()?.to_string()?;
-            if self.fail.get() {
-                return Err(RENDER_E_BACKEND);
-            }
-            Texture::from_value(Texture { size }).query()
+        ) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::ITextureCreationResultAbi>, NcStatus> {
+            let result = (|| -> Result<ComPtr<ITextureAbi>, NcStatus> {
+                self.calls.set(self.calls.get() + 1);
+                let pixels = neocogi_render_core::source::read_initial(pixels, size.width as usize * size.height as usize * 4)?.unwrap();
+                assert!(pixels.iter().all(|channel| *channel == 255));
+                self.diagnostics.diagnostic()?.to_string()?;
+                if self.fail.get() {
+                    return Err(RENDER_E_BACKEND);
+                }
+                Texture::from_value(Texture { size }).query()
+            })();
+            Ok(neocogi_render_core::abi::texture_creation_result(result.map_err(neocogi_render_core::abi::RenderError::from)))
         }
     }
 

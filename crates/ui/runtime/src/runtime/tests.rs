@@ -285,16 +285,19 @@ impl neocogi_render_core::abi::IRenderDriverBound for Renderer {
 }
 impl IRenderer for Renderer {
     /// Copies bulk geometry during its valid scope and retains authority for later rejection tests.
-    fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
-        assert_eq!(batches.len(), 1);
-        assert!(matches!(batches[0], UiBatch::Atlas { first: 0, count } if count as usize == vertices.len()));
-        assert!(vertices.len() >= 6);
-        assert!(vertices.iter().all(|v| v.x.is_finite() && v.y.is_finite()));
-        *self.probe.vertices.borrow_mut() = vertices;
-        self.probe.calls.set(self.probe.calls.get() + 1);
-        self.probe.streams.borrow_mut().push((stream.try_add_ref()?, info.invocation));
-        if self.probe.fail.get() { Err(UI_E_RENDER) } else { Ok(()) }
+    fn render_result(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+        let result = (|| -> Result<(), NcStatus> {
+            let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
+            assert_eq!(batches.len(), 1);
+            assert!(matches!(batches[0], UiBatch::Atlas { first: 0, count } if count as usize == vertices.len()));
+            assert!(vertices.len() >= 6);
+            assert!(vertices.iter().all(|v| v.x.is_finite() && v.y.is_finite()));
+            *self.probe.vertices.borrow_mut() = vertices;
+            self.probe.calls.set(self.probe.calls.get() + 1);
+            self.probe.streams.borrow_mut().push((stream.try_add_ref()?, info.invocation));
+            if self.probe.fail.get() { Err(UI_E_RENDER) } else { Ok(()) }
+        })();
+        Ok(neocogi_render_core::abi::operation_result(result.map_err(neocogi_render_core::abi::RenderError::from)))
     }
 }
 
@@ -337,21 +340,21 @@ fn rendering_requires_synchronized_geometry_and_streams_expire_after_success_and
     let node = button_owner.query().unwrap();
     let _window = mount(&runtime, node).unwrap();
     let (renderer, probe) = renderer();
-    assert_eq!(runtime.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
     runtime.update(SIZE).unwrap();
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     button.set_label(NcCopyFromBufferOffset::new(0, b"longer")).unwrap();
-    assert_eq!(runtime.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
     assert_eq!(probe.calls.get(), 1);
     runtime.update(SIZE).unwrap();
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     button.set_label(NcCopyFromBufferOffset::new(0, b"longer")).unwrap();
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     let resized = Size { width: 800, height: 480 };
-    assert_eq!(runtime.render(resized, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(runtime.render(resized, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
     runtime.update(resized).unwrap();
     probe.fail.set(true);
-    assert_eq!(runtime.render(resized, renderer.as_com_ref()), Err(UI_E_RENDER));
+    assert_eq!(runtime.render(resized, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_RENDER));
     for (stream, scope) in probe.streams.borrow().iter() {
         assert_eq!(stream.view(*scope, 0).unwrap_err(), NC_E_INVALID_ARG);
         assert_eq!(stream.view(*scope, 0).unwrap_err(), NC_E_INVALID_ARG);
@@ -596,7 +599,7 @@ fn external_widget_cannot_reenter_mutate_during_observation_or_reuse_a_paint_sco
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     probe.fail_paint.set(true);
-    assert_eq!(runtime.render(SIZE, renderer.as_com_ref()), Err(NC_E_INVALID_ARG));
+    assert_eq!(runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(NC_E_INVALID_ARG));
     assert_eq!(backend.calls.get(), 2);
     window.close().unwrap();
     runtime.close().unwrap();
@@ -826,7 +829,7 @@ fn com_nodes_update_without_activation_and_collect_hidden_widget_changes() {
     let measured = probe.measures.get();
     runtime.input(UiInput::Text, NcCopyFromBufferOffset::new(0, "hello ☃".as_bytes())).unwrap();
     let (renderer, _) = renderer();
-    assert_eq!(runtime.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
     runtime.update(SIZE).unwrap();
     assert_eq!(&*probe.texts.borrow(), &["hello ☃"]);
     assert_eq!(probe.measures.get(), measured, "NoChange text processing must preserve measurement");
@@ -1627,7 +1630,7 @@ fn update_failure_stops_later_roots_without_losing_retry_invalidation() {
     assert_eq!(first.updates.get(), before.0 + 1);
     assert_eq!(later.updates.get(), before.1);
     let (renderer, _) = renderer();
-    assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(ui.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
     ui.update(SIZE).unwrap();
     assert_eq!(first.updates.get(), before.0 + 2);
     assert_eq!(later.updates.get(), before.1 + 1);
@@ -1813,7 +1816,7 @@ fn review_independent_sticky_setter_requires_update_before_render() {
     let (renderer, probe) = renderer();
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     text.set_text(NcCopyFromBufferOffset::new(0, b"a much longer label")).unwrap();
-    assert_eq!(runtime.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
     assert_eq!(probe.calls.get(), 1);
 }
 

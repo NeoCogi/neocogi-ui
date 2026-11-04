@@ -781,7 +781,7 @@ fn build_controls(
 /// Mounts the log, typography, layout and custom drawing examples as ordinary structural children.
 fn build_examples(host: &Host, state: &mut State, log_owner: OwnedWidget<ScrollAreaAbi>, entry_owner: OwnedWidget<TextboxAbi>) -> Result<(), HostError> {
     let clients = host.renderer.query::<neocogi_render_core::abi::IRenderClientFactoryAbi>()?;
-    let domain = clients.create_client(neocogi_render_core::abi::RenderClientLimits::default())?;
+    let domain = clients.create_client(neocogi_render_core::abi::RenderClientLimits::default(), host.surface.as_com_ref(), neocogi_render_core::abi::RenderClientPermissions::default())?;
     let resources = domain.resources()?;
     state.gpu_domains.push(domain);
     let events_tx = &mut state.inputs;

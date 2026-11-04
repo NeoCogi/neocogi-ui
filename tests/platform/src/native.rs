@@ -1,14 +1,14 @@
-use neocogi_com::{com_object, ComPtr, NcCopyFromBufferOffset, NcStatus, INcStringComPtrExt};
+use neocogi_com::{com_object, ComRef, ComPtr, NcCopyFromBufferOffset, NcStatus};
 #[cfg(feature = "glow")]
-use neocogi_com::{ComRef, ComBox, IUnknown, ComInterface, NC_E_INVALID_ARG};
+use neocogi_com::{ComBox, IUnknown, ComInterface, NC_E_INVALID_ARG};
 use neocogi_render_core::{abi::*, platform::*};
 #[cfg(feature = "glow")]
 use neocogi_gfx_support::abi::RenderVertex;
 #[cfg(feature = "glow")]
 use std::{cell::RefCell, rc::Rc};
-use nc_render::testing::NativeWindow;
+use nc_platform::testing::NativeWindow;
 #[cfg(feature = "glow")]
-use nc_render::testing::NativeBackend;
+use nc_platform::testing::NativeBackend;
 #[cfg(feature = "glow")]
 use neocogi_render_gpu::source::{Bytes, PipelineDesc};
 mod compiler_failure;
@@ -39,8 +39,8 @@ impl PlatformObject {
         Self { compiler }
     }
     /// Uses the public opt-in platform fixture, including its weak observations.
-    fn window(&self, title: &str, size: Size) -> Result<NativeWindow, NcStatus> {
-        nc_render::testing::window(self.compiler.clone(), title, size)
+    fn window(&self, title: &str, size: Size) -> Result<NativeWindow, RenderError> {
+        nc_platform::testing::window(self.compiler.clone(), title, size)
     }
 }
 /// Transfers the factory-issued production window into its public COM capability.
@@ -114,4 +114,11 @@ fn quad(rect: Rect) -> [RenderVertex; 4] {
             rgba: 0xffffffff,
         },
     ]
+}
+
+/// Creates an explicit view of the production window framebuffer for this fixture.
+fn framebuffer(host: ComRef<'_, IRenderHostAbi>) -> ComPtr<IRenderSurfaceAbi> {
+    host.try_add_ref().unwrap().query::<IRenderSurfaceFactoryAbi>().unwrap().create_surface(RenderSurfaceDesc {
+        kind: RenderSurfaceKind::Framebuffer, size: Size::default(),
+    }).unwrap()
 }

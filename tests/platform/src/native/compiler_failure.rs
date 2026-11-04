@@ -2,7 +2,7 @@ use super::*;
 #[com_object(interfaces(neocogi_shader_core::abi::ShaderCompiler))]
 struct RejectedCompiler;
 impl neocogi_shader_core::abi::ShaderCompiler for RejectedCompiler {
-    fn compile(
+    fn compile_result(
         &self,
         request: neocogi_shader_core::abi::ShaderCompileRequest,
         _: NcCopyFromBufferOffset<'_, u8>,
@@ -10,14 +10,14 @@ impl neocogi_shader_core::abi::ShaderCompiler for RejectedCompiler {
     ) -> Result<ComPtr<neocogi_shader_core::abi::IShaderCompilationAbi>, NcStatus> {
         let root: ComPtr<neocogi_shader_core::abi::ShaderCompilerAbi> =
             nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query()?;
-        root.compile(request, NcCopyFromBufferOffset::new(0, b"rejected_ui_shader_diagnostic"), entry)
+        root.compile_result(request, NcCopyFromBufferOffset::new(0, b"rejected_ui_shader_diagnostic"), entry)
     }
 }
 /// Exercise the actual UI->GFX->resource->compiler first-bind chain; capture detail
 /// before dropping the native window, then prove the owned text remains usable.
 #[test]
 #[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
-fn first_ui_bind_shader_rejection_preserves_device_diagnostic() {
+fn first_ui_bind_shader_rejection_returns_owned_operation_error() {
     use neocogi_gfx_support::abi::GfxPluginFactoryAbi;
     use neocogi_ui::abi::core::UiPluginFactoryAbi;
     let _session = native_session();
@@ -41,16 +41,11 @@ fn first_ui_bind_shader_rejection_preserves_device_diagnostic() {
     let window: ComPtr<IPlatformWindowAbi> = WindowObject::from_value(native).query().unwrap();
     let renderer: ComPtr<IRendererAbi> = window.query().unwrap();
     let host = window.graphics_host().unwrap();
-    assert!(ui.set_render_host(host.as_com_ref()).is_err());
-    let detail = renderer
-        .query::<IRenderDiagnosticsAbi>()
-        .unwrap()
-        .diagnostic()
-        .unwrap()
-        .to_string_bounded(4096)
-        .unwrap();
+    let surface = framebuffer(host.as_com_ref());
+    let error = ui.set_render_host(host.as_com_ref(), surface.as_com_ref()).unwrap_err();
+    let detail = error.message;
     assert!(detail.contains("rejected_ui_shader_diagnostic"), "{detail}");
-    drop((ui, host, renderer, window, platform));
+    drop((ui, host, renderer, surface, window, platform));
     assert!(!weak.is_alive());
     assert!(detail.contains("rejected_ui_shader_diagnostic"));
 }

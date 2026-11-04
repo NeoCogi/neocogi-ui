@@ -259,7 +259,7 @@ struct Probe {
     /// The observer must see the exact atlas version accepted by native preparation.
     prepared: Cell<usize>,
 }
-#[com_object(interfaces(neocogi_render_core::abi::IRenderHost))]
+#[com_object(interfaces(neocogi_render_core::abi::IRenderHost, neocogi_render_core::abi::IRenderClientFactory))]
 /// Native preparation probes run through the private graphics host, without owning their runtime.
 struct UploadHost {
     /// CPU assembly authenticates real generic resources and blocks.
@@ -273,49 +273,39 @@ impl neocogi_render_core::abi::IRenderDriverBound for UploadHost {
     }
 }
 impl neocogi_render_core::abi::IRenderHost for UploadHost {
-    fn maintain(&self) -> Result<(), NcStatus> {
-        self.inner.maintain()
+    fn maintain_result(&self) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+        self.inner.maintain_result()
     }
-    fn import_ui_texture(
-        &self,
-        resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>,
-        image: ComRef<'_, ITextureAbi>,
-    ) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::IGpuTextureAbi>, NcStatus> {
-        self.inner.import_ui_texture(resources, image)
+    fn import_texture_result(&self, resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>, image: ComRef<'_, neocogi_render_core::abi::ITextureAbi>) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::ITextureImportResultAbi>, NcStatus> {
+        self.inner.import_texture_result(resources, image)
     }
-    fn create_ui_client(
-        &self,
-        limits: neocogi_render_core::abi::RenderClientLimits,
-    ) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::IRenderClientDomainAbi>, NcStatus> {
-        self.inner.create_ui_client(limits)
-    }
+
     fn recording_broker(&self) -> Result<ComPtr<neocogi_render_core::abi::IRenderViewBrokerAbi>, NcStatus> {
         self.inner.recording_broker()
     }
-    fn prepare_ui_texture(
-        &self,
-        resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>,
-        texture: ComRef<'_, neocogi_render_core::abi::IGpuTextureAbi>,
-    ) -> Result<(), NcStatus> {
-        let version = neocogi_gfx_support::testing::texture(resources, texture)?;
-        self.inner.prepare_ui_texture(resources, texture)?;
-        if self.probe.armed.get() {
-            self.probe.uploads.set(self.probe.uploads.get() + 1);
-            let installed = self.probe.button.host()?.assets()?.image()?;
-            assert_eq!(installed.as_raw().object, self.probe.current.borrow().as_raw().object);
-            let runtime = self.probe.runtime.upgrade().expect("test owns runtime reentry capability");
-            assert_eq!(runtime.update(SIZE), Err(NC_E_BUSY));
-            let mut button = self.probe.button.clone();
-            assert_eq!(button.set_label(NcCopyFromBufferOffset::new(0, b"reentrant")), Err(UI_E_BUSY));
-            let installed = self.probe.button.host()?.assets()?;
-            let mut runtime = runtime.as_ref().clone();
-            assert_eq!(runtime.install_assets(installed.as_com_ref()), Err(NC_E_BUSY));
-            if self.probe.fail.get() {
-                return Err(UI_E_RENDER);
+    fn prepare_texture_result(&self, resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>, texture: ComRef<'_, neocogi_render_core::abi::IGpuTextureAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+        let result = (|| -> Result<(), neocogi_render_core::abi::RenderError> {
+            let version = neocogi_gfx_support::testing::texture(resources, texture)?;
+            self.inner.prepare_texture(resources, texture)?;
+            if self.probe.armed.get() {
+                self.probe.uploads.set(self.probe.uploads.get() + 1);
+                let installed = self.probe.button.host()?.assets()?.image()?;
+                assert_eq!(installed.as_raw().object, self.probe.current.borrow().as_raw().object);
+                let runtime = self.probe.runtime.upgrade().expect("test owns runtime reentry capability");
+                assert_eq!(runtime.update(SIZE), Err(NC_E_BUSY));
+                let mut button = self.probe.button.clone();
+                assert_eq!(button.set_label(NcCopyFromBufferOffset::new(0, b"reentrant")), Err(UI_E_BUSY));
+                let installed = self.probe.button.host()?.assets()?;
+                let mut runtime = runtime.as_ref().clone();
+                assert_eq!(runtime.install_assets(installed.as_com_ref()).map_err(|error| error.status), Err(NC_E_BUSY));
+                if self.probe.fail.get() {
+                    return Err(UI_E_RENDER.into());
+                }
             }
-        }
-        self.probe.prepared.set(Rc::as_ptr(&version) as usize);
-        Ok(())
+            self.probe.prepared.set(Rc::as_ptr(&version) as usize);
+            Ok(())
+        })();
+        Ok(neocogi_render_core::abi::operation_result(result))
     }
 }
 
@@ -328,19 +318,22 @@ impl neocogi_render_core::abi::IRenderDriverBound for UploadRenderer {
     }
 }
 impl IRenderer for UploadRenderer {
-    fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        let blocks = neocogi_gfx_support::testing::blocks(info, stream)?;
-        let mut draws = 0;
-        for block in blocks {
-            for command in block.commands() {
-                if let neocogi_render_gpu::command::Command::Draw(draw) = command {
-                    assert_eq!(Rc::as_ptr(&draw.textures[0].texture) as usize, self.0.prepared.get());
-                    draws += 1;
+    fn render_result(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+        let result = (|| -> Result<(), NcStatus> {
+            let blocks = neocogi_gfx_support::testing::blocks(info, stream)?;
+            let mut draws = 0;
+            for block in blocks {
+                for command in block.commands() {
+                    if let neocogi_render_gpu::command::Command::Draw(draw) = command {
+                        assert_eq!(Rc::as_ptr(&draw.textures[0].texture) as usize, self.0.prepared.get());
+                        draws += 1;
+                    }
                 }
             }
-        }
-        assert!(draws > 0);
-        Ok(())
+            assert!(draws > 0);
+            Ok(())
+        })();
+        Ok(neocogi_render_core::abi::operation_result(result.map_err(neocogi_render_core::abi::RenderError::from)))
     }
 }
 /// Bind real host preparation before arming injection; no observer owns a strong runtime cycle.
@@ -352,7 +345,7 @@ fn upload_renderer(probe: Rc<Probe>) -> ComPtr<IRendererAbi> {
     .query()
     .unwrap();
     let mut runtime = probe.runtime.upgrade().unwrap().as_ref().clone();
-    runtime.set_render_host(host.as_com_ref()).unwrap();
+    runtime.set_render_host(host.as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
     probe.armed.set(true);
     UploadRenderer::from_value(UploadRenderer(probe)).query().unwrap()
 }
@@ -373,7 +366,7 @@ struct InstallTheme;
 impl InstallTheme {
     /// The generated COM borrow gate rejects this call before the renderer observes a candidate.
     fn handle(&mut self, state: &mut ThemeState, _: &()) -> Result<(), NcStatus> {
-        state.ui.install_assets(state.candidate.as_com_ref())?;
+        state.ui.install_assets(state.candidate.as_com_ref()).map_err(|error| error.status)?;
         state.installed += 1;
         Ok(())
     }
@@ -442,7 +435,7 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
     {
         let state = &mut *app.state();
         let candidate = state.candidate.clone();
-        assert_eq!(state.ui.install_assets(candidate.as_com_ref()), Err(UI_E_RENDER));
+        assert_eq!(state.ui.install_assets(candidate.as_com_ref()).map_err(|error| error.status), Err(UI_E_RENDER));
     }
     assert_eq!(ui.assets().unwrap().as_raw().object, source.as_raw().object);
     assert_eq!(probe.uploads.get(), 1);
@@ -495,19 +488,19 @@ fn runtime_install_is_atomic_and_updates_shared_widget_measurement() {
     data.tables.metrics.padding += 10;
     let candidate = data.into_revision(source.as_com_ref()).unwrap();
     probe.fail.set(true);
-    assert_eq!(ui.install_assets(candidate.as_com_ref()), Err(UI_E_RENDER));
+    assert_eq!(ui.install_assets(candidate.as_com_ref()).map_err(|error| error.status), Err(UI_E_RENDER));
     assert_eq!(ui.assets().unwrap().as_raw().object, source.as_raw().object);
     assert_eq!(leaf.measure(limits, metrics.as_com_ref()).unwrap(), before);
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
 
     let unrelated = export_bundle(&bundle()).unwrap();
-    assert_eq!(ui.install_assets(unrelated.as_com_ref()), Err(UI_E_OWNER));
+    assert_eq!(ui.install_assets(unrelated.as_com_ref()).map_err(|error| error.status), Err(UI_E_OWNER));
     assert_eq!(probe.uploads.get(), 1);
     probe.fail.set(false);
     ui.install_assets(candidate.as_com_ref()).unwrap();
     assert_eq!(probe.uploads.get(), 2);
     assert_eq!(button_interface.host().unwrap().assets().unwrap().as_raw().object, candidate.as_raw().object);
-    assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(ui.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
     let after = leaf.measure(limits, metrics.as_com_ref()).unwrap();
     assert_eq!(after.width, before.width + 20);
     // Buttons use half-padding above and below text; horizontal padding is the full value.
@@ -585,4 +578,11 @@ fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision
     ui.close().unwrap();
     // Compilation owns no UI lifetime: retained resource data remains authorable after closure.
     compiler.derive_style(source.as_com_ref(), metrics, PaletteEdit::Preserve).unwrap();
+}
+
+/// Delegates group creation while retaining the fixture's upload/quota observations.
+impl neocogi_render_core::abi::IRenderClientFactory for UploadHost {
+    fn create_client(&self, limits: neocogi_render_core::abi::RenderClientLimits, surface: ComRef<'_, neocogi_render_core::abi::IRenderSurfaceAbi>, permissions: neocogi_render_core::abi::RenderClientPermissions) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::IRenderClientDomainAbi>, NcStatus> {
+        self.inner.query::<neocogi_render_core::abi::IRenderClientFactoryAbi>()?.create_client(limits, surface, permissions)
+    }
 }

@@ -62,7 +62,7 @@ extern "C" {
 /// Executes platform DOM checks and the real UI integration from this application-owned test artifact.
 #[wasm_bindgen]
 pub fn run_browser_input_tests() {
-    nc_render::testing::run_platform_input_tests();
+    nc_platform::testing::run_platform_input_tests();
     static_com_editing_and_webgl();
 }
 /// Registers all provider descriptors in one linked runtime, then exercises real DOM input,
@@ -76,10 +76,10 @@ fn static_com_editing_and_webgl() {
         runtime.register_plugin_descriptor(nc_ui_nodes::plugin_descriptor()).unwrap();
         runtime.register_plugin_descriptor(nc_gfx::plugin_descriptor()).unwrap();
         runtime.register_plugin_descriptor(nc_shader_compiler::plugin_descriptor()).unwrap();
-        runtime.register_plugin_descriptor(nc_render::plugin_descriptor()).unwrap();
+        runtime.register_plugin_descriptor(nc_platform::plugin_descriptor()).unwrap();
     }
     let platform = runtime
-        .acquire_plugin_root::<PlatformAbi>(neocogi_com::guid_from_qualified_name("neocogi.render.webgl"))
+        .acquire_plugin_root::<PlatformAbi>(neocogi_com::guid_from_qualified_name("neocogi.platform.webgl"))
         .unwrap();
     let assets = neocogi_demo_assets::load_bundle(crate::host_runtime()).unwrap();
     let native = platform
@@ -96,7 +96,11 @@ fn static_com_editing_and_webgl() {
         .acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
         .unwrap();
     let mut core = factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref()).unwrap();
-    core.set_render_host(native.graphics_host().unwrap().as_com_ref()).unwrap();
+    let host = native.graphics_host().unwrap();
+    let surface = host.query::<IRenderSurfaceFactoryAbi>().unwrap().create_surface(RenderSurfaceDesc {
+        kind: RenderSurfaceKind::Framebuffer, size: Size::default(),
+    }).unwrap();
+    core.set_render_host(host.as_com_ref(), surface.as_com_ref()).unwrap();
     let nodes = runtime
         .acquire_plugin_root::<NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))
         .unwrap();
@@ -128,7 +132,7 @@ fn static_com_editing_and_webgl() {
     canvas.style().set_property("width", "500px").unwrap();
     let resized = native.size().unwrap();
     assert_ne!(resized, size);
-    assert_eq!(ui.render(resized, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(ui.render(resized, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
     ui.update(resized).unwrap();
     ui.render(resized, renderer.as_com_ref()).unwrap();
     window.close().unwrap();

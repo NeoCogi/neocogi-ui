@@ -247,7 +247,7 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
     let (renderer, _) = renderer();
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
     item.set_shortcut_hint("A longer accelerator").unwrap();
-    assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(ui.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
     window.close().unwrap();
     assert_eq!(item.label(), Err(UI_E_CLOSED));
 }

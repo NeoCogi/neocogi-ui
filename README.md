@@ -7,7 +7,7 @@ GFX, and skin providers.
 
 [NeoCogi Platform](https://github.com/NeoCogi/neocogi-platform) supplies native/browser
 platform services, generic graphics resources, shader compilation and renderer
-backends through the exact revision pinned by this workspace.
+backends through the published crates.io release `0.1.0-alpha.1`.
 
 See [UI and COM history](docs/project/HISTORY.md) for the matching dependency
 revisions throughout the commit history.
@@ -40,9 +40,9 @@ SDL2 and the libraries for their selected graphics backend; see
 [backend prerequisites](crates/ui/runtime/docs/BACKENDS.md).
 The checked-in lockfile fixes the standalone dependency graph.
 
-Platform dependencies use exact SSH Git revisions. Local Cargo fetches use Git's
-SSH configuration and agent. CI fetches public companion repositories over
-anonymous HTTPS while preserving the same locked source and revision.
+All Platform and COM packages use exact `=0.1.0-alpha.1` registry requirements.
+Cargo downloads their checked packages from crates.io; builds require no GitHub
+credentials or companion checkout.
 
 ```sh
 cargo fetch --locked

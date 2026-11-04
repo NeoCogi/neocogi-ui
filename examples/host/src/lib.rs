@@ -26,7 +26,7 @@ pub enum HostError {
         operation: &'static str,
         /// Exact cause remains available through Error::source.
         status: NcStatus,
-        /// Bounded owned detail captured while a failing setup device is still alive.
+        /// Bounded text owned by this operation, independent of subsequent calls or device lifetime.
         detail: Option<String>,
     },
     /// Package validation or native renderer detail is available as owned text.
@@ -161,6 +161,8 @@ pub struct Host {
     pub ui: Ui,
     /// Selected backend owns all images and custom render items used by this host.
     pub renderer: ComPtr<IRendererAbi>,
+    /// Explicit framebuffer view shared by UI and application-created resource groups.
+    pub surface: ComPtr<IRenderSurfaceAbi>,
     /// OS/canvas polling and native composition share the renderer's COM identity.
     pub window: ComPtr<IPlatformWindowAbi>,
     /// Pending native observations owned independently of any mutable application borrow.
@@ -169,24 +171,9 @@ pub struct Host {
     input: ComPtr<IInputSinkAbi>,
 }
 impl Host {
-    /// Names the failing frame operation and preserves detail from native renderer failures.
-    /// All renderer projections from this window share its device diagnostic. Other statuses
-    /// retain their original error instead of acquiring a potentially stale renderer message.
+    /// Context for status-only UI/input operations carries no unrelated renderer text.
     fn frame_error(&self, phase: &'static str, status: NcStatus) -> HostError {
-        if status != UI_E_RENDER {
-            return HostError::Operation { operation: phase, status, detail: None };
-        }
-        let detail = self
-            .renderer
-            .query::<IRenderDiagnosticsAbi>()
-            .and_then(|diagnostics| diagnostics.diagnostic())
-            .and_then(|text| neocogi_com::INcStringComPtrExt::to_string(&text))
-            .unwrap_or_default();
-        HostError::Message(if detail.is_empty() {
-            format!("{phase} failed: {status}")
-        } else {
-            format!("{phase} failed: {status}: {detail}")
-        })
+        HostError::Operation { operation: phase, status, detail: None }
     }
 
     /// Loads/registers trusted assemblies once and creates one complete demo host from immutable assets.
@@ -200,9 +187,12 @@ impl Host {
         let mut ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
         ui_runtime.set_clipboard(window.clipboard()?.as_com_ref())?;
         let render_host = window.graphics_host()?;
-        ui_runtime
-            .set_render_host(render_host.as_com_ref())
-            .map_err(|status| setup_error(&renderer, status))?;
+        let surface = render_host.query::<IRenderSurfaceFactoryAbi>()?.create_surface(RenderSurfaceDesc {
+            kind: RenderSurfaceKind::Framebuffer,
+            size: Size::default(),
+        })?;
+        ui_runtime.set_render_host(render_host.as_com_ref(), surface.as_com_ref())
+            .map_err(|error| render_error("UI renderer setup", error))?;
         let node_provider = runtime.acquire_plugin_root::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
         let factory = node_provider.bind(ui_runtime.as_com_ref())?;
         let ui = Ui::from_interfaces(ui_runtime, factory)?;
@@ -212,6 +202,7 @@ impl Host {
             runtime,
             ui,
             renderer,
+            surface,
             window,
             input,
             observations,
@@ -466,7 +457,7 @@ impl<State: AppState> Driver<State> {
             .map_err(|status| host.frame_error("native text input", status))?;
         host.ui
             .render(size, host.renderer.as_com_ref())
-            .map_err(|status| host.frame_error("frame rendering", status))?;
+            .map_err(|error| render_error("frame rendering", error))?;
         if let Some(remaining) = self.remaining {
             self.remaining = Some(remaining - 1);
             return Ok(match remaining {
@@ -487,20 +478,18 @@ fn register(_runtime: neocogi_com::Runtime) -> Result<(), HostError> {
     Err(HostError::Message("select dynamic or monolith for native execution".to_owned()))
 }
 
-/// Captures first-bind detail before the fresh renderer/window is destroyed.
-/// Later frame failures use their separate status-specific stale-text gate.
-fn setup_error(renderer: &ComPtr<IRendererAbi>, status: NcStatus) -> HostError {
-    let detail = renderer
-        .query::<IRenderDiagnosticsAbi>()
-        .and_then(|diagnostics| diagnostics.diagnostic())
-        .and_then(|text| neocogi_com::INcStringComPtrExt::to_string_bounded(&text, 4096))
-        .ok()
-        .filter(|text| !text.is_empty());
+/// Keeps this operation's original status and owned text without retaining the failed device.
+fn render_error(operation: &'static str, error: RenderError) -> HostError {
     HostError::Operation {
-        operation: "UI renderer setup",
-        status,
-        detail,
+        operation,
+        status: error.status,
+        detail: if error.message.is_empty() { None } else { Some(error.message) },
     }
+}
+
+impl From<RenderError> for HostError {
+    /// Native setup failures own their message before reaching application formatting.
+    fn from(error: RenderError) -> Self { render_error("platform operation", error) }
 }
 
 /// Registers the process plugin catalog before loading assets or constructing windows.
@@ -529,7 +518,7 @@ fn register(runtime: neocogi_com::Runtime) -> Result<(), HostError> {
         nc_ui::plugin_descriptor(),
         nc_ui_nodes::plugin_descriptor(),
         nc_shader_compiler::plugin_descriptor(),
-        nc_render::plugin_descriptor(),
+        nc_platform::plugin_descriptor(),
         #[cfg(feature = "monolith-extension")]
         nc_ui_extension::plugin_descriptor(),
         #[cfg(any(target_arch = "wasm32", feature = "monolith-gfx"))]
@@ -549,15 +538,15 @@ fn register(runtime: neocogi_com::Runtime) -> Result<(), HostError> {
 /// Returns the qualified identity selected for the separately built renderer assembly.
 fn renderer_plugin_name() -> &'static str {
     if cfg!(feature = "vulkan") {
-        "neocogi.render.vulkan"
+        "neocogi.platform.vulkan"
     } else if cfg!(feature = "wgpu") {
-        "neocogi.render.wgpu"
+        "neocogi.platform.wgpu"
     } else if cfg!(feature = "webgl") {
-        "neocogi.render.webgl"
+        "neocogi.platform.webgl"
     } else {
         // Glow is also the workspace-check fallback when this library is built
         // directly without an application selecting its renderer feature.
-        "neocogi.render.glow"
+        "neocogi.platform.glow"
     }
 }
 

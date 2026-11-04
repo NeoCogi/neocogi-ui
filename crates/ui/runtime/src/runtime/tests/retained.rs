@@ -169,7 +169,7 @@ fn auto_width_consumes_typed_measurement_invalidation_before_intrinsic_measureme
     fixture.frame(VIEW).unwrap();
     let first = window.snapshot().unwrap().rect;
     text.set_text("aaaa").unwrap();
-    assert_eq!(fixture.ui.render(VIEW, fixture.renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(fixture.ui.render(VIEW, fixture.renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
     fixture.frame(VIEW).unwrap();
     let next = window.snapshot().unwrap().rect;
     assert_eq!(next.width, first.width + 24);

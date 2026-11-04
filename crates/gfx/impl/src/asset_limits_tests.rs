@@ -3,7 +3,6 @@ use super::*;
 use neocogi_com::{NcOutputWriter, ComInlineValue, com_object};
 use neocogi_gfx_support::AssetTables;
 use neocogi_ui::{NativePath, PathEncoding};
-use neocogi_render_core::platform::*;
 use std::{cell::Cell, rc::Rc};
 
 /// Independent encoder creates a valid one-pixel icon without file or atlas dependencies.

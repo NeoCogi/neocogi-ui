@@ -41,7 +41,7 @@ def digest(path):
 def cache_checks(profile, executable):
     """Restore a cached backend and deleted outputs without cleaning Cargo."""
     root = executable.parent
-    renderer = root / "lib/libnc_render.so"
+    renderer = root / "lib/libnc_platform.so"
     expected = digest(renderer)
     build(profile, "glow")
     assert digest(renderer) != expected, "renderer switch did not update the deployed DLL"

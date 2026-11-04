@@ -78,7 +78,7 @@ cache regression cannot hide behind a native node adapter. The deleted executor'
 allocation counters and ignored native benchmarks did not measure COM deployment
 cost and are not a production performance baseline.
 
-`SDL_VIDEODRIVER=offscreen cargo test --offline -p neocogi-render-plugin --lib
+`SDL_VIDEODRIVER=offscreen cargo test --offline -p neocogi-platform-plugin --lib
 measure_ui_and_mixed_client_costs -- --ignored --nocapture --test-threads=1`
 measures a real retained Button and the same scene with a procedural client block
 on the production GL executor. It reports setup/UI recording, cold preparation,

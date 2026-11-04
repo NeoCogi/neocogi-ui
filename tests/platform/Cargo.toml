@@ -7,15 +7,15 @@ license.workspace = true
 
 [features]
 default = ["glow"]
-glow = ["neocogi-render-plugin/glow"]
-vulkan = ["neocogi-render-plugin/vulkan"]
-wgpu = ["neocogi-render-plugin/wgpu"]
-webgl = ["neocogi-render-plugin/webgl"]
+glow = ["neocogi-platform-plugin/glow"]
+vulkan = ["neocogi-platform-plugin/vulkan"]
+wgpu = ["neocogi-platform-plugin/wgpu"]
+webgl = ["neocogi-platform-plugin/webgl"]
 
 [dev-dependencies]
 neocogi-render-core.workspace = true
 neocogi-render-gpu.workspace = true
-neocogi-render-plugin = { workspace = true, features = ["test-support"] }
+neocogi-platform-plugin = { workspace = true, features = ["test-support"] }
 neocogi-shader-core.workspace = true
 neocogi-shader-compiler.workspace = true
 neocogi-ui.workspace = true

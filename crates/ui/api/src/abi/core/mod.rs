@@ -21,6 +21,8 @@ pub use neocogi_gfx_support::abi::*;
 mod helpers;
 pub use helpers::*;
 
+mod outcomes;
+
 pub mod events;
 
 // Event publication is UI authoring policy, separate from callable IDL ABI.

@@ -7,7 +7,8 @@ mod interface;
 use interface::IRegistryProbeAbi;
 use neocogi_com::guid_from_qualified_name;
 
-use neocogi_render_core::platform::deployment as profile;
+use neocogi_native_layout_core as profile;
+use std::path::Path;
 
 /// Compiler-only artifact copying leaves only this platform filename in the test host.
 const PROBE: &str = neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_RUNTIME_PROBE_nc_cargo_runtime_probe");
@@ -16,14 +17,13 @@ const PROBE: &str = neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_RUN
 /// No implementation Rust dependency or copied fixture descriptor can satisfy this regression.
 #[test]
 fn final_libraries_export_their_real_descriptors() {
-    let executable = std::env::current_exe().unwrap();
-    let root = profile::output_root(&executable, std::env::var_os("NEOCOGI_NATIVE_OUTPUT_DIR").map(Into::into)).unwrap();
+    let root = profile::output_root(Some(Path::new(env!("OUT_DIR"))), std::env::var_os("NEOCOGI_NATIVE_OUTPUT_DIR").map(Into::into)).unwrap();
     let renderer = if cfg!(feature = "vulkan") {
-        "neocogi.render.vulkan"
+        "neocogi.platform.vulkan"
     } else if cfg!(feature = "wgpu") {
-        "neocogi.render.wgpu"
+        "neocogi.platform.wgpu"
     } else {
-        "neocogi.render.glow"
+        "neocogi.platform.glow"
     };
     let providers = [
         (
@@ -38,7 +38,7 @@ fn final_libraries_export_their_real_descriptors() {
             neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_SHADER_LIBRARY_nc_shader_compiler"),
             "neocogi.shader.compiler",
         ),
-        (neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_RENDER_LIBRARY_nc_render"), renderer),
+        (neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_PLATFORM_LIBRARY_nc_platform"), renderer),
         (
             neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_GFX_LIBRARY_nc_gfx"),
             "neocogi.gfx.runtime",
@@ -78,7 +78,7 @@ fn cargo_host_and_plugin_share_one_runtime_catalog() {
     // child must also start directly, before main, without that hidden support.
     if std::env::var_os("NEOCOGI_DIRECT_RUNTIME_TEST").is_none() {
         let executable = std::env::current_exe().unwrap();
-        let root = profile::output_root(&executable, std::env::var_os("NEOCOGI_NATIVE_OUTPUT_DIR").map(Into::into)).unwrap();
+        let root = profile::output_root(Some(Path::new(env!("OUT_DIR"))), std::env::var_os("NEOCOGI_NATIVE_OUTPUT_DIR").map(Into::into)).unwrap();
         let temporary = tempfile::tempdir().unwrap();
         let before = temporary.path().join("before");
         let after = temporary.path().join("relocated");
@@ -112,15 +112,15 @@ fn cargo_host_and_plugin_share_one_runtime_catalog() {
     neocogi_demo_plugins::register(host_runtime()).unwrap();
     let runtime = host_runtime();
     let renderer = if cfg!(feature = "vulkan") {
-        "neocogi.render.vulkan"
+        "neocogi.platform.vulkan"
     } else if cfg!(feature = "wgpu") {
-        "neocogi.render.wgpu"
+        "neocogi.platform.wgpu"
     } else {
-        "neocogi.render.glow"
+        "neocogi.platform.glow"
     };
     let catalog = runtime.plugins().unwrap();
     assert!(catalog.iter().any(|plugin| plugin.plugin_id == guid_from_qualified_name(renderer)));
-    assert_eq!(catalog.iter().filter(|plugin| plugin.qualified_name.starts_with("neocogi.render.")).count(), 1);
+    assert_eq!(catalog.iter().filter(|plugin| plugin.qualified_name.starts_with("neocogi.platform.")).count(), 1);
     let count = catalog.len();
     // Re-loading the exact Cargo artifacts must reuse the first registrations.
     neocogi_demo_plugins::register(host_runtime()).unwrap();

@@ -1,7 +1,7 @@
 //! Explicit, non-asserting measurements of real UI recording and native execution.
 use super::*;
 use std::time::Instant;
-use nc_render::testing::Sample;
+use nc_platform::testing::Sample;
 
 #[com_object(interfaces(IRenderer))]
 /// Captures authentic blocks after real UI paint without substituting a fake GPU host.
@@ -17,14 +17,17 @@ impl neocogi_render_core::abi::IRenderDriverBound for Capture {
     }
 }
 impl IRenderer for Capture {
-    fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        let mut blocks = Vec::new();
-        for index in 0..info.block_count {
-            let block = stream.view(info.invocation, index)?;
-            blocks.push(self.logical.block_snapshot(block.as_com_ref())?);
-        }
-        *self.blocks.borrow_mut() = blocks;
-        Ok(())
+    fn render_result(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+        let result = (|| -> Result<(), NcStatus> {
+            let mut blocks = Vec::new();
+            for index in 0..info.block_count {
+                let block = stream.view(info.invocation, index)?;
+                blocks.push(self.logical.block_snapshot(block.as_com_ref())?);
+            }
+            *self.blocks.borrow_mut() = blocks;
+            Ok(())
+        })();
+        Ok(neocogi_render_core::abi::operation_result(result.map_err(neocogi_render_core::abi::RenderError::from)))
     }
 }
 
@@ -63,7 +66,7 @@ fn measure_ui_and_mixed_client_costs() {
             .acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))
             .unwrap();
         let mut core = factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref()).unwrap();
-        core.set_render_host(host.as_com_ref()).unwrap();
+        core.set_render_host(host.as_com_ref(), framebuffer(host.as_com_ref()).as_com_ref()).unwrap();
         let nodes = runtime
             .acquire_plugin_root::<NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))
             .unwrap();
@@ -83,7 +86,7 @@ fn measure_ui_and_mixed_client_costs() {
         let record_ns = record.elapsed().as_nanos();
         let mut blocks = captured.borrow().clone();
         let clients: ComPtr<IRenderClientFactoryAbi> = window.query().unwrap();
-        let domain = clients.create_client(Default::default()).unwrap();
+        let domain = clients.create_client(Default::default(), framebuffer(host.as_com_ref()).as_com_ref(), RenderClientPermissions::default()).unwrap();
         let resources = domain.resources().unwrap();
         let client = mixed.then(|| {
             graphics(

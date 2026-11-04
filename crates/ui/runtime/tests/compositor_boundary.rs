@@ -41,24 +41,27 @@ impl neocogi_render_core::abi::IRenderDriverBound for CaptureRenderer {
 }
 impl IRenderer for CaptureRenderer {
     /// Copies both bounded arrays while the invocation token is valid.
-    fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
-        self.observation.vertices.set(vertices.len() as u32);
-        self.observation.batches.set(batches.len() as u32);
-        self.observation.calls.set(self.observation.calls.get() + 1);
-        let blocks = neocogi_gfx_support::testing::blocks(info, stream)?;
-        let atlas = blocks.iter().flat_map(|block| block.commands()).find_map(|command| {
-            if let neocogi_render_gpu::command::Command::Draw(draw) = command {
-                Some(draw.textures[0].texture.clone())
-            } else {
-                None
+    fn render_result(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+        let result = (|| -> Result<(), NcStatus> {
+            let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
+            self.observation.vertices.set(vertices.len() as u32);
+            self.observation.batches.set(batches.len() as u32);
+            self.observation.calls.set(self.observation.calls.get() + 1);
+            let blocks = neocogi_gfx_support::testing::blocks(info, stream)?;
+            let atlas = blocks.iter().flat_map(|block| block.commands()).find_map(|command| {
+                if let neocogi_render_gpu::command::Command::Draw(draw) = command {
+                    Some(draw.textures[0].texture.clone())
+                } else {
+                    None
+                }
+            });
+            if let Some(atlas) = atlas {
+                self.observation.size.set(Some(atlas.desc().size));
+                *self.observation.pixels.borrow_mut() = atlas.pixels().unwrap().as_slice().unwrap().to_vec();
             }
-        });
-        if let Some(atlas) = atlas {
-            self.observation.size.set(Some(atlas.desc().size));
-            *self.observation.pixels.borrow_mut() = atlas.pixels().unwrap().as_slice().unwrap().to_vec();
-        }
-        Ok(())
+            Ok(())
+        })();
+        Ok(neocogi_render_core::abi::operation_result(result.map_err(neocogi_render_core::abi::RenderError::from)))
     }
 }
 
@@ -70,7 +73,7 @@ fn create_ui(assets: ComRef<'_, IAssetBundleAbi>, gfx: ComRef<'_, GfxPluginFacto
 fn create_ui_with_failure(assets: ComRef<'_, IAssetBundleAbi>, gfx: ComRef<'_, GfxPluginFactoryAbi>, failure: Rc<Cell<Option<NcStatus>>>) -> Ui {
     let mut runtime = nc_ui::create_runtime_from_assets(assets, gfx).unwrap();
     runtime
-        .set_render_host(neocogi_gfx_support::testing::host_with_preparation_failure(failure).as_com_ref())
+        .set_render_host(neocogi_gfx_support::testing::host_with_preparation_failure(failure).as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref())
         .unwrap();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
     let text = ui.widgets().text_block("Independent UI", TextWrapping::None).unwrap();
@@ -151,7 +154,7 @@ fn shared_graphics_service_keeps_runtime_resources_independent() {
         .into_revision(revision.as_com_ref())
         .unwrap();
     failure.set(Some(NC_E_OUT_OF_MEMORY));
-    assert_eq!(second.install_assets(next.as_com_ref()), Err(NC_E_OUT_OF_MEMORY));
+    assert_eq!(second.install_assets(next.as_com_ref()).map_err(|error| error.status), Err(NC_E_OUT_OF_MEMORY));
     assert_frame(&second, revision.as_com_ref(), renderer.as_com_ref(), &observation);
     assert_frame(&first, base.as_com_ref(), renderer.as_com_ref(), &observation);
 
@@ -185,7 +188,7 @@ fn shared_factory_supports_independent_catalogs() {
 
     assert_frame(&first, base.as_com_ref(), renderer.as_com_ref(), &observation);
     assert_frame(&second, unrelated.as_com_ref(), renderer.as_com_ref(), &observation);
-    assert_eq!(first.install_assets(unrelated.as_com_ref()), Err(UI_E_OWNER));
+    assert_eq!(first.install_assets(unrelated.as_com_ref()).map_err(|error| error.status), Err(UI_E_OWNER));
     assert_frame(&first, base.as_com_ref(), renderer.as_com_ref(), &observation);
     assert_frame(&second, unrelated.as_com_ref(), renderer.as_com_ref(), &observation);
 }
@@ -196,7 +199,7 @@ fn standalone_compositor_frame_does_not_block_runtime_construction_or_rendering(
     let assets = neocogi_demo_assets::load_bundle(host_runtime()).unwrap();
     let gfx = neocogi_ui_support::test_support::gfx_factory(host_runtime());
     let mut standalone = gfx.create_compositor(assets.as_com_ref()).unwrap();
-    standalone.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref()).unwrap();
+    standalone.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
     standalone.begin(SIZE, 0).unwrap();
     // An active standalone frame must remain active while the UI creates and submits its own.
     let ui = create_ui(assets.as_com_ref(), gfx.as_com_ref());
@@ -216,7 +219,7 @@ fn production_runtime_uses_the_gfx_compositor() {
     let assets = neocogi_demo_assets::load_bundle(host_runtime()).expect("embedded test assets must load");
     let gfx = neocogi_ui_support::test_support::gfx_factory(host_runtime());
     let mut runtime = nc_ui::create_runtime_from_assets(assets.as_com_ref(), gfx.as_com_ref()).expect("matching UI and GFX resources must create a runtime");
-    runtime.set_render_host(neocogi_gfx_support::testing::host().as_com_ref()).unwrap();
+    runtime.set_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime).expect("the object must expose every UI capability");
     let text = ui
         .widgets()

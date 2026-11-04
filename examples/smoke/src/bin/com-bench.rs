@@ -55,11 +55,14 @@ impl IRenderDriverBound for Recorder {
 }
 impl IRenderer for Recorder {
     /// Always restores capacity after an outward call, including failed stream reads.
-    fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        let mut buffers = self.buffers.borrow_mut().take().ok_or(UI_E_BUSY)?;
-        let result = buffers.copy(info, stream);
-        *self.buffers.borrow_mut() = Some(buffers);
-        result
+    fn render_result(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_render_gpu::abi::IRenderOutcomeAbi>, NcStatus> {
+        let result = (|| -> Result<(), NcStatus> {
+            let mut buffers = self.buffers.borrow_mut().take().ok_or(UI_E_BUSY)?;
+            let result = buffers.copy(info, stream);
+            *self.buffers.borrow_mut() = Some(buffers);
+            result
+        })();
+        Ok(neocogi_render_gpu::abi::operation_result(result.map_err(neocogi_render_gpu::abi::RenderError::from)))
     }
 }
 
@@ -191,7 +194,7 @@ impl Workload {
                 })?;
                 self.ui.update(self.size)
             }
-            Operation::Render => self.ui.render(self.size, self.recorder.as_com_ref()),
+            Operation::Render => self.ui.render(self.size, self.recorder.as_com_ref()).map_err(|error| error.status),
         }
     }
     /// Warm both label sizes, both drawable sizes and the largest display-list/receiver capacities.
@@ -270,7 +273,7 @@ fn run(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
     let runtime_factory = runtime.acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
     let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
     let mut ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
-    ui_runtime.set_render_host(neocogi_gfx_support::testing::host().as_com_ref())?;
+    ui_runtime.set_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref())?;
     let node_provider = runtime.acquire_plugin_root::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
     let node_factory = node_provider.bind(ui_runtime.as_com_ref())?;
     let ui = Ui::from_interfaces(ui_runtime, node_factory)?;

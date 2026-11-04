@@ -299,7 +299,7 @@ fn construction_rejection_checks(ui: &Ui) -> Result<(), NcStatus> {
 }
 
 /// Native and WebGL exercise the same bounded Combo input and resize path.
-fn popup_scrolling_checks(host: &Host, size: Size) -> Result<(), NcStatus> {
+fn popup_scrolling_checks(host: &Host, size: Size) -> Result<(), RenderError> {
     let column = host.ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     let mut children = column.handle();
     let window = host

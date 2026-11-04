@@ -11,3 +11,5 @@ include!(env!("IDL_NEOCOGI_GFX"));
 
 mod helpers;
 pub use helpers::*;
+
+mod outcomes;

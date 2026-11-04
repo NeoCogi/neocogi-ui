@@ -22,7 +22,7 @@ impl PopupFixture {
         let value = create_runtime_value(source.as_com_ref(), gfx.as_com_ref()).unwrap();
         let storage = value.storage.clone();
         let mut runtime: ComPtr<UiRuntimeAbi> = Runtime::from_value(value).query().unwrap();
-        runtime.set_render_host(neocogi_gfx_support::testing::host().as_com_ref()).unwrap();
+        runtime.set_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
         let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
         Self { ui, runtime, storage }
     }

@@ -6,9 +6,9 @@
 
 use super::{Color, DisplayList};
 use crate::{AtlasHandle, Recti};
-use neocogi_com::{ComPtr, ComRef, NC_E_INVALID_ARG, NcCopyFromBufferOffset, NcStatus};
+use neocogi_com::{ComPtr, ComRef, NC_E_INVALID_ARG, NcCopyFromBufferOffset};
 use neocogi_gfx_support::abi::{AssetPatch, DrawPoint, GfxCompositorAbi, Insets, NinePatchDraw, SolidVertex};
-use neocogi_render_core::abi::{IRendererAbi, Rect, Size};
+use neocogi_render_core::abi::{IRendererAbi, RenderError, Rect, Size};
 
 /// Replays one complete display list and clears it on success or failure.
 pub(crate) fn submit(
@@ -18,7 +18,7 @@ pub(crate) fn submit(
     renderer: ComRef<'_, IRendererAbi>,
     size: Size,
     clear: u32,
-) -> Result<(), NcStatus> {
+) -> Result<(), RenderError> {
     let result = submit_once(list, atlas, compositor, renderer, size, clear);
     if result.is_err() {
         // Cancellation is idempotent and releases resources retained by operations preceding the
@@ -37,7 +37,7 @@ fn submit_once(
     renderer: ComRef<'_, IRendererAbi>,
     size: Size,
     clear: u32,
-) -> Result<(), NcStatus> {
+) -> Result<(), RenderError> {
     compositor.begin(size, clear)?;
     let super::display_list::DisplayList {
         ops,

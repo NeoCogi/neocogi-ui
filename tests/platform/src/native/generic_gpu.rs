@@ -30,7 +30,7 @@ fn gfx_generic_blocks_preserve_window_order_and_immutable_surface_output() {
     let renderer: ComPtr<IRendererAbi> = window.query().unwrap();
     let host = window.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap();
     let mut compositor = gfx.create_compositor(assets.as_com_ref()).unwrap();
-    compositor.bind_render_host(host.as_com_ref()).unwrap();
+    compositor.bind_render_host(host.as_com_ref(), framebuffer(host.as_com_ref()).as_com_ref()).unwrap();
     let images: ComPtr<ITextureFactoryAbi> = window.query().unwrap();
     let image = images
         .create_texture(
@@ -45,7 +45,7 @@ fn gfx_generic_blocks_preserve_window_order_and_immutable_surface_output() {
         )
         .unwrap();
     let clients: ComPtr<IRenderClientFactoryAbi> = window.query().unwrap();
-    let domain = clients.create_client(RenderClientLimits::default()).unwrap();
+    let domain = clients.create_client(RenderClientLimits::default(), clients.query::<IRenderSurfaceFactoryAbi>().unwrap().create_surface(RenderSurfaceDesc { kind: RenderSurfaceKind::Framebuffer, size: Size::default() }).unwrap().as_com_ref(), RenderClientPermissions::default()).unwrap();
     let resources = domain.resources().unwrap();
     let broker = host.recording_broker().unwrap();
     let root = Rect { x: 16, y: 16, width: 32, height: 32 };
@@ -86,8 +86,9 @@ fn gfx_generic_blocks_preserve_window_order_and_immutable_surface_output() {
     assert_eq!(pixel(60, 60), [0, 255, 0, 255]);
 
     let surfaces: ComPtr<IRenderSurfaceFactoryAbi> = window.query().unwrap();
-    let surface = surfaces.create_surface(SIZE).unwrap();
+    let surface = surfaces.create_surface(RenderSurfaceDesc { kind: RenderSurfaceKind::Image, size: SIZE }).unwrap();
     let preview: ComPtr<IRendererAbi> = surface.query().unwrap();
+    compositor.bind_render_host(host.as_com_ref(), surface.as_com_ref()).unwrap();
     compositor.begin(SIZE, 0xff000000).unwrap();
     compositor.texture(bounds, bounds, unit, 0xffffffff, image.as_com_ref()).unwrap();
     compositor.submit(preview.as_com_ref()).unwrap();
@@ -96,9 +97,10 @@ fn gfx_generic_blocks_preserve_window_order_and_immutable_surface_output() {
     compositor
         .render_view(graphics(&resources, &broker, RenderViewRoot { client: root, target: root }))
         .unwrap();
-    assert_eq!(compositor.submit(preview.as_com_ref()), Err(NC_E_INVALID_ARG));
+    assert_eq!(compositor.submit(preview.as_com_ref()).map_err(|error| error.status), Err(RENDER_E_OWNER));
     assert_eq!(identity(&surface.completed_image().unwrap()).unwrap(), identity(&output).unwrap());
     drop((preview, surface, surfaces));
+    compositor.bind_render_host(host.as_com_ref(), framebuffer(host.as_com_ref()).as_com_ref()).unwrap();
     compositor.begin(SIZE, 0xff000000).unwrap();
     compositor.texture(bounds, bounds, unit, 0xffffffff, output.as_com_ref()).unwrap();
     compositor.submit(renderer.as_com_ref()).unwrap();
@@ -152,7 +154,7 @@ fn surfaces_recheck_ui_domains_and_exclude_resource_reentry_after_foreign_callba
     .unwrap();
     let window = WindowObject::from_value(native);
     let host = window.query::<IPlatformWindowAbi>().unwrap().graphics_host().unwrap();
-    let surface = window.query::<IRenderSurfaceFactoryAbi>().unwrap().create_surface(SIZE).unwrap();
+    let surface = window.query::<IRenderSurfaceFactoryAbi>().unwrap().create_surface(RenderSurfaceDesc { kind: RenderSurfaceKind::Image, size: SIZE }).unwrap();
     let renderer: ComPtr<IRendererAbi> = surface.query().unwrap();
     let empty: ComPtr<IRenderStreamAbi> = super::view_geometry::ViewStream::from_value(super::view_geometry::ViewStream { blocks: vec![] })
         .query()
@@ -166,8 +168,8 @@ fn surfaces_recheck_ui_domains_and_exclude_resource_reentry_after_foreign_callba
     renderer.render(info, empty.as_com_ref()).unwrap();
     let previous = surface.completed_image().unwrap();
     {
-        let first = host.create_ui_client(RenderClientLimits::default()).unwrap();
-        let second = host.create_ui_client(RenderClientLimits::default()).unwrap();
+        let first = host.query::<IRenderClientFactoryAbi>().unwrap().create_client(RenderClientLimits::default(), surface.as_com_ref(), neocogi_gfx_support::compositor_permissions()).unwrap();
+        let second = host.query::<IRenderClientFactoryAbi>().unwrap().create_client(RenderClientLimits::default(), surface.as_com_ref(), neocogi_gfx_support::compositor_permissions()).unwrap();
         let first_resources = first.resources().unwrap();
         let second_resources = second.resources().unwrap();
         let broker = host.recording_broker().unwrap();
@@ -189,7 +191,7 @@ fn surfaces_recheck_ui_domains_and_exclude_resource_reentry_after_foreign_callba
         .query()
         .unwrap();
         assert_eq!(
-            renderer.render(RenderInfo { block_count: 2, ..info }, stream.as_com_ref()),
+            renderer.render(RenderInfo { block_count: 2, ..info }, stream.as_com_ref()).map_err(|error| error.status),
             Err(neocogi_com::NC_E_DROPPED)
         );
         assert!(close.borrow().is_none());
@@ -210,7 +212,7 @@ fn submit_interleaved(host: ComRef<'_, IRenderHostAbi>, renderer: ComRef<'_, IRe
         .unwrap();
     let assets = neocogi_demo_assets::load_bundle(runtime).unwrap();
     let mut compositor = gfx.create_compositor(assets.as_com_ref()).unwrap();
-    compositor.bind_render_host(host).unwrap();
+    compositor.bind_render_host(host, framebuffer(host).as_com_ref()).unwrap();
     compositor.begin(SIZE, 0xff000000).unwrap();
     let bounds = Rect { x: 0, y: 0, width: 64, height: 64 };
     let draw = |compositor: &mut ComPtr<neocogi_gfx_support::abi::GfxCompositorAbi>, vertices: &[RenderVertex]| {
@@ -232,7 +234,7 @@ fn rectangle(rect: Rect, color: u32) -> Vec<RenderVertex> {
 /// Real immutable-image import samples captured native pixels without retaining a public COM image.
 #[test]
 #[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
-fn private_ui_image_import_retains_native_pixels_without_a_com_image_cycle() {
+fn permitted_image_import_retains_native_pixels_without_a_com_image_cycle() {
     let _session = native_session();
     let platform = PlatformObject::new(
         nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
@@ -256,16 +258,16 @@ fn private_ui_image_import_retains_native_pixels_without_a_com_image_cycle() {
         .unwrap();
     let image_key = identity(&image).unwrap();
     let clients: ComPtr<IRenderClientFactoryAbi> = window.query().unwrap();
-    let client = clients.create_client(RenderClientLimits::default()).unwrap();
+    let client = clients.create_client(RenderClientLimits::default(), clients.query::<IRenderSurfaceFactoryAbi>().unwrap().create_surface(RenderSurfaceDesc { kind: RenderSurfaceKind::Framebuffer, size: Size::default() }).unwrap().as_com_ref(), RenderClientPermissions::default()).unwrap();
     assert!(matches!(
-        graphics.import_ui_texture(client.resources().unwrap().as_com_ref(), image.as_com_ref()),
-        Err(RENDER_E_OWNER)
+        graphics.import_texture(client.resources().unwrap().as_com_ref(), image.as_com_ref()).map_err(|error| error.status),
+        Err(RENDER_E_PERMISSION)
     ));
-    let ui = graphics.create_ui_client(RenderClientLimits::default()).unwrap();
+    let ui = clients.create_client(RenderClientLimits::default(), framebuffer(graphics.as_com_ref()).as_com_ref(), neocogi_gfx_support::compositor_permissions()).unwrap();
     let resources = ui.resources().unwrap();
-    let imported = graphics.import_ui_texture(resources.as_com_ref(), image.as_com_ref()).unwrap();
+    let imported = graphics.import_texture(resources.as_com_ref(), image.as_com_ref()).unwrap();
     assert!(imported.query_ref::<ITextureAbi>().is_err());
-    graphics.prepare_ui_texture(resources.as_com_ref(), imported.as_com_ref()).unwrap();
+    graphics.prepare_texture(resources.as_com_ref(), imported.as_com_ref()).unwrap();
     let code = Bytes::source(
         br#"
         @group(2) @binding(0) var image:texture_2d<f32>;
@@ -357,7 +359,7 @@ fn generic_pipeline_renders_in_its_root_and_preserves_surrounding_ui() {
     let unknown = WindowObject::from_value(native);
     let renderer: ComPtr<IRendererAbi> = unknown.query().unwrap();
     let clients: ComPtr<IRenderClientFactoryAbi> = unknown.query().unwrap();
-    let domain = clients.create_client(RenderClientLimits::default()).unwrap();
+    let domain = clients.create_client(RenderClientLimits::default(), clients.query::<IRenderSurfaceFactoryAbi>().unwrap().create_surface(RenderSurfaceDesc { kind: RenderSurfaceKind::Framebuffer, size: Size::default() }).unwrap().as_com_ref(), RenderClientPermissions::default()).unwrap();
     let resources = domain.resources().unwrap();
     assert!(resources.query::<IRendererAbi>().is_err());
     assert!(resources.query::<IRenderClientFactoryAbi>().is_err());
@@ -447,7 +449,7 @@ fn generic_indexed_texture_and_uniform_snapshots_reach_the_native_pipeline() {
     let unknown = WindowObject::from_value(native);
     let renderer: ComPtr<IRendererAbi> = unknown.query().unwrap();
     let clients: ComPtr<IRenderClientFactoryAbi> = unknown.query().unwrap();
-    let domain = clients.create_client(RenderClientLimits::default()).unwrap();
+    let domain = clients.create_client(RenderClientLimits::default(), clients.query::<IRenderSurfaceFactoryAbi>().unwrap().create_surface(RenderSurfaceDesc { kind: RenderSurfaceKind::Framebuffer, size: Size::default() }).unwrap().as_com_ref(), RenderClientPermissions::default()).unwrap();
     let resources = domain.resources().unwrap();
     let code = Bytes::source(
         br#"
@@ -636,7 +638,7 @@ fn generic_depth_survives_draws_and_reset_with_independent_ordered_views() {
     let controller = window
         .query::<IRenderClientFactoryAbi>()
         .unwrap()
-        .create_client(RenderClientLimits::default())
+        .create_client(RenderClientLimits::default(), framebuffer(window.graphics_host().unwrap().as_com_ref()).as_com_ref(), RenderClientPermissions::default())
         .unwrap();
     let resources = controller.resources().unwrap();
     let code = Bytes::source(

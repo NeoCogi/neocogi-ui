@@ -15,7 +15,7 @@ import subprocess
 import tempfile
 import tomllib
 
-from contract_check_support import child_environment, registry_dependency, workspace_dependency
+from contract_check_support import child_environment, registry_dependency
 
 
 @dataclass(frozen=True)
@@ -91,12 +91,12 @@ def write_consumer(consumer, repository, directory):
                 '[workspace]\n[dependencies]\n')
     if consumer.generated_module:
         manifest += registry_dependency(repository, "neocogi-com", ["alloc"])
-        manifest += '[build-dependencies]\n' + registry_dependency(repository, "neocogi-idl") + workspace_dependency(repository, "neocogi-render-core")
+        manifest += '[build-dependencies]\n' + registry_dependency(repository, "neocogi-idl") + registry_dependency(repository, "neocogi-platform-build")
         (directory / "build.rs").write_text(
-            'fn main() { for module in neocogi_idl::cargo::SharedSources::new(neocogi_render_core::SCHEMA_ROOT)'
-            '.module(' + json.dumps(consumer.generated_module) + ', "contract_consumer_check::contract").build().unwrap() {'
+            'fn main() { for module in neocogi_platform_build::sources(&[neocogi_platform_build::Module::Renderer]).unwrap()'
+            '.build().unwrap() {'
             'println!("cargo::rustc-env=CONSUMER_BINDINGS={}", module.include.display()); } }\n')
-        prefix = 'extern crate self as contract_consumer_check;\nmod contract { include!(env!("CONSUMER_BINDINGS")); }\n'
+        prefix = 'extern crate self as neocogi_render_core;\nmod abi { include!(env!("CONSUMER_BINDINGS")); }\nuse abi as contract;\n'
     else:
         manifest += 'library={package=' + json.dumps(consumer.package) + ',path=' + json.dumps(str(repository / consumer.path)) + '}\n'
         prefix = 'use library::' + consumer.namespace + ' as contract;\n'

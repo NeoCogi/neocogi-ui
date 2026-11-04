@@ -162,7 +162,7 @@ fn unknown_application_dispatch_outcome_stops_before_input_and_allows_retry() {
     key(&ui, KeyCode::Space);
     assert_eq!(ui.update_with_events(SIZE, dispatcher.as_com_ref()), Err(neocogi_com::NC_E_INVALID_TAG));
     let (renderer, _) = renderer();
-    assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(ui.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
     let app = TestApp::new(0, messages, |count, ()| {
         *count += 1;
         Ok(())
@@ -203,7 +203,7 @@ fn failed_pending_changes_leave_input_queued_and_the_frame_uncommitted() {
     assert_eq!(app.update(&ui, SIZE), Err(NC_E_INVALID_ARG));
     assert_eq!(app.state().1, ["failed"]);
     let (renderer, _) = renderer();
-    assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(ui.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
     app.update(&ui, SIZE).unwrap();
     assert_eq!(app.state().1, ["failed", "input"]);
     ui.render(SIZE, renderer.as_com_ref()).unwrap();

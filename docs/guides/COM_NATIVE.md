@@ -268,7 +268,7 @@ normal dependencies: build dependencies receive host-tool profiles even with
 packages add only symbol ownership, with no duplicate metadata, factories, runtime,
 generated workspace or dependency resolver.
 
-The host implementation Rust target is `neocogi_com_host`. Native provider names remain `nc_ui`, `nc_ui_nodes`, `nc_shader_compiler`, `nc_render`,
+The host implementation Rust target is `neocogi_com_host`. Native provider names remain `nc_ui`, `nc_ui_nodes`, `nc_shader_compiler`, `nc_platform`,
 `nc_gfx`, `nc_skin` and optional `nc_ui_extension`. The executable is in the usual
 `target/<profile>` directory when no explicit target is selected. Dependency DLLs
 remain in Cargo's artifact directories as compiler inputs, with deployment copies

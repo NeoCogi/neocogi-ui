@@ -102,14 +102,14 @@ impl ILeafLayout for SceneView {
 }
 
 /// Exercises actual separately loaded texture/resource creation and ordered native GPU execution.
-pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
+pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), RenderError> {
     let factory: ComPtr<ITextureFactoryAbi> = renderer.try_add_ref()?.query()?;
     let pixels = [255u8, 32, 16, 255, 16, 255, 32, 255, 32, 16, 255, 255, 255, 255, 255, 255];
     let image_size = Size { width: 2, height: 2 };
     assert_eq!(
         factory
             .create_texture(image_size, neocogi_render_gpu::source::initial_bytes(pixels[..15].to_vec()).borrow()?)
-            .unwrap_err(),
+            .unwrap_err().status,
         NC_E_INVALID_ARG
     );
     let texture = factory.create_texture(
@@ -118,7 +118,10 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     )?;
     assert_eq!(texture.size()?, image_size);
     let clients: ComPtr<IRenderClientFactoryAbi> = renderer.try_add_ref()?.query()?;
-    let controller = clients.create_client(RenderClientLimits::default())?;
+    let surface = renderer.try_add_ref()?.query::<IRenderSurfaceFactoryAbi>()?.create_surface(RenderSurfaceDesc {
+        kind: RenderSurfaceKind::Framebuffer, size: Size::default(),
+    })?;
+    let controller = clients.create_client(RenderClientLimits::default(), surface.as_com_ref(), RenderClientPermissions::default())?;
     let resources = controller.resources()?;
     assert!(resources.query::<IRendererAbi>().is_err());
     let code = Bytes::source(

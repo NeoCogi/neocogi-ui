@@ -42,7 +42,7 @@ fn committed_views_keep_their_original_position_and_visible_client_root() {
             .query()
             .unwrap(),
     );
-    let domain = device.create_client(RenderClientLimits::default()).unwrap();
+    let domain = device.create_client(RenderClientLimits::default(), device.surface_target(RenderSurfaceKind::Framebuffer).unwrap(), RenderClientPermissions::default()).unwrap();
     let resources = domain.resources().unwrap();
     let frames = std::rc::Rc::new(gpu::Frames::default());
     frames.install(device.broker());
@@ -85,7 +85,7 @@ fn unhandled_view_failure_rejects_the_whole_invocation_even_if_the_widget_retrie
             .query()
             .unwrap(),
     );
-    let domain = device.create_client(RenderClientLimits::default()).unwrap();
+    let domain = device.create_client(RenderClientLimits::default(), device.surface_target(RenderSurfaceKind::Framebuffer).unwrap(), RenderClientPermissions::default()).unwrap();
     let resources = domain.resources().unwrap();
     let frames = std::rc::Rc::new(gpu::Frames::default());
     frames.install(device.broker());
@@ -111,7 +111,7 @@ fn dropped_and_cancelled_rejections_remain_sticky_at_the_host_harvest_boundary()
                 .query()
                 .unwrap(),
         );
-        let domain = device.create_client(RenderClientLimits::default()).unwrap();
+        let domain = device.create_client(RenderClientLimits::default(), device.surface_target(RenderSurfaceKind::Framebuffer).unwrap(), RenderClientPermissions::default()).unwrap();
         let resources = domain.resources().unwrap();
         let frames = std::rc::Rc::new(gpu::Frames::default());
         frames.install(device.broker());
@@ -150,7 +150,7 @@ fn cancelled_views_are_empty_and_retained_painters_cannot_join_a_later_widget() 
         .create_client(RenderClientLimits {
             frame_draws: 2,
             ..RenderClientLimits::default()
-        })
+        }, device.surface_target(RenderSurfaceKind::Framebuffer).unwrap(), RenderClientPermissions::default())
         .unwrap();
     let resources = domain.resources().unwrap();
     let frames = std::rc::Rc::new(gpu::Frames::default());

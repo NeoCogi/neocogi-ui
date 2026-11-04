@@ -120,7 +120,7 @@ def production(directory):
     assert not any(name.startswith("themes/") or "FACEPALM" in name or name.endswith(".obj") for name in files(built["basic-a"]))
     assert not any(name.startswith(("themes/", "assets/")) for name in files(built["embedded"]))
     assert not any(name.startswith("lib/") for name in files(built["monolith"]))
-    provider = "lib/libnc_render.so" if sys.platform.startswith("linux") else "lib/nc_render.dll" if os.name == "nt" else "lib/libnc_render.dylib"
+    provider = "lib/libnc_platform.so" if sys.platform.startswith("linux") else "lib/nc_platform.dll" if os.name == "nt" else "lib/libnc_platform.dylib"
     assert digest(built["basic-a"] / provider) == digest(built["basic-b"] / provider)
     assert digest(built["basic-vulkan"] / provider) != digest(built["basic-b"] / provider)
 

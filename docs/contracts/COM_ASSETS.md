@@ -15,7 +15,7 @@
 | `neocogi-ui-support` | Non-plugin table retention, pure geometry/text algorithms, and phase-local presentation helpers; no retained tree or concrete classes. |
 | `neocogi-ui-runtime` | Core retained layout, painting, surfaces, and menu policy. |
 | `neocogi-ui-nodes` | Built-in controls and standard compositions over one bound runtime resource source. |
-| [Platform renderer providers](https://github.com/NeoCogi/neocogi-platform/tree/master/crates/render/plugin) | Pixel upload, GPU resources and ordered frame execution. |
+| [Platform renderer providers](https://github.com/NeoCogi/neocogi-platform/tree/master/crates/platform/plugin) | Pixel upload, GPU resources and ordered frame execution. |
 
 The GFX plugin has no production dependency on either the UI facade or runtime;
 the skin plugin has no production dependency on `neocogi-ui-runtime`. UI construction
@@ -134,7 +134,11 @@ let node_provider = runtime.acquire_plugin_root::<NodesPluginFactoryAbi>(
 )?;
 let factory = node_provider.bind(ui_runtime.as_com_ref())?;
 let graphics = native.graphics_host()?;
-ui_runtime.set_render_host(graphics.as_com_ref())?;
+let surface = graphics.query::<IRenderSurfaceFactoryAbi>()?.create_surface(RenderSurfaceDesc {
+    kind: RenderSurfaceKind::Framebuffer,
+    size: Size::default(),
+})?;
+ui_runtime.set_render_host(graphics.as_com_ref(), surface.as_com_ref())?;
 let mut ui = Ui::from_interfaces(ui_runtime, factory)?;
 ```
 
@@ -438,7 +442,9 @@ Recoverable failures return statuses. `IGfxDiagnostics` retains decoder and
 packing detail; `ISkinDiagnostics` retains schema, file, and appearance compiler
 detail. Argument validation may supply no additional text.
 Diagnostics are immutable snapshots and remain inspectable after a consuming failed
-finish. Renderer upload details use `IRenderDiagnostics`.
+finish. Native renderer operations return owned `RenderError` status/text; GFX
+retains a failed PNG upload's text in its decoder diagnostic while preserving its status.
+Compositor binding, installation and submission use per-operation outcome reports.
 
 ## Live metric and palette edits
 

@@ -34,5 +34,5 @@ trybuild.workspace = true
 neocogi-com-host.workspace = true
 
 [build-dependencies]
-neocogi-render-core.workspace = true
+neocogi-platform-build.workspace = true
 neocogi-idl.workspace = true

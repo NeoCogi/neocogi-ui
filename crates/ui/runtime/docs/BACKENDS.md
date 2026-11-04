@@ -1,7 +1,7 @@
 # Backend ownership and COM rendering
 
-Each renderer is a plugin: `neocogi.render.glow`, `neocogi.render.vulkan`,
-`neocogi.render.wgpu`, or `neocogi.render.webgl`. A build of `neocogi-render-plugin`
+Each renderer is a plugin: `neocogi.platform.glow`, `neocogi.platform.vulkan`,
+`neocogi.platform.wgpu`, or `neocogi.platform.webgl`. A build of `neocogi-platform-plugin`
 produces exactly one of those identities and links its concrete renderer. Browser
 builds statically register the WebGL descriptor; native assemblies dynamically load
 one of the other three.
@@ -39,19 +39,18 @@ swapchain creation, with an opaque-composition diagnostic. Other composition
 modes are not transparent-window fallbacks; they need their own pixel-alpha
 contract. A failed destructive rebuild leaves presentation unavailable.
 
-Renderer sources live together under `crates/render`. The `plugin` package is the
-deployment shell and owns the platform/device integration. The other packages are
-ordinary Rust implementation libraries linked into the selected plugin artifact; they
-are not additional runtime boundaries.
+GPU backends live in `crates/render/gpu/src/backends`. The platform plugin under
+`crates/platform/plugin` owns window/input assembly and selects one backend. Core
+and support remain ordinary Rust libraries linked into that plugin artifact.
 
 | Source | Responsibility |
 | --- | --- |
-| [crates/render/plugin](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/plugin) | Plugin descriptor plus window, input, and device ownership |
+| [crates/platform/plugin](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/platform/plugin) | Plugin descriptor plus window, input, and device ownership |
 | [crates/render/core](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/core) | Backend-neutral frame, texture, color, and validated upload SPI used by renderer implementations and native test fixtures |
-| [crates/render/glow](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/glow) | Glow rendering shared by native OpenGL and WebGL |
-| [crates/render/vulkan](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/vulkan) | Vulkan target and command execution |
-| [crates/render/wgpu](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/wgpu) | WGPU rendering |
-| [crates/render/webgl](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/webgl) | Browser canvas backend using the Glow renderer |
+| [crates/render/gpu/src/backends/glow](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/gpu/src/backends/glow) | Glow rendering shared by native OpenGL and WebGL |
+| [crates/render/gpu/src/backends/vulkan](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/gpu/src/backends/vulkan) | Vulkan target and command execution |
+| [crates/render/gpu/src/backends/wgpu](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/gpu/src/backends/wgpu) | WGPU rendering |
+| [crates/render/gpu/src/backends/webgl](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/gpu/src/backends/webgl) | Browser canvas backend using the Glow renderer |
 | [crates/render/support](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/support) | Shared frame preparation and resource validation |
 
 `core` is a statically linked Rust SPI, not a COM component or deployment plugin. It

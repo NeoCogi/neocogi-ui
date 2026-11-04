@@ -87,7 +87,10 @@ fn run(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
     let runtime_factory = runtime.acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
     let mut ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
     let render_host = native.graphics_host()?;
-    ui_runtime.set_render_host(render_host.as_com_ref())?;
+    let surface = render_host.query::<IRenderSurfaceFactoryAbi>()?.create_surface(RenderSurfaceDesc {
+        kind: RenderSurfaceKind::Framebuffer, size: Size::default(),
+    })?;
+    ui_runtime.set_render_host(render_host.as_com_ref(), surface.as_com_ref())?;
     let node_provider = runtime.acquire_plugin_root::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
     let node_factory = node_provider.bind(ui_runtime.as_com_ref())?;
     let mut ui = Ui::from_interfaces(ui_runtime, node_factory)?;
@@ -156,11 +159,11 @@ fn run(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
         ui.update_with_events(size, owner.as_com_ref())?;
         assert_eq!(app.try_borrow()?.processor.count, 1);
         button.set_label("A longer label changes preferred measurement across the plugin boundary")?;
-        assert_eq!(ui.render(size, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+        assert_eq!(ui.render(size, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
         ui.update_with_events(size, owner.as_com_ref())?;
         ui.render(size, renderer.as_com_ref())?;
         window.set_rect(Rect { x: 20, y: 20, width: 560, height: 280 })?;
-        assert_eq!(ui.render(size, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+        assert_eq!(ui.render(size, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
         ui.update_with_events(size, owner.as_com_ref())?;
         ui.render(size, renderer.as_com_ref())?;
         // Restoring the compiled bundle exercises a second real upload and shared UI revision.
@@ -205,11 +208,11 @@ fn run(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
 /// Returns the qualified identity selected for this smoke executable's renderer assembly.
 fn renderer_plugin_name() -> &'static str {
     if cfg!(feature = "vulkan") {
-        "neocogi.render.vulkan"
+        "neocogi.platform.vulkan"
     } else if cfg!(feature = "wgpu") {
-        "neocogi.render.wgpu"
+        "neocogi.platform.wgpu"
     } else {
-        "neocogi.render.glow"
+        "neocogi.platform.glow"
     }
 }
 
@@ -231,7 +234,7 @@ fn key(ui: &Ui, key: KeyCode) -> Result<(), NcStatus> {
 }
 
 /// Exercises every migrated container through independently compiled factory and layout interfaces.
-fn smoke_containers(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
+fn smoke_containers(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), RenderError> {
     let section = ui.widgets().disclosure("Composed editor", DisclosureStyle::Tree, true)?;
     let text = ui
         .widgets()

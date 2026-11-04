@@ -299,7 +299,7 @@ impl StyleEditor {
         };
         if let Err(error) = ui.install_assets(candidate.as_com_ref()) {
             self.pending = Some(candidate);
-            return Err(error);
+            return Err(error.status);
         }
         Ok(())
     }

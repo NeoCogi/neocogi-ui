@@ -44,14 +44,18 @@ thread_local! {
     static CORE: Rc<Core> = Core::new();
     /// Physical virtual core is shared only on this fixture thread.
     static DEVICE: GpuDevice = GpuDevice::new(CORE.with(Clone::clone),nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query().unwrap());
+    /// Target metadata is shared by all fixture groups without granting UI-specific authority.
+    static TARGET: Rc<neocogi_render_gpu::target::SurfaceTarget<Backend>> = DEVICE.with(|device| device.surface_target(RenderSurfaceKind::Framebuffer).unwrap());
+    /// Concrete identity authenticates factory requests without calling supplied surface getters.
+    static SURFACE: ComPtr<IRenderSurfaceAbi> = Surface::from_value(Surface).query().unwrap();
     /// Keys are explicitly replaced at each fixture-image construction; no COM owner is retained.
     static IMAGES: RefCell<HashMap<usize, Rc<Image>>> = RefCell::new(HashMap::new());
 }
 
-#[com_object(interfaces(IRenderHost))]
+#[com_object(interfaces(IRenderHost, IRenderClientFactory, IRenderSurfaceFactory))]
 /// CPU-only assembly has no native window or device getter.
 struct Host {
-    /// Canonical recording and private UI-resource provenance.
+    /// Canonical logical device authenticates resource and block ownership.
     device: GpuDevice,
     /// Caller-owned failure injection has no reference to the runtime or widgets.
     failure: Rc<Cell<Option<NcStatus>>>,
@@ -63,32 +67,95 @@ impl IRenderDriverBound for Host {
 }
 impl IRenderHost for Host {
     /// CPU-only assembly has no native work or retirement queue.
-    fn maintain(&self) -> Result<(), NcStatus> {
-        Ok(())
+    fn maintain_result(&self) -> Result<ComPtr<IRenderOutcomeAbi>, NcStatus> {
+        Ok(operation_result(Ok(())))
     }
-    /// Import requires prior explicit fixture registration and never calls the image's getters.
-    fn import_ui_texture(&self, resources: ComRef<'_, IRenderResourcesAbi>, image: ComRef<'_, ITextureAbi>) -> Result<ComBox<IGpuTextureAbi>, NcStatus> {
-        let id = IMAGES
-            .with(|images| images.borrow().get(&(image.as_raw().object as usize)).cloned())
-            .ok_or(NC_E_INVALID_ARG)?;
-        self.device.import_ui_texture(resources, id)
+    /// Import requires explicit fixture registration and never calls image getters.
+    fn import_texture_result(
+        &self,
+        resources: ComRef<'_, IRenderResourcesAbi>,
+        image: ComRef<'_, ITextureAbi>,
+    ) -> Result<ComBox<ITextureImportResultAbi>, NcStatus> {
+        let result = (|| {
+            let id = IMAGES
+                .with(|images| images.borrow().get(&(image.as_raw().object as usize)).cloned())
+                .ok_or(NC_E_INVALID_ARG)?;
+            self.device.import_texture(resources, id)
+        })();
+        Ok(texture_import_result(result.map_err(RenderError::from)))
     }
-    /// Run real logical provenance checks; this assembly owns no native texture upload.
-    fn prepare_ui_texture(&self, resources: ComRef<'_, IRenderResourcesAbi>, texture: ComRef<'_, IGpuTextureAbi>) -> Result<(), NcStatus> {
-        self.device.ui_texture_snapshot(resources, texture)?;
-        match self.failure.get() {
-            Some(status) => Err(status),
-            None => Ok(()),
-        }
+    /// Validate logical ownership before injecting this preparation's failure.
+    fn prepare_texture_result(
+        &self,
+        resources: ComRef<'_, IRenderResourcesAbi>,
+        texture: ComRef<'_, IGpuTextureAbi>,
+    ) -> Result<ComPtr<IRenderOutcomeAbi>, NcStatus> {
+        let result = self
+            .device
+            .imported_texture_snapshot(resources, texture)
+            .and_then(|_| self.failure.get().map_or(Ok(()), Err));
+        Ok(operation_result(result.map_err(RenderError::from)))
     }
-    /// UI provenance is granted only through the trusted fixture assembly.
-    fn create_ui_client(&self, limits: RenderClientLimits) -> Result<ComBox<IRenderClientDomainAbi>, NcStatus> {
-        self.device.create_ui_client(limits)
-    }
-    /// Every consumer gets a separate frame coordinator on the same logical device.
+    /// Each consumer gets a separate frame coordinator on the same logical device.
     fn recording_broker(&self) -> Result<ComPtr<IRenderViewBrokerAbi>, NcStatus> {
         Ok(self.device.broker())
     }
+}
+impl IRenderClientFactory for Host {
+    /// Only the fixture's exact framebuffer capability can select its shared target.
+    fn create_client(
+        &self,
+        limits: RenderClientLimits,
+        surface: ComRef<'_, IRenderSurfaceAbi>,
+        permissions: RenderClientPermissions,
+    ) -> Result<ComBox<IRenderClientDomainAbi>, NcStatus> {
+        if surface.as_raw().object != framebuffer().as_raw().object {
+            return Err(RENDER_E_OWNER);
+        }
+        TARGET.with(|target| self.device.create_client(limits, target.clone(), permissions))
+    }
+}
+impl IRenderSurfaceFactory for Host {
+    /// Headless fixtures support only the shared framebuffer; native suites qualify image targets.
+    fn create_surface(&self, desc: RenderSurfaceDesc) -> Result<ComPtr<IRenderSurfaceAbi>, NcStatus> {
+        if desc.kind != RenderSurfaceKind::Framebuffer || desc.size != Size::default() {
+            return Err(NC_E_INVALID_ARG);
+        }
+        Ok(framebuffer())
+    }
+}
+
+#[com_object(interfaces(IRenderSurface))]
+/// One authenticated framebuffer identity per fixture thread, without a native attachment.
+struct Surface;
+impl IRenderDriverBound for Surface {
+    /// Shares the real virtual device identity used by fixture resources.
+    fn driver_identity(&self) -> Result<ComPtr<IRenderDriverIdentityAbi>, NcStatus> {
+        Ok(DEVICE.with(|device| device.driver_identity()))
+    }
+}
+impl IRenderSurface for Surface {
+    /// Framebuffer recording is submitted by the fixture's capture renderer.
+    fn kind(&self) -> Result<RenderSurfaceKind, NcStatus> {
+        Ok(RenderSurfaceKind::Framebuffer)
+    }
+    /// The headless fixture has no drawable; tests supply explicit positive frame sizes.
+    fn size(&self) -> Result<Size, NcStatus> {
+        Ok(Size::default())
+    }
+    /// Framebuffer size is controlled by its enclosing host.
+    fn resize(&self, _: Size) -> Result<(), NcStatus> {
+        Err(NC_E_INVALID_ARG)
+    }
+    /// A framebuffer does not publish independent immutable images.
+    fn completed_image(&self) -> Result<ComPtr<ITextureAbi>, NcStatus> {
+        Err(neocogi_com::NC_E_NOT_FOUND)
+    }
+}
+
+/// Retains the concrete framebuffer identity accepted by this thread's host factories.
+pub fn framebuffer() -> ComPtr<IRenderSurfaceAbi> {
+    SURFACE.with(Clone::clone)
 }
 
 /// Creates a trusted CPU host on the current test thread, with no native upload behavior.
@@ -127,12 +194,16 @@ pub fn texture(
     resources: ComRef<'_, IRenderResourcesAbi>,
     texture: ComRef<'_, IGpuTextureAbi>,
 ) -> Result<Rc<neocogi_render_gpu::resource::TextureVersion<Backend>>, NcStatus> {
-    DEVICE.with(|device| device.ui_texture_snapshot(resources, texture))
+    DEVICE.with(|device| device.imported_texture_snapshot(resources, texture))
 }
 
 /// Creates a real client controller; tests keep it alive while submitting its blocks.
 pub fn client() -> ComBox<IRenderClientDomainAbi> {
-    DEVICE.with(|device| device.create_client(RenderClientLimits::default()).expect("valid client fixture limits"))
+    DEVICE.with(|device| {
+        device
+            .create_client(RenderClientLimits::default(), TARGET.with(Clone::clone), RenderClientPermissions::default())
+            .expect("valid client fixture limits")
+    })
 }
 
 /// Observes charged pending bytes and live client shells on the fixture's actual recording device.
@@ -171,7 +242,12 @@ pub fn read(info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(V
     let mut vertices = Vec::new();
     let mut batches = Vec::new();
     for block in blocks(info, stream)? {
-        if !block.is_ui() {
+        // Observation recognizes GFX's concrete vertex layout, never a resource-group role.
+        if !block
+            .commands()
+            .iter()
+            .any(|command| matches!(command, Command::Draw(draw) if draw.pipeline.vertex_buffers().iter().any(|layout| layout.stride == 20)))
+        {
             batches.push(UiBatch::View);
             continue;
         }

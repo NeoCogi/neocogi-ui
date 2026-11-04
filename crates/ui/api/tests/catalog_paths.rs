@@ -17,8 +17,8 @@ fn raw_identifier_catalog_paths_compile_in_exported_forms() {
     fs::write(directory.join("Cargo.toml"), "[workspace]\nmembers=['contracts','app']\nresolver='3'\n").unwrap();
     // The provider and application share source, not a Cargo graph owner.
     for (source_root, namespace) in [
-        (Path::new(neocogi_render_core::SCHEMA_ROOT).to_path_buf(), "neocogi/renderer"),
-        (Path::new(neocogi_render_core::SCHEMA_ROOT).to_path_buf(), "neocogi/platform"),
+        (Path::new(env!("OUT_DIR")).join("neocogi-shared-sources"), "neocogi/renderer"),
+        (Path::new(env!("OUT_DIR")).join("neocogi-shared-sources"), "neocogi/platform"),
         (root.join("crates/gfx/schemas"), "neocogi/gfx"),
         (root.join("crates/ui/schemas"), "neocogi/ui/core"),
     ] {

@@ -82,7 +82,7 @@ fn combo_owns_optional_selection_and_popup_state_end_to_end() {
     assert_eq!(combo.display_text().unwrap(), "Choose a value");
     assert_eq!(app.as_interface().dispatch_next(), Ok(ApplicationDispatch::Idle));
     let (renderer, _) = renderer();
-    assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(ui.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
     ui.update_with_events(SIZE, app.as_interface()).unwrap();
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
 
@@ -197,9 +197,9 @@ impl neocogi_ui::events::IEventReceiver for RemoveComboDuringPost {
         event_owner: neocogi_com::ComBox<neocogi_ui::events::IEventAbi>,
     ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui::events::IEventAbi>)> {
         let result = (|| -> Result<(), NcStatus> {
-            event_owner.query_weak::<neocogi_ui::IChoiceChangedEventAbi>()?;
-            self.calls.set(self.calls.get() + 1);
-            self.root.clear()
+                event_owner.query_weak::<neocogi_ui::IChoiceChangedEventAbi>()?;
+                self.calls.set(self.calls.get() + 1);
+                self.root.clear()
         })();
         result.map_err(|status| (status, event_owner))
     }

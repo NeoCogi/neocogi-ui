@@ -1,4 +1,4 @@
-use neocogi.renderer::{IRenderHost, IRenderViewBlock, IRenderer, ITexture, Rect, Size, TextureRegion};
+use neocogi.renderer::{IRenderOutcome, IRenderSurface, IRenderHost, IRenderViewBlock, IRenderer, ITexture, Rect, Size, TextureRegion};
 
 #[version(1)]
 /// GFX textured UI vertex before private clipping and generic-command lowering.
@@ -70,13 +70,14 @@ struct NinePatchDraw {
 /// charges. begin requires the previous frame to end through submit or cancel.
 interface GfxCompositor: IGfxDiagnostics {
     /// Bind private graphics authority and prepare the current atlas before replacing this session.
-    /// The host and all resulting factories remain private to this compositor.
-    fn bind_render_host(&mut self, host: &IRenderHost) -> Result<()>;
+    /// Color/resource writes and image import are enabled; all depth and clear permissions are denied.
+    /// The host and factories remain private. The report owns this operation's original status/text.
+    fn bind_render_host_result(&mut self, host: &IRenderHost, surface: &IRenderSurface) -> Result<ComPtr<IRenderOutcome>>;
     /// Takes a sealed generic graphics contribution at its reserved painter-order position.
     /// The renderer authenticates its private provenance before acquiring the native frame.
     fn render_view(&mut self, block: ComBox<IRenderViewBlock>) -> Result<()>;
     /// Imports a complete compatible resource revision before the UI publishes matching style state.
-    fn install_assets(&mut self, assets: &IAssetBundle) -> Result<()>;
+    fn install_assets_result(&mut self, assets: &IAssetBundle) -> Result<ComPtr<IRenderOutcome>>;
     /// Clears retained command output and starts one frame with positive drawable dimensions.
     fn begin(&mut self, size: Size, clear: u32) -> Result<()>;
     /// Appends complete solid triangles with one authoritative drawable clip.
@@ -94,7 +95,8 @@ interface GfxCompositor: IGfxDiagnostics {
     /// CPU reservation failure appends neither its quad nor its batch and retains no additional texture owner.
     fn texture(&mut self, clip: Rect, destination: Rect, source: TextureRegion, rgba: u32, texture: &ITexture) -> Result<()>;
     /// Submits the complete frame once and clears retained resource capabilities on every result.
-    fn submit(&mut self, renderer: &IRenderer) -> Result<()>;
+    /// The report retains the original lowering/native failure after device and frame cleanup.
+    fn submit_result(&mut self, renderer: &IRenderer) -> Result<ComPtr<IRenderOutcome>>;
     /// Abandons an incomplete frame while retaining reusable allocations.
     fn cancel(&mut self) -> Result<()>;
 }

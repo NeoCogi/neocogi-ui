@@ -34,7 +34,7 @@ pub(super) struct Graphics {
     host: ComPtr<IRenderHostAbi>,
     /// Closing this exclusive controller revokes later admission without cancelling submitted data.
     _domain: ComBox<IRenderClientDomainAbi>,
-    /// Never delegated to widgets: only this factory has trusted compositor provenance.
+    /// Private color/image resources carry only the permissions explicitly selected for this compositor.
     resources: ComPtr<IRenderResourcesAbi>,
     /// Separate CPU frame accounting for this compositor's own UI work.
     broker: ComPtr<IRenderViewBrokerAbi>,
@@ -47,18 +47,25 @@ pub(super) struct Graphics {
 }
 
 impl Graphics {
-    /// Builds and uploads a complete candidate before replacing any installed graphics session.
-    pub(super) fn new(host: ComRef<'_, IRenderHostAbi>, image: ComRef<'_, IRgbaImageAbi>) -> Result<Self, NcStatus> {
+    /// Builds and uploads a complete candidate before replacing the installed session.
+    /// The host authenticates the selected surface; the resource group retains its target
+    /// after the caller releases the public surface capability.
+    pub(super) fn new(host: ComRef<'_, IRenderHostAbi>, surface: ComRef<'_, IRenderSurfaceAbi>, image: ComRef<'_, IRgbaImageAbi>) -> Result<Self, RenderError> {
         let host = host.try_add_ref()?;
-        let domain = host.create_ui_client(RenderClientLimits {
-            resources: 65_536,
-            live_bytes: 1024 * 1024 * 1024,
-            pending_bytes: 64 * 1024 * 1024,
-            frame_draws: MAX_UI_BATCHES + 1,
-            frame_indices: u64::from(MAX_UI_VERTICES) * 2 + 3,
-            live_views: MAX_UI_BATCHES + 1,
-            stack_depth: 1,
-        })?;
+        let clients = host.query::<IRenderClientFactoryAbi>()?;
+        let domain = clients.create_client(
+            RenderClientLimits {
+                resources: 65_536,
+                live_bytes: 1024 * 1024 * 1024,
+                pending_bytes: 64 * 1024 * 1024,
+                frame_draws: MAX_UI_BATCHES + 1,
+                frame_indices: u64::from(MAX_UI_VERTICES) * 2 + 3,
+                live_views: MAX_UI_BATCHES + 1,
+                stack_depth: 1,
+            },
+            surface,
+            neocogi_gfx_support::compositor_permissions(),
+        )?;
         let resources = domain.resources()?;
         let broker = host.recording_broker()?;
         let code = Bytes::source(SHADER.as_bytes().to_vec());
@@ -133,7 +140,7 @@ impl Graphics {
     }
 
     /// Complete native preparation precedes atomic metadata/atlas publication in the parent.
-    pub(super) fn candidate_atlas(&self, image: ComRef<'_, IRgbaImageAbi>) -> Result<ComBox<IGpuTextureAbi>, NcStatus> {
+    pub(super) fn candidate_atlas(&self, image: ComRef<'_, IRgbaImageAbi>) -> Result<ComBox<IGpuTextureAbi>, RenderError> {
         Self::upload_atlas(self.host.as_com_ref(), self.resources.as_com_ref(), image)
     }
 
@@ -147,7 +154,7 @@ impl Graphics {
         host: ComRef<'_, IRenderHostAbi>,
         resources: ComRef<'_, IRenderResourcesAbi>,
         image: ComRef<'_, IRgbaImageAbi>,
-    ) -> Result<ComBox<IGpuTextureAbi>, NcStatus> {
+    ) -> Result<ComBox<IGpuTextureAbi>, RenderError> {
         let size = image.size()?;
         let source: ComPtr<IGpuDataSourceAbi> = ImageBytes::from_value(ImageBytes { image: image.try_add_ref()?, size }).query()?;
         let atlas = resources.create_texture(
@@ -158,12 +165,12 @@ impl Graphics {
             },
             neocogi_render_core::source::supplied(source.as_com_ref())?.borrow()?,
         )?;
-        host.prepare_ui_texture(resources, atlas.as_com_ref())?;
+        host.prepare_texture(resources, atlas.as_com_ref())?;
         Ok(atlas)
     }
 
     /// Pack geometry once, then preserve client positions with UI blocks using the same resources.
-    pub(super) fn lower(&self, frame: FrameState, vertices: &[RenderVertex], batches: &[Batch]) -> Result<Vec<Rc<ComBox<IRenderViewBlockAbi>>>, NcStatus> {
+    pub(super) fn lower(&self, frame: FrameState, vertices: &[RenderVertex], batches: &[Batch]) -> Result<Vec<Rc<ComBox<IRenderViewBlockAbi>>>, RenderError> {
         // A previous frame can release its final block only after renderer.render returns.
         // Drain before allocating geometry so quota pressure cannot prevent reaching maintenance.
         self.host.maintain()?;
@@ -185,7 +192,7 @@ impl Graphics {
                 Batch::Texture { texture, .. } => {
                     let key = texture.as_raw().object as usize;
                     if let std::collections::hash_map::Entry::Vacant(entry) = images.entry(key) {
-                        entry.insert(self.host.import_ui_texture(self.resources.as_com_ref(), texture.as_com_ref())?);
+                        entry.insert(self.host.import_texture(self.resources.as_com_ref(), texture.as_com_ref())?);
                     }
                     (6, images.get(&key).expect("import installed above").as_com_ref())
                 }

@@ -141,20 +141,23 @@ impl neocogi_render_core::abi::IRenderDriverBound for ImageFrameRenderer {
 }
 impl IRenderer for ImageFrameRenderer {
     /// Resolves each texture only during the active stream, then immediately releases the projection.
-    fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
-        let quads = batches
-            .into_iter()
-            .filter_map(|batch| {
-                if let UiBatch::Texture { first } = batch {
-                    Some(vertices[first as usize..first as usize + 4].try_into().unwrap())
-                } else {
-                    None
-                }
-            })
-            .collect();
-        *self.quads.borrow_mut() = quads;
-        Ok(())
+    fn render_result(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+        let result = (|| -> Result<(), NcStatus> {
+            let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
+            let quads = batches
+                .into_iter()
+                .filter_map(|batch| {
+                    if let UiBatch::Texture { first } = batch {
+                        Some(vertices[first as usize..first as usize + 4].try_into().unwrap())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            *self.quads.borrow_mut() = quads;
+            Ok(())
+        })();
+        Ok(neocogi_render_core::abi::operation_result(result.map_err(neocogi_render_core::abi::RenderError::from)))
     }
 }
 

@@ -3,7 +3,6 @@ use super::*;
 use neocogi_com::{ComPtr, INcStringAbi, INcStringComPtrExt, NC_E_INVALID_ARG, NcStatus, com_object};
 use neocogi_ui::{NativePath, PathEncoding};
 use neocogi_ui_support::assets::ImportedAssets;
-use neocogi_render_core::platform::*;
 
 #[com_object(interfaces(INativePath))]
 /// A caller-owned path deliberately tries to consume its builder during path decoding.

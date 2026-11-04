@@ -20,6 +20,25 @@ identity is not required for the COM dependencies or the inspector. Run
 `cargo fetch --locked` to populate the local registry cache; callers with a
 complete cache can select `CARGO_NET_OFFLINE=true`.
 
+## Platform dependencies
+
+The Platform packages also use exact `=0.1.0-alpha.1` requirements from crates.io.
+Update renderer core, GPU, support, shader core/compiler, native layout, and both
+static/dynamic platform assemblies together. The provider packages are
+`neocogi-platform-plugin` and `neocogi-platform-plugin-dylib`, with library name
+`nc_platform` and catalog identities `neocogi.platform.<backend>`.
+`neocogi-platform-build` supplies shared IDL to build scripts; target libraries
+no longer publish `SCHEMA_ROOT`. The UI helper combines those packaged inputs
+with UI-owned schemas, and each consumer generates in its own `OUT_DIR`.
+Native staging policy comes from the build-only `neocogi-native-layout-core`.
+
+Rendering explicitly binds each compositor to a framebuffer or image surface.
+Resource groups select permissions at creation; UI permits color/resource writes
+and image import, with all depth operations disabled. Custom 3D groups retain
+their separately selected permissions. See [rendering](../../crates/ui/runtime/docs/RENDER.md)
+for ownership and per-operation errors. These pre-release interfaces change their
+fingerprints: rebuild hosts and every provider together.
+
 ## Updating the release
 
 Update all three exact `version` requirements in the root `Cargo.toml` together,

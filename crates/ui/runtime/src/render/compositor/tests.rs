@@ -2,6 +2,7 @@
 
 use neocogi_gfx_support::testing::UiBatch;
 use super::*;
+use neocogi_com::NcStatus;
 use crate::{color, SliceInsets, Vec2i};
 use neocogi_com::{com_object};
 use neocogi_render_core::abi::*;
@@ -36,14 +37,17 @@ impl neocogi_render_core::abi::IRenderDriverBound for Recorder {
 }
 impl IRenderer for Recorder {
     /// Copies the live stream before borrowing assertion storage, keeping foreign calls reentrant.
-    fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
-        let mut capture = self.capture.borrow_mut();
-        capture.calls += 1;
-        capture.vertices = vertices;
-        capture.batches = batches;
-        capture.stream = Some((stream.try_add_ref()?, info.invocation));
-        if capture.fail { Err(NC_E_INVALID_ARG) } else { Ok(()) }
+    fn render_result(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+        let result = (|| -> Result<(), NcStatus> {
+            let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
+            let mut capture = self.capture.borrow_mut();
+            capture.calls += 1;
+            capture.vertices = vertices;
+            capture.batches = batches;
+            capture.stream = Some((stream.try_add_ref()?, info.invocation));
+            if capture.fail { Err(NC_E_INVALID_ARG) } else { Ok(()) }
+        })();
+        Ok(neocogi_render_core::abi::operation_result(result.map_err(neocogi_render_core::abi::RenderError::from)))
     }
 }
 
@@ -80,7 +84,7 @@ impl Composition {
     fn new(atlas: AtlasHandle) -> Self {
         let source = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(atlas.clone())).unwrap();
         let mut compositor = neocogi_gfx_impl::GfxCompositorObject::create(source.as_com_ref()).unwrap();
-        compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref()).unwrap();
+        compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
         let capture = Rc::new(RefCell::new(Capture::default()));
         let renderer = Recorder::from_value(Recorder { capture: capture.clone() }).query().unwrap();
         Self {
@@ -93,7 +97,7 @@ impl Composition {
     }
 
     /// Calls the same replay function as RuntimeContext; no geometry is computed in the fixture.
-    fn submit(&mut self, size: Size) -> Result<(), NcStatus> {
+    fn submit(&mut self, size: Size) -> Result<(), RenderError> {
         super::submit(&mut self.list, &self.atlas, &mut self.compositor, self.renderer.as_com_ref(), size, 0xff000000)
     }
 }
@@ -271,7 +275,7 @@ fn flat_nine_patch_filters_its_hidden_center_during_gfx_expansion() {
 fn frame_finish_failure_is_observable_and_the_next_frame_can_complete() {
     let mut fixture = Composition::new(atlas());
     fixture.capture.borrow_mut().fail = true;
-    assert_eq!(fixture.submit(Size { width: 32, height: 32 }), Err(NC_E_INVALID_ARG));
+    assert_eq!(fixture.submit(Size { width: 32, height: 32 }).map_err(|error| error.status), Err(NC_E_INVALID_ARG));
     assert!(fixture.list.is_empty());
     let (stream, invocation) = fixture.capture.borrow().stream.clone().unwrap();
     assert!(stream.view(invocation, 0).is_err());

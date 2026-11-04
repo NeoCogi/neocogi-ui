@@ -80,7 +80,7 @@ fn partial_paint_releases_owned_commands_before_a_later_frame_succeeds() {
     let later_leaf = fixture.ui.widgets().leaf(PartialPaint { attempt: later.clone() }, WidgetOptions::NONE).unwrap();
     let _later_owner = window(&fixture.ui, "later", Rect { x: 140, y: 10, width: 120, height: 80 }, later_leaf);
     fixture.ui.update(VIEW).unwrap();
-    assert_eq!(fixture.ui.render(VIEW, fixture.renderer.as_com_ref()), Err(neocogi_com::NC_E_INVALID_ARG));
+    assert_eq!(fixture.ui.render(VIEW, fixture.renderer.as_com_ref()).map_err(|error| error.status), Err(neocogi_com::NC_E_INVALID_ARG));
     assert_eq!(fixture.snapshot().calls, 0);
     assert_eq!(attempt.borrow().releases, 1);
     assert_eq!(later.borrow().releases, 0);
@@ -185,7 +185,7 @@ fn gpu_paint_failure_survives_facade_drop_cancel_and_retry_until_host_return() {
         fixture.ui.update(VIEW).unwrap();
         for _ in 0..2 {
             assert_eq!(
-                fixture.ui.render(VIEW, fixture.renderer.as_com_ref()),
+                fixture.ui.render(VIEW, fixture.renderer.as_com_ref()).map_err(|error| error.status),
                 Err(neocogi_render_core::abi::RENDER_E_STATE)
             );
             assert_eq!(fixture.snapshot().calls, 0);

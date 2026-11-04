@@ -5,8 +5,6 @@
 pub fn sources(repository: &str, local: &[&str]) -> neocogi_idl::cargo::SharedSources {
     let locations = [
         ("neocogi.ui.runtime.internal", "nc_ui::choice_menu::bindings"),
-        ("neocogi.renderer", "neocogi_render_core::abi"),
-        ("neocogi.platform", "neocogi_render_core::platform"),
         ("neocogi.gfx", "neocogi_gfx_support::abi"),
         ("neocogi.skin", "neocogi_appearance::skin"),
         ("neocogi.ui.core", "neocogi_ui::abi::core"),
@@ -19,7 +17,7 @@ pub fn sources(repository: &str, local: &[&str]) -> neocogi_idl::cargo::SharedSo
         "unknown shared IDL module"
     );
     let repository = std::path::Path::new(repository);
-    let mut request = neocogi_idl::cargo::SharedSources::new(neocogi_render_core::SCHEMA_ROOT);
+    let mut request = neocogi_platform_build::sources(&[]).expect("prepare platform IDL sources");
     for relative in ["crates/gfx/schemas", "crates/skin/schemas", "crates/ui/schemas", "examples/schemas"] {
         request = request.include_root(repository.join(relative));
     }

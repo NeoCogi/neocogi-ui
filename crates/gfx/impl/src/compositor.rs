@@ -11,7 +11,10 @@ use neocogi_com::{
 };
 use neocogi_gfx_support::abi::*;
 use neocogi_gfx_support::{AssetTables, AsciiGlyphIndex, MAX_UI_BATCHES, MAX_UI_VERTICES};
-use neocogi_render_core::abi::{IRenderViewBlockAbi, IRenderStream, IRenderStreamAbi, IRenderStreamVtblFor, IRgbaImageAbi, IRendererAbi, ITextureAbi, RenderInfo};
+use neocogi_render_core::abi::{
+    IRenderViewBlockAbi, IRenderStream, IRenderStreamAbi, IRenderStreamVtblFor, IRgbaImageAbi, IRendererAbi, ITextureAbi, RenderInfo,
+    IRenderHostAbi, IRenderSurfaceAbi, IRenderOutcomeAbi, RenderError, operation_result,
+};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -491,13 +494,16 @@ impl GfxCompositorObject {
 
 impl GfxCompositor for GfxCompositorObject {
     /// Complete construction/upload before replacing the old private GPU session.
-    fn bind_render_host(&mut self, host: ComRef<'_, neocogi_render_core::abi::IRenderHostAbi>) -> Result<(), NcStatus> {
-        if self.frame.is_some() {
-            return Err(NC_E_BUSY);
-        }
-        let graphics = gpu::Graphics::new(host, self.resources.image.as_com_ref())?;
-        self.graphics = Some(graphics);
-        Ok(())
+    fn bind_render_host_result(&mut self, host: ComRef<'_, IRenderHostAbi>, surface: ComRef<'_, IRenderSurfaceAbi>) -> Result<ComPtr<IRenderOutcomeAbi>, NcStatus> {
+        let result = (|| -> Result<(), RenderError> {
+            if self.frame.is_some() {
+                return Err(NC_E_BUSY.into());
+            }
+            let graphics = gpu::Graphics::new(host, surface, self.resources.image.as_com_ref())?;
+            self.graphics = Some(graphics);
+            Ok(())
+        })();
+        Ok(operation_result(result))
     }
     /// Retains generic work without interpreting client shaders or resource semantics.
     fn render_view(&mut self, block: ComBox<IRenderViewBlockAbi>) -> Result<(), (NcStatus, ComBox<IRenderViewBlockAbi>)> {
@@ -517,29 +523,32 @@ impl GfxCompositor for GfxCompositorObject {
     }
 
     /// Replaces resource metadata only with a validated revision from the original namespace.
-    fn install_assets(&mut self, assets: ComRef<'_, IAssetBundleAbi>) -> Result<(), NcStatus> {
-        if self.frame.is_some() {
-            return Err(NC_E_BUSY);
-        }
-        let resources = Resources::read(assets).inspect_err(|status| {
-            self.diagnostic.failure(*status);
-        })?;
-        if resources.catalog.as_raw().object != self.resources.catalog.as_raw().object {
-            return Err(self.diagnostic.failure("asset revision belongs to another catalog"));
-        }
-        let atlas = self
-            .graphics
-            .as_ref()
-            // Appearance revisions reuse the immutable atlas. Do not copy or prepare it again;
-            // only a changed image identity needs a candidate GPU texture before publication.
-            .filter(|_| resources.image.as_raw().object != self.resources.image.as_raw().object)
-            .map(|graphics| graphics.candidate_atlas(resources.image.as_com_ref()))
-            .transpose()?;
-        if let (Some(graphics), Some(atlas)) = (self.graphics.as_mut(), atlas) {
-            graphics.replace_atlas(atlas);
-        }
-        self.resources = resources;
-        Ok(())
+    fn install_assets_result(&mut self, assets: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IRenderOutcomeAbi>, NcStatus> {
+        let result = (|| -> Result<(), RenderError> {
+            if self.frame.is_some() {
+                return Err(NC_E_BUSY.into());
+            }
+            let resources = Resources::read(assets).inspect_err(|status| {
+                self.diagnostic.failure(status);
+            })?;
+            if resources.catalog.as_raw().object != self.resources.catalog.as_raw().object {
+                return Err(self.diagnostic.failure("asset revision belongs to another catalog").into());
+            }
+            let atlas = self
+                .graphics
+                .as_ref()
+                // Appearance revisions reuse the immutable atlas. Do not copy or prepare it again;
+                // only a changed image identity needs a candidate GPU texture before publication.
+                .filter(|_| resources.image.as_raw().object != self.resources.image.as_raw().object)
+                .map(|graphics| graphics.candidate_atlas(resources.image.as_com_ref()))
+                .transpose()?;
+            if let (Some(graphics), Some(atlas)) = (self.graphics.as_mut(), atlas) {
+                graphics.replace_atlas(atlas);
+            }
+            self.resources = resources;
+            Ok(())
+        })();
+        Ok(operation_result(result))
     }
 
     /// Starts an empty frame after checking dimensions and sequencing.
@@ -710,11 +719,11 @@ impl GfxCompositor for GfxCompositorObject {
     }
 
     /// Performs the frame's only renderer call and expires all retained resource capabilities.
-    fn submit(&mut self, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
+    fn submit_result(&mut self, renderer: ComRef<'_, IRendererAbi>) -> Result<ComPtr<IRenderOutcomeAbi>, NcStatus> {
         // Native/foreign work runs over owned geometry, never while a storage cell is borrowed.
         let mut vertices = std::mem::take(&mut *self.storage.vertices.borrow_mut());
         let mut batches = std::mem::take(&mut *self.storage.batches.borrow_mut());
-        let result = (|| {
+        let result: Result<(), RenderError> = (|| {
             let frame = self.frame.take().ok_or(NC_E_INVALID_ARG)?;
             let invocation = self.next_invocation.checked_add(1).ok_or(NC_E_OUT_OF_RANGE)?;
             self.next_invocation = invocation;
@@ -738,9 +747,10 @@ impl GfxCompositor for GfxCompositorObject {
         batches.clear();
         *self.storage.vertices.borrow_mut() = vertices;
         *self.storage.batches.borrow_mut() = batches;
-        result.inspect_err(|status| {
-            self.diagnostic.failure(*status);
-        })
+        let result = result.inspect_err(|error| {
+            self.diagnostic.failure(error);
+        });
+        Ok(operation_result(result))
     }
 
     /// Abandons a frame and releases its retained capabilities while preserving allocations.

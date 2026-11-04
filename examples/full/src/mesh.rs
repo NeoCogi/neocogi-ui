@@ -97,7 +97,7 @@ struct Geometry {
 }
 impl Geometry {
     /// Uploads explicit byte arrays and declares their exact shader interpretation.
-    fn new(resources: ComRef<'_, IRenderResourcesAbi>, vertices: Vec<u8>, indices: Vec<u32>) -> Result<Self, NcStatus> {
+    fn new(resources: ComRef<'_, IRenderResourcesAbi>, vertices: Vec<u8>, indices: Vec<u32>) -> Result<Self, RenderError> {
         let vertex = resources.create_buffer(
             GpuBufferDesc {
                 role: GpuBufferRole::Vertex,
@@ -374,12 +374,12 @@ mod viewport_tests {
         fn create_sampler(&self, _: GpuSamplerDesc) -> Result<ComBox<IGpuSamplerAbi>, NcStatus> {
             self.reject()
         }
-        fn create_shader(
+        fn create_shader_result(
             &self,
             _: GpuShaderStage,
             _: ComRef<'_, IGpuDataSourceAbi>,
             _: NcCopyFromBufferOffset<'_, u8>,
-        ) -> Result<ComBox<IGpuShaderAbi>, NcStatus> {
+        ) -> Result<ComBox<IShaderCreationResultAbi>, NcStatus> {
             self.reject()
         }
         fn create_pipeline(
@@ -469,7 +469,7 @@ mod viewport_tests {
                 .query()
                 .unwrap(),
         );
-        let domain = device.create_client(RenderClientLimits::default()).unwrap();
+        let domain = device.create_client(RenderClientLimits::default(), device.surface_target(RenderSurfaceKind::Framebuffer).unwrap(), RenderClientPermissions::default()).unwrap();
         let resources = domain.resources().unwrap();
         let mut bytes = Vec::new();
         for position in [Vec3f::new(-1., -1., 0.), Vec3f::new(1., -1., 0.), Vec3f::new(0., 1., 0.)] {

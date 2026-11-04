@@ -10,7 +10,7 @@ use crate::{
 };
 use neocogi_com::{ComPtr, ComRef, NcStatus};
 use neocogi_gfx_support::abi::GfxCompositorAbi;
-use neocogi_render_core::abi::{IRendererAbi, Size};
+use neocogi_render_core::abi::{IRendererAbi, IRenderHostAbi, IRenderSurfaceAbi, RenderError, Size};
 
 /// Production UI state with no renderer executor or render-stream implementation.
 /// Shutdown drops this owner directly after idle preflight. Field destruction releases
@@ -30,8 +30,8 @@ pub(crate) struct RuntimeContext {
 
 impl RuntimeContext {
     /// GFX privately retains its graphics authority only after the candidate session prepares.
-    pub(crate) fn bind_render_host(&mut self, host: ComRef<'_, neocogi_render_core::abi::IRenderHostAbi>) -> Result<(), NcStatus> {
-        self.compositor.bind_render_host(host)
+    pub(crate) fn bind_render_host(&mut self, host: ComRef<'_, IRenderHostAbi>, surface: ComRef<'_, IRenderSurfaceAbi>) -> Result<(), RenderError> {
+        self.compositor.bind_render_host(host, surface)
     }
 
     /// Adopts a fresh compositor and the exact resource revision used to construct it.
@@ -82,14 +82,14 @@ impl RuntimeContext {
     }
 
     /// Submits a successfully checked paint phase through the real GFX compositor.
-    pub(crate) fn submit(&mut self, size: Size, clear: u32, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
+    pub(crate) fn submit(&mut self, size: Size, clear: u32, renderer: ComRef<'_, IRendererAbi>) -> Result<(), RenderError> {
         // Clone the cheap immutable atlas handle before mutably borrowing the display list.
         let atlas = self.window_manager.skin_bundle().atlas().clone();
         crate::render::compositor::submit(self.window_manager.display_list_mut(), &atlas, &mut self.compositor, renderer, size, clear)
     }
 
     /// Installs the copied resource revision in the GFX owner before UI publishes its projection.
-    pub(crate) fn install_compositor_assets(&mut self, source: ComRef<'_, neocogi_gfx_support::abi::IAssetBundleAbi>) -> Result<(), NcStatus> {
+    pub(crate) fn install_compositor_assets(&mut self, source: ComRef<'_, neocogi_gfx_support::abi::IAssetBundleAbi>) -> Result<(), RenderError> {
         self.compositor.install_assets(source)
     }
 }

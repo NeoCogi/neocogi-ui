@@ -11,7 +11,7 @@ categories = ["gui", "rendering"]
 
 
 [build-dependencies]
-neocogi-render-core.workspace = true
+neocogi-platform-build.workspace = true
 neocogi-idl.workspace = true
 
 [lib]

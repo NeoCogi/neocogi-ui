@@ -23,5 +23,5 @@ neocogi-com = { workspace = true, default-features = false, features = ["macros"
 miniz_oxide = { workspace = true, optional = true }
 
 [build-dependencies]
-neocogi-render-core.workspace = true
+neocogi-platform-build.workspace = true
 neocogi-idl.workspace = true

@@ -37,8 +37,32 @@ font slots therefore resolve against that revision without reconstructing an atl
 The compositor retains the bundle's narrow `IRgbaImage` projection and uses its bound
 `IRenderHost` to prepare a private generic texture. Native preparation must succeed
 before an asset replacement is published; unchanged image identity reuses that texture.
-`Ui::install_assets` takes only the candidate bundle. The final `IRenderer::render`
+`Ui::install_assets` takes only the candidate bundle. The final `IRenderer::render_result`
 receives frame metadata and a sealed block stream, with no atlas or UI metadata.
+
+## Drawing target and errors
+
+Create a surface through `IRenderSurfaceFactory::create_surface(RenderSurfaceDesc)`
+on the graphics host, then call `set_render_host(host, surface)` on the UI runtime
+(or `bind_render_host(host, surface)` on a standalone compositor). A framebuffer
+view uses zero descriptor dimensions and follows its window; an image surface
+uses explicit dimensions and exposes its own renderer. GFX creates its resource
+group against that exact surface. Rebinding prepares a complete candidate before
+replacing the previous group. Image-bound blocks cannot be submitted to another
+image or the window; framebuffer blocks join their enclosing window frame.
+
+The compositor enables only `write_color`, `write_resources` and `import_images`.
+Depth read/write, depth initialization and attachment clears are disabled. Custom
+3D groups select their own surface and permissions and retain independent quotas.
+There are no UI-specific resource roles or `create_ui_client` calls.
+
+Rust binding, asset-installation and frame methods return `RenderError` with the
+original status and independently owned message. Wire methods use the corresponding
+`*_result` names and return `IRenderOutcome`; Rust clients read that report before
+returning. UI and GFX forward the original failure instead of replacing it with
+`UI_E_RENDER` or querying device last-error state. Errors remain usable after the
+window, renderer and report are dropped. Failed paint/replay still cancels retained
+work; every submission releases its frame resources on success or failure.
 
 ## Update and frame validity
 
@@ -110,8 +134,8 @@ ownership, validation, viewport and work-budget rules.
 | `render/display_list.rs` | Owned ordered operations and reusable geometry |
 | `render/compositor.rs` | Thin production replay into the GFX compositor |
 | [crates/render/core](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/core) | Backend-neutral frame contracts, texture identity, color, and upload validation |
-| [crates/render/plugin](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/plugin) | Backend plugin identity, window/device ownership, and checked COM GPU submission |
-| [crates/render/{glow,vulkan,wgpu,webgl}](BACKENDS.md#backend-sources) | Concrete GPU implementations linked into one selected plugin |
+| [crates/platform/plugin](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/platform/plugin) | Backend plugin identity, window/device ownership, and checked COM GPU submission |
+| [crates/render/gpu/src/backends](BACKENDS.md#backend-sources) | Concrete GPU implementations linked into one selected plugin |
 | [crates/render/support](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/support) | Shared frame preparation and resource validation |
 
 A backend acquires one exclusive frame through `RendererBackend::frame`. Its quad and

@@ -34,7 +34,7 @@ impl events::MessageProcessor for Model {
 }
 
 /// Runs real routing, layout, GPU recording and lifecycle through three independently built assemblies.
-pub(super) fn smoke(runtime: neocogi_com::Runtime, ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
+pub(super) fn smoke(runtime: neocogi_com::Runtime, ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), RenderError> {
     let provider = runtime.acquire_plugin_root::<ExtensionProviderAbi>(neocogi_com::guid_from_qualified_name("neocogi.example.ui-extension"))?;
     let host = ui.widgets().host()?;
     // Exercise rejection through the independent extension and runtime DLLs.
@@ -112,14 +112,14 @@ pub(super) fn smoke(runtime: neocogi_com::Runtime, ui: &Ui, size: Size, renderer
     assert!(activated.measures > first.measures, "handler edits are measured before update returns");
 
     counter.set_count(1_000_000)?;
-    assert_eq!(ui.render(size, renderer), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(ui.render(size, renderer).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
     ui.update_with_events(size, owner.as_com_ref())?;
     let edited = probe.calls()?;
     assert!(edited.measures > activated.measures);
     counter.set_count(1_000_000)?;
     ui.render(size, renderer)?; // An identical setter retains the commit.
     inset.set_padding(20)?;
-    assert_eq!(ui.render(size, renderer), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(ui.render(size, renderer).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
     ui.update_with_events(size, owner.as_com_ref())?;
     let padded = probe.calls()?;
     assert!(padded.measures > edited.measures, "container constraints invalidate descendants");

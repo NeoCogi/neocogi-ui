@@ -2,6 +2,12 @@
 
 ## 0.0.0 (unreleased)
 
+- Consume all NeoCogi Platform packages from crates.io at exactly `0.1.0-alpha.1`.
+  Use the `nc_platform` assembly and packaged build-time IDL sources. Bind UI/GFX
+  groups to explicit surfaces with color/resource/image permissions and no depth.
+  Preserve original rendering, binding and upload failures in owned operation
+  reports through the UI and GFX plugins. Rebuild all pre-release peers together.
+
 - Bound Combo dropdowns to a positive configurable visible-item count (default
   ten), further constrained by frame space, with vertical scrolling and one
   text line of preferred edge clearance. Share fitting, scrolling and scrollbar

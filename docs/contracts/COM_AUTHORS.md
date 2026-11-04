@@ -1078,9 +1078,10 @@ Resources belong to one native window/renderer instance, even when two instances
 use the same GPU API. The native plugin authenticates canonical COM identity against
 its own weak registry; a matching ABI or a claimed numeric owner does not prove
 membership. Foreign images, factories and graphics blocks fail device authentication.
-The UI's frame API reports backend failures as `UI_E_RENDER`; query
-`IRenderDiagnostics::diagnostic` on the renderer for the underlying preparation or
-native-driver detail. Returned diagnostic strings are immutable snapshots.
+The UI's frame API returns `RenderError` with the original operation status and
+owned preparation or native-driver detail. Its COM `render_result` method returns
+an `IRenderOutcome` for this invocation. Error text survives later operations and
+device destruction; callers never query a shared renderer diagnostic.
 
 An image keeps its native allocation and physical device/context alive after the
 public window is released, without retaining the driver facade or input routes.

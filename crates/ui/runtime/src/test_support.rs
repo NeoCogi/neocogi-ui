@@ -145,7 +145,7 @@ pub(crate) fn runtime_from_assets(
 ) -> Result<neocogi_com::ComPtr<neocogi_ui::abi::core::UiRuntimeAbi>, neocogi_com::NcStatus> {
     let gfx = neocogi_ui_support::test_support::gfx_factory(crate::test_support::host_runtime());
     let mut runtime = crate::create_runtime_from_assets(source, gfx.as_com_ref())?;
-    runtime.set_render_host(neocogi_gfx_support::testing::host().as_com_ref())?;
+    runtime.set_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).map_err(|error| error.status)?;
     Ok(runtime)
 }
 

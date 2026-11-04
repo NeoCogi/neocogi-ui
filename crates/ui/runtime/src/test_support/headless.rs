@@ -30,15 +30,18 @@ impl neocogi_render_core::abi::IRenderDriverBound for CaptureRenderer {
 }
 impl IRenderer for CaptureRenderer {
     /// Reads complete arrays while the token is live, then publishes copied observations.
-    fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
-        // No observation borrow survives a foreign stream call. This also permits deliberately
-        // reentrant renderer fixtures to be added without changing the production path.
-        let mut frame = self.frame.borrow_mut();
-        frame.calls += 1;
-        frame.vertices = vertices;
-        frame.batches = batches;
-        Ok(())
+    fn render_result(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+        let result = (|| -> Result<(), NcStatus> {
+            let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
+            // No observation borrow survives a foreign stream call. This also permits deliberately
+            // reentrant renderer fixtures to be added without changing the production path.
+            let mut frame = self.frame.borrow_mut();
+            frame.calls += 1;
+            frame.vertices = vertices;
+            frame.batches = batches;
+            Ok(())
+        })();
+        Ok(neocogi_render_core::abi::operation_result(result.map_err(neocogi_render_core::abi::RenderError::from)))
     }
 }
 
@@ -73,7 +76,7 @@ impl Headless {
     /// Commits queued input and renders through the ordinary UI-to-GFX-to-renderer path.
     pub(crate) fn frame(&mut self, size: Size) -> Result<(), NcStatus> {
         self.ui.update(size)?;
-        self.ui.render(size, self.renderer.as_com_ref())
+        self.ui.render(size, self.renderer.as_com_ref()).map_err(|error| error.status)
     }
 
     /// Returns an owned assertion snapshot without exposing the compositor's expired buffers.

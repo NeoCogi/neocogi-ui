@@ -309,3 +309,14 @@ mod compiled_tests {
 
 /// Shared IDL bindings and their Rust conveniences.
 pub mod abi;
+
+/// Permissions delegated to a UI compositor on either a framebuffer or an image surface.
+/// UI writes color and resources and imports images; depth and attachment clears remain denied.
+pub const fn compositor_permissions() -> neocogi_render_core::abi::RenderClientPermissions {
+    neocogi_render_core::abi::RenderClientPermissions {
+        write_color: true,
+        write_resources: true,
+        import_images: true,
+        ..neocogi_render_core::abi::RenderClientPermissions::none()
+    }
+}

@@ -63,7 +63,7 @@ impl IAssetBundle for ReentrantAssets {
                 RefreshAction::Sibling(mut sibling) => named_font(&mut sibling)?,
                 RefreshAction::Replace { runtime, next, sibling } => {
                     let mut runtime = runtime.upgrade()?.ok_or(neocogi_com::NC_E_DROPPED)?;
-                    runtime.install_assets(next.as_com_ref())?;
+                    runtime.install_assets(next.as_com_ref()).map_err(|error| error.status)?;
                     if let Some(mut sibling) = sibling {
                         named_font(&mut sibling)?;
                     }

@@ -2,7 +2,7 @@
 use super::*;
 
 /// Build an independent compositor through the same statically linked GFX service as applications.
-fn compositor(host: ComRef<'_, IRenderHostAbi>) -> ComPtr<neocogi_gfx_support::abi::GfxCompositorAbi> {
+fn compositor(host: ComRef<'_, IRenderHostAbi>, surface: ComRef<'_, IRenderSurfaceAbi>) -> ComPtr<neocogi_gfx_support::abi::GfxCompositorAbi> {
     use neocogi_gfx_support::abi::GfxPluginFactoryAbi;
     let runtime = crate::host_runtime();
     // SAFETY: the statically linked descriptor and implementation live for this process.
@@ -14,7 +14,7 @@ fn compositor(host: ComRef<'_, IRenderHostAbi>) -> ComPtr<neocogi_gfx_support::a
         .unwrap();
     let assets = neocogi_demo_assets::load_bundle(runtime).unwrap();
     let mut compositor = gfx.create_compositor(assets.as_com_ref()).unwrap();
-    compositor.bind_render_host(host).unwrap();
+    compositor.bind_render_host(host, surface).unwrap();
     compositor
 }
 
@@ -37,7 +37,7 @@ fn independent_surface_snapshots_keep_orientation_and_device_lifetime() {
     let images: ComPtr<ITextureFactoryAbi> = window.query().unwrap();
     let factory: ComPtr<IRenderSurfaceFactoryAbi> = window.query().unwrap();
     let extent = Size { width: 32, height: 32 };
-    let surface = factory.create_surface(extent).unwrap();
+    let surface = factory.create_surface(RenderSurfaceDesc { kind: RenderSurfaceKind::Image, size: extent }).unwrap();
     let preview: ComPtr<IRendererAbi> = surface.query().unwrap();
     let driver = renderer.driver_identity().unwrap();
     assert_eq!(identity(&driver).unwrap(), identity(&surface.driver_identity().unwrap()).unwrap());
@@ -55,7 +55,7 @@ fn independent_surface_snapshots_keep_orientation_and_device_lifetime() {
             .unwrap(),
         )
         .unwrap();
-    let mut compositor = compositor(host.as_com_ref());
+    let mut compositor = compositor(host.as_com_ref(), surface.as_com_ref());
     let bounds = Rect { x: 0, y: 0, width: 32, height: 32 };
     compositor.begin(extent, 0xff000000).unwrap();
     compositor
@@ -72,18 +72,19 @@ fn independent_surface_snapshots_keep_orientation_and_device_lifetime() {
     let oversized = Size { width: 131072, height: 1 };
     surface.resize(oversized).unwrap();
     compositor.begin(oversized, 0xff000000).unwrap();
-    assert_eq!(compositor.submit(preview.as_com_ref()), Err(RENDER_E_BACKEND));
+    assert_eq!(compositor.submit(preview.as_com_ref()).map_err(|error| error.status), Err(RENDER_E_BACKEND));
     assert_eq!(identity(&surface.completed_image().unwrap()).unwrap(), identity(&new).unwrap());
     assert_eq!(surface.resize(Size { width: -1, height: 32 }), Err(NC_E_INVALID_ARG));
     surface.resize(Size { width: 0, height: 0 }).unwrap();
     compositor.begin(extent, 0xff000000).unwrap();
-    assert_eq!(compositor.submit(preview.as_com_ref()), Err(NC_E_INVALID_ARG));
+    assert_eq!(compositor.submit(preview.as_com_ref()).map_err(|error| error.status), Err(NC_E_INVALID_ARG));
     surface.resize(Size { width: 16, height: 16 }).unwrap();
     compositor.begin(Size { width: 16, height: 16 }, 0xff123456).unwrap();
     compositor.submit(preview.as_com_ref()).unwrap();
     assert_eq!(old.size().unwrap(), extent);
     assert_eq!(new.size().unwrap(), extent);
     drop((preview, surface, factory));
+    compositor.bind_render_host(host.as_com_ref(), framebuffer(host.as_com_ref()).as_com_ref()).unwrap();
     let full = Rect { x: 0, y: 0, width: 64, height: 64 };
     compositor.begin(SIZE, 0xff333333).unwrap();
     compositor.texture(full, bounds, TextureRegion::FULL, 0xffffffff, old.as_com_ref()).unwrap();
@@ -107,7 +108,7 @@ fn independent_surface_snapshots_keep_orientation_and_device_lifetime() {
     assert!(!physical.native_alive(), "final image release tears down the physical owner");
 }
 
-#[com_object(interfaces(IRenderHost))]
+#[com_object(interfaces(IRenderHost, IRenderClientFactory))]
 /// Native fixture captures its actual UI factory and gives it a bounded logical byte quota.
 struct QuotaHost {
     /// All native preparation/maintenance uses the production host, not a test renderer.
@@ -121,24 +122,19 @@ impl IRenderDriverBound for QuotaHost {
     }
 }
 impl IRenderHost for QuotaHost {
-    fn maintain(&self) -> Result<(), NcStatus> {
-        self.native.maintain()
+    fn maintain_result(&self) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+        self.native.maintain_result()
     }
-    fn import_ui_texture(&self, resources: ComRef<'_, IRenderResourcesAbi>, image: ComRef<'_, ITextureAbi>) -> Result<ComBox<IGpuTextureAbi>, NcStatus> {
-        self.native.import_ui_texture(resources, image)
+    fn import_texture_result(&self, resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>, image: ComRef<'_, neocogi_render_core::abi::ITextureAbi>) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::ITextureImportResultAbi>, NcStatus> {
+        self.native.import_texture_result(resources, image)
     }
-    fn prepare_ui_texture(&self, resources: ComRef<'_, IRenderResourcesAbi>, texture: ComRef<'_, IGpuTextureAbi>) -> Result<(), NcStatus> {
-        self.native.prepare_ui_texture(resources, texture)
+    fn prepare_texture_result(&self, resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>, texture: ComRef<'_, neocogi_render_core::abi::IGpuTextureAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+        self.native.prepare_texture_result(resources, texture)
     }
     fn recording_broker(&self) -> Result<ComPtr<IRenderViewBrokerAbi>, NcStatus> {
         self.native.recording_broker()
     }
-    fn create_ui_client(&self, mut limits: RenderClientLimits) -> Result<ComBox<IRenderClientDomainAbi>, NcStatus> {
-        limits.live_bytes = 8 * 1024 * 1024;
-        let domain = self.native.create_ui_client(limits)?;
-        *self.factory.borrow_mut() = Some(domain.resources()?);
-        Ok(domain)
-    }
+
 }
 
 /// A queued native deletion must free quota before GFX attempts its next geometry allocation.
@@ -163,7 +159,7 @@ fn gfx_maintenance_precedes_geometry_admission_at_exact_quota_pressure() {
     })
     .query()
     .unwrap();
-    let mut compositor = compositor(host.as_com_ref());
+    let mut compositor = compositor(host.as_com_ref(), framebuffer(window.graphics_host().unwrap().as_com_ref()).as_com_ref());
     let resources = captured.borrow().as_ref().unwrap().clone();
     let texture = resources
         .create_texture(
@@ -175,7 +171,7 @@ fn gfx_maintenance_precedes_geometry_admission_at_exact_quota_pressure() {
             neocogi_render_core::source::initial(None).borrow().unwrap(),
         )
         .unwrap();
-    host.prepare_ui_texture(resources.as_com_ref(), texture.as_com_ref()).unwrap();
+    host.prepare_texture(resources.as_com_ref(), texture.as_com_ref()).unwrap();
     device.finish().unwrap();
     host.maintain().unwrap();
     drop(texture);
@@ -208,4 +204,15 @@ fn gfx_maintenance_precedes_geometry_admission_at_exact_quota_pressure() {
     // Moving maintenance after geometry would reject this call before renderer.render is reached.
     compositor.submit(renderer.as_com_ref()).unwrap();
     drop(padding);
+}
+
+/// Delegates group creation while retaining the fixture's upload/quota observations.
+impl neocogi_render_core::abi::IRenderClientFactory for QuotaHost {
+    fn create_client(&self, mut limits: neocogi_render_core::abi::RenderClientLimits, surface: ComRef<'_, neocogi_render_core::abi::IRenderSurfaceAbi>, permissions: neocogi_render_core::abi::RenderClientPermissions) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::IRenderClientDomainAbi>, NcStatus> {
+        limits.live_bytes = 8 * 1024 * 1024;
+        let domain = self.native.query::<neocogi_render_core::abi::IRenderClientFactoryAbi>()?.create_client(limits, surface, permissions)?;
+        *self.factory.borrow_mut() = Some(domain.resources()?);
+        Ok(domain)
+
+    }
 }

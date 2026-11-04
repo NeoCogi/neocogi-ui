@@ -179,7 +179,7 @@ fn eventful_runtime_releases_context_and_routes_later_input_to_the_new_tree() {
             match message {
                 Mutation::Replace => {
                     assert_eq!(ui.update(SIZE), Err(UI_E_BUSY));
-                    assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_BUSY));
+                    assert_eq!(ui.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_BUSY));
                     previous.close()?;
                     let replacement_owner = ui.widgets().textbox_unobserved("")?;
                     let replacement = replacement_owner.handle();
@@ -541,7 +541,7 @@ fn failed_consumer_recovers_on_next_update_and_preserves_remaining_native_input(
     assert_eq!(*app.state(), 1);
     assert_eq!(editor.text().unwrap(), "");
     let (renderer, _) = renderer();
-    assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(ui.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
     app.update(&ui, SIZE).unwrap();
     assert_eq!(*app.state(), 1);
     assert_eq!(editor.text().unwrap(), "still queued");
@@ -601,7 +601,7 @@ fn runtime_preserves_uncommitted_frame_on_foreign_consumer_failure() {
     let dispatcher: ComPtr<IApplicationDispatcherAbi> = FailingOwner::from_value(FailingOwner).query().unwrap();
     assert_eq!(runtime.update_with_events(SIZE, dispatcher.as_com_ref()), Err(NC_E_INVALID_ARG));
     let (renderer, _) = renderer();
-    assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(ui.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
     ui.update(SIZE).unwrap();
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
     window.close().unwrap();
@@ -673,7 +673,7 @@ fn failed_post_preserves_committed_widget_state_and_requires_a_new_frame() {
     assert_eq!(ui.update(SIZE), Err(NC_E_INVALID_ARG));
     assert_eq!(number.value(), Ok(10.0));
     assert!(events.try_recv().is_err());
-    assert_eq!(ui.render(SIZE, renderer.as_com_ref()), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(ui.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
 
     ui.update(SIZE).unwrap();
     ui.render(SIZE, renderer.as_com_ref()).unwrap();
@@ -697,8 +697,8 @@ fn failed_lifecycle_post_preserves_visibility_and_returns_its_receiver_error() {
             event_owner: neocogi_com::ComBox<neocogi_ui::events::IEventAbi>,
         ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui::events::IEventAbi>)> {
             let result = (|| -> Result<(), NcStatus> {
-                event_owner.query_weak::<IWindowEventAbi>()?;
-                Err(NC_E_INVALID_ARG)
+                    event_owner.query_weak::<IWindowEventAbi>()?;
+                    Err(NC_E_INVALID_ARG)
             })();
             result.map_err(|status| (status, event_owner))
         }

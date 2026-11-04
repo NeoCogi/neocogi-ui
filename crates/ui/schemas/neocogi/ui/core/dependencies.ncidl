@@ -1,7 +1,7 @@
 extern neocogi.renderer;
 extern neocogi.platform;
 extern neocogi.gfx;
-use neocogi.renderer::{IRenderHost, IRenderResources, IRenderView, IRenderViewBlock, Color, IRgbaImage, IRenderer, ITexture, Rect, Size, TextureRegion};
+use neocogi.renderer::{IRenderOutcome, IRenderSurface, IRenderHost, IRenderResources, IRenderView, IRenderViewBlock, Color, IRgbaImage, IRenderer, ITexture, Rect, Size, TextureRegion};
 use neocogi.platform::{ITextClipboard, IInputSink, INativePath, KeyCode, KeyStroke, PathEncoding, Point, TextInputArea, UiInput};
 use neocogi.gfx::{AssetChrome, AssetChromeVisuals, AssetControlVisuals, AssetFont, AssetGlyph, AssetIcon, AssetInfo, AssetMenuVisuals, AssetMetrics, AssetPatch, AssetPointerVisuals, AssetRange, AssetSurfaceVisuals, AssetVisual, CaptionSide, ChromeRole, ControlRole, FlatPalette, FontRole, GfxPluginFactory, IAssetBundle, IAssetCatalog, IconRole, Insets, MenuRole, SurfaceRole, TitleAlignment};
 

@@ -89,33 +89,36 @@ impl neocogi_render_core::abi::IRenderDriverBound for Renderer {
 }
 impl IRenderer for Renderer {
     /// The shared production importer rejects orphan vertices before resolving any texture.
-    fn render(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
-        let mut frame = PreparedFrame::default();
-        frame.read(info, stream, &OwnedTextures)?;
-        let (vertices, records) = neocogi_gfx_support::testing::read(info, stream)?;
-        *self.capture.vertices.borrow_mut() = vertices;
-        *self.capture.batches.borrow_mut() = records;
-        *self.capture.textures.borrow_mut() = frame
-            .blocks()
-            .iter()
-            .flat_map(|block| {
-                block.commands().iter().filter_map(|command| {
-                    let neocogi_render_gpu::command::Command::Draw(draw) = command else {
-                        return None;
-                    };
-                    draw.textures[0]
-                        .texture
-                        .imported_image()
-                        .map(|id| neocogi_gfx_support::testing::image_identity(id).unwrap())
+    fn render_result(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+        let result = (|| -> Result<(), NcStatus> {
+            let mut frame = PreparedFrame::default();
+            frame.read(info, stream, &OwnedTextures)?;
+            let (vertices, records) = neocogi_gfx_support::testing::read(info, stream)?;
+            *self.capture.vertices.borrow_mut() = vertices;
+            *self.capture.batches.borrow_mut() = records;
+            *self.capture.textures.borrow_mut() = frame
+                .blocks()
+                .iter()
+                .flat_map(|block| {
+                    block.commands().iter().filter_map(|command| {
+                        let neocogi_render_gpu::command::Command::Draw(draw) = command else {
+                            return None;
+                        };
+                        draw.textures[0]
+                            .texture
+                            .imported_image()
+                            .map(|id| neocogi_gfx_support::testing::image_identity(id).unwrap())
+                    })
                 })
-            })
-            .collect();
-        self.capture.calls.set(self.capture.calls.get() + 1);
-        frame.clear();
-        match self.capture.failure.get() {
-            Some(status) => Err(status),
-            None => Ok(()),
-        }
+                .collect();
+            self.capture.calls.set(self.capture.calls.get() + 1);
+            frame.clear();
+            match self.capture.failure.get() {
+                Some(status) => Err(status),
+                None => Ok(()),
+            }
+        })();
+        Ok(neocogi_render_core::abi::operation_result(result.map_err(neocogi_render_core::abi::RenderError::from)))
     }
 }
 
@@ -162,7 +165,7 @@ const CLIP: Rect = Rect { x: 0, y: 0, width: 16, height: 16 };
 fn recording(failure: Failure) -> Recording {
     let bundle = fixture::test_bundle();
     let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
-    compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref()).unwrap();
+    compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
     compositor.begin(Size { width: 16, height: 16 }, 0xff000000).unwrap();
     let solid = [
         SolidVertex { x: 0., y: 0., rgba: 0xff0000ff },
@@ -322,7 +325,7 @@ fn texture_reservation_errors_allow_failed_submit_and_next_frame() {
     for failure in [Failure::Vertices, Failure::Batches] {
         let mut failed = fail_draw(failure);
         failed.capture.failure.set(Some(neocogi_com::NC_E_NOT_FOUND));
-        assert_eq!(failed.compositor.submit(failed.renderer.as_com_ref()), Err(neocogi_com::NC_E_NOT_FOUND));
+        assert_eq!(failed.compositor.submit(failed.renderer.as_com_ref()).map_err(|error| error.status), Err(neocogi_com::NC_E_NOT_FOUND));
         assert_frame(&failed.capture, failure.prefix());
         assert_eq!(failed.earlier_drops.get(), 1);
         failed.capture.failure.set(None);

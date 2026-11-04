@@ -7,7 +7,7 @@
 
 pub use neocogi_gfx_support::abi::RenderVertex;
 pub use neocogi_render_core::abi::{
-    Color, IRenderDiagnostics, IRenderDiagnosticsAbi, IRenderStream, IRenderStreamAbi, IRenderer, IRendererAbi, IRgbaImage, IRgbaImageAbi, ITexture,
+    Color, IRenderStream, IRenderStreamAbi, IRenderer, IRendererAbi, IRgbaImage, IRgbaImageAbi, ITexture,
     ITextureAbi, ITextureFactory, ITextureFactoryAbi, MAX_IMAGE_BYTES, Rect, RenderInfo, Size, TextureRegion, color, rgba_bytes,
 };
 pub use neocogi_render_core::platform::{
@@ -809,16 +809,18 @@ impl Ui {
     pub fn update_with_events(&self, size: Size, owner: ComRef<'_, IApplicationDispatcherAbi>) -> Result<(), NcStatus> {
         self.runtime.update_with_events(size, owner)
     }
-    /// Submits a synchronized UI frame to a native window's renderer capability.
-    pub fn render(&self, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
+    /// Submits synchronized UI geometry to the renderer for its bound framebuffer or image surface.
+    /// The returned failure owns the original status and text independently of the renderer.
+    pub fn render(&self, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), RenderError> {
         self.runtime.render(size, renderer)
     }
     /// Retains the current immutable bundle for restoration or another UI/renderer consumer.
     pub fn assets(&self) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
         self.runtime.assets()
     }
-    /// Replaces this UI's runtime-wide resources through exclusive access; call update after success.
-    pub fn install_assets(&mut self, assets: ComRef<'_, IAssetBundleAbi>) -> Result<(), NcStatus> {
+    /// Replaces this UI's resources through exclusive access; call update after success.
+    /// Failed native preparation returns its owned error and preserves the installed revision.
+    pub fn install_assets(&mut self, assets: ComRef<'_, IAssetBundleAbi>) -> Result<(), RenderError> {
         self.runtime.install_assets(assets)
     }
     /// Terminates this UI context, synchronously dropping mounted trees and private resources.

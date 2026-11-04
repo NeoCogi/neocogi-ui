@@ -240,14 +240,17 @@ impl IChoiceMenus for Runtime {
 
 impl UiRuntime for Runtime {
     /// Publish private compositor authority and client recording only after both candidates are owned.
-    fn set_render_host(&mut self, host: ComRef<'_, IRenderHostAbi>) -> Result<(), NcStatus> {
-        self.storage.open()?;
-        let mut context = self.storage.context()?;
-        self.storage.factory.painter.can_install_broker()?;
-        let broker = host.recording_broker()?;
-        context.bind_render_host(host)?;
-        self.storage.factory.painter.install_broker(broker);
-        Ok(())
+    fn set_render_host_result(&mut self, host: ComRef<'_, IRenderHostAbi>, surface: ComRef<'_, IRenderSurfaceAbi>) -> Result<ComPtr<IRenderOutcomeAbi>, NcStatus> {
+        let result = (|| -> Result<(), RenderError> {
+            self.storage.open()?;
+            let mut context = self.storage.context()?;
+            self.storage.factory.painter.can_install_broker()?;
+            let broker = host.recording_broker()?;
+            context.bind_render_host(host, surface)?;
+            self.storage.factory.painter.install_broker(broker);
+            Ok(())
+        })();
+        Ok(operation_result(result))
     }
 
     /// Publishes a platform service only through the runtime's exclusive mutation boundary.
@@ -273,31 +276,34 @@ impl UiRuntime for Runtime {
         revision.source().try_add_ref()
     }
     /// Uses exclusive runtime access to prepare CPU state and the GPU upload before publication.
-    fn install_assets(&mut self, source: ComRef<'_, IAssetBundleAbi>) -> Result<(), NcStatus> {
-        let storage = &self.storage;
-        storage.factory.host.check_mutation()?;
-        // Dispatch returns the context specifically to permit application edits. The active
-        // observation phase and exclusive context slot still reject layout/paint/upload reentry.
-        let mut context = storage.context()?;
-        let _phase = Observation::begin(&storage.factory.state);
-        let previous = storage.factory.resources.borrow().clone();
-        if previous.source().as_raw().object == source.as_raw().object {
-            return Ok(()); // No metadata or GPU resource changed; preserve committed geometry.
-        }
-        let basis = previous.catalog();
-        drop(previous);
-        // Keep only an owned immutable catalog basis across provider callbacks.
-        let next = crate::assets::ImportedAssets::read(source, Some(&basis))?;
-        context.install_compositor_assets(source)?;
-        // ImportedAssets has already proved every original identity survives. The COM backend's
-        // atlas replacement is a local assignment; this commit performs no further foreign calls.
-        context.set_skin_bundle(next.bundle()).map_err(|_| NC_E_INVALID_ARG)?;
-        // RefCell::replace returns the old locally owned revision after ending its
-        // mutable borrow. Foreign destruction therefore cannot run inside that borrow.
-        let retired = storage.factory.resources.replace(Rc::new(next));
-        drop(retired);
-        storage.pending.set(true);
-        Ok(())
+    fn install_assets_result(&mut self, source: ComRef<'_, IAssetBundleAbi>) -> Result<ComPtr<IRenderOutcomeAbi>, NcStatus> {
+        let result = (|| -> Result<(), RenderError> {
+            let storage = &self.storage;
+            storage.factory.host.check_mutation()?;
+            // Dispatch returns the context specifically to permit application edits. The active
+            // observation phase and exclusive context slot still reject layout/paint/upload reentry.
+            let mut context = storage.context()?;
+            let _phase = Observation::begin(&storage.factory.state);
+            let previous = storage.factory.resources.borrow().clone();
+            if previous.source().as_raw().object == source.as_raw().object {
+                return Ok(()); // No metadata or GPU resource changed; preserve committed geometry.
+            }
+            let basis = previous.catalog();
+            drop(previous);
+            // Keep only an owned immutable catalog basis across provider callbacks.
+            let next = crate::assets::ImportedAssets::read(source, Some(&basis))?;
+            context.install_compositor_assets(source)?;
+            // ImportedAssets has already proved every original identity survives. The COM backend's
+            // atlas replacement is a local assignment; this commit performs no further foreign calls.
+            context.set_skin_bundle(next.bundle()).map_err(|_| NC_E_INVALID_ARG)?;
+            // RefCell::replace returns the old locally owned revision after ending its
+            // mutable borrow. Foreign destruction therefore cannot run inside that borrow.
+            let retired = storage.factory.resources.replace(Rc::new(next));
+            drop(retired);
+            storage.pending.set(true);
+            Ok(())
+        })();
+        Ok(operation_result(result))
     }
     /// Exposes only committed geometry; pending setters or input hide stale IME placement.
     fn text_input_area(&self) -> Result<TextInputArea, NcStatus> {
@@ -325,36 +331,39 @@ impl UiRuntime for Runtime {
         self.update_cycle(size, Some(dispatcher))
     }
     /// Keeps the renderer reference and stream authority within one synchronous submission.
-    fn render(&self, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<(), NcStatus> {
-        let storage = &self.storage;
-        storage.open()?;
-        if storage.updating.get() {
-            return Err(UI_E_BUSY);
-        }
-        let mut context = storage.context()?;
-        storage.collect_changes(&mut context)?;
-        if storage.pending.get() || storage.dimensions.get() != size {
-            return Err(UI_E_UPDATE_REQUIRED);
-        }
-        // The complete submission is observational, including calls into the native renderer.
-        let _phase = Observation::begin(&storage.factory.state);
-        storage.factory.state.error.set(None);
-        let gpu_frame = storage.factory.painter.begin_frame()?;
-        let painted = context.paint(size);
-        let boundary_error = storage.factory.state.error.take();
-        if let Err(error) = painted.and_then(|()| boundary_error.map_or(Ok(()), Err)) {
-            // A foreign widget can fail after recording commands. Discard those owned commands
-            // before entering GFX so a failed observational phase cannot publish a partial frame.
-            context.discard_paint();
-            return Err(error);
-        }
-        if let Err(error) = gpu_frame.finish() {
-            context.discard_paint();
-            return Err(error);
-        }
-        // Only a successful paint phase may cross the GFX submission boundary. Native renderer
-        // diagnostics retain backend detail while the public UI operation reports UI_E_RENDER.
-        context.submit(size, 0xff302820, renderer).map_err(|_| UI_E_RENDER)
+    fn render_result(&self, size: Size, renderer: ComRef<'_, IRendererAbi>) -> Result<ComPtr<IRenderOutcomeAbi>, NcStatus> {
+        let result = (|| -> Result<(), RenderError> {
+            let storage = &self.storage;
+            storage.open()?;
+            if storage.updating.get() {
+                return Err(UI_E_BUSY.into());
+            }
+            let mut context = storage.context()?;
+            storage.collect_changes(&mut context)?;
+            if storage.pending.get() || storage.dimensions.get() != size {
+                return Err(UI_E_UPDATE_REQUIRED.into());
+            }
+            // The complete submission is observational, including calls into the native renderer.
+            let _phase = Observation::begin(&storage.factory.state);
+            storage.factory.state.error.set(None);
+            let gpu_frame = storage.factory.painter.begin_frame()?;
+            let painted = context.paint(size);
+            let boundary_error = storage.factory.state.error.take();
+            if let Err(error) = painted.and_then(|()| boundary_error.map_or(Ok(()), Err)) {
+                // A foreign widget can fail after recording commands. Discard those owned commands
+                // before entering GFX so a failed observational phase cannot publish a partial frame.
+                context.discard_paint();
+                return Err(error.into());
+            }
+            if let Err(error) = gpu_frame.finish() {
+                context.discard_paint();
+                return Err(error.into());
+            }
+            // Only a successful paint phase crosses the GFX boundary. Its outcome retains
+            // the exact lowering/native failure, independently of later renderer operations.
+            context.submit(size, 0xff302820, renderer)
+        })();
+        Ok(operation_result(result))
     }
     /// Ends this UI context without publishing individual surface lifecycle events.
     /// Busy preflight preserves the live context. Once accepted, ordinary Drop releases
