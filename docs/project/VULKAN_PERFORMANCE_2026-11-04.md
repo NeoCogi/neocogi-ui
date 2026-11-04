@@ -1,5 +1,13 @@
 # Vulkan performance investigation, November 3–4, 2026
 
+These measurements describe the original alpha.1 investigation. The current
+workspace adopts published Platform `0.1.0-alpha.2` and rs-math3d `0.20.1`,
+including persistent GPU buffers, through ordinary registry dependencies.
+The local overrides below reproduce the earlier development workflow; they are
+not required for the current build.
+See the [alpha.2 qualification](PLATFORM_ALPHA2_QUALIFICATION_2026-11-04.md) for
+current release measurements and their comparison limitations.
+
 The week-old build reproduces the reported 1,400 FPS performance. The regression
 already exists before the crates.io Platform migration. Checked geometry,
 per-vertex serialization, and native Vulkan allocation churn account for the
@@ -7,8 +15,9 @@ measured increase in CPU work. Local fixes preserve the existing `min-size`
 optimization settings, checked geometry, immutable captures, and completion ownership.
 
 The fixes span `neocogi-ui`, `../rs-math3d`, and `../neocogi-platform`, on local
-`perf/vulkan-frame-throughput` branches. Dependency releases remain unpublished;
-use the explicit local Cargo overrides below to exercise all three together.
+`perf/vulkan-frame-throughput` branches. At measurement time those dependency
+releases were unpublished, so the explicit local Cargo overrides below selected
+all three together.
 
 ## Configuration and comparison
 
@@ -231,6 +240,6 @@ files include `current-stat.txt`, `oct28-stat.txt`, `pre-migration-stat.txt`,
 `qualification-progress.log`, and the final comparison JSON/logs.
 
 Registry declarations and the `0.1.0-alpha.1` tag retain their existing meanings.
-The full improvement needs the fixed math and Platform crates; ordinary registry
-resolution continues to select their currently published versions until those
-dependency releases are published and adopted.
+At that revision, the full improvement needed the local math and Platform fixes;
+ordinary registry resolution selected the earlier published dependencies. Their
+successor releases are now selected by the workspace's exact registry requirements.

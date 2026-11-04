@@ -4,17 +4,17 @@ Use the existing `min-size` profile, `dynamic,vulkan` features, and full demo sc
 Linux measurements require `perf`, a C compiler, Vulkan development headers and
 loader, and access to the native graphics session.
 
-Generate an explicit development override for the sibling owned repositories:
+Build the published dependency set directly; no local override is needed for
+Platform alpha.2 or rs-math3d 0.20.1:
 
 ```sh
-python3 tools/perf/profile_vulkan.py --local-overrides /tmp/neocogi-local.toml
-cargo --config /tmp/neocogi-local.toml build --profile min-size -p neocogi-demo-full --no-default-features --features dynamic,vulkan
+cargo build --locked --profile min-size -p neocogi-demo-full --no-default-features --features dynamic,vulkan
 ```
 
-The generated file selects local crates through Cargo's registry patch mechanism.
-The workspace dependencies keep their published version declarations. Cargo updates
-the development lockfile when using overrides; published releases require the
-corresponding dependency releases and normal registry resolution.
+For unpublished companion development, `--local-overrides /tmp/neocogi-local.toml`
+generates an optional configuration for the sibling Platform and math checkouts.
+Pass it to Cargo with `--config /tmp/neocogi-local.toml`. This deliberately updates
+the development lockfile; release builds use the committed registry resolution.
 
 Measure complete intervals between presentation entries after warmup:
 
@@ -40,3 +40,5 @@ affect elapsed time, so retain the full range alongside the median.
 Raw logs, all accepted runs and a median/range summary remain in the output directory.
 The source and raw-data locations for the November investigation are recorded in the
 [performance report](../../docs/project/VULKAN_PERFORMANCE_2026-11-04.md).
+The [Platform alpha.2 qualification](../../docs/project/PLATFORM_ALPHA2_QUALIFICATION_2026-11-04.md)
+records the current registry build, deployment size and all repeated timings.

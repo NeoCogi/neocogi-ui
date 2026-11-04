@@ -1,0 +1,306 @@
+{
+  "date": "2026-11-04",
+  "ui_revision": "985551d3",
+  "dependencies": [
+    {
+      "name": "neocogi-com",
+      "version": "0.1.0",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "97c73e6b10fdee9ede43cb9d8aa396569da11d75f34569423cab6e5c4020eab8"
+    },
+    {
+      "name": "neocogi-com-core",
+      "version": "0.1.0",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "caf1ee02e5dd10965b55d643a3a453109eceb31c98fc12cc53663aacdd04e823"
+    },
+    {
+      "name": "neocogi-com-host",
+      "version": "0.1.0",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "c1ccfe87b37a70ff9eaa0930763edae0338a7706df41bde88b75bec0a83b71f4"
+    },
+    {
+      "name": "neocogi-com-macros",
+      "version": "0.1.0",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "32673a3fef6696ad59f95da42bdbe6877e2e781a50508ef9aa1547b7122ee825"
+    },
+    {
+      "name": "neocogi-idl",
+      "version": "0.1.0",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "0a9f2b1bb8b6b8d82df63f761422e9a4d741ce7b5f22e9a2131cd50976275310"
+    },
+    {
+      "name": "neocogi-native-layout",
+      "version": "0.1.0-alpha.2",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "12e0f565c32e11d2d83c4287bdb238857d4b2d7cee7509cc51ca1c829183264a"
+    },
+    {
+      "name": "neocogi-native-layout-core",
+      "version": "0.1.0-alpha.2",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "52270b7eb1e7b5452dcc476ffaa88ecdee9961fc3cf7391d8ffcdab518ff5766"
+    },
+    {
+      "name": "neocogi-platform-build",
+      "version": "0.1.0-alpha.2",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "83ea4070ed67804bb760fca011bf1a8e4a5c079cc919b183a79bfafb51d960db"
+    },
+    {
+      "name": "neocogi-platform-plugin",
+      "version": "0.1.0-alpha.2",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "1d9aa3d385d3295419cfa81996da40942da731a8abdcfa487cc09012c5dcbe9a"
+    },
+    {
+      "name": "neocogi-platform-plugin-dylib",
+      "version": "0.1.0-alpha.2",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "6b2f37cbb87af213b08ee2c726ea4acd1950de8ab330ad43c080afde4f833ea5"
+    },
+    {
+      "name": "neocogi-render-core",
+      "version": "0.1.0-alpha.2",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "78ba6a44fc030658b485e9b69945d7ae3fe4ee3eac447abf2d0676d6ccb33464"
+    },
+    {
+      "name": "neocogi-render-gpu",
+      "version": "0.1.0-alpha.2",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "55e310ad09dcd4b711befa61313534d2e3412ef78254a852a8fcc58922207896"
+    },
+    {
+      "name": "neocogi-render-support",
+      "version": "0.1.0-alpha.2",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "498fd059c8e46bbd2a1bd10c1f2a66358a05097a3f941a61e5e61465178963da"
+    },
+    {
+      "name": "neocogi-shader-compiler",
+      "version": "0.1.0-alpha.2",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "6ec1431f1cad314f4f2fe4ca5146c291327b344e282733c4f0b4734ac3d15529"
+    },
+    {
+      "name": "neocogi-shader-compiler-dylib",
+      "version": "0.1.0-alpha.2",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "0fc9cfa5cf53223ae3f6ad5a9e2c5117d74d3fb78bee5d0a9cc36dcd68e63943"
+    },
+    {
+      "name": "neocogi-shader-core",
+      "version": "0.1.0-alpha.2",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "8f82847b8fea83f91266ae393bc3894fed564611240dbaa2c493867888c6ddc9"
+    },
+    {
+      "name": "rs-math3d",
+      "version": "0.20.1",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "3cbaeb2ff97fb73ddd89959e55529979448f5fc0f5a0fe07f65697970b43d8d8"
+    }
+  ],
+  "build": {
+    "profile": "min-size",
+    "features": [
+      "dynamic",
+      "vulkan"
+    ],
+    "default_features": false,
+    "source_overrides": false,
+    "build_jobs": 2,
+    "toolchain": "nightly-2026-09-29"
+  },
+  "measurement": {
+    "frames_per_run": 30000,
+    "warmup_frames": 2000,
+    "runs": [
+      {
+        "label": "alpha2-registry",
+        "executable": "/tmp/neocogi-ui-platform-alpha2/dist/neocogi-demo-full",
+        "repetition": 0,
+        "presentations": 30000,
+        "warmup": 2000,
+        "intervals": 27999,
+        "seconds": 43.931277782,
+        "fps": 637.336,
+        "failures": 0,
+        "full_process_cpu_ms_per_frame": 0.5224546666666666,
+        "stages": [
+          {
+            "name": "vkWaitForFences",
+            "calls": 28000,
+            "seconds": 8.809998494
+          },
+          {
+            "name": "vkAcquireNextImageKHR",
+            "calls": 28000,
+            "seconds": 21.477736656
+          },
+          {
+            "name": "vkQueueSubmit",
+            "calls": 28000,
+            "seconds": 0.479447907
+          },
+          {
+            "name": "vkQueuePresentKHR",
+            "calls": 28000,
+            "seconds": 0.147966656
+          },
+          {
+            "name": "vkDeviceWaitIdle",
+            "calls": 4,
+            "seconds": 0.0020787
+          }
+        ]
+      },
+      {
+        "label": "alpha2-registry",
+        "executable": "/tmp/neocogi-ui-platform-alpha2/dist/neocogi-demo-full",
+        "repetition": 1,
+        "presentations": 30000,
+        "warmup": 2000,
+        "intervals": 27999,
+        "seconds": 31.09932628,
+        "fps": 900.309,
+        "failures": 0,
+        "full_process_cpu_ms_per_frame": 0.5188863333333333,
+        "stages": [
+          {
+            "name": "vkWaitForFences",
+            "calls": 28000,
+            "seconds": 0.993203234
+          },
+          {
+            "name": "vkAcquireNextImageKHR",
+            "calls": 28000,
+            "seconds": 16.37545372
+          },
+          {
+            "name": "vkQueueSubmit",
+            "calls": 28000,
+            "seconds": 0.457740973
+          },
+          {
+            "name": "vkQueuePresentKHR",
+            "calls": 28000,
+            "seconds": 0.146939194
+          },
+          {
+            "name": "vkDeviceWaitIdle",
+            "calls": 4,
+            "seconds": 0.002308574
+          }
+        ]
+      },
+      {
+        "label": "alpha2-registry",
+        "executable": "/tmp/neocogi-ui-platform-alpha2/dist/neocogi-demo-full",
+        "repetition": 2,
+        "presentations": 30000,
+        "warmup": 2000,
+        "intervals": 27999,
+        "seconds": 60.921661122,
+        "fps": 459.59,
+        "failures": 0,
+        "full_process_cpu_ms_per_frame": 0.521522,
+        "stages": [
+          {
+            "name": "vkWaitForFences",
+            "calls": 28000,
+            "seconds": 1.762388397
+          },
+          {
+            "name": "vkAcquireNextImageKHR",
+            "calls": 28000,
+            "seconds": 45.411682864
+          },
+          {
+            "name": "vkQueueSubmit",
+            "calls": 28000,
+            "seconds": 0.476318096
+          },
+          {
+            "name": "vkQueuePresentKHR",
+            "calls": 28000,
+            "seconds": 0.145935285
+          },
+          {
+            "name": "vkDeviceWaitIdle",
+            "calls": 4,
+            "seconds": 0.002233402
+          }
+        ]
+      }
+    ],
+    "summary": {
+      "alpha2-registry": {
+        "median_fps": 637.336,
+        "fps_range": [
+          459.59,
+          900.309
+        ],
+        "median_full_process_cpu_ms_per_frame": 0.521522
+      }
+    },
+    "baseline_timing_excluded": "The retained alpha.1 distribution was overwritten by later debug library staging; no controlled alpha.1/alpha.2 throughput ratio is claimed."
+  },
+  "deployment": {
+    "alpha2": {
+      "native_bytes": 2912608,
+      "native_files": {
+        "neocogi-demo-full": {
+          "bytes": 258752,
+          "sha256": "4c06002d9c419b670f1e79839a09d3d34944e8228dbf0859793eff847865ed77"
+        },
+        "lib/libnc_gfx.so": {
+          "bytes": 311152,
+          "sha256": "3c8033e158bef1484a730699994fe98614f008f3251daf5934a8b666da3138e2"
+        },
+        "lib/libnc_platform.so": {
+          "bytes": 264504,
+          "sha256": "98dcdcb953b8fa1522e5283975e71665da78604ab57e60292b94c5039a69feca"
+        },
+        "lib/libnc_shader_compiler.so": {
+          "bytes": 1227216,
+          "sha256": "acab5bd534035908cd6256145485579deb6ed9f969df4191badd542fe25696df"
+        },
+        "lib/libnc_skin.so": {
+          "bytes": 228688,
+          "sha256": "702257333216f20c07fc5b45b09c61d1376c3183151b60b4ea14d0f9d1ab8448"
+        },
+        "lib/libnc_ui.so": {
+          "bytes": 263336,
+          "sha256": "296b33e024a40e3cff04fbfbf900911cd4f4b42ed0d9b85a008b7b963662025a"
+        },
+        "lib/libnc_ui_nodes.so": {
+          "bytes": 358960,
+          "sha256": "38583ee35816d00f5cb3bd2dd83b5e8d9262349e676d9502b2bd5888661e194e"
+        }
+      },
+      "resources_bytes": 3119161
+    },
+    "recorded_alpha1_native_bytes": 2913512,
+    "native_delta_bytes": -904,
+    "native_delta_percent": -0.03102784543190486,
+    "recorded_alpha1_source": "/tmp/neocogi-ui-vulkan-profile/final-sizes.json"
+  },
+  "evidence_directory": "/tmp/neocogi-ui-platform-alpha2",
+  "user_observation": {
+    "reported_fps_lower_bound": 1950,
+    "configuration": {
+      "profile": "min-size",
+      "features": [
+        "dynamic",
+        "vulkan"
+      ]
+    },
+    "source": "User reported seeing more than 1950 FPS in an interactive run during this migration.",
+    "measurement_method": "User observation, recorded separately from the instrumented presentation runs."
+  }
+}
