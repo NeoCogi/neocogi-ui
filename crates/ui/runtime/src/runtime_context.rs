@@ -22,6 +22,9 @@ pub(crate) struct RuntimeContext {
     /// Private GFX executor created for this runtime; never exposed or shared with another UI.
     /// Only this context changes its resources and frame state through exclusive calls.
     compositor: ComPtr<GfxCompositorAbi>,
+    /// Trusted native retirement capability, never lent to widgets or exposed by public getters.
+    /// Kept with the matching compositor binding so completed camera slots retire before paint.
+    render_host: Option<ComPtr<IRenderHostAbi>>,
     /// Authoritative retained windows, nodes, input, layout, and semantic display list.
     pub(crate) window_manager: WindowManager,
     /// Composition-layer ownership for core choice-menu state and popup handles.
@@ -29,9 +32,21 @@ pub(crate) struct RuntimeContext {
 }
 
 impl RuntimeContext {
-    /// GFX privately retains its graphics authority only after the candidate session prepares.
+    /// Publish matching private maintenance/GFX authority only after the candidate session prepares.
     pub(crate) fn bind_render_host(&mut self, host: ComRef<'_, IRenderHostAbi>, surface: ComRef<'_, IRenderSurfaceAbi>) -> Result<(), RenderError> {
-        self.compositor.bind_render_host(host, surface)
+        let retained = host.try_add_ref()?;
+        self.compositor.bind_render_host(host, surface)?;
+        self.render_host = Some(retained);
+        Ok(())
+    }
+
+    /// Retire completed native owners before widget paint uploads into persistent buffer slots.
+    /// Preserve the operation's owned status/text; a failure prevents recording or submission.
+    pub(crate) fn maintain_render_host(&self) -> Result<(), RenderError> {
+        match &self.render_host {
+            Some(host) => host.maintain(),
+            None => Ok(()),
+        }
     }
 
     /// Adopts a fresh compositor and the exact resource revision used to construct it.
@@ -40,6 +55,7 @@ impl RuntimeContext {
         Self {
             resource_catalog: ResourceCatalog::new(bundle.atlas().clone()),
             compositor,
+            render_host: None,
             window_manager: WindowManager::new(bundle),
             choice_menus: ChoiceMenuManager::default(),
         }

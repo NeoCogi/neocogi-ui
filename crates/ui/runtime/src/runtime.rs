@@ -346,6 +346,7 @@ impl UiRuntime for Runtime {
             // The complete submission is observational, including calls into the native renderer.
             let _phase = Observation::begin(&storage.factory.state);
             storage.factory.state.error.set(None);
+            context.maintain_render_host()?;
             let gpu_frame = storage.factory.painter.begin_frame()?;
             let painted = context.paint(size);
             let boundary_error = storage.factory.state.error.take();

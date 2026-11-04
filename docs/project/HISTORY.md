@@ -32,7 +32,7 @@ The `microui-redux-0.9-alpha.0` tag selects the corresponding UI baseline.
 Later commits use their root Cargo dependency pins as the authority. A COM Git
 trailer, when present, must match a Git dependency selection. The current SDK,
 host and compiler use the exact published crates.io release
-[`0.1.0-alpha.1`](https://crates.io/crates/neocogi-com/0.1.0-alpha.1).
+[`0.1.0`](https://crates.io/crates/neocogi-com/0.1.0).
 The [dependency guide](../guides/COM_DEPENDENCY.md) explains coordinated updates.
 
 ## Verification
@@ -74,7 +74,7 @@ their exact platform commit in Cargo dependencies and a `NeoCogi-Platform-Commit
 trailer. Those snapshots retain their `NeoCogi-Revision-ID` correlation identifiers
 and reciprocal companion links in `refs/notes/neocogi-companions`.
 
-The current UI consumes the published Platform crates at exactly `0.1.0-alpha.1`.
+The current UI consumes the published Platform crates at exactly `0.1.0-alpha.2`.
 Its root manifests and registry checksums in `Cargo.lock` control that selection;
 a Platform Git companion trailer is not required for a registry release. See the
 [dependency guide](../guides/COM_DEPENDENCY.md) for source ownership and updates.

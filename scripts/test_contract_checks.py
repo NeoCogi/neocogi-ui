@@ -56,9 +56,9 @@ class ContractDependencies(unittest.TestCase):
             # while their facade deliberately selects allocation without macros.
             (root / "Cargo.toml").write_text(
                 '[workspace.dependencies]\n'
-                'neocogi-com={version="=0.1.0-alpha.1",default-features=false}\n'
-                'neocogi-idl={version="=0.1.0-alpha.1"}\n'
-                'neocogi-platform-build={version="=0.1.0-alpha.1"}\n'
+                'neocogi-com={version="=0.1.0",default-features=false}\n'
+                'neocogi-idl={version="=0.1.0"}\n'
+                'neocogi-platform-build={version="=0.1.0-alpha.2"}\n'
             )
             for index, consumer in enumerate(consumers.CONSUMERS):
                 directory = root / str(index)
@@ -70,9 +70,9 @@ class ContractDependencies(unittest.TestCase):
                     self.assertEqual(data["dependencies"]["neocogi-com"]["features"], ["alloc"])
                     self.assertFalse(data["dependencies"]["neocogi-com"]["default-features"])
                     self.assertEqual(set(data["build-dependencies"]), {"neocogi-idl", "neocogi-platform-build"})
-                    self.assertEqual(data["build-dependencies"]["neocogi-platform-build"]["version"], "=0.1.0-alpha.1")
+                    self.assertEqual(data["build-dependencies"]["neocogi-platform-build"]["version"], "=0.1.0-alpha.2")
                     for dependency in (data["dependencies"]["neocogi-com"], data["build-dependencies"]["neocogi-idl"]):
-                        self.assertEqual(dependency["version"], "=0.1.0-alpha.1")
+                        self.assertEqual(dependency["version"], "=0.1.0")
                         self.assertNotIn("git", dependency)
                         self.assertNotIn("rev", dependency)
                         self.assertNotIn("path", dependency)

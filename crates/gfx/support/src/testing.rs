@@ -88,7 +88,7 @@ impl IRenderHost for Host {
     fn prepare_texture_result(
         &self,
         resources: ComRef<'_, IRenderResourcesAbi>,
-        texture: ComRef<'_, IGpuTextureAbi>,
+        texture: ComRef<'_, IGpuBufferAbi>,
     ) -> Result<ComPtr<IRenderOutcomeAbi>, NcStatus> {
         let result = self
             .device
@@ -192,7 +192,7 @@ pub fn snapshot(block: ComRef<'_, IRenderViewBlockAbi>) -> Result<Rc<neocogi_ren
 /// Inspect an actual private UI texture version while a fixture models native preparation.
 pub fn texture(
     resources: ComRef<'_, IRenderResourcesAbi>,
-    texture: ComRef<'_, IGpuTextureAbi>,
+    texture: ComRef<'_, IGpuBufferAbi>,
 ) -> Result<Rc<neocogi_render_gpu::resource::TextureVersion<Backend>>, NcStatus> {
     DEVICE.with(|device| device.imported_texture_snapshot(resources, texture))
 }
@@ -261,7 +261,7 @@ pub fn read(info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(V
             let binding = &draw.vertex_buffers[0];
             assert_eq!(binding.slot, 0);
             let first_byte = binding.offset as usize + first as usize * 20;
-            let bytes = &binding.buffer.bytes().as_slice().ok_or(NC_E_INVALID_ARG)?[first_byte..first_byte + count as usize * 20];
+            let bytes = &binding.buffer.bytes().as_slice()[first_byte..first_byte + count as usize * 20];
             let decoded = bytes
                 .as_chunks::<20>()
                 .0

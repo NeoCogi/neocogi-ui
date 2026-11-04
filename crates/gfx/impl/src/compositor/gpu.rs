@@ -43,7 +43,19 @@ pub(super) struct Graphics {
     /// Nearest/clamped sampling matches the UI asset and immutable-image contract.
     sampler: ComBox<IGpuSamplerAbi>,
     /// Immutable atlas version is published with the matching resource metadata.
-    atlas: ComBox<IGpuTextureAbi>,
+    atlas: ComBox<IGpuBufferAbi>,
+    /// Fixed three-slot camera storage; each lowered frame uploads before recording any UI draw.
+    uniform: ComBox<IGpuBufferAbi>,
+    /// Persistent triangle chunks grow only when an admitted frame exceeds their capacity.
+    vertices: Vec<VertexBuffer>,
+}
+
+/// One bounded streamed vertex resource; immutable capacity avoids foreign queries each frame.
+struct VertexBuffer {
+    /// Authoritative public owner; Platform protects snapshots until logical/native retirement.
+    buffer: ComBox<IGpuBufferAbi>,
+    /// Byte capacity selected at creation, capped by the common per-buffer limit.
+    capacity: usize,
 }
 
 impl Graphics {
@@ -128,6 +140,7 @@ impl Graphics {
         let pipeline = resources.create_pipeline(desc.as_com_ref(), vertex.as_com_ref(), fragment.as_com_ref())?;
         let sampler = resources.create_sampler(GpuSamplerDesc::default())?;
         let atlas = Self::upload_atlas(host.as_com_ref(), resources.as_com_ref(), image)?;
+        let uniform = resources.create_streamed_buffer(GpuBufferDesc::Uniform { byte_len: 16 })?;
         Ok(Self {
             host,
             _domain: domain,
@@ -136,16 +149,18 @@ impl Graphics {
             pipeline,
             sampler,
             atlas,
+            uniform,
+            vertices: Vec::new(),
         })
     }
 
     /// Complete native preparation precedes atomic metadata/atlas publication in the parent.
-    pub(super) fn candidate_atlas(&self, image: ComRef<'_, IRgbaImageAbi>) -> Result<ComBox<IGpuTextureAbi>, RenderError> {
+    pub(super) fn candidate_atlas(&self, image: ComRef<'_, IRgbaImageAbi>) -> Result<ComBox<IGpuBufferAbi>, RenderError> {
         Self::upload_atlas(self.host.as_com_ref(), self.resources.as_com_ref(), image)
     }
 
     /// No failure remains when the parent publishes a prepared atlas with its resource revision.
-    pub(super) fn replace_atlas(&mut self, atlas: ComBox<IGpuTextureAbi>) {
+    pub(super) fn replace_atlas(&mut self, atlas: ComBox<IGpuBufferAbi>) {
         self.atlas = atlas;
     }
 
@@ -154,32 +169,36 @@ impl Graphics {
         host: ComRef<'_, IRenderHostAbi>,
         resources: ComRef<'_, IRenderResourcesAbi>,
         image: ComRef<'_, IRgbaImageAbi>,
-    ) -> Result<ComBox<IGpuTextureAbi>, RenderError> {
+    ) -> Result<ComBox<IGpuBufferAbi>, RenderError> {
         let size = image.size()?;
         let source: ComPtr<IGpuDataSourceAbi> = ImageBytes::from_value(ImageBytes { image: image.try_add_ref()?, size }).query()?;
-        let atlas = resources.create_texture(
-            GpuTextureDesc {
+        let atlas = resources.create_static_buffer(
+            GpuBufferDesc::Texture {
                 size,
                 format: GpuTextureFormat::Rgba8Unorm,
                 mip_count: 1,
             },
-            neocogi_render_core::source::supplied(source.as_com_ref())?.borrow()?,
+            source.as_com_ref(),
         )?;
         host.prepare_texture(resources, atlas.as_com_ref())?;
         Ok(atlas)
     }
 
     /// Pack geometry once, then preserve client positions with UI blocks using the same resources.
-    pub(super) fn lower(&self, frame: FrameState, vertices: &[RenderVertex], batches: &[Batch]) -> Result<Vec<Rc<ComBox<IRenderViewBlockAbi>>>, RenderError> {
-        // A previous frame can release its final block only after renderer.render returns.
-        // Drain before allocating geometry so quota pressure cannot prevent reaching maintenance.
+    pub(super) fn lower(&mut self, frame: FrameState, vertices: &[RenderVertex], batches: &[Batch]) -> Result<Vec<Rc<ComBox<IRenderViewBlockAbi>>>, RenderError> {
+        // Drain again before compositor uploads: standalone GFX callers own their client
+        // preparation, and UI painting may have released additional resource owners.
         self.host.maintain()?;
-        let buffers = self.geometry(vertices, batches)?;
+        self.geometry(vertices, batches)?;
+        if batches.iter().any(|batch| !matches!(batch, Batch::View(_))) {
+            let values = [frame.size.width as f32, frame.size.height as f32, 0., 0.].map(f32::to_le_bytes);
+            self.uniform.upload(NcCopyFromBufferOffset::new(0, values.as_flattened()))?;
+        }
         let mut recording = self.broker.begin_frame()?;
         let mut active: Option<Recording> = None;
         let mut output = Vec::new();
         output.try_reserve(batches.len()).map_err(|_| NC_E_OUT_OF_MEMORY)?;
-        let mut images = HashMap::<usize, ComBox<IGpuTextureAbi>>::new();
+        let mut images = HashMap::<usize, ComBox<IGpuBufferAbi>>::new();
         let mut cursor = 0usize;
         for batch in batches {
             let (count, image) = match batch {
@@ -207,11 +226,7 @@ impl Graphics {
                 let mut session = recording.begin_view(RenderViewRoot { client: root, target: root }, self.resources.as_com_ref())?;
                 let mut view = session.view()?;
                 view.bind_pipeline(self.pipeline.as_com_ref())?;
-                let values: Vec<_> = [frame.size.width as f32, frame.size.height as f32, 0., 0.]
-                    .into_iter()
-                    .flat_map(f32::to_le_bytes)
-                    .collect();
-                view.push_uniforms(GpuShaderStage::Vertex, 0, NcCopyFromBufferOffset::new(0, &values))?;
+                view.bind_uniform_buffer(GpuShaderStage::Vertex, 0, self.uniform.as_com_ref(), 0, 16)?;
                 active = Some(Recording { session, view });
             }
             let view = &mut active.as_mut().expect("UI session installed above").view;
@@ -221,7 +236,7 @@ impl Graphics {
                 let chunk = cursor / CHUNK_VERTICES;
                 let first = cursor % CHUNK_VERTICES;
                 let count = remaining.min(CHUNK_VERTICES - first);
-                view.bind_vertex_buffer(0, buffers.get(chunk).ok_or(NC_E_INVALID_ARG)?.as_com_ref(), 0)?;
+                view.bind_vertex_buffer(0, self.vertices.get(chunk).ok_or(NC_E_INVALID_ARG)?.buffer.as_com_ref(), 0)?;
                 view.draw(count as u32, 1, first as u32)?;
                 cursor += count;
                 remaining -= count;
@@ -232,25 +247,27 @@ impl Graphics {
         Ok(output)
     }
 
-    /// Triangle-aligned shared buffers avoid one native allocation per UI operation or panel.
-    fn geometry(&self, vertices: &[RenderVertex], batches: &[Batch]) -> Result<Vec<ComBox<IGpuBufferAbi>>, NcStatus> {
+    /// Reuse bounded streamed chunks. Busy propagates without allocating replacement storage;
+    /// prior snapshots stay immutable even if a later chunk's upload rejects this frame.
+    fn geometry(&mut self, vertices: &[RenderVertex], batches: &[Batch]) -> Result<(), NcStatus> {
         let chunks = pack_geometry(vertices, batches, CHUNK_VERTICES)?;
-        let mut output = Vec::new();
-        output.try_reserve_exact(chunks.len()).map_err(|_| NC_E_OUT_OF_MEMORY)?;
-        for bytes in chunks {
-            output.push(self.buffer(bytes)?);
+        self.vertices.try_reserve(chunks.len().saturating_sub(self.vertices.len())).map_err(|_| NC_E_OUT_OF_MEMORY)?;
+        for (index, bytes) in chunks.into_iter().enumerate() {
+            if self.vertices.get(index).is_none_or(|slot| slot.capacity < bytes.len()) {
+                // Geometric growth avoids replacing native storage for small layout changes.
+                // The final chunk cap remains triangle-aligned even when rounding up capacity.
+                let capacity = bytes.len().checked_next_power_of_two().ok_or(NC_E_OUT_OF_RANGE)?.min(CHUNK_VERTICES * STRIDE);
+                let buffer = self.resources.create_streamed_buffer(GpuBufferDesc::Vertex { byte_len: capacity as u64 })?;
+                let candidate = VertexBuffer { buffer, capacity };
+                if let Some(slot) = self.vertices.get_mut(index) {
+                    *slot = candidate;
+                } else {
+                    self.vertices.push(candidate);
+                }
+            }
+            self.vertices[index].buffer.upload(NcCopyFromBufferOffset::new(0, &bytes))?;
         }
-        Ok(output)
-    }
-
-    /// Byte ownership is explicit; no Rust/IDL struct layout becomes GPU layout.
-    fn buffer(&self, bytes: Vec<u8>) -> Result<ComBox<IGpuBufferAbi>, NcStatus> {
-        let desc = GpuBufferDesc {
-            role: GpuBufferRole::Vertex,
-            byte_len: bytes.len() as u64,
-        };
-        self.resources
-            .create_buffer(desc, neocogi_render_core::source::supplied(Bytes::source(bytes).as_com_ref())?.borrow()?)
+        Ok(())
     }
 }
 
@@ -382,6 +399,78 @@ impl IGpuDataSource for ImageBytes {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Real logical resources and sealed draw snapshots expose slot reuse without a native window.
+    #[test]
+    fn streamed_geometry_reuses_owners_and_reports_pinned_capacity_without_growth() {
+        let assets = crate::test_support::test_bundle();
+        let host = neocogi_gfx_support::testing::host();
+        let surface = neocogi_gfx_support::testing::framebuffer();
+        let mut graphics = Graphics::new(host.as_com_ref(), surface.as_com_ref(), assets.image().unwrap().as_com_ref()).unwrap();
+        let frame = FrameState { size: Size { width: 80, height: 60 }, clear: 0, budget: FrameBudget::default() };
+        let batches = [Batch::Atlas { first: 0, count: 3 }];
+        let mut held = Vec::new();
+        for x in [1., 2., 3.] {
+            let vertices = [RenderVertex { x, ..Default::default() }; 3];
+            held.push(graphics.lower(frame, &vertices, &batches).unwrap());
+        }
+        let vertex_owner = graphics.vertices[0].buffer.as_raw().object;
+        let uniform_owner = graphics.uniform.as_raw().object;
+        assert_eq!(graphics.vertices[0].capacity, 64);
+        let vertices = [RenderVertex { x: 4., ..Default::default() }; 3];
+        assert_eq!(graphics.lower(frame, &vertices, &batches).unwrap_err().status, RENDER_E_BUSY);
+        assert_eq!(graphics.vertices[0].buffer.as_raw().object, vertex_owner);
+        assert_eq!(graphics.uniform.as_raw().object, uniform_owner);
+        assert_eq!(graphics.vertices.len(), 1);
+        for (index, blocks) in held.iter().enumerate() {
+            let block = neocogi_gfx_support::testing::snapshot(blocks[0].as_ref().as_com_ref()).unwrap();
+            let neocogi_render_gpu::command::Command::Draw(draw) = &block.commands()[0] else { panic!("missing UI draw") };
+            let bytes = draw.vertex_buffers[0].buffer.bytes().as_slice();
+            assert_eq!(f32::from_le_bytes(bytes[..4].try_into().unwrap()), index as f32 + 1.);
+            assert_eq!(draw.uniforms[0].data.bytes(), [80f32, 60., 0., 0.].map(f32::to_le_bytes).as_flattened());
+        }
+        drop(held.remove(0));
+        let blocks = graphics.lower(frame, &vertices, &batches).unwrap();
+        assert_eq!(graphics.vertices[0].buffer.as_raw().object, vertex_owner);
+        assert_eq!(graphics.uniform.as_raw().object, uniform_owner);
+        let block = neocogi_gfx_support::testing::snapshot(blocks[0].as_ref().as_com_ref()).unwrap();
+        let neocogi_render_gpu::command::Command::Draw(draw) = &block.commands()[0] else { panic!("missing UI draw") };
+        assert_eq!(f32::from_le_bytes(draw.vertex_buffers[0].buffer.bytes().as_slice()[..4].try_into().unwrap()), 4.);
+    }
+
+    /// Explicit growth preserves retained old draws; smaller frames reuse capacity and clear tails.
+    #[test]
+    fn streamed_geometry_grows_only_for_larger_frames_and_zeros_shorter_tails() {
+        let assets = crate::test_support::test_bundle();
+        let host = neocogi_gfx_support::testing::host();
+        let surface = neocogi_gfx_support::testing::framebuffer();
+        let mut graphics = Graphics::new(host.as_com_ref(), surface.as_com_ref(), assets.image().unwrap().as_com_ref()).unwrap();
+        let frame = FrameState { size: Size { width: 80, height: 60 }, clear: 0, budget: FrameBudget::default() };
+        let mut vertices = [RenderVertex { x: 1., ..Default::default() }; 6];
+        let first = graphics.lower(frame, &vertices, &[Batch::Atlas { first: 0, count: 3 }]).unwrap();
+        let original = graphics.vertices[0].buffer.as_raw().object;
+        let grown = graphics.lower(frame, &vertices, &[Batch::Atlas { first: 0, count: 6 }]).unwrap();
+        assert_ne!(graphics.vertices[0].buffer.as_raw().object, original);
+        assert_eq!(graphics.vertices[0].capacity, 128);
+        let replacement = graphics.vertices[0].buffer.as_raw().object;
+        vertices.fill(RenderVertex { x: 2., ..Default::default() });
+        let shorter = graphics.lower(frame, &vertices, &[Batch::Atlas { first: 0, count: 3 }]).unwrap();
+        assert_eq!(graphics.vertices[0].buffer.as_raw().object, replacement);
+        let mut bytes = NcOutputBuffer::new();
+        graphics.vertices[0].buffer.read(bytes.output(0, 128)).unwrap();
+        assert!(bytes.as_slice()[3 * STRIDE..].iter().all(|byte| *byte == 0));
+        // Keeping old sealed blocks alive must not let a later upload rewrite their contents.
+        for blocks in [&first, &grown] {
+            let block = neocogi_gfx_support::testing::snapshot(blocks[0].as_ref().as_com_ref()).unwrap();
+            let neocogi_render_gpu::command::Command::Draw(draw) = &block.commands()[0] else { panic!("missing UI draw") };
+            assert_eq!(f32::from_le_bytes(draw.vertex_buffers[0].buffer.bytes().as_slice()[..4].try_into().unwrap()), 1.);
+        }
+        drop((first, grown, shorter));
+        for _ in 0..12 {
+            drop(graphics.lower(frame, &vertices, &[Batch::Atlas { first: 0, count: 3 }]).unwrap());
+            assert_eq!(graphics.vertices[0].buffer.as_raw().object, replacement);
+        }
+    }
 
     #[com_object(interfaces(ITexture))]
     /// Retained capability is irrelevant to pure packing; no foreign texture method is needed.

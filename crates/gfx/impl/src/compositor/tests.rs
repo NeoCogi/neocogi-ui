@@ -36,7 +36,7 @@ impl neocogi_render_core::abi::IRenderHost for UploadHost {
     fn import_texture_result(&self, resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>, image: ComRef<'_, neocogi_render_core::abi::ITextureAbi>) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::ITextureImportResultAbi>, NcStatus> {
         self.inner.import_texture_result(resources, image)
     }
-    fn prepare_texture_result(&self, resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>, texture: ComRef<'_, neocogi_render_core::abi::IGpuTextureAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+    fn prepare_texture_result(&self, resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>, texture: ComRef<'_, neocogi_render_core::abi::IGpuBufferAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
         let result = (|| -> Result<(), neocogi_render_core::abi::RenderError> {
             self.probe.calls.set(self.probe.calls.get() + 1);
             if self.probe.fail.get() {

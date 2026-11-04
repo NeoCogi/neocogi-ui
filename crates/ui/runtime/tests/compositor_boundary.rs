@@ -12,6 +12,114 @@ use std::{
 /// Identical drawable dimensions keep alternating frames comparable across independent UIs.
 const SIZE: Size = Size { width: 200, height: 120 };
 
+/// Maintenance runs through the real UI/GFX boundary before client camera uploads.
+mod maintenance {
+    use super::*;
+    use neocogi_com::ComBox;
+    use neocogi_render_core::abi::*;
+    use neocogi_ui::{GeometryChange, ITextMetricsAbi, LayoutLimits, LeafContent, Painter, WidgetEvent, WidgetOptions, WidgetPaint, WidgetUpdate};
+
+    /// Shared observations bridge generated COM callbacks and the independently owned test caller.
+    #[derive(Default)]
+    struct Probe {
+        /// Native host methods use shared receivers and cannot borrow the caller's owned counters.
+        maintained: Cell<u32>,
+        /// Proves a failed retirement never invokes widget paint.
+        painted: Cell<u32>,
+        /// Arms a recoverable owned native error after binding has succeeded.
+        fail: Cell<bool>,
+    }
+
+    #[com_object(interfaces(IRenderHost, IRenderClientFactory))]
+    /// Delegate authentic resource creation while observing maintenance admission.
+    struct Host {
+        /// Sole resource authority remains the canonical logical fixture device.
+        inner: ComPtr<IRenderHostAbi>,
+        /// Contains no UI or widget reference, preventing a capability ownership cycle.
+        probe: Rc<Probe>,
+    }
+    impl IRenderDriverBound for Host {
+        fn driver_identity(&self) -> Result<ComPtr<IRenderDriverIdentityAbi>, NcStatus> {
+            self.inner.driver_identity()
+        }
+    }
+    impl IRenderHost for Host {
+        /// Failure returns the same owned report used by actual native retirement operations.
+        fn maintain_result(&self) -> Result<ComPtr<IRenderOutcomeAbi>, NcStatus> {
+            self.probe.maintained.set(self.probe.maintained.get() + 1);
+            if self.probe.fail.get() {
+                return Ok(operation_result(Err(RenderError::new(RENDER_E_BACKEND, "camera retirement failed: é"))));
+            }
+            self.inner.maintain_result()
+        }
+        fn import_texture_result(&self, resources: ComRef<'_, IRenderResourcesAbi>, image: ComRef<'_, ITextureAbi>) -> Result<ComBox<ITextureImportResultAbi>, NcStatus> {
+            self.inner.import_texture_result(resources, image)
+        }
+        fn prepare_texture_result(&self, resources: ComRef<'_, IRenderResourcesAbi>, texture: ComRef<'_, IGpuBufferAbi>) -> Result<ComPtr<IRenderOutcomeAbi>, NcStatus> {
+            self.inner.prepare_texture_result(resources, texture)
+        }
+        fn recording_broker(&self) -> Result<ComPtr<IRenderViewBrokerAbi>, NcStatus> {
+            self.inner.recording_broker()
+        }
+    }
+    impl IRenderClientFactory for Host {
+        fn create_client(&self, limits: RenderClientLimits, surface: ComRef<'_, IRenderSurfaceAbi>, permissions: RenderClientPermissions) -> Result<ComBox<IRenderClientDomainAbi>, NcStatus> {
+            self.inner.query::<IRenderClientFactoryAbi>()?.create_client(limits, surface, permissions)
+        }
+    }
+
+    /// Runtime-exclusive leaf observes maintenance ordering at the actual widget paint boundary.
+    struct Content(Rc<Probe>);
+    impl LeafContent for Content {
+        fn measure(&self, _: LayoutLimits, _: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
+            Ok(Size { width: 80, height: 24 })
+        }
+        fn update(&mut self, _: WidgetUpdate, _: WidgetEvent, _: &str) -> Result<GeometryChange, NcStatus> {
+            Ok(GeometryChange::NoChange)
+        }
+        fn paint(&mut self, state: WidgetPaint, painter: &mut Painter<'_>) -> Result<(), NcStatus> {
+            assert!(self.0.maintained.get() > 0, "retirement must precede widget uploads, not wait for GFX replay");
+            self.0.painted.set(self.0.painted.get() + 1);
+            painter.fill(state.clip, 0xffffffff)
+        }
+    }
+
+    /// A maintenance failure stops before paint, owns its original error and permits a later retry.
+    #[test]
+    fn maintenance_precedes_widget_paint_and_preserves_owned_errors() {
+        let assets = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)]).into_bundle().unwrap();
+        let gfx = neocogi_ui_support::test_support::gfx_factory(super::host_runtime());
+        let probe = Rc::new(Probe::default());
+        let host: ComPtr<IRenderHostAbi> = Host::from_value(Host {
+            inner: neocogi_gfx_support::testing::host(),
+            probe: probe.clone(),
+        }).query().unwrap();
+        let mut runtime = nc_ui::create_runtime_from_assets(assets.as_com_ref(), gfx.as_com_ref()).unwrap();
+        runtime.set_render_host(host.as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
+        let factory = nc_ui_nodes::UiFactory::bind(runtime.as_com_ref()).unwrap();
+        let ui = Ui::from_interfaces(runtime, factory).unwrap();
+        let root = ui.widgets().leaf(Content(probe.clone()), WidgetOptions::NONE).unwrap();
+        let _window = ui.window("camera uploads", Rect { x: 0, y: 0, width: 180, height: 100 }, root).unwrap();
+        ui.update(SIZE).unwrap();
+        let observation = Rc::new(Observation::default());
+        let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { observation: observation.clone() }).query().unwrap();
+        ui.render(SIZE, renderer.as_com_ref()).unwrap();
+        assert_eq!(probe.painted.get(), 1);
+        assert_eq!(observation.calls.get(), 1);
+        probe.fail.set(true);
+        let failure = ui.render(SIZE, renderer.as_com_ref()).unwrap_err();
+        assert_eq!(failure.status, RENDER_E_BACKEND);
+        assert_eq!(failure.message, "camera retirement failed: é");
+        assert_eq!(probe.painted.get(), 1);
+        assert_eq!(observation.calls.get(), 1);
+        probe.fail.set(false);
+        ui.render(SIZE, renderer.as_com_ref()).unwrap();
+        assert_eq!(probe.painted.get(), 2);
+        assert_eq!(observation.calls.get(), 2);
+        assert_eq!(failure.message, "camera retirement failed: é");
+    }
+}
+
 /// Counts complete renderer calls and records the bulk sizes observed during each active scope.
 #[derive(Default)]
 struct Observation {
@@ -57,7 +165,7 @@ impl IRenderer for CaptureRenderer {
             });
             if let Some(atlas) = atlas {
                 self.observation.size.set(Some(atlas.desc().size));
-                *self.observation.pixels.borrow_mut() = atlas.pixels().unwrap().as_slice().unwrap().to_vec();
+                *self.observation.pixels.borrow_mut() = atlas.pixels().unwrap().as_slice().to_vec();
             }
             Ok(())
         })();

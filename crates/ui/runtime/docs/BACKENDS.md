@@ -62,7 +62,7 @@ GFX-to-renderer boundaries use generated contracts and one complete COM frame.
 
 A widget owns buffers, sampled textures, samplers, shaders and pipelines created
 through its restricted factory. It begins a render view through the current
-painter and records bindings, copied uniforms, primitive draws and bounded clears.
+painter and records bindings, persistent uniform buffer ranges, primitive draws and bounded clears.
 Finish seals its contribution; the runtime preserves the position reserved at
 begin. No native callback, mesh or camera object crosses the graphics ABI.
 
@@ -79,8 +79,12 @@ All window, renderer and UI operations run on their creating thread. Cross-threa
 workers deliver owned data to that thread before an update. COM retention does not
 make GPU contexts or widgets thread-safe.
 
-Ordinary images are immutable. GPU buffer/texture updates publish complete immutable
-versions; each draw captures the version it actually consumes. All capabilities
+Ordinary images are immutable. GPU buffers have a fixed Vertex, Index, Uniform or
+Texture shape. Static buffers are initialized once; dynamic buffers preserve
+unselected bytes, and streamed buffers reuse three slots while clearing unwritten
+tails. Synchronous uploads publish a slot only when its recorded and native owners
+have retired; Busy rejects without growing storage. Each draw captures the slot it
+actually consumes. All capabilities
 are authenticated to their creating device and client domain. Foreign-device resources are rejected before native work. Resource
 references retain the device owner until release; retirement queues defer destruction
 until the backend can safely perform it. Renderer destruction precedes native surface

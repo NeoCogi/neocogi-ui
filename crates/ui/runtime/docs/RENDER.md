@@ -102,6 +102,17 @@ result into adjacent atlas work. GFX records that geometry and ordinary images a
 commands in its private UI domain. Client blocks seal preceding UI work and retain their
 original painter positions. The final stream exposes only sealed block observers.
 
+GFX keeps its streamed vertex chunks and 16-byte frame uniform buffer across
+frames. Vertex capacity grows geometrically only when a larger admitted frame
+requires it, up to the common buffer limit. Each resource has three fixed slots;
+UI retires completed native owners before widget painting, and GFX drains again
+before its own uploads. Maintenance failures retain their owned status/text and
+prevent painting or submission. Pinned-slot Busy is returned without
+allocating a fallback resource. Smaller frames reuse the existing capacity and
+clear unwritten tails. Atlas replacements remain immutable candidates, prepared
+before their matching metadata is published. Suzanne similarly owns immutable
+mesh buffers and one persistent streamed 128-byte camera buffer.
+
 The portable target is a positive drawable up to 8192 by 8192 pixels. Translated logical
 edges must remain in `-32768..=40960`, allowing four maximum drawable spans off-screen.
 Widget/app authors own that coordinate constraint. Positive-size validation does not

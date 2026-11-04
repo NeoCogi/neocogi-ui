@@ -462,7 +462,7 @@ rejected geometry does not publish a partial window edit or input transition.
 Localized pointer differences can span both ends of the domain and remain wide until
 conversion to the existing integer event records.
 
-The shared `neocogi_ui::geometry` policy uses rs-math3d 0.20.0. Integer pixels convert
+The shared `neocogi_ui::geometry` policy uses rs-math3d 0.20.1. Integer pixels convert
 exactly to `Fixed<i32, 6>`. Explicit fractional drawing inputs round once to its
 1/64-pixel grid, nearest with ties to even, after validating the original finite
 value and range. `Fixed<i64, 12>` working vectors/rectangles retain products of two
@@ -1110,6 +1110,16 @@ private immutable versions through execution/completion. A weak lifetime check i
 neither a callback nor a GPU completion signal. Pipelines retain their shader artifacts
 independently of public shader owners.
 
+Create static buffers with complete encoded initial data. Dynamic buffers preserve
+unselected bytes; streamed buffers reserve three replacement slots and clear
+unwritten bytes on each upload. Retain these public owners across frames and use
+synchronous `upload` calls before recording their consuming draws. A pinned slot
+cannot be overwritten: Busy leaves its published contents unchanged and must not
+trigger unbounded fallback allocation. Native maintenance retires completed owners.
+Uniform bindings select a Uniform-role buffer, a 256-byte-aligned offset and the
+exact reflected block length. Ordinary image capabilities remain immutable;
+Texture-role GPU buffers use tightly packed row-major RGBA bytes.
+
 Native completion, abandonment and maintenance follow the canonical
 [GPU lifecycle contract](https://github.com/NeoCogi/neocogi-platform/blob/master/docs/contracts/GPU_RENDERING.md#immutable-native-preparation-data-and-identity).
 Public owner expiry alone never establishes that the driver has finished using
@@ -1119,7 +1129,7 @@ frame destruction; it adds neither a draw nor presentation.
 `Painter::begin_render_view(resources)` reserves an exact painter-order position and
 returns a temporary exclusive command view. Its copied client information comes from
 committed visible geometry. Bind pipelines, explicit byte streams, sampled textures
-and copied uniform inputs, then issue primitive draws and call `finish`. Explicit
+and persistent uniform buffer ranges, then issue primitive draws and call `finish`. Explicit
 cancel of healthy recording contributes nothing. Client Drop preserves unfinished
 or rejected state; cancel cannot erase a rejection. Unfinished or rejected work
 fails the paint invocation; paint return permanently revokes retained facades.

@@ -283,7 +283,7 @@ impl neocogi_render_core::abi::IRenderHost for UploadHost {
     fn recording_broker(&self) -> Result<ComPtr<neocogi_render_core::abi::IRenderViewBrokerAbi>, NcStatus> {
         self.inner.recording_broker()
     }
-    fn prepare_texture_result(&self, resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>, texture: ComRef<'_, neocogi_render_core::abi::IGpuTextureAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+    fn prepare_texture_result(&self, resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>, texture: ComRef<'_, neocogi_render_core::abi::IGpuBufferAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
         let result = (|| -> Result<(), neocogi_render_core::abi::RenderError> {
             let version = neocogi_gfx_support::testing::texture(resources, texture)?;
             self.inner.prepare_texture(resources, texture)?;

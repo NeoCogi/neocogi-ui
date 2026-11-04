@@ -1,7 +1,7 @@
 //! Independently compiled DLL proving Cargo compositions share one runtime authority.
 extern crate self as nc_cargo_runtime_probe;
 #[path = "../interface.rs"]
-mod interface;
+pub mod interface;
 use interface::{IRegistryProbe, IRegistryProbeAbi};
 use neocogi_com::{ComPtr, NcStatus, Runtime, com_object};
 

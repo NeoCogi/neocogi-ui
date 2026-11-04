@@ -45,8 +45,8 @@ edition = "2024"
 [workspace]
 [dependencies]
 neocogi-gfx-support = {{ path = {rust_path(ROOT / 'crates/gfx/support')}, features = ["compiled-assets"] }}
-neocogi-com = {{ version = "=0.1.0-alpha.1", features = ["std", "runtime"] }}
-neocogi-com-host = "=0.1.0-alpha.1"
+neocogi-com = {{ version = "=0.1.0", features = ["std", "runtime"] }}
+neocogi-com-host = "=0.1.0"
 {extra}
 {PROFILES}
 '''

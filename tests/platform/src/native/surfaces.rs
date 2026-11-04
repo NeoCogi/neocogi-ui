@@ -128,7 +128,7 @@ impl IRenderHost for QuotaHost {
     fn import_texture_result(&self, resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>, image: ComRef<'_, neocogi_render_core::abi::ITextureAbi>) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::ITextureImportResultAbi>, NcStatus> {
         self.native.import_texture_result(resources, image)
     }
-    fn prepare_texture_result(&self, resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>, texture: ComRef<'_, neocogi_render_core::abi::IGpuTextureAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+    fn prepare_texture_result(&self, resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>, texture: ComRef<'_, neocogi_render_core::abi::IGpuBufferAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
         self.native.prepare_texture_result(resources, texture)
     }
     fn recording_broker(&self) -> Result<ComPtr<IRenderViewBrokerAbi>, NcStatus> {
@@ -162,13 +162,12 @@ fn gfx_maintenance_precedes_geometry_admission_at_exact_quota_pressure() {
     let mut compositor = compositor(host.as_com_ref(), framebuffer(window.graphics_host().unwrap().as_com_ref()).as_com_ref());
     let resources = captured.borrow().as_ref().unwrap().clone();
     let texture = resources
-        .create_texture(
-            GpuTextureDesc {
+        .create_dynamic_buffer(
+            GpuBufferDesc::Texture {
                 size: Size { width: 1, height: 1 },
                 format: GpuTextureFormat::Rgba8Unorm,
                 mip_count: 1,
             },
-            neocogi_render_core::source::initial(None).borrow().unwrap(),
         )
         .unwrap();
     host.prepare_texture(resources.as_com_ref(), texture.as_com_ref()).unwrap();
@@ -176,18 +175,16 @@ fn gfx_maintenance_precedes_geometry_admission_at_exact_quota_pressure() {
     host.maintain().unwrap();
     drop(texture);
     let before = device.logical().unwrap().live_bytes(resources.as_com_ref()).unwrap();
-    // The next six UI vertices require exactly 120 bytes. Leave only 116 while the native
+    // Six UI vertices round to 128 bytes in each of three persistent slots. Leave 380 while the native
     // texture's 4-byte retirement packet is queued; no CPU zero payload is allocated for padding.
     let padding = resources
-        .create_buffer(
-            GpuBufferDesc {
-                role: GpuBufferRole::Vertex,
-                byte_len: 8 * 1024 * 1024 - before - 116,
+        .create_dynamic_buffer(
+            GpuBufferDesc::Vertex {
+                byte_len: 8 * 1024 * 1024 - before - 380,
             },
-            neocogi_render_core::source::initial(None).borrow().unwrap(),
         )
         .unwrap();
-    assert_eq!(8 * 1024 * 1024 - device.logical().unwrap().live_bytes(resources.as_com_ref()).unwrap(), 116);
+    assert_eq!(8 * 1024 * 1024 - device.logical().unwrap().live_bytes(resources.as_com_ref()).unwrap(), 380);
     let vertex = |x, y| RenderVertex { x, y, u: 0., v: 0., rgba: 0xffffffff };
     let vertices = [
         vertex(0., 0.),

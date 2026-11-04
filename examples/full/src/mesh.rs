@@ -93,6 +93,8 @@ struct Geometry {
     vertices: ComBox<IGpuBufferAbi>,
     /// Separate index role remains portable to WebGL 2.
     indices: ComBox<IGpuBufferAbi>,
+    /// Persistent three-slot camera upload, retaining older draws until their owners retire.
+    uniform: ComBox<IGpuBufferAbi>,
     /// Explicit encoded layout and this example's programmable shading.
     pipeline: ComBox<IGpuPipelineAbi>,
     /// Complete triangle-list index extent.
@@ -101,21 +103,15 @@ struct Geometry {
 impl Geometry {
     /// Uploads explicit byte arrays and declares their exact shader interpretation.
     fn new(resources: ComRef<'_, IRenderResourcesAbi>, vertices: Vec<u8>, indices: Vec<u32>) -> Result<Self, RenderError> {
-        let vertex = resources.create_buffer(
-            GpuBufferDesc {
-                role: GpuBufferRole::Vertex,
-                byte_len: vertices.len() as u64,
-            },
-            neocogi_render_core::source::supplied(Bytes::source(vertices).as_com_ref())?.borrow()?,
+        let vertex = resources.create_static_buffer(
+            GpuBufferDesc::Vertex { byte_len: vertices.len() as u64 },
+            Bytes::source(vertices).as_com_ref(),
         )?;
         let index_count = indices.len().try_into().map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)?;
         let indices: Vec<_> = indices.into_iter().flat_map(u32::to_le_bytes).collect();
-        let index = resources.create_buffer(
-            GpuBufferDesc {
-                role: GpuBufferRole::Index,
-                byte_len: indices.len() as u64,
-            },
-            neocogi_render_core::source::supplied(Bytes::source(indices).as_com_ref())?.borrow()?,
+        let index = resources.create_static_buffer(
+            GpuBufferDesc::Index { byte_len: indices.len() as u64 },
+            Bytes::source(indices).as_com_ref(),
         )?;
         let code = Bytes::source(SHADER.as_bytes().to_vec());
         let vs = resources.create_shader(GpuShaderStage::Vertex, code.as_com_ref(), NcCopyFromBufferOffset::new(0, b"vs"))?;
@@ -160,10 +156,12 @@ impl Geometry {
         }
         .source()?;
         let pipeline = resources.create_pipeline(descriptor.as_com_ref(), vs.as_com_ref(), fs.as_com_ref())?;
+        let uniform = resources.create_streamed_buffer(GpuBufferDesc::Uniform { byte_len: 128 })?;
         Ok(Self {
             resources: resources.try_add_ref()?,
             vertices: vertex,
             indices: index,
+            uniform,
             pipeline,
             index_count,
         })
@@ -265,7 +263,8 @@ impl LeafContent for Suzanne {
         commands.bind_pipeline(self.geometry.pipeline.as_com_ref())?;
         commands.bind_vertex_buffer(0, self.geometry.vertices.as_com_ref(), 0)?;
         commands.bind_index_buffer(self.geometry.indices.as_com_ref(), GpuIndexFormat::U32, 0)?;
-        commands.push_uniforms(GpuShaderStage::Vertex, 0, NcCopyFromBufferOffset::new(0, &uniforms))?;
+        self.geometry.uniform.upload(NcCopyFromBufferOffset::new(0, &uniforms))?;
+        commands.bind_uniform_buffer(GpuShaderStage::Vertex, 0, self.geometry.uniform.as_com_ref(), 0, 128)?;
         commands.draw_indexed(self.geometry.index_count, 1, 0)?;
         commands.finish()
     }
@@ -361,18 +360,17 @@ mod viewport_tests {
         }
     }
     impl IRenderResources for UnreachableResources {
-        fn create_buffer(
+        fn create_static_buffer(
             &self,
             _: GpuBufferDesc,
-            _: neocogi_com::NcValueRef<'_, neocogi_render_core::abi::InitialGpuData>,
+            _: ComRef<'_, IGpuDataSourceAbi>,
         ) -> Result<ComBox<IGpuBufferAbi>, NcStatus> {
             self.reject()
         }
-        fn create_texture(
-            &self,
-            _: GpuTextureDesc,
-            _: neocogi_com::NcValueRef<'_, neocogi_render_core::abi::InitialGpuData>,
-        ) -> Result<ComBox<IGpuTextureAbi>, NcStatus> {
+        fn create_dynamic_buffer(&self, _: GpuBufferDesc) -> Result<ComBox<IGpuBufferAbi>, NcStatus> {
+            self.reject()
+        }
+        fn create_streamed_buffer(&self, _: GpuBufferDesc) -> Result<ComBox<IGpuBufferAbi>, NcStatus> {
             self.reject()
         }
         fn create_sampler(&self, _: GpuSamplerDesc) -> Result<ComBox<IGpuSamplerAbi>, NcStatus> {
@@ -392,12 +390,6 @@ mod viewport_tests {
             _: ComRef<'_, IGpuShaderAbi>,
             _: ComRef<'_, IGpuShaderAbi>,
         ) -> Result<ComBox<IGpuPipelineAbi>, NcStatus> {
-            self.reject()
-        }
-        fn update_buffer(&self, _: ComRef<'_, IGpuBufferAbi>, _: u64, _: ComRef<'_, IGpuDataSourceAbi>) -> Result<(), NcStatus> {
-            self.reject()
-        }
-        fn update_texture(&self, _: ComRef<'_, IGpuTextureAbi>, _: Rect, _: ComRef<'_, IGpuDataSourceAbi>) -> Result<(), NcStatus> {
             self.reject()
         }
     }

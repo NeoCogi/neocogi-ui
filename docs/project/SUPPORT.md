@@ -50,7 +50,7 @@ your application and every plugin, and review the [changelog](CHANGELOG.md) befo
 is not a promise that the unreleased checkout matches a published package.
 
 The COM SDK, host implementation and IDL compiler use the exact published
-crates.io release `0.1.0-alpha.1`; this checkout owns their UI/render integration. Core, plugin
+crates.io release `0.1.0-alpha.2`; this checkout owns their UI/render integration. Core, plugin
 descriptor and runtime table ABIs remain at version 1 during pre-alpha.
 The [COM ABI-v1 specification](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/docs/abi-v1.md) describes that
 baseline; the [core version constant](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/crates/core/src/metadata/contract.rs)

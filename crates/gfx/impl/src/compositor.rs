@@ -755,7 +755,7 @@ impl GfxCompositor for GfxCompositorObject {
             let frame = self.frame.take().ok_or(NC_E_INVALID_ARG)?;
             let invocation = self.next_invocation.checked_add(1).ok_or(NC_E_OUT_OF_RANGE)?;
             self.next_invocation = invocation;
-            let blocks = self.graphics.as_ref().ok_or(NC_E_INVALID_ARG)?.lower(frame, &vertices, &batches)?;
+            let blocks = self.graphics.as_mut().ok_or(NC_E_INVALID_ARG)?.lower(frame, &vertices, &batches)?;
             let block_count = u32::try_from(blocks.len()).map_err(|_| NC_E_OUT_OF_RANGE)?;
             *self.storage.blocks.borrow_mut() = blocks;
             self.storage.active.set(invocation);

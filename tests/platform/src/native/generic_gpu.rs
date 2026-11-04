@@ -134,10 +134,7 @@ struct ClosingUiStream {
 impl IRenderStream for ClosingUiStream {
     fn view(&self, _: u64, index: u32) -> Result<WeakComBox<IRenderViewBlockAbi>, NcStatus> {
         assert!(matches!(
-            self.editing.create_buffer(
-                GpuBufferDesc { role: GpuBufferRole::Vertex, byte_len: 4 },
-                neocogi_render_core::source::initial_bytes(vec![0; 4]).borrow().unwrap()
-            ),
+            self.editing.create_dynamic_buffer(GpuBufferDesc::Vertex { byte_len: 4 }),
             Err(RENDER_E_BUSY)
         ));
         if index == 1 {
@@ -529,39 +526,28 @@ fn generic_indexed_texture_and_uniform_snapshots_reach_the_native_pipeline() {
         encoded.extend([255; 4]);
     }
     let vertex_buffer = resources
-        .create_buffer(
-            GpuBufferDesc {
-                role: GpuBufferRole::Vertex,
-                byte_len: encoded.len() as u64,
-            },
-            neocogi_render_core::source::supplied(Bytes::source(encoded).as_com_ref())
-                .unwrap()
-                .borrow()
-                .unwrap(),
+        .create_static_buffer(
+            GpuBufferDesc::Vertex { byte_len: encoded.len() as u64 },
+            Bytes::source(encoded).as_com_ref(),
         )
         .unwrap();
     let index_buffer = resources
-        .create_buffer(
-            GpuBufferDesc { role: GpuBufferRole::Index, byte_len: 12 },
-            neocogi_render_core::source::supplied(Bytes::source([0u16, 1, 2, 0, 2, 3].into_iter().flat_map(u16::to_le_bytes).collect()).as_com_ref())
-                .unwrap()
-                .borrow()
-                .unwrap(),
+        .create_static_buffer(
+            GpuBufferDesc::Index { byte_len: 12 },
+            Bytes::source([0u16, 1, 2, 0, 2, 3].into_iter().flat_map(u16::to_le_bytes).collect()).as_com_ref(),
         )
         .unwrap();
-    let texture = resources
-        .create_texture(
-            GpuTextureDesc {
+    let mut texture = resources
+        .create_streamed_buffer(
+            GpuBufferDesc::Texture {
                 size: Size { width: 2, height: 2 },
                 format: GpuTextureFormat::Rgba8Unorm,
                 mip_count: 1,
             },
-            neocogi_render_core::source::supplied(Bytes::source(vec![255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255]).as_com_ref())
-                .unwrap()
-                .borrow()
-                .unwrap(),
         )
         .unwrap();
+    texture.upload(NcCopyFromBufferOffset::new(0, &[255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255])).unwrap();
+    let mut uniform = resources.create_streamed_buffer(GpuBufferDesc::Uniform { byte_len: 16 }).unwrap();
     let sampler = resources.create_sampler(GpuSamplerDesc::default()).unwrap();
     let broker = unknown
         .query::<IPlatformWindowAbi>()
@@ -587,26 +573,20 @@ fn generic_indexed_texture_and_uniform_snapshots_reach_the_native_pipeline() {
     view.bind_texture(GpuShaderStage::Fragment, 0, texture.as_com_ref(), sampler.as_com_ref())
         .unwrap();
     let white: Vec<_> = [1f32; 4].into_iter().flat_map(f32::to_le_bytes).collect();
-    view.push_uniforms(GpuShaderStage::Fragment, 0, NcCopyFromBufferOffset::new(0, &white)).unwrap();
+    uniform.upload(NcCopyFromBufferOffset::new(0, &white)).unwrap();
+    view.bind_uniform_buffer(GpuShaderStage::Fragment, 0, uniform.as_com_ref(), 0, 16).unwrap();
     view.draw_indexed(6, 1, 0).unwrap();
-    // Later draws see a new texture and new copied uniforms; the earlier draw remains exact A.
-    resources
-        .update_texture(
-            texture.as_com_ref(),
-            Rect { x: 0, y: 0, width: 2, height: 2 },
-            Bytes::source(vec![255; 16]).as_com_ref(),
-        )
-        .unwrap();
+    // Later draws capture another fixed slot of the same persistent resources; A remains exact.
+    texture.upload(NcCopyFromBufferOffset::new(0, &[255; 16])).unwrap();
     view.push_view(Rect { x: 24, y: 0, width: 24, height: 48 }).unwrap();
     let magenta: Vec<_> = [1f32, 0., 1., 1.].into_iter().flat_map(f32::to_le_bytes).collect();
-    view.push_uniforms(GpuShaderStage::Fragment, 0, NcCopyFromBufferOffset::new(0, &magenta))
-        .unwrap();
+    uniform.upload(NcCopyFromBufferOffset::new(0, &magenta)).unwrap();
     view.draw_indexed(6, 1, 0).unwrap();
     view.pop().unwrap();
     view.finish().unwrap();
     let block = session.take_block().unwrap();
     frame.finish().unwrap();
-    drop((pipeline, vs, fs, vertex_buffer, index_buffer, texture, sampler));
+    drop((pipeline, vs, fs, vertex_buffer, index_buffer, texture, uniform, sampler));
     let vertices = rectangle(Rect { x: 0, y: 0, width: 64, height: 64 }, 0xff00ff00)
         .into_iter()
         .chain(rectangle(Rect { x: 28, y: 28, width: 8, height: 8 }, 0xffffffff))
@@ -691,7 +671,8 @@ fn generic_depth_survives_draws_and_reset_with_independent_ordered_views() {
     let masked = pipeline(0);
     let draw = |view: &mut ComBox<IRenderViewAbi>, color: [f32; 4], depth: f32| {
         let bytes: Vec<_> = color.into_iter().chain([depth, 0., 0., 0.]).flat_map(f32::to_le_bytes).collect();
-        view.push_uniforms(GpuShaderStage::Vertex, 0, NcCopyFromBufferOffset::new(0, &bytes)).unwrap();
+        let buffer = resources.create_static_buffer(GpuBufferDesc::Uniform { byte_len: bytes.len() as u64 }, Bytes::source(bytes).as_com_ref()).unwrap();
+        view.bind_uniform_buffer(GpuShaderStage::Vertex, 0, buffer.as_com_ref(), 0, 32).unwrap();
         view.draw(3, 1, 0).unwrap();
     };
     let broker = window

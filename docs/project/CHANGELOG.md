@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Use published Platform `0.1.0-alpha.2`, COM/IDL `0.1.0` and rs-math3d `0.20.1`.
+  Retain streamed UI vertex/frame buffers and Suzanne's camera buffer across
+  frames, upload synchronously and bind explicit uniform ranges. Keep immutable
+  mesh/atlas data static; preserve draw snapshots and propagate bounded-slot Busy
+  without allocating replacement buffers. Migrate native rendering and external
+  generated-contract tests to the same published dependency set.
+
 ## 0.1.0-alpha.1
 
 - Coordinate all workspace package versions at `0.1.0-alpha.1` and use exact

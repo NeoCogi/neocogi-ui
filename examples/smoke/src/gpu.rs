@@ -164,17 +164,13 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
         .into_iter()
         .flat_map(f32::to_le_bytes)
         .collect();
-    let vertices = resources.create_buffer(
-        GpuBufferDesc {
-            role: GpuBufferRole::Vertex,
-            byte_len: payload.len() as u64,
-        },
-        neocogi_render_gpu::source::supplied(Bytes::source(payload).as_com_ref())?.borrow()?,
+    let vertices = resources.create_static_buffer(
+        GpuBufferDesc::Vertex { byte_len: payload.len() as u64 },
+        Bytes::source(payload).as_com_ref(),
     )?;
-    let indices = resources.create_buffer(
-        GpuBufferDesc { role: GpuBufferRole::Index, byte_len: 6 },
-        neocogi_render_gpu::source::supplied(Bytes::source([0u16, 1, 3].into_iter().flat_map(u16::to_le_bytes).collect()).as_com_ref())?.borrow()?,
-    )?;
+    let mut indices = resources.create_dynamic_buffer(GpuBufferDesc::Index { byte_len: 6 })?;
+    let invalid_indices: Vec<_> = [0u16, 1, 3].into_iter().flat_map(u16::to_le_bytes).collect();
+    indices.upload(NcCopyFromBufferOffset::new(0, &invalid_indices))?;
     // Raw bytes have no semantic meaning until draw consumption validates the complete footprint.
     let host = renderer.try_add_ref()?.query::<IPlatformWindowAbi>()?.graphics_host()?;
     let mut frame = host.recording_broker()?.begin_frame()?;
@@ -190,11 +186,8 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     assert_eq!(session.state()?, RenderViewState::Rejected);
     assert_eq!(frame.finish(), Err(RENDER_E_STATE));
     frame.abort()?;
-    resources.update_buffer(
-        indices.as_com_ref(),
-        0,
-        Bytes::source([0u16, 1, 2].into_iter().flat_map(u16::to_le_bytes).collect()).as_com_ref(),
-    )?;
+    let valid_indices: Vec<_> = [0u16, 1, 2].into_iter().flat_map(u16::to_le_bytes).collect();
+    indices.upload(NcCopyFromBufferOffset::new(0, &valid_indices))?;
     let root = OwnedWidget::<IWidgetAbi>::from_interface(
         SceneView::into_box(SceneView {
             state: WidgetState::new(ui.widgets().host()?, WidgetOptions::NONE),

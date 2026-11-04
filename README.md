@@ -7,7 +7,7 @@ GFX, and skin providers.
 
 [NeoCogi Platform](https://github.com/NeoCogi/neocogi-platform) supplies native/browser
 platform services, generic graphics resources, shader compilation and renderer
-backends through the published crates.io release `0.1.0-alpha.1`.
+backends through the published crates.io release `0.1.0-alpha.2`.
 
 The coordinated UI release is `0.1.0-alpha.1`. See the
 [release guide](docs/project/RELEASING.md) for archive qualification and publishing.
@@ -50,7 +50,7 @@ Mac OS 9 themes. Select a theme from **View → Theme** in the Demo Window.
 
 The [COM SDK, host implementation, IDL compiler and inspector](https://github.com/NeoCogi/neocogi-com)
 are maintained together. All COM dependencies use the exact published crates.io
-release `0.1.0-alpha.1`; see the
+release `0.1.0`; see the
 [dependency guide](docs/guides/COM_DEPENDENCY.md) for updates and validation.
 
 ## Build and run
@@ -61,8 +61,9 @@ SDL2 and the libraries for their selected graphics backend; see
 [backend prerequisites](crates/ui/runtime/docs/BACKENDS.md).
 The checked-in lockfile fixes the standalone dependency graph.
 
-All Platform and COM packages use exact `=0.1.0-alpha.1` registry requirements.
-Internal production/build dependencies use that exact UI release too; test-only
+Platform packages use exact `=0.1.0-alpha.2` registry requirements, COM/IDL use
+`=0.1.0`, and `rs-math3d` uses `=0.20.1`. Internal production/build dependencies
+use the exact UI release `=0.1.0-alpha.1`; test-only
 peer links are omitted from publication and restored from packaged test metadata
 by the archive qualifier.
 Cargo downloads their checked packages from crates.io; builds require no GitHub
@@ -104,7 +105,7 @@ Use the exact matching registry versions when integrating the alpha release:
 ```toml
 [dependencies]
 neocogi-ui = { version = "=0.1.0-alpha.1" }
-neocogi-com = { version = "=0.1.0-alpha.1" }
+neocogi-com = { version = "=0.1.0" }
 ```
 
 With an initialized `Ui`, the facade creates and edits the actual objects:

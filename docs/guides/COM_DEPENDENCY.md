@@ -1,8 +1,8 @@
 # COM dependency
 
 NeoCogi UI consumes the published COM SDK, host implementation and IDL compiler
-at exactly `0.1.0-alpha.1` from crates.io. The root `Cargo.toml` selects
-`=0.1.0-alpha.1` for `neocogi-com`, `neocogi-com-host` and `neocogi-idl`.
+at exactly `0.1.0` from crates.io. The root `Cargo.toml` selects
+`=0.1.0` for `neocogi-com`, `neocogi-com-host` and `neocogi-idl`.
 There is no local SDK fork, Git dependency or path override.
 
 `neocogi-com` supplies caller/provider contracts, owned handles, object macros
@@ -22,7 +22,8 @@ complete cache can select `CARGO_NET_OFFLINE=true`.
 
 ## Platform dependencies
 
-The Platform packages also use exact `=0.1.0-alpha.1` requirements from crates.io.
+The Platform packages use exact `=0.1.0-alpha.2` requirements from crates.io.
+Math uses `rs-math3d = "=0.20.1"`.
 Update renderer core, GPU, support, shader core/compiler, native layout, and both
 static/dynamic platform assemblies together. The provider packages are
 `neocogi-platform-plugin` and `neocogi-platform-plugin-dylib`, with library name
@@ -75,7 +76,7 @@ workspace and its [Rust task runner](https://github.com/NeoCogi/neocogi-com/blob
 The inspector is published with the SDK. Install the matching release:
 
 ```sh
-cargo install neocogi-inspect --version '=0.1.0-alpha.1' --locked
+cargo install neocogi-inspect --version '=0.1.0' --locked
 neocogi-inspect dump path/to/plugin.so
 ```
 
