@@ -49,10 +49,14 @@ independent evidence that a checkout build cannot provide:
 ```sh
 python3 scripts/package_inputs.py --check
 python3 -m unittest discover -s scripts -p test_release_packages.py
+rustup component add clippy
 python3 scripts/check_packages.py --publish-dry-run --stable-toolchain stable --output /tmp/neocogi-ui-alpha2-archives
 ```
 
 Use `python3 scripts/package_inputs.py` after changing a canonical package input.
+The qualifier invokes the pinned toolchain explicitly, so install its Clippy
+component before entering the external consumer workspace. A `cargo +<toolchain>`
+override does not install the component list from `rust-toolchain.toml`.
 `--allow-dirty` is available during development; final qualification must use a
 clean committed tree, including qualification tooling and CI changes. `--offline` is useful after all pinned dependencies are
 cached, using package mode without `--publish-dry-run`: Cargo's publisher needs

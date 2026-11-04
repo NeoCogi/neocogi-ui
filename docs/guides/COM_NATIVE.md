@@ -46,7 +46,12 @@ Native renderers need the platform SDL2 development library and an available GPU
 backend. Vulkan also links the platform Vulkan loader. CI installs SDL2, Vulkan
 and software Mesa drivers on Linux; macOS uses Homebrew SDL2. Windows CI installs
 `vcpkg install sdl2:x64-windows`, adds its library directory to `LIB` and its DLL
-directory to `PATH`. Cargo owns NeoCogi artifacts; those OS dependencies retain
+directory to `PATH`. Windows deployment must also place `SDL2.dll` in the `lib`
+directory beside `nc_platform.dll` (or install it in System32). COM's explicit
+provider loader searches only the selected DLL's directory and System32; adding
+vcpkg to `PATH` does not satisfy a provider's imports. Windows CI copies the
+vcpkg runtime into `target/debug/lib` before the relocated-host checks.
+Cargo owns NeoCogi artifacts; those OS dependencies retain
 their usual platform installation requirements. Browser builds use WebGL2 and
 require neither SDL nor native plugin artifacts.
 

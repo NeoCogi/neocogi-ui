@@ -28,6 +28,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      # The qualifier invokes cargo +<pinned-toolchain>; explicit overrides do
+      # not install the components listed in rust-toolchain.toml automatically.
+      - name: Install Clippy for the workspace toolchain
+        run: rustup component add clippy
       - name: Derived license and test input freshness
         run: python3 scripts/package_inputs.py --check
       - name: Archive policy and fixture regressions
@@ -111,6 +115,9 @@ jobs:
       - name: Exact distributions and concurrent private artifact capture
         if: matrix.backend == 'vulkan'
         run: |
+          # The Vulkan build above has not populated Glow's optional dependencies.
+          # Fetch the locked graph before the packaging checks deliberately go offline.
+          cargo fetch --locked
           python3 scripts/test_package_native.py
           python3 scripts/test_package_native.py --production "$RUNNER_TEMP/neocogi-exact-apps"
           cargo test --locked -p neocogi-demo-assets --features external-themes --test paths
@@ -149,6 +156,13 @@ jobs:
           "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin" >> $env:GITHUB_PATH
       - name: Build Cargo-owned native Glow artifacts
         run: cargo build --locked -p neocogi-demo-full
+      - name: Stage the Windows SDL runtime beside the native provider
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # COM loads a provider's imports only from its own directory or System32.
+          # PATH alone cannot satisfy nc_platform.dll's SDL2.dll dependency.
+          Copy-Item -LiteralPath "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin\SDL2.dll" -Destination "target\debug\lib\SDL2.dll" -ErrorAction Stop
       - name: Relocated host and independent plugin share the runtime
         run: cargo test --locked -p neocogi-demo-plugins -p neocogi-ui-support --test shared_runtime --features neocogi-demo-plugins/glow,neocogi-demo-plugins/skin,neocogi-demo-plugins/extension
       - name: Platform-neutral contracts and facade behavior
