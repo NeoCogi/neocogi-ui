@@ -2,6 +2,66 @@
 use super::*;
 use neocogi_ui::events::testing::TestApp;
 
+/// Exercise the same leaf constructor used by both scene viewports through actual UI routing.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+#[ignore = "requires the packaged native plugin graph and a native GPU window"]
+fn packaged_full_viewport_wheel_routing() {
+    /// Owns observations in a channel because the runtime exclusively owns the mounted content.
+    struct WheelProbe(std::sync::mpsc::Sender<Point>);
+    impl LeafContent for WheelProbe {
+        /// Keep the leaf smaller than its window so layout cannot hide its hit target.
+        fn measure(&self, _: LayoutLimits, _: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
+            Ok(Size { width: 80, height: 24 })
+        }
+        /// Observe only scroll events admitted by the production pointer router and COM leaf.
+        fn update(&mut self, state: WidgetUpdate, event: WidgetEvent, _: &str) -> Result<GeometryChange, NcStatus> {
+            if let WidgetEvent::Scroll { delta, .. } = event {
+                assert!(!state.focused, "hovered wheel routing must not require keyboard focus");
+                self.0.send(delta).unwrap();
+            }
+            Ok(GeometryChange::NoChange)
+        }
+        /// Routing assertions require no fixture-specific rendering operations.
+        fn paint(&mut self, _: WidgetPaint, _: &mut Painter<'_>) -> Result<(), NcStatus> {
+            Ok(())
+        }
+    }
+    let (host, _state, _events) = create(crate::host_runtime()).unwrap();
+    let ui = &host.ui;
+    let size = host.window.size().unwrap();
+    let (send, received) = std::sync::mpsc::channel();
+    let leaf = viewport(ui, WheelProbe(send)).unwrap();
+    let mut observed = leaf.handle();
+    let window = ui.window("Wheel routing", rect(10, 10, 200, 100), leaf).unwrap();
+    window.set_options(WindowOptions::NO_TITLE | WindowOptions::NO_PADDING | WindowOptions::NO_RESIZE).unwrap();
+    window.raise().unwrap();
+    ui.update(size).unwrap();
+    ui.input(UiInput::Pointer(Point { x: 30, y: 30 }), "").unwrap();
+    for delta in [Point { x: 0, y: -30 }, Point { x: 0, y: 30 }, Point { x: 1, y: 0 }] {
+        ui.input(UiInput::Scroll(delta), "").unwrap();
+        ui.update(size).unwrap();
+        assert_eq!(received.try_recv().unwrap(), delta);
+        assert!(received.try_recv().is_err(), "one wheel event is delivered once");
+    }
+    // Removing the routing opt-in reproduces the original defect; restoring it recovers delivery.
+    observed.clear_flags(WidgetOptions::GRAB_SCROLL).unwrap();
+    ui.input(UiInput::Scroll(Point { x: 0, y: 30 }), "").unwrap();
+    ui.update(size).unwrap();
+    assert!(received.try_recv().is_err());
+    observed.set_flags(WidgetOptions::GRAB_SCROLL).unwrap();
+    ui.input(UiInput::Scroll(Point { x: 0, y: 1 }), "").unwrap();
+    ui.update(size).unwrap();
+    assert_eq!(received.try_recv().unwrap(), Point { x: 0, y: 1 });
+    // Neither zero deltas nor a pointer outside the visible leaf may reach its scroll handler.
+    ui.input(UiInput::Scroll(Point::default()), "").unwrap();
+    ui.input(UiInput::Pointer(Point { x: 240, y: 140 }), "").unwrap();
+    ui.input(UiInput::Scroll(Point { x: 0, y: 30 }), "").unwrap();
+    ui.update(size).unwrap();
+    assert!(received.try_recv().is_err());
+    window.close().unwrap();
+}
+
 /// Compiles shipped themes through the deployed services without requiring a GPU window.
 #[cfg(not(target_arch = "wasm32"))]
 #[test]

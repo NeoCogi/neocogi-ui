@@ -103,7 +103,12 @@ separately from committed UTF-8. The shared UI provides:
   navigate their actual compact rows.
 
 The grid and falloff editor accept pointer focus without adding inert Tab stops.
-Suzanne also accepts arrow-key orbiting and committed W/S zoom. The browser demo
-retains the same controls and all themes, while its native-filesystem picker is
+Suzanne also accepts arrow-key orbiting and committed W/S zoom. Wheel input
+routes to the grid or Suzanne beneath the pointer without requiring
+keyboard focus. Both viewports explicitly request `WidgetOptions::GRAB_SCROLL`;
+implementing a leaf's scroll handler alone does not opt it into wheel routing.
+Suzanne converts physical wheel pixels to camera distance: a 30-pixel wheel line
+matches one W/S half-unit step, and smaller trackpad deltas move proportionally.
+The browser demo retains the same controls and all themes, while its native-filesystem picker is
 inert. [WEB.md](WEB.md) documents IME and browser input limits; component/app writers
 own the synchronization obligations in [COM_AUTHORS.md](../contracts/COM_AUTHORS.md).

@@ -105,6 +105,11 @@ pub(super) fn column(ui: &Ui) -> Result<OwnedWidget<LinearAbi>, NcStatus> {
 pub(super) fn row(ui: &Ui) -> Result<OwnedWidget<LinearAbi>, NcStatus> {
     ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Content)
 }
+/// Scene viewports consume wheel input under the pointer, independently of keyboard focus.
+/// The explicit routing flag is required even when the leaf implements a Scroll handler.
+fn viewport(ui: &Ui, content: impl LeafContent) -> Result<OwnedWidget<IWidgetAbi>, NcStatus> {
+    ui.widgets().leaf(content, WidgetOptions::GRAB_SCROLL)
+}
 /// Shared construction helper abandons rejected candidates only after COM returns.
 pub(super) use neocogi_ui_samples::append;
 /// Static display text remains a real plugin-owned TextBlock with no application callback.
@@ -524,7 +529,7 @@ fn create(runtime: neocogi_com::Runtime) -> Result<(Host, State, std::sync::mpsc
     let (receiver, events) = neocogi_ui::events::channel();
     let mut events_tx = Inputs::new(receiver);
     let grid = Rc::new(RefCell::new(GridState::default()));
-    let grid_widget = ui.widgets().leaf(GridViewWidget::new(grid.clone()), WidgetOptions::NONE)?;
+    let grid_widget = viewport(ui, GridViewWidget::new(grid.clone()))?;
     let desktop = ui
         .window("X-Y Grid Surface", rect(0, 0, 1200, 800), into_widget(grid_widget)?)
         .map_err(|(status, _candidate)| status)?;
@@ -834,7 +839,7 @@ fn build_examples(host: &Host, state: &mut State, log_owner: OwnedWidget<ScrollA
         desktop,
         "Suzanne Window",
         rect(220, 220, 300, 300),
-        into_widget(ui.widgets().leaf(Suzanne::new(resources.as_com_ref())?, WidgetOptions::NONE)?)?,
+        into_widget(viewport(ui, Suzanne::new(resources.as_com_ref())?)?)?,
     )?;
     // All sample buttons share this parent destination; each widget retains it at creation.
     let sample_sink = events_tx.queue.clone();

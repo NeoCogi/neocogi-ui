@@ -59,6 +59,9 @@ use neocogi_render_gpu::{
 
 /// This client's explicit GPU byte stride, unrelated to Rust or generated record layout.
 const STRIDE: u32 = 32;
+/// Host wheel deltas are physical pixels; a standard 30-pixel wheel line matches
+/// one W/S half-unit zoom step, while smaller trackpad deltas retain proportional motion.
+const MESH_WHEEL_DISTANCE_SCALE: f32 = 0.5 / 30.;
 /// Portable column-major camera inputs owned entirely by this example's shader.
 const SHADER: &str = r#"
 struct Camera { pvm:mat4x4<f32>, view_model:mat4x4<f32> }
@@ -216,7 +219,8 @@ impl LeafContent for Suzanne {
                 self.view.update_drag(Vec2i::new(p.x.saturating_sub(delta.x), p.y.saturating_sub(delta.y)), p);
             }
             WidgetEvent::Scroll { delta, .. } => {
-                self.view.apply_scroll(if delta.y != 0 { delta.y } else { delta.x } as f32);
+                let pixels = if delta.y != 0 { delta.y } else { delta.x };
+                self.view.apply_scroll(pixels as f32 * MESH_WHEEL_DISTANCE_SCALE);
             }
             WidgetEvent::Key(key) if key.pressed => {
                 let delta = match key.key {
@@ -459,6 +463,58 @@ mod viewport_tests {
         assert_eq!(bytes.len(), 32);
         let values: Vec<_> = bytes.as_chunks::<4>().0.iter().map(|value| f32::from_le_bytes(*value)).collect();
         assert_eq!(values, [1., 2., 3., 4., 5., 6., 7., 8.]);
+    }
+
+    /// Pixel wheel input shares the checked camera path with W/S without jumping to a limit.
+    #[test]
+    fn wheel_zoom_preserves_direction_pixel_scale_and_camera_limits() {
+        let device = neocogi_render_gpu::testing::device(
+            nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query().unwrap(),
+        );
+        let domain = device.create_client(
+            RenderClientLimits::default(),
+            device.surface_target(RenderSurfaceKind::Framebuffer).unwrap(),
+            RenderClientPermissions::default(),
+        ).unwrap();
+        let resources = domain.resources().unwrap();
+        let asset = include_bytes!("../../../assets/suzanne.obj");
+        let bounds = MeshData::parse(asset).unwrap().bounds();
+        let mut widget = Suzanne::from_bytes(resources.as_com_ref(), asset).unwrap();
+        let rect = Rect { x: 0, y: 0, width: 300, height: 200 };
+        let mut state = crate::viewport_test_support::update_state(rect, rect);
+        state.focused = false;
+        for (delta, distance) in [
+            (Point { x: 0, y: -30 }, -0.5),
+            (Point { x: 0, y: 30 }, 0.5),
+            (Point { x: -30, y: 0 }, -0.5),
+            (Point { x: 30, y: 0 }, 0.5),
+            (Point { x: 30, y: -30 }, -0.5),
+            (Point { x: 0, y: 1 }, 1. / 60.),
+            (Point { x: 0, y: -1 }, -1. / 60.),
+            (Point { x: 0, y: 0 }, 0.),
+            (Point { x: 0, y: i32::MAX }, f32::MAX),
+            (Point { x: 0, y: i32::MIN }, -f32::MAX),
+        ] {
+            widget.view = mesh_view(bounds).unwrap();
+            widget.view.set_viewport(local_rect(rect));
+            let before = camera_bytes(&widget.view.pvm(), &widget.view.view_matrix());
+            let mut reference = mesh_view(bounds).unwrap();
+            reference.set_viewport(local_rect(rect));
+            reference.apply_scroll(distance);
+            widget.update(state, WidgetEvent::Scroll { position: Point { x: 150, y: 100 }, delta }, "").unwrap();
+            let actual = camera_bytes(&widget.view.pvm(), &widget.view.view_matrix());
+            assert_eq!(actual, camera_bytes(&reference.pvm(), &reference.view_matrix()), "delta={delta:?}");
+            assert_eq!(actual == before, distance == 0., "delta={delta:?}");
+            if distance == -0.5 || distance == 0.5 {
+                widget.view = mesh_view(bounds).unwrap();
+                widget.update(state, WidgetEvent::Text, if distance < 0. { "W" } else { "S" }).unwrap();
+                assert_eq!(actual, camera_bytes(&widget.view.pvm(), &widget.view.view_matrix()));
+            }
+            // Empty visible clients must never change navigation, even with captured input.
+            let hidden = crate::viewport_test_support::update_state(rect, Rect::default());
+            widget.update(hidden, WidgetEvent::Scroll { position: Point { x: 150, y: 100 }, delta }, "").unwrap();
+            assert_eq!(actual, camera_bytes(&widget.view.pvm(), &widget.view.view_matrix()));
+        }
     }
 
     /// Final paint uses a real scoped view and captures the late visible aspect as generic uniforms.
