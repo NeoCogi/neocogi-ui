@@ -1,0 +1,141 @@
+{
+  "optimized_all_final_runs": {
+    "runs": 4,
+    "frames_per_run": 15000,
+    "warmup_presentations": 1000,
+    "median_fps": 1595.481,
+    "fps_range": [
+      915.871,
+      1730.059
+    ],
+    "median_full_process_cpu_ms_per_frame": 0.5346893333333333,
+    "cpu_ms_range": [
+      0.5315806666666667,
+      0.540154
+    ]
+  },
+  "three_build_cohort": {
+    "week-old": {
+      "median_fps": 878.513,
+      "fps_range": [
+        876.736,
+        1455.419
+      ],
+      "median_full_process_cpu_ms_per_frame": 0.4806993333333333
+    },
+    "current": {
+      "median_fps": 681.767,
+      "fps_range": [
+        676.024,
+        719.68
+      ],
+      "median_full_process_cpu_ms_per_frame": 1.4634839999999998
+    },
+    "optimized": {
+      "median_fps": 1482.433,
+      "fps_range": [
+        915.871,
+        1730.059
+      ],
+      "median_full_process_cpu_ms_per_frame": 0.536276
+    }
+  },
+  "matched_profile_control": {
+    "baseline": {
+      "median_fps": 727.127,
+      "fps_range": [
+        727.127,
+        727.127
+      ],
+      "median_full_process_cpu_ms_per_frame": 1.3898013333333334
+    },
+    "optimized": {
+      "median_fps": 1708.529,
+      "fps_range": [
+        1708.529,
+        1708.529
+      ],
+      "median_full_process_cpu_ms_per_frame": 0.5315806666666667
+    }
+  },
+  "binary_sizes": {
+    "baseline": {
+      "neocogi-demo-full": 258928,
+      "libnc_gfx.so": 310728,
+      "libnc_platform.so": 262776,
+      "libnc_shader_compiler.so": 1227296,
+      "libnc_skin.so": 228688,
+      "libnc_ui.so": 262712,
+      "libnc_ui_nodes.so": 362016
+    },
+    "optimized": {
+      "neocogi-demo-full": 258384,
+      "libnc_gfx.so": 311640,
+      "libnc_platform.so": 265880,
+      "libnc_shader_compiler.so": 1227104,
+      "libnc_skin.so": 228688,
+      "libnc_ui.so": 262856,
+      "libnc_ui_nodes.so": 358960
+    },
+    "baseline_total": 2913144,
+    "optimized_total": 2913512,
+    "delta_bytes": 368,
+    "delta_percent": 0.012632399908827027
+  },
+  "validation": {
+    "math": {
+      "passed": 194,
+      "ignored": 0,
+      "result_groups": 5,
+      "log": "final-math-tests.log"
+    },
+    "ui_providers": {
+      "passed": 509,
+      "ignored": 2,
+      "result_groups": 10,
+      "log": "final-ui-providers.log"
+    },
+    "ui_public": {
+      "passed": 71,
+      "ignored": 1,
+      "result_groups": 17,
+      "log": "final-ui-public.log"
+    },
+    "gfx": {
+      "passed": 46,
+      "ignored": 0,
+      "result_groups": 2,
+      "log": "final-gfx.log"
+    },
+    "vulkan_renderer": {
+      "passed": 86,
+      "ignored": 0,
+      "result_groups": 1,
+      "log": "combined-vulkan-tests.log"
+    },
+    "ui_vulkan_integration": {
+      "passed": 1,
+      "ignored": 0,
+      "result_groups": 2,
+      "log": "final-ui-platform.log"
+    }
+  },
+  "math_lints": {
+    "baseline_diagnostics": 92,
+    "current_diagnostics": 92,
+    "identical_messages_and_primary_source_text": true
+  },
+  "deployed_assets_and_themes_identical": true,
+  "implementation": {
+    "branch": "perf/vulkan-frame-throughput",
+    "commits": {
+      "math": "16d9be02ca5661df28dca96bd7eeaabfd768d549",
+      "platform": "60387d9ea76de83fa14c08ebcc96bf5f32e4128d",
+      "ui-geometry": "11e573026daa06b8800407a3d0b3307e8d7c9ee7",
+      "gfx": "88eaecaac10c25cbd4cb5a7b99a6de72941eefba"
+    },
+    "ui_reference": "323a5322049d1689dcaca84cc9211152f7205474",
+    "published_platform_reference": "6f0c536d07bdc2c54632e24be5fc799c80ae0e3f",
+    "published_math_reference": "15fa84598d73538346d4de7425e299131e7516f2"
+  }
+}
