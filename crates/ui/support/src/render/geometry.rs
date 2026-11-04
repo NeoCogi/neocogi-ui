@@ -38,7 +38,7 @@ pub static UNCLIPPED_RECT: Recti = Recti {
 };
 use neocogi_com::{NcStatus, NC_E_INVALID_ARG, NC_E_OUT_OF_RANGE};
 use neocogi_ui::geometry::{self, WidePoint, WideScalar};
-use rs_math3d::{Color4b, RealVector, Recti, Vec2f, Vector, Vector3};
+use rs_math3d::{Color4b, RealVector, Recti, Scalar, Vec2f, Vector};
 use std::ops::Range;
 
 /// Final float vertex produced after checked fixed-point UI geometry calculations.
@@ -239,12 +239,12 @@ impl SolidGeometry {
                 let previous = (index + len - 1) % len;
                 let next = (index + 1) % len;
                 let [a, b, c] = [self.polygon_boundary[previous], self.polygon_boundary[index], self.polygon_boundary[next]];
-                if !is_convex_ccw(a, b, c)? {
+                let Some(candidate) = EarTriangle::new([a, b, c])? else {
                     continue;
-                }
+                };
                 let mut contains = false;
                 for (probe, &point) in self.polygon_boundary.iter().enumerate() {
-                    if probe != previous && probe != index && probe != next && point_in_triangle_ccw(point, a, b, c)? {
+                    if probe != previous && probe != index && probe != next && candidate.contains(point)? {
                         contains = true;
                         break;
                     }
@@ -381,10 +381,12 @@ fn same_point(a: WidePoint, b: WidePoint) -> bool {
     a.x == b.x && a.y == b.y
 }
 /// Adds working vectors with the library's checked arithmetic.
+#[inline(always)]
 fn add(a: WidePoint, b: WidePoint) -> Result<WidePoint, NcStatus> {
     WidePoint::checked_add_vv(&a, &b).map_err(geometry::status)
 }
 /// Subtracts before any narrowing or float conversion.
+#[inline(always)]
 fn sub(a: WidePoint, b: WidePoint) -> Result<WidePoint, NcStatus> {
     WidePoint::checked_sub_vv(&a, &b).map_err(geometry::status)
 }
@@ -399,21 +401,55 @@ fn fixed_triangle(points: [WidePoint; 3], color: Color4b, offset: WidePoint) -> 
         color,
     ))
 }
-/// Delegates orientation products to rs-math3d's checked vector kernel.
+/// Computes only the 2D determinant, with one exact accumulation and rounding.
+/// A 3D cross product also evaluates two unused zero components under min-size.
 fn cross2(a: WidePoint, b: WidePoint) -> Result<WideScalar, NcStatus> {
-    Vector3::checked_cross(&Vector3::new(a.x, a.y, WideScalar::ZERO), &Vector3::new(b.x, b.y, WideScalar::ZERO))
-        .map(|v| v.z)
-        .map_err(geometry::status)
+    <WideScalar as Scalar>::checked_sum_products(&[(a.x, b.y, false), (a.y, b.x, true)]).map_err(geometry::status)
 }
 /// Exact positive winding after duplicate/collinear cleanup.
 fn is_convex_ccw(a: WidePoint, b: WidePoint, c: WidePoint) -> Result<bool, NcStatus> {
     Ok(cross2(sub(b, a)?, sub(c, b)?)? > WideScalar::ZERO)
 }
-/// Includes a triangle's boundary using the same exact orientation owner.
-fn point_in_triangle_ccw(p: WidePoint, a: WidePoint, b: WidePoint, c: WidePoint) -> Result<bool, NcStatus> {
-    Ok(cross2(sub(b, a)?, sub(p, a)?)? >= WideScalar::ZERO
-        && cross2(sub(c, b)?, sub(p, b)?)? >= WideScalar::ZERO
-        && cross2(sub(a, c)?, sub(p, c)?)? >= WideScalar::ZERO)
+/// One positively wound ear candidate reuses exact edges across every boundary-point probe.
+struct EarTriangle {
+    /// Local fixed points remain authoritative; float vertices are never geometric predicates.
+    vertices: [WidePoint; 3],
+    /// Checked directed edges in the same order as vertices.
+    edges: [WidePoint; 3],
+    /// Closed component bounds cheaply reject probes that cannot lie in the triangle.
+    minimum: WidePoint,
+    /// Closed upper component bounds retain probes on an edge or vertex.
+    maximum: WidePoint,
+}
+impl EarTriangle {
+    /// Rejects nonconvex/degenerate corners before constructing the remaining reusable edge.
+    fn new(vertices: [WidePoint; 3]) -> Result<Option<Self>, NcStatus> {
+        let [a, b, c] = vertices;
+        let ab = sub(b, a)?;
+        let bc = sub(c, b)?;
+        if cross2(ab, bc)? <= WideScalar::ZERO {
+            return Ok(None);
+        }
+        Ok(Some(Self {
+            vertices,
+            edges: [ab, bc, sub(a, c)?],
+            minimum: WidePoint::new(a.x.min(b.x).min(c.x), a.y.min(b.y).min(c.y)),
+            maximum: WidePoint::new(a.x.max(b.x).max(c.x), a.y.max(b.y).max(c.y)),
+        }))
+    }
+
+    /// Includes the closed boundary and uses the shared checked determinant after coarse rejection.
+    fn contains(&self, point: WidePoint) -> Result<bool, NcStatus> {
+        if point.x < self.minimum.x || point.x > self.maximum.x || point.y < self.minimum.y || point.y > self.maximum.y {
+            return Ok(false);
+        }
+        for index in 0..3 {
+            if cross2(self.edges[index], sub(point, self.vertices[index])?)? < WideScalar::ZERO {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
 }
 
 #[cfg(test)]
@@ -423,6 +459,45 @@ mod tests {
 
     fn white() -> Color4b {
         color4b(255, 255, 255, 255)
+    }
+
+    /// Orientation retains exact cancellation, subpixel areas and checked overflow.
+    #[test]
+    fn determinant_preserves_cancellation_and_rejects_final_overflow() {
+        let largest = WideScalar::from_bits(i64::MAX);
+        let diagonal = WidePoint::new(largest, largest);
+        assert_eq!(cross2(diagonal, diagonal), Ok(WideScalar::ZERO));
+        let side = WideScalar::try_from_int(262_144).unwrap();
+        let zero = WideScalar::ZERO;
+        assert_eq!(
+            cross2(WidePoint::new(side, zero), WidePoint::new(zero, side)),
+            Ok(WideScalar::try_from_int(1_i64 << 36).unwrap())
+        );
+        assert_eq!(
+            cross2(
+                WidePoint::new(WideScalar::DELTA, zero),
+                WidePoint::new(zero, WideScalar::try_from_int(1).unwrap())
+            ),
+            Ok(WideScalar::DELTA)
+        );
+        assert_eq!(cross2(WidePoint::new(largest, zero), WidePoint::new(zero, largest)), Err(NC_E_OUT_OF_RANGE));
+    }
+
+    /// A coarse bound must preserve closed edges and still reject points outside the diagonal.
+    #[test]
+    fn ear_candidate_contains_closed_edges_and_large_origin_subpixels() {
+        let point = |x, y| geometry::wide_fractional_point(Vec2f::new(x, y)).unwrap();
+        for origin in [0., 131_000.] {
+            let triangle = EarTriangle::new([point(origin, origin), point(origin + 0.5, origin), point(origin, origin + 0.5)])
+                .unwrap()
+                .unwrap();
+            for (x, y) in [(0., 0.), (0.5, 0.), (0., 0.5), (0.25, 0.), (0.25, 0.25), (0.125, 0.125)] {
+                assert!(triangle.contains(point(origin + x, origin + y)).unwrap());
+            }
+            for (x, y) in [(-0.125, 0.), (0.625, 0.), (0., 0.625), (0.375, 0.375)] {
+                assert!(!triangle.contains(point(origin + x, origin + y)).unwrap());
+            }
+        }
     }
 
     fn test_polygon(points: &[Vec2f]) -> Vec<SolidTriangle> {

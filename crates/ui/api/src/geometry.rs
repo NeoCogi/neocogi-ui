@@ -42,6 +42,7 @@ pub fn integer(value: i32) -> Result<Scalar, NcStatus> {
 }
 
 /// Converts a fractional input after checking its original value, before quantization.
+#[inline(always)]
 pub fn fractional(value: f32) -> Result<Scalar, NcStatus> {
     if !value.is_finite() {
         return Err(NC_E_INVALID_ARG);
@@ -80,6 +81,7 @@ pub fn integer_point(value: Vec2i) -> Result<Point, NcStatus> {
 }
 
 /// Admits an explicitly fractional UI position, rounding once at this boundary.
+#[inline(always)]
 pub fn fractional_point(value: Vec2f) -> Result<Point, NcStatus> {
     Ok(Point::new(fractional(value.x)?, fractional(value.y)?))
 }
@@ -91,6 +93,7 @@ pub const fn wide_integer(value: i32) -> WideScalar {
 }
 
 /// Admits and widens an explicitly fractional position for checked geometry calculations.
+#[inline(always)]
 pub fn wide_fractional_point(value: Vec2f) -> Result<WidePoint, NcStatus> {
     fractional_point(value)?.try_cast().ok_or(NC_E_OUT_OF_RANGE)
 }
