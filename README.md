@@ -15,6 +15,23 @@ The coordinated UI release is `0.1.0-alpha.1`. See the
 See [UI and COM history](docs/project/HISTORY.md) for the matching dependency
 revisions throughout the commit history.
 
+## Themes
+
+The full demo with the default skin and the bundled Windows 3.11 and classic
+Mac OS 9 themes. Select a theme from **View → Theme** in the Demo Window.
+
+### Default
+
+![Full demo with the default dark skin](docs/screenshots/default.png)
+
+### Windows 3.11
+
+![Full demo with the Windows 3.11 for Workgroups theme](docs/screenshots/windows-3.11.png)
+
+### Mac OS 9
+
+![Full demo with the classic Mac OS 9 Platinum theme](docs/screenshots/mac-os-9.png)
+
 ## Workspace layout
 
 | Directory | Purpose |
