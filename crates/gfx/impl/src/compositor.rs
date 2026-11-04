@@ -12,8 +12,8 @@ use neocogi_com::{
 use neocogi_gfx_support::abi::*;
 use neocogi_gfx_support::{AssetTables, AsciiGlyphIndex, MAX_UI_BATCHES, MAX_UI_VERTICES};
 use neocogi_render_core::abi::{
-    IRenderViewBlockAbi, IRenderStream, IRenderStreamAbi, IRenderStreamVtblFor, IRgbaImageAbi, IRendererAbi, ITextureAbi, RenderInfo,
-    IRenderHostAbi, IRenderSurfaceAbi, IRenderOutcomeAbi, RenderError, operation_result,
+    IRenderViewBlockAbi, IRenderStream, IRenderStreamAbi, IRenderStreamVtblFor, IRgbaImageAbi, IRendererAbi, ITextureAbi, RenderInfo, IRenderHostAbi,
+    IRenderSurfaceAbi, IRenderOutcomeAbi, RenderError, operation_result,
 };
 use std::{
     cell::{Cell, RefCell},
@@ -29,6 +29,8 @@ struct Resources {
     tables: AssetTables,
     /// Bounded exact ASCII slots, replaced atomically with their immutable font revision.
     glyph_ascii: Vec<AsciiGlyphIndex>,
+    /// Exact normalized source edges indexed by the same sorted immutable glyph slots.
+    glyph_uvs: Vec<[f32; 4]>,
     /// Cached authenticated white tile used by solid triangles and flat patch cells.
     white: Rect,
     /// Narrow image projection supplied to the renderer for its already prepared atlas.
@@ -54,10 +56,24 @@ impl Resources {
         // per installed immutable revision instead of scanning icon names for every solid shape.
         let white = tables.white_rect();
         let glyph_ascii = AsciiGlyphIndex::build(&tables)?;
+        // Atlas validation already admitted every glyph rectangle. Normalize once per revision,
+        // using the original divisions even for non-power-of-two images; render-time lookup
+        // shares the sorted glyph index and cannot pair coordinates with a different revision.
+        let mut glyph_uvs = Vec::new();
+        glyph_uvs.try_reserve_exact(tables.glyphs.len()).map_err(|_| NC_E_OUT_OF_MEMORY)?;
+        for glyph in tables.glyphs.iter() {
+            glyph_uvs.push([
+                glyph.rect.x as f32 / tables.size.width as f32,
+                glyph.rect.y as f32 / tables.size.height as f32,
+                (i64::from(glyph.rect.x) + i64::from(glyph.rect.width)) as f32 / tables.size.width as f32,
+                (i64::from(glyph.rect.y) + i64::from(glyph.rect.height)) as f32 / tables.size.height as f32,
+            ]);
+        }
         Ok(Self {
             catalog: source.catalog()?,
             tables,
             glyph_ascii,
+            glyph_uvs,
             white,
             image: source.image()?,
         })
@@ -435,7 +451,7 @@ impl GfxCompositorObject {
         ) else {
             return Ok(None);
         };
-        Ok(Some([vertices[0], vertices[1], vertices[2], vertices[0], vertices[2], vertices[3]]))
+        Ok(Some(triangulate_quad(vertices)))
     }
 
     /// Appends one text/icon rectangle within the caller's already resolved viewport intersection.
@@ -470,12 +486,12 @@ impl GfxCompositorObject {
         self.append_atlas(&vertices[..vertex_count])
     }
 
-    /// Finds one glyph in the sorted private partition, falling back to underscore when absent.
-    fn glyph(&self, font_slot: usize, font: AssetFont, scalar: u32) -> Result<AssetGlyph, NcStatus> {
+    /// Resolves the shared metadata/UV slot, falling back to underscore when absent.
+    fn glyph(&self, font_slot: usize, font: AssetFont, scalar: u32) -> Result<usize, NcStatus> {
         if scalar < 128 {
             let index = &self.resources.glyph_ascii[font_slot];
             let slot = index.get(scalar).or_else(|| index.get(u32::from('_'))).ok_or(NC_E_INVALID_ARG)?;
-            return Ok(self.resources.tables.glyphs[slot]);
+            return Ok(slot);
         }
         let end = font.glyphs.first.checked_add(font.glyphs.count).ok_or(NC_E_INVALID_ARG)?;
         let glyphs = self
@@ -488,13 +504,17 @@ impl GfxCompositorObject {
             .binary_search_by_key(&scalar, |glyph| glyph.scalar)
             .or_else(|_| glyphs.binary_search_by_key(&u32::from('_'), |glyph| glyph.scalar))
             .map_err(|_| NC_E_INVALID_ARG)?;
-        Ok(glyphs[index])
+        Ok(font.glyphs.first as usize + index)
     }
 }
 
 impl GfxCompositor for GfxCompositorObject {
     /// Complete construction/upload before replacing the old private GPU session.
-    fn bind_render_host_result(&mut self, host: ComRef<'_, IRenderHostAbi>, surface: ComRef<'_, IRenderSurfaceAbi>) -> Result<ComPtr<IRenderOutcomeAbi>, NcStatus> {
+    fn bind_render_host_result(
+        &mut self,
+        host: ComRef<'_, IRenderHostAbi>,
+        surface: ComRef<'_, IRenderSurfaceAbi>,
+    ) -> Result<ComPtr<IRenderOutcomeAbi>, NcStatus> {
         let result = (|| -> Result<(), RenderError> {
             if self.frame.is_some() {
                 return Err(NC_E_BUSY.into());
@@ -644,7 +664,8 @@ impl GfxCompositor for GfxCompositorObject {
                 baseline_y += i128::from(font.line_size);
                 continue;
             }
-            let glyph = self.glyph(font_slot, font, u32::from(character))?;
+            let slot = self.glyph(font_slot, font, u32::from(character))?;
+            let glyph = self.resources.tables.glyphs[slot];
             let destination = Rect {
                 x: clamp_i128(i128::from(origin.x) + pen_x + i128::from(glyph.offset_x)),
                 y: clamp_i128(i128::from(origin.y) + baseline_y - i128::from(glyph.offset_y) - i128::from(glyph.rect.height)),
@@ -657,7 +678,14 @@ impl GfxCompositor for GfxCompositorObject {
                 && glyph.rect.height > 0
                 && let Some(clip) = clip?
             {
-                self.append_atlas_rect(clip, destination, glyph.rect, rgba)?;
+                // Installed metadata already validates this source. Cached endpoints preserve
+                // exact UV bits while removing four divisions and repeated atlas checks per glyph.
+                let [u0, v0, u1, v1] = self.resources.glyph_uvs[slot];
+                if rgba.to_le_bytes()[3] != 0
+                    && let Some(vertices) = clipped_quad(destination, u0, v0, u1, v1, rgba, clip)
+                {
+                    self.append_atlas(&triangulate_quad(vertices))?;
+                }
             }
             pen_x += i128::from(glyph.advance_x);
         }
@@ -888,6 +916,11 @@ fn clipped_quad(destination: Rect, u0: f32, v0: f32, u1: f32, v1: f32, rgba: u32
             rgba,
         },
     ])
+}
+
+/// Preserves the common clockwise quad winding as two complete shader triangles.
+fn triangulate_quad(vertices: [RenderVertex; 4]) -> [RenderVertex; 6] {
+    [vertices[0], vertices[1], vertices[2], vertices[0], vertices[2], vertices[3]]
 }
 
 /// Saturates wide text arithmetic only at the renderer-facing coordinate boundary.

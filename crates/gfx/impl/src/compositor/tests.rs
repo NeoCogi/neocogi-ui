@@ -695,13 +695,23 @@ fn compositor_intake_limits_apply_before_expansion_and_reset_with_frames() {
 fn glyph_acceleration_preserves_unicode_fallback_and_revision_publication() {
     let original = test_bundle();
     let mut fixture = data(&original);
+    // Nonbinary atlas dimensions catch reciprocal approximations and mismatched cached UV slots.
+    fixture.tables.size = Size { width: 7, height: 5 };
+    fixture.pixels = vec![255; 7 * 5 * 4].into();
     for glyph in fixture.tables.glyphs.to_mut() {
         match char::from_u32(glyph.scalar).unwrap() {
-            'A' => glyph.advance_x = 3,
-            '_' => glyph.advance_x = 5,
+            'A' => {
+                glyph.advance_x = 3;
+                glyph.rect = Rect { x: 0, y: 0, width: 3, height: 2 };
+            }
+            '_' => {
+                glyph.advance_x = 5;
+                glyph.rect = Rect { x: 1, y: 1, width: 2, height: 3 };
+            }
             'B' => {
                 glyph.scalar = u32::from('Ω');
                 glyph.advance_x = 7;
+                glyph.rect = Rect { x: 3, y: 0, width: 4, height: 4 };
             }
             _ => {}
         }
@@ -710,7 +720,12 @@ fn glyph_acceleration_preserves_unicode_fallback_and_revision_publication() {
     fixture.tables.glyphs.to_mut().reverse();
     let source = fixture.clone().into_bundle().unwrap();
     let mut compositor = GfxCompositorObject::create(source.as_com_ref()).unwrap();
-    compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
+    compositor
+        .bind_render_host(
+            neocogi_gfx_support::testing::host().as_com_ref(),
+            neocogi_gfx_support::testing::framebuffer().as_com_ref(),
+        )
+        .unwrap();
     let capture = std::rc::Rc::new(RenderCapture::default());
     let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { capture: capture.clone() }).query().unwrap();
     let size = Size { width: 128, height: 32 };
@@ -719,8 +734,16 @@ fn glyph_acceleration_preserves_unicode_fallback_and_revision_publication() {
         if replacement {
             for glyph in fixture.tables.glyphs.to_mut() {
                 match char::from_u32(glyph.scalar).unwrap() {
-                    'A' => glyph.advance_x = 11,
-                    'Ω' => glyph.advance_x = 17,
+                    'A' => {
+                        glyph.advance_x = 11;
+                        glyph.rect.x = 3;
+                        glyph.rect.y = 1;
+                    }
+                    'Ω' => {
+                        glyph.advance_x = 17;
+                        glyph.rect.x = 2;
+                        glyph.rect.y = 1;
+                    }
                     _ => {}
                 }
             }
@@ -736,6 +759,16 @@ fn glyph_acceleration_preserves_unicode_fallback_and_revision_publication() {
         assert_eq!(vertices.len(), 24);
         let positions = vertices.as_chunks::<6>().0.iter().map(|quad| quad[0].x).collect::<Vec<_>>();
         assert_eq!(positions, expected, "both missing characters use the underscore advance");
+        for (quad, scalar) in vertices.as_chunks::<6>().0.iter().zip(['A', '_', 'Ω', '_']) {
+            let rect = fixture.tables.glyphs.iter().find(|glyph| glyph.scalar == u32::from(scalar)).unwrap().rect;
+            let expected = [
+                rect.x as f32 / 7.,
+                rect.y as f32 / 5.,
+                (rect.x + rect.width) as f32 / 7.,
+                (rect.y + rect.height) as f32 / 5.,
+            ];
+            assert_eq!([quad[0].u, quad[0].v, quad[2].u, quad[2].v].map(f32::to_bits), expected.map(f32::to_bits));
+        }
     }
 }
 

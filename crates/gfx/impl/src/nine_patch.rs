@@ -39,21 +39,38 @@ pub(super) struct ExpandedPatch {
 impl ExpandedPatch {
     /// Consumes the fixed grid and yields only cells that can contribute atlas pixels.
     pub(super) fn visible_cells(self) -> impl Iterator<Item = AtlasCell> {
-        // Keep each diagnostic immediately after its image cell in painter order. Sampling the
-        // white tile adds pink with source-over blending even on black artwork; tint modulation
-        // alone could not do that. Empty/hidden cells remain absent and no allocation is needed.
-        self.cells.into_iter().flatten().flat_map(move |cell| {
-            [
-                Some(cell),
-                self.diagnostic_white.map(|source| AtlasCell {
-                    destination: cell.destination,
-                    source,
-                    rgba: SHRUNK_SOURCE_OVERLAY_RGBA,
-                }),
-            ]
-            .into_iter()
-            .flatten()
-        })
+        VisibleCells {
+            cells: self.cells.into_iter(),
+            diagnostic_white: self.diagnostic_white,
+            pending_overlay: None,
+        }
+    }
+}
+
+/// One grid traversal yields each image before its optional diagnostic without nested flatteners.
+struct VisibleCells {
+    /// Only occupied slots can produce an image contribution.
+    cells: std::array::IntoIter<Option<AtlasCell>, PATCH_CELL_COUNT>,
+    /// A source-shrink diagnostic samples the authenticated white tile with source-over pink.
+    diagnostic_white: Option<Rect>,
+    /// Taken before advancing the grid, preserving the preceding image's painter order.
+    pending_overlay: Option<AtlasCell>,
+}
+impl Iterator for VisibleCells {
+    type Item = AtlasCell;
+
+    /// Ends permanently after the last occupied cell and its optional overlay have been consumed.
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(overlay) = self.pending_overlay.take() {
+            return Some(overlay);
+        }
+        let cell = self.cells.find_map(core::convert::identity)?;
+        self.pending_overlay = self.diagnostic_white.map(|source| AtlasCell {
+            destination: cell.destination,
+            source,
+            rgba: SHRUNK_SOURCE_OVERLAY_RGBA,
+        });
+        Some(cell)
     }
 }
 

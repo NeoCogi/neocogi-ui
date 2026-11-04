@@ -234,51 +234,10 @@ impl Graphics {
 
     /// Triangle-aligned shared buffers avoid one native allocation per UI operation or panel.
     fn geometry(&self, vertices: &[RenderVertex], batches: &[Batch]) -> Result<Vec<ComBox<IGpuBufferAbi>>, NcStatus> {
-        let total = batches.iter().try_fold(0usize, |total, batch| {
-            total
-                .checked_add(match batch {
-                    Batch::View(_) => 0,
-                    Batch::Atlas { count, .. } => *count as usize,
-                    Batch::Texture { .. } => 6,
-                })
-                .ok_or(NC_E_OUT_OF_RANGE)
-        })?;
+        let chunks = pack_geometry(vertices, batches, CHUNK_VERTICES)?;
         let mut output = Vec::new();
-        output.try_reserve_exact(total.div_ceil(CHUNK_VERTICES)).map_err(|_| NC_E_OUT_OF_MEMORY)?;
-        let mut bytes = Vec::new();
-        bytes.try_reserve_exact(total.min(CHUNK_VERTICES) * STRIDE).map_err(|_| NC_E_OUT_OF_MEMORY)?;
-        for batch in batches {
-            let mut append = |vertex: RenderVertex| -> Result<(), NcStatus> {
-                for value in [vertex.x, vertex.y, vertex.u, vertex.v] {
-                    bytes.extend_from_slice(&value.to_le_bytes());
-                }
-                bytes.extend_from_slice(&vertex.rgba.to_le_bytes());
-                if bytes.len() == CHUNK_VERTICES * STRIDE {
-                    output.push(self.buffer(std::mem::take(&mut bytes))?);
-                    let remaining = total.saturating_sub(output.len() * CHUNK_VERTICES);
-                    bytes
-                        .try_reserve_exact(remaining.min(CHUNK_VERTICES) * STRIDE)
-                        .map_err(|_| NC_E_OUT_OF_MEMORY)?;
-                }
-                Ok(())
-            };
-            match batch {
-                Batch::View(_) => {}
-                Batch::Atlas { first, count } => {
-                    let range = *first as usize..(*first as usize).checked_add(*count as usize).ok_or(NC_E_OUT_OF_RANGE)?;
-                    for vertex in vertices.get(range).ok_or(NC_E_INVALID_ARG)? {
-                        append(*vertex)?;
-                    }
-                }
-                Batch::Texture { first, .. } => {
-                    let quad = vertices.get(*first as usize..*first as usize + 4).ok_or(NC_E_INVALID_ARG)?;
-                    for index in [0, 1, 2, 0, 2, 3] {
-                        append(quad[index])?;
-                    }
-                }
-            }
-        }
-        if !bytes.is_empty() {
+        output.try_reserve_exact(chunks.len()).map_err(|_| NC_E_OUT_OF_MEMORY)?;
+        for bytes in chunks {
             output.push(self.buffer(bytes)?);
         }
         Ok(output)
@@ -293,6 +252,82 @@ impl Graphics {
         self.resources
             .create_buffer(desc, neocogi_render_core::source::supplied(Bytes::source(bytes).as_com_ref())?.borrow()?)
     }
+}
+
+/// Packs complete triangle-aligned chunks before publishing any resource. Source batches append
+/// slices into pre-sized rows, removing a function call and vector growth bookkeeping per vertex.
+/// Each byte remains explicitly encoded; flattening transfers the same owned row allocation.
+fn pack_geometry(vertices: &[RenderVertex], batches: &[Batch], chunk_vertices: usize) -> Result<Vec<Vec<u8>>, NcStatus> {
+    if chunk_vertices == 0 || !chunk_vertices.is_multiple_of(3) {
+        return Err(NC_E_INVALID_ARG);
+    }
+    let total = batches.iter().try_fold(0usize, |total, batch| {
+        total
+            .checked_add(match batch {
+                Batch::View(_) => 0,
+                Batch::Atlas { count, .. } => *count as usize,
+                Batch::Texture { .. } => 6,
+            })
+            .ok_or(NC_E_OUT_OF_RANGE)
+    })?;
+    let mut chunks = Vec::new();
+    chunks.try_reserve_exact(total.div_ceil(chunk_vertices)).map_err(|_| NC_E_OUT_OF_MEMORY)?;
+    let mut bytes: Vec<[u8; STRIDE]> = Vec::new();
+    let size = total.min(chunk_vertices);
+    bytes.try_reserve_exact(size).map_err(|_| NC_E_OUT_OF_MEMORY)?;
+    bytes.resize(size, [0; STRIDE]);
+    let mut cursor = 0;
+    let mut remaining = total;
+    for batch in batches {
+        let mut append = |mut source: &[RenderVertex]| -> Result<(), NcStatus> {
+            while !source.is_empty() {
+                let count = source.len().min(bytes.len() - cursor);
+                let (prefix, tail) = source.split_at(count);
+                for (destination, vertex) in bytes[cursor..cursor + count].iter_mut().zip(prefix) {
+                    *destination = encode_vertex(*vertex);
+                }
+                cursor += count;
+                source = tail;
+                if cursor == bytes.len() {
+                    remaining -= bytes.len();
+                    chunks.push(std::mem::take(&mut bytes).into_flattened());
+                    let size = remaining.min(chunk_vertices);
+                    bytes.try_reserve_exact(size).map_err(|_| NC_E_OUT_OF_MEMORY)?;
+                    bytes.resize(size, [0; STRIDE]);
+                    cursor = 0;
+                }
+            }
+            Ok(())
+        };
+        match batch {
+            Batch::View(_) => {}
+            Batch::Atlas { first, count } => {
+                let range = *first as usize..(*first as usize).checked_add(*count as usize).ok_or(NC_E_OUT_OF_RANGE)?;
+                append(vertices.get(range).ok_or(NC_E_INVALID_ARG)?)?;
+            }
+            Batch::Texture { first, .. } => {
+                let first = *first as usize;
+                let end = first.checked_add(4).ok_or(NC_E_OUT_OF_RANGE)?;
+                let quad = vertices.get(first..end).ok_or(NC_E_INVALID_ARG)?;
+                append(&[quad[0], quad[1], quad[2], quad[0], quad[2], quad[3]])?;
+            }
+        }
+    }
+    debug_assert_eq!(remaining, 0);
+    debug_assert_eq!(cursor, 0);
+    Ok(chunks)
+}
+
+/// Encodes the portable vertex layout once, independently of native endianness and padding.
+fn encode_vertex(vertex: RenderVertex) -> [u8; STRIDE] {
+    let mut packed = [0u8; STRIDE];
+    // Fixed offsets let min-size combine these stores instead of emitting a five-step loop.
+    packed[0..4].copy_from_slice(&vertex.x.to_le_bytes());
+    packed[4..8].copy_from_slice(&vertex.y.to_le_bytes());
+    packed[8..12].copy_from_slice(&vertex.u.to_le_bytes());
+    packed[12..16].copy_from_slice(&vertex.v.to_le_bytes());
+    packed[16..20].copy_from_slice(&vertex.rgba.to_le_bytes());
+    packed
 }
 
 /// One contiguous UI contribution; client blocks force sealing at their original painter position.
@@ -341,5 +376,82 @@ impl IGpuDataSource for ImageBytes {
             return Err(NC_E_INVALID_ARG);
         }
         output.extend_from_slice(bytes.as_slice())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[com_object(interfaces(ITexture))]
+    /// Retained capability is irrelevant to pure packing; no foreign texture method is needed.
+    struct UnusedTexture;
+    impl IRenderDriverBound for UnusedTexture {
+        fn driver_identity(&self) -> Result<ComPtr<IRenderDriverIdentityAbi>, NcStatus> {
+            Err(neocogi_com::NC_E_NOINTERFACE)
+        }
+    }
+    impl ITexture for UnusedTexture {
+        fn size(&self) -> Result<Size, NcStatus> {
+            Err(NC_E_INVALID_ARG)
+        }
+    }
+
+    /// Quad expansion and adjacent atlas ranges retain winding even at the smallest chunk size.
+    #[test]
+    fn bulk_geometry_expands_texture_quads_before_following_atlas_vertices() {
+        let texture = Rc::new(UnusedTexture::from_value(UnusedTexture).query::<ITextureAbi>().unwrap());
+        let vertices = (0..7).map(|index| RenderVertex { x: index as f32, ..Default::default() }).collect::<Vec<_>>();
+        let batches = [Batch::Texture { first: 0, texture }, Batch::Atlas { first: 4, count: 3 }];
+        let chunks = pack_geometry(&vertices, &batches, 3).unwrap();
+        assert_eq!(chunks.len(), 3);
+        let positions = chunks
+            .iter()
+            .flat_map(|chunk| chunk.as_chunks::<STRIDE>().0.iter())
+            .map(|vertex| f32::from_le_bytes(vertex[..4].try_into().unwrap()))
+            .collect::<Vec<_>>();
+        assert_eq!(positions, [0., 1., 2., 0., 2., 3., 4., 5., 6.]);
+    }
+
+    /// Bulk writes keep batch order and complete triangles across full and partial chunks.
+    #[test]
+    fn bulk_geometry_preserves_triangle_order_across_chunk_boundaries() {
+        let vertices = (0..21).map(|index| RenderVertex { x: index as f32, ..Default::default() }).collect::<Vec<_>>();
+        let batches = [
+            Batch::Atlas { first: 3, count: 9 },
+            Batch::Atlas { first: 0, count: 0 },
+            Batch::Atlas { first: 15, count: 6 },
+        ];
+        let chunks = pack_geometry(&vertices, &batches, 6).unwrap();
+        assert_eq!(chunks.iter().map(Vec::len).collect::<Vec<_>>(), [6 * STRIDE, 6 * STRIDE, 3 * STRIDE]);
+        let actual = chunks
+            .iter()
+            .flat_map(|chunk| chunk.as_chunks::<STRIDE>().0.iter())
+            .map(|vertex| f32::from_le_bytes(vertex[..4].try_into().unwrap()))
+            .collect::<Vec<_>>();
+        assert_eq!(actual, [3., 4., 5., 6., 7., 8., 9., 10., 11., 15., 16., 17., 18., 19., 20.]);
+        assert!(pack_geometry(&vertices, &[], 6).unwrap().is_empty());
+        assert_eq!(
+            pack_geometry(&vertices, &[Batch::Atlas { first: 20, count: 3 }], 6).unwrap_err(),
+            NC_E_INVALID_ARG
+        );
+    }
+
+    /// GPU byte order includes float sign bits and RGBA order independently of struct layout.
+    #[test]
+    fn packed_vertex_matches_portable_shader_layout() {
+        let vertex = RenderVertex {
+            x: 1.,
+            y: -2.5,
+            u: 0.5,
+            v: -0.,
+            rgba: 0x7856_3412,
+        };
+        assert_eq!(
+            encode_vertex(vertex),
+            [
+                0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x20, 0xc0, 0x00, 0x00, 0x00, 0x3f, 0x00, 0x00, 0x00, 0x80, 0x12, 0x34, 0x56, 0x78,
+            ]
+        );
     }
 }
