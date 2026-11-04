@@ -8,8 +8,7 @@ use neocogi_ui::events::ApplyOutcome;
 use neocogi_com::{com_object, ComPtr, NcCopyFromBufferOffset, NcStatus};
 use std::fmt;
 
-/// Validates assembly selections against actual statically linked factory descriptors.
-
+/// Owns browser animation callbacks and releases their platform session on stop or failure.
 #[cfg(target_arch = "wasm32")]
 mod browser;
 

@@ -93,6 +93,14 @@ After the web build installs the matching bindings tool, run `./scripts/test-bro
 and `./scripts/test-browser-input.sh full`. The full suite renders every compiled theme, exercises
 the photograph and typed application actions, and checks both successful and failed animation-loop
 teardown, including final application-state and canvas/textarea release.
+The full driver yields an event-loop task before each render so WebGL can retire the
+three-slot streamed-buffer ring. Only `RENDER_E_BUSY` retries, for at most 120 tasks;
+other failures return immediately. The fixture reads the last frame's pixels before the
+next animation boundary and verifies the normal/error loops reach their expected callback
+counts, so early rendering failures cannot masquerade as successful teardown.
+The normal loop retains the full application's client GPU domains until stopping;
+destroying those owners before rendering would deliberately invalidate its scene.
+
 The script builds the wasm library test export, starts a temporary localhost server, and checks its
 result in headless Chromium. Set `CHROME_BIN` to a compatible executable or
 `NEOCOGI_BROWSER_TEST_PORT` to change the default port 8118. Generated bindings and result HTML
@@ -103,6 +111,13 @@ An occupied port, early child exit or startup timeout fails with the server log;
 another listener's response cannot qualify the suite. Exit and handled termination
 signals reap the child and remove its private startup files. Separate simultaneous
 runs should use distinct ports and target roots to avoid sharing generated sites.
+
+The server holds a load-blocking image until a terminal `PASS` or `FAIL` mutation,
+with a 30-second deadline. Chromium then dumps the completed DOM using ordinary
+browser time. Virtual time is unsuitable here: it advances timers without reliably
+advancing real RAF callbacks or retiring GPU work. An unfinished fixture releases
+the barrier at the deadline and fails with its actual `RUNNING` result.
+
 The fixture covers DOM composition/paste, keyboard,
 wheel conversion, button chords, cancellation, and teardown. It stubs capture acquisition because
 synthetic pointer events cannot acquire native capture; trusted pointer/OS IME/mobile behavior
@@ -115,11 +130,13 @@ suites. The browser CI job runs both real suites under a custom target root with
 spaces, while the Pages job retains its deployment artifact path.
 
 `python3 -m unittest discover -s scripts -p test_browser_server.py` exercises the
-unchanged runner with real loopback servers, a fetching browser canary, and stubbed
+runner with real loopback servers, a fetching browser canary, and stubbed
 build tools. It checks both selected suites, an unrelated PASS listener, early
 exit, failed readiness publication, bounded timeout, termination and cleanup after
-a failing browser result. It needs loopback access and complements the actual
-WebAssembly/Chromium suites; it does not execute their rendering or DOM tests.
+a failing browser result. It also checks completion before/after the image request
+and the bounded failure of an unfinished fixture. It needs loopback access and
+complements the actual WebAssembly/Chromium suites; it does not execute their
+rendering or DOM tests.
 
 ## GitHub Pages
 

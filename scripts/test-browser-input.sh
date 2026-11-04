@@ -63,16 +63,59 @@ mkdir -p "$site_dir"
 "$wasm_bindgen" --target web --out-dir "$site_dir" --out-name input-test "$artifact"
 cp "$fixture" "$site_dir/index.html"
 python3 - "$site_dir" "$port" "$ready_file" > "$site_dir/server.log" 2>&1 <<'PY' &
-import functools
 import http.server
 from pathlib import Path
 import sys
+import threading
 
 site, port, ready = sys.argv[1:]
-handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=site)
+# Hold window.load until the asynchronous fixture reports a terminal result. Dumping
+# the DOM with virtual time can exhaust its budget before real RAF/GPU work retires.
+# A pending image delays load without blocking modules, timers or animation callbacks.
+index = Path(site) / 'index.html'
+with index.open('a') as page:
+    page.write('''
+<img hidden src="/__neocogi_wait" alt="">
+<script>
+(() => {
+  const result = document.getElementById('result');
+  const observer = new MutationObserver(complete);
+  function complete() {
+    if (!/^(PASS|FAIL)/.test(result.textContent)) return;
+    observer.disconnect();
+    fetch('/__neocogi_done', {method: 'POST'});
+  }
+  observer.observe(result, {childList: true, characterData: true, subtree: true});
+  complete();
+})();
+</script>
+''')
+completed = threading.Event()
+
+class Handler(http.server.SimpleHTTPRequestHandler):
+    """Serve the selected fixture and own its bounded asynchronous load barrier."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=site, **kwargs)
+
+    def do_GET(self):
+        if self.path != '/__neocogi_wait':
+            return super().do_GET()
+        # Timeout releases load too: an unfinished fixture then dumps RUNNING and fails.
+        completed.wait(timeout=30)
+        self.send_response(204)
+        self.end_headers()
+
+    def do_POST(self):
+        if self.path != '/__neocogi_done':
+            return self.send_error(404)
+        completed.set()
+        self.send_response(204)
+        self.end_headers()
+
 # Construction owns bind/listen. Only this child can publish readiness, after it
 # has acquired the selected endpoint; another server's response is not evidence.
-with http.server.ThreadingHTTPServer(('127.0.0.1', int(port)), handler) as server:
+with http.server.ThreadingHTTPServer(('127.0.0.1', int(port)), Handler) as server:
     Path(ready).write_text('ready\n')
     server.serve_forever()
 PY
@@ -90,7 +133,7 @@ fi
 # This isolated fixture serves only repository tests. Disabling the browser sandbox supports
 # container CI runners; the browser process exits after dumping the completed DOM. Piping stdout
 # also supports Snap Chromium, whose launcher does not preserve a regular-file output descriptor.
-"$browser" --headless --no-sandbox --enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader --virtual-time-budget=15000 \
+"$browser" --headless --no-sandbox --enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader --timeout=35000 \
   --force-device-scale-factor="${NEOCOGI_BROWSER_SCALE:-1}" --dump-dom "http://127.0.0.1:$port" | cat > "$site_dir/result.html"
 # Like the package builder, the browser runner depends only on standard shell text utilities.
 if ! grep -Fq '<pre id="result">PASS</pre>' "$site_dir/result.html"; then

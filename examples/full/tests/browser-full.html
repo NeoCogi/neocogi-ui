@@ -22,8 +22,13 @@ try {
   if (!startupFailed || !startupErrors.some(message => message.includes('Demo startup failed: NC_E_NOT_FOUND(-7)'))) {
     throw new Error('Original startup error was not reported to the browser console');
   }
-  test.full_demo_checks();
-  // The synchronous production checks just rendered the full application. Inspect its actual
+  const loopErrors = [];
+  console.error = (...arguments_) => {
+    loopErrors.push(arguments_.map(String).join(' '));
+    originalConsoleError(...arguments_);
+  };
+  await test.full_demo_checks();
+  // The final test task just rendered the full application. Inspect its actual
   // default framebuffer before returning to the browser, which may discard unpreserved WebGL
   // contents between animation turns. Successful COM calls alone do not prove a visible frame.
   const canvas = document.querySelector('canvas');
@@ -56,7 +61,7 @@ try {
     } else if (++attempts < 120) {
       requestAnimationFrame(complete);
     } else {
-      result.textContent = 'FAIL: normal/error animation loops did not release their application state';
+      result.textContent = `FAIL: unexpected animation-loop release: ${test.demo_loop_frames()}; ${loopErrors.join('; ')}`;
     }
   }
   requestAnimationFrame(complete);

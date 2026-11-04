@@ -35,6 +35,11 @@ rs-math3d.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen.workspace = true
+js-sys = "=0.3.104"
+wasm-bindgen-futures = "=0.4.77"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+pollster = "1"
 
 [dev-dependencies]
 neocogi-render-gpu = {workspace=true,features=["test-support"]}

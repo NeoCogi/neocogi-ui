@@ -858,6 +858,7 @@ dependencies = [
 name = "neocogi-demo-full"
 version = "0.1.0-alpha.2"
 dependencies = [
+ "js-sys",
  "neocogi-com",
  "neocogi-com-host",
  "neocogi-demo-assets",
@@ -867,8 +868,10 @@ dependencies = [
  "neocogi-shader-compiler",
  "neocogi-ui",
  "neocogi-ui-samples",
+ "pollster",
  "rs-math3d",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]

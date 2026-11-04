@@ -248,8 +248,32 @@ fn packaged_full_host_preserves_rejecting_operation() {
     }
 }
 
+/// Renders without exhausting the browser's finite streamed-buffer ring in one JavaScript task.
+/// Native calls remain synchronous; browsers retire GPU fences between event-loop tasks.
+async fn render_frame(host: &Host, size: Size) -> Result<(), HostError> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        host.ui.render(size, host.renderer.as_com_ref()).map_err(Into::into)
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        for attempt in 0..120 {
+            // Yield before rendering: the caller must inspect the final framebuffer before the
+            // browser can discard its unpreserved contents at the next animation boundary.
+            browser::next_task().await?;
+            match host.ui.render(size, host.renderer.as_com_ref()) {
+                Ok(()) => return Ok(()),
+                Err(error) if error.status == neocogi_render_core::abi::RENDER_E_BUSY && attempt < 119 => {},
+                Err(error) => return Err(error.into()),
+            }
+        }
+        unreachable!("the final attempt returns either the rendered frame or its original error")
+    }
+}
+
 /// Selects Win 3.11 through the real nested menu and verifies publication on the following frame.
-fn select_win311_from_menu(host: &Host, app: &TestApp<State, neocogi_ui::events::EventMessage>) -> Result<(), HostError> {
+async fn select_win311_from_menu(host: &Host, app: &TestApp<State, neocogi_ui::events::EventMessage>) -> Result<(), HostError> {
     let mut state = app.state();
     let size = host.window.size()?;
     let base = host.ui.assets()?;
@@ -300,7 +324,9 @@ fn select_win311_from_menu(host: &Host, app: &TestApp<State, neocogi_ui::events:
     state = app.state();
     assert_eq!(state.themes[1].1.mark()?, MenuMark::Radio { selected: true });
     assert_eq!(state.ui.assets()?.metrics()?, installed.metrics()?);
-    host.ui.render(size, host.renderer.as_com_ref())?;
+    drop(state);
+    render_frame(host, size).await?;
+    state = app.state();
     // The following frame publishes the candidate and settles its geometry with one update too.
     state.frame(host, size, 0.)?;
     drop(state);
@@ -310,7 +336,8 @@ fn select_win311_from_menu(host: &Host, app: &TestApp<State, neocogi_ui::events:
         state.ui.assets()?.metrics()?,
         Theme::ALL[1].load(crate::host_runtime(), base.as_com_ref())?.metrics()?
     );
-    host.ui.render(size, host.renderer.as_com_ref())?;
+    drop(state);
+    render_frame(host, size).await?;
     Ok(())
 }
 
@@ -359,7 +386,7 @@ fn construction_rejection_checks(ui: &Ui) -> Result<(), NcStatus> {
 }
 
 /// Native and WebGL exercise the same bounded Combo input and resize path.
-fn popup_scrolling_checks(host: &Host, size: Size) -> Result<(), RenderError> {
+async fn popup_scrolling_checks(host: &Host, size: Size) -> Result<(), HostError> {
     let column = host.ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     let mut children = column.handle();
     let window = host
@@ -400,7 +427,7 @@ fn popup_scrolling_checks(host: &Host, size: Size) -> Result<(), RenderError> {
     };
     key(KeyCode::End)?;
     host.ui.update(size)?;
-    host.ui.render(size, host.renderer.as_com_ref())?;
+    render_frame(host, size).await?;
     // Shrink a live popup, then refit after a drawable-layout change; the complete
     // candidate/model remains usable through the exact same generated interfaces.
     control.set_max_visible_items(3)?;
@@ -418,23 +445,23 @@ fn popup_scrolling_checks(host: &Host, size: Size) -> Result<(), RenderError> {
     host.ui.input(UiInput::Pointer(Point { x: 610, y: 450 }), "")?;
     host.ui.input(UiInput::Scroll(Point { x: 0, y: 60 }), "")?;
     host.ui.update(size)?;
-    host.ui.render(size, host.renderer.as_com_ref())?;
+    render_frame(host, size).await?;
     key(KeyCode::Escape)?;
     host.ui.update(size)?;
     assert_eq!(control.selection()?, ChoiceSelection::Selected(15), "scroll/cancel do not commit a candidate");
     window.close()?;
     host.ui.update(size)?;
-    host.ui.render(size, host.renderer.as_com_ref())
+    render_frame(host, size).await
 }
 
 /// Exercises application-level composition against real runtime, platform and decoder objects.
-fn exercise() -> Result<(Host, TestApp<State, neocogi_ui::events::EventMessage>), HostError> {
+async fn exercise() -> Result<(Host, TestApp<State, neocogi_ui::events::EventMessage>), HostError> {
     let (host, state, events) = create(crate::host_runtime())?;
     construction_rejection_checks(&host.ui)?;
     let app = TestApp::new(state, events, State::update);
     let size = host.window.size()?;
     let base = host.ui.assets()?;
-    select_win311_from_menu(&host, &app)?;
+    select_win311_from_menu(&host, &app).await?;
     let mut state = app.state();
     for theme in Theme::ALL.into_iter().cycle().take(2 * Theme::ALL.len()) {
         state.select_theme(theme)?;
@@ -445,8 +472,8 @@ fn exercise() -> Result<(Host, TestApp<State, neocogi_ui::events::EventMessage>)
         state.sample_scroll.scroll_to_end()?;
         drop(state);
         app.update(&host.ui, size)?;
+        render_frame(&host, size).await?;
         state = app.state();
-        host.ui.render(size, host.renderer.as_com_ref())?;
         assert_eq!(state.ui.assets()?.metrics()?, theme.load(crate::host_runtime(), base.as_com_ref())?.metrics()?);
         for (choice, item) in &state.themes {
             assert_eq!(item.mark()?, MenuMark::Radio { selected: *choice == theme });
@@ -457,7 +484,7 @@ fn exercise() -> Result<(Host, TestApp<State, neocogi_ui::events::EventMessage>)
             state.frame(&host, size, f64::from(frame) / 4.)?;
             drop(state);
             app.update(&host.ui, size)?;
-            host.ui.render(size, host.renderer.as_com_ref())?;
+            render_frame(&host, size).await?;
             state = app.state();
         }
         let original = state.demo.snapshot()?.rect;
@@ -466,7 +493,7 @@ fn exercise() -> Result<(Host, TestApp<State, neocogi_ui::events::EventMessage>)
             state.frame(&host, size, 2.)?;
             drop(state);
             app.update(&host.ui, size)?;
-            host.ui.render(size, host.renderer.as_com_ref())?;
+            render_frame(&host, size).await?;
             state = app.state();
         }
         state.demo.set_rect(original)?;
@@ -490,10 +517,8 @@ fn exercise() -> Result<(Host, TestApp<State, neocogi_ui::events::EventMessage>)
     assert_eq!(state.ui.assets()?.metrics()?.spacing, 2);
     drop(state);
     app.update(&host.ui, size)?;
-    state = app.state();
-    host.ui.render(size, host.renderer.as_com_ref())?;
-    drop(state);
-    popup_scrolling_checks(&host, size)?;
+    render_frame(&host, size).await?;
+    popup_scrolling_checks(&host, size).await?;
     Ok((host, app))
 }
 
@@ -502,7 +527,7 @@ fn exercise() -> Result<(Host, TestApp<State, neocogi_ui::events::EventMessage>)
 #[test]
 #[ignore = "run scripts/test-demo.sh to stage the independently built native plugins"]
 fn packaged_full_application_themes_images_actions_and_close() {
-    let (host, app) = exercise().unwrap();
+    let (host, app) = pollster::block_on(exercise()).unwrap();
     let retained = app.state().combo.clone();
     drop(host);
     assert_eq!(retained.selection(), Err(neocogi_com::NC_E_DROPPED));
@@ -515,20 +540,40 @@ mod browser {
     use std::cell::Cell;
     use wasm_bindgen::prelude::*;
 
+    #[wasm_bindgen(inline_js = "export function nextTask() { return new Promise(resolve => setTimeout(resolve, 0)); }")]
+    extern "C" {
+        /// Resolves in a new event-loop task, after previous GPU work can retire.
+        #[wasm_bindgen(js_name = nextTask)]
+        fn next_task_promise() -> js_sys::Promise;
+    }
+
+    /// Yields only the test driver; production rendering and resource ownership stay unchanged.
+    pub(super) async fn next_task() -> Result<(), HostError> {
+        wasm_bindgen_futures::JsFuture::from(next_task_promise())
+            .await
+            .map(|_| ())
+            .map_err(|error| HostError::Message(format!("browser task failed: {error:?}")))
+    }
+
+    /// A drop-time callback count shared with the harness without retaining application state.
+    type ReleasedFrames = Rc<Cell<Option<u32>>>;
+
     thread_local! {
         /// Independent observations do not keep the application, its session or its canvas alive.
-        static RELEASED: RefCell<Option<[Rc<Cell<bool>>; 2]>> = const { RefCell::new(None) };
+        static RELEASED: RefCell<Option<[ReleasedFrames; 2]>> = const { RefCell::new(None) };
     }
-    /// Concrete finite app checks the host's real RAF ownership paths after the full synchronous checks.
-    struct Stop {
+    /// Concrete finite app checks the host's real RAF ownership paths after the full demo checks.
+    struct Stop<Resources> {
+        /// Keeps client-owned scene resources alive until the rendering loop itself stops.
+        _resources: Resources,
         /// Counts ordinary callbacks before an explicit stop or deliberate frame error.
         frames: u32,
         /// Selects the error path independently of the normal stop path.
         fail: bool,
-        /// Test-owned flag observes final state destruction without retaining the state itself.
-        released: Rc<Cell<bool>>,
+        /// Test-owned observation records the final callback count without retaining the state.
+        released: ReleasedFrames,
     }
-    impl AppState for Stop {
+    impl<Resources: 'static> AppState for Stop<Resources> {
         /// The teardown fixture has no semantic messages.
         type Message = ();
         /// The successful run renders two frames; the failing run rejects its first callback.
@@ -537,21 +582,21 @@ mod browser {
             if self.fail { Err(UI_E_RENDER) } else { Ok(self.frames < 3) }
         }
     }
-    impl Drop for Stop {
-        /// Final release proves the RAF closure/session cycle was broken.
+    impl<Resources> Drop for Stop<Resources> {
+        /// Final release proves the RAF closure/session cycle was broken at the expected callback.
         fn drop(&mut self) {
-            self.released.set(true);
+            self.released.set(Some(self.frames));
         }
     }
     /// Browser harness starts the real full demo checks followed by both asynchronous teardown paths.
     #[wasm_bindgen]
-    pub fn full_demo_checks() -> Result<(), JsValue> {
-        let (host, app) = exercise().map_err(|error| JsValue::from_str(&error.to_string()))?;
-        drop(app);
-        let released = [Rc::new(Cell::new(false)), Rc::new(Cell::new(false))];
+    pub async fn full_demo_checks() -> Result<(), JsValue> {
+        let (host, app) = exercise().await.map_err(|error| JsValue::from_str(&error.to_string()))?;
+        let released = [Rc::new(Cell::new(None)), Rc::new(Cell::new(None))];
         RELEASED.with_borrow_mut(|stored| *stored = Some(released.clone()));
         host.run(
             Stop {
+                _resources: app,
                 frames: 0,
                 fail: false,
                 released: released[0].clone(),
@@ -568,6 +613,7 @@ mod browser {
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
         host.run(
             Stop {
+                _resources: (),
                 frames: 0,
                 fail: true,
                 released: released[1].clone(),
@@ -586,6 +632,16 @@ mod browser {
     /// The HTML harness also checks that both platform-owned canvases and input textareas disappeared.
     #[wasm_bindgen]
     pub fn demo_loops_released() -> bool {
-        RELEASED.with_borrow(|stored| stored.as_ref().is_some_and(|flags| flags.iter().all(|flag| flag.get())))
+        RELEASED.with_borrow(|stored| {
+            stored.as_ref().is_some_and(|counts| counts[0].get() == Some(3) && counts[1].get() == Some(1))
+        })
+    }
+    /// Diagnoses early render failures separately from a loop that still owns its state.
+    #[wasm_bindgen]
+    pub fn demo_loop_frames() -> String {
+        RELEASED.with_borrow(|stored| match stored {
+            Some(counts) => format!("normal={:?}, error={:?}", counts[0].get(), counts[1].get()),
+            None => "loops not started".to_owned(),
+        })
     }
 }

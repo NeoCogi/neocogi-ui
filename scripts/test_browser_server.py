@@ -1,4 +1,4 @@
-"""Qualify the unchanged browser runner's owned HTTP startup and cleanup.
+"""Qualify the browser runner's owned HTTP startup, async completion and cleanup.
 
 Cargo and wasm-bindgen are canaries; the server is real Python HTTP and the
 browser canary fetches its actual response. These tests require loopback access,
@@ -24,7 +24,7 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parent.parent
 CANARY = r'''
-import json, os, signal, sys, urllib.request
+import json, os, signal, sys, threading, time, urllib.request
 from pathlib import Path
 name = Path(sys.argv[0]).name
 if name == 'cargo':
@@ -33,7 +33,30 @@ elif name == 'wasm-bindgen':
     Path(sys.argv[sys.argv.index('--out-dir') + 1]).mkdir(parents=True, exist_ok=True)
 elif name == 'probe-browser':
     Path(os.environ['BROWSER_CALL']).write_text(sys.argv[-1])
-    print(urllib.request.urlopen(sys.argv[-1], timeout=5).read().decode())
+    base = sys.argv[-1]
+    page = urllib.request.urlopen(base, timeout=5).read().decode()
+    assert 'src="/__neocogi_wait"' in page, 'missing async load barrier'
+    mode = os.environ.get('BROWSER_COMPLETION', 'delayed')
+    def complete():
+        request = urllib.request.Request(base + '/__neocogi_done', method='POST')
+        assert urllib.request.urlopen(request, timeout=5).status == 204
+    if mode == 'early':
+        complete()
+        assert urllib.request.urlopen(base + '/__neocogi_wait', timeout=5).status == 204
+    elif mode == 'timeout':
+        assert urllib.request.urlopen(base + '/__neocogi_wait', timeout=35).status == 204
+    else:
+        results = []
+        def wait_for_completion():
+            results.append(urllib.request.urlopen(base + '/__neocogi_wait', timeout=5).status)
+        thread = threading.Thread(target=wait_for_completion)
+        thread.start()
+        time.sleep(0.1)
+        assert not results, 'load barrier opened before fixture completion'
+        complete()
+        thread.join(timeout=5)
+        assert results == [204], 'completion did not release the waiting browser'
+    print(page)
 elif name == 'python3':
     if len(sys.argv) == 5 and sys.argv[1] == '-':
         Path(os.environ['SERVER_CALL']).write_text(json.dumps({
@@ -86,6 +109,7 @@ class BrowserServerTests(unittest.TestCase):
             BROWSER_CALL=str(self.browser_call), SERVER_CALL=str(self.server_call),
         )
         self.environment.pop('BROWSER_SERVER_FAULT', None)
+        self.environment.pop('BROWSER_COMPLETION', None)
 
     def run_suite(self, suite: str, port: int) -> subprocess.CompletedProcess[str]:
         """Run the production script from outside its checkout, with a hard limit."""
@@ -93,7 +117,7 @@ class BrowserServerTests(unittest.TestCase):
         return subprocess.run(
             ['bash', str(self.workspace / 'scripts/test-browser-input.sh'), suite],
             cwd=self.base, env=self.environment, text=True, stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, timeout=20,
+            stderr=subprocess.STDOUT, timeout=40,
         )
 
     def assert_cleaned(self) -> None:
@@ -207,6 +231,25 @@ class BrowserServerTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertIn('<pre id="result">FAIL</pre>', result.stdout)
         self.assertTrue(self.browser_call.exists())
+        self.assert_cleaned()
+
+    def test_completion_before_image_request_opens_load_barrier(self) -> None:
+        self.environment['BROWSER_COMPLETION'] = 'early'
+        result = self.run_suite('full', self.free_port())
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assert_cleaned()
+
+    def test_unfinished_fixture_releases_load_after_bounded_timeout_and_fails(self) -> None:
+        self.environment['BROWSER_COMPLETION'] = 'timeout'
+        fixture = self.workspace / 'examples/full/tests/browser-full.html'
+        fixture.write_text('<pre id="result">RUNNING</pre>')
+        start = time.monotonic()
+        result = self.run_suite('full', self.free_port())
+        elapsed = time.monotonic() - start
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertGreaterEqual(elapsed, 29)
+        self.assertLess(elapsed, 38)
+        self.assertIn('<pre id="result">RUNNING</pre>', result.stdout)
         self.assert_cleaned()
 
 
