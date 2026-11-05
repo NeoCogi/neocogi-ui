@@ -1,13 +1,10 @@
-error[E0603]: struct `DisplayList` is private
- --> tests/ui/display_list_private.rs:3:20
+error[E0425]: cannot find type `DisplayList` in this scope
+ --> tests/ui/display_list_private.rs:9:19
   |
-3 | use nc_ui::render::DisplayList;
-  |                    ^^^^^^^^^^^ private struct
+9 |     let _: Option<DisplayList> = None;
+  |                   ^^^^^^^^^^^ not found in this scope
   |
-note: the struct `DisplayList` is defined here
- --> /cargo/deps/neocogi-ui-runtime-0.1.0-alpha.2/src/render.rs:8:15
-help: import `DisplayList` directly
+help: consider importing this struct
   |
-3 - use nc_ui::render::DisplayList;
-3 + use neocogi_ui_support::render::display_list::DisplayList;
+6 + use neocogi_ui_support::render::DisplayList;
   |
