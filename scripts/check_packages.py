@@ -3,8 +3,8 @@
 
 Packaging resolves unpublished members locally without compiling checkout source.
 All subsequent internal code comes exclusively from inspected, extracted archives.
-One target directory is shared sequentially; stale internal artifacts are removed
-before compilation because Cargo archives normalize source mtimes.
+Archive builds and their fixture children share one fresh external target directory,
+so generated Cargo workspaces cannot inherit the checkout's development configuration.
 """
 import argparse
 import hashlib
@@ -152,6 +152,29 @@ def archive_command(cargo, packages, flags, resolution, *, allow_dirty, publish_
     return command
 
 
+def validation_environment(outside, packages, locations, toolchain, *, offline):
+    """Own archive-only configuration and a fresh target outside the development checkout.
+
+    Trybuild creates child Cargo workspaces below CARGO_TARGET_DIR. Keeping that
+    directory in the checkout would let those children inherit .cargo/config.toml,
+    including build-std, even though their parent test ran against extracted sources.
+    Registry/Git caches may be shared; build policy and compiled outputs must not be.
+    """
+    if outside.resolve().is_relative_to(ROOT.resolve()):
+        raise ValueError("archive validation directory must be outside the checkout")
+    home = outside / "cargo-home"
+    home.mkdir()
+    original_home = Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo"))
+    for name in ["registry", "git"]:
+        if (original_home / name).exists():
+            (home / name).symlink_to(original_home / name, target_is_directory=True)
+    (home / "config.toml").write_text(patch_configuration(packages, locations))
+    environment = dict(os.environ, CARGO_HOME=str(home), CARGO_TARGET_DIR=str(outside / "target"), RUSTUP_TOOLCHAIN=toolchain)
+    if offline:
+        environment["CARGO_NET_OFFLINE"] = "true"
+    return environment
+
+
 def qualify(*, offline=False, allow_dirty=False, stable=None, output=None, publish_dry_run=False):
     """Build actual archives, inspect them and execute only extracted internal implementation code."""
     if offline and publish_dry_run:
@@ -166,7 +189,7 @@ def qualify(*, offline=False, allow_dirty=False, stable=None, output=None, publi
     cargo = ["cargo", "+" + toolchain]
     metadata = json.loads(run([*cargo, "metadata", "--locked", "--format-version=1", *flags], capture=True))
     packages = release_packages(metadata)
-    target = Path(metadata["target_directory"])
+    packaging_target = Path(metadata["target_directory"])
     with tempfile.TemporaryDirectory(prefix="neocogi-ui-release-") as temporary:
         outside = Path(temporary)
         resolution = outside / "packaging.toml"
@@ -177,7 +200,7 @@ def qualify(*, offline=False, allow_dirty=False, stable=None, output=None, publi
         run(command)
         # The pinned workspace publisher retains its upload candidates separately
         # from `cargo package` output; never inspect stale candidates from the other mode.
-        archive_directory = target / "package"
+        archive_directory = packaging_target / "package"
         if publish_dry_run: archive_directory /= "tmp-crate"
         locations = {}
         inventory = {}
@@ -198,20 +221,7 @@ def qualify(*, offline=False, allow_dirty=False, stable=None, output=None, publi
         manifest = "[workspace]\nresolver='3'\nmembers=" + json.dumps(members) + "\n" + patch_configuration(packages, locations)
         (outside / "Cargo.toml").write_text(manifest)
         shutil.copyfile(ROOT / "Cargo.lock", outside / "Cargo.lock")
-        # Cargo fixture children run in their own workspaces. A temporary Cargo
-        # home supplies the same archive-only patches to those children without
-        # editing their manifests or the caller's Cargo configuration/cache.
-        home = outside / "cargo-home"
-        home.mkdir()
-        original_home = Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo"))
-        for name in ["registry", "git"]:
-            if (original_home / name).exists(): (home / name).symlink_to(original_home / name, target_is_directory=True)
-        (home / "config.toml").write_text(patch_configuration(packages, locations))
-        environment = dict(os.environ, CARGO_HOME=str(home), CARGO_TARGET_DIR=str(target), RUSTUP_TOOLCHAIN=toolchain)
-        if offline: environment["CARGO_NET_OFFLINE"] = "true"
-        clean = [*cargo, "clean", *flags]
-        for name in sorted(packages): clean += ["-p", name]
-        run(clean)
+        environment = validation_environment(outside, packages, locations, toolchain, offline=offline)
         # These commands have no repository .cargo/config.toml, scripts, assets,
         # authored schemas or source paths outside the extracted release set.
         artifacts = run([*cargo, "build", "--workspace", "--lib", "--bins", "--all-features", "--message-format=json", *flags], cwd=outside, env=environment, capture=True)

@@ -94,6 +94,14 @@ regressions remain executable from the complete archived source set through this
 test preparation step. A plain `cargo test` against an individual normalized
 archive does not include the omitted peer links.
 
+Validation builds use one fresh target directory beneath the temporary extracted
+workspace, outside the checkout. Trybuild generates its own Cargo workspaces below
+that target directory; placing it in the checkout would make those children inherit
+the development `.cargo/config.toml`, including `build-std`. Registry and Git caches
+are shared through the temporary Cargo home, while its configuration contains only
+the archive source patches. The private target is removed with the temporary
+workspace after qualification, and the checkout's compiled outputs are untouched.
+
 Before the first upload, unpublished same-version peers are resolved with
 explicit temporary registry patches. Packaging uses checkout paths only to
 resolve metadata; no code is compiled there. Every internal implementation used
@@ -101,9 +109,9 @@ by subsequent compilation, tests and nested fixture consumers comes from an
 inspected archive. Temporary Cargo configuration is scoped to the run; the
 caller's global configuration is not modified. The production publication graph
 excludes cyclic test-only edges; the later
-archive-test phase restores them without requiring premature uploads. All Cargo
-commands share one target directory sequentially, and internal artifacts are
-invalidated before using normalized archive timestamps.
+archive-test phase restores them without requiring premature uploads. The fresh
+external target prevents normalized archive timestamps from reusing checkout
+implementation artifacts.
 
 On success the optional output directory contains the exact qualified archives
 and `SHA256SUMS`. Keep these with the logs as release evidence. The CI archive

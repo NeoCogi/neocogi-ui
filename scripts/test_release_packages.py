@@ -2,9 +2,12 @@
 import copy
 import io
 import json
+import os
 from pathlib import Path
+import subprocess
 import tarfile
 import tempfile
+import tomllib
 import unittest
 from unittest.mock import patch
 
@@ -81,6 +84,73 @@ class CommittedQualification(unittest.TestCase):
             prepare.assert_not_called()
 
 
+class ValidationIsolation(unittest.TestCase):
+    """Generated Cargo children must share archive sources without inheriting checkout policy."""
+
+    def test_private_target_and_archive_patches_preserve_the_callers_configuration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            original = base / "original-home"
+            original.mkdir()
+            for name in ("registry", "git"):
+                (original / name).mkdir()
+            config = original / "config.toml"
+            config.write_text('[build]\nrustflags=["--cfg", "caller_setting"]\n')
+            outside = base / "validation"
+            outside.mkdir()
+            locations = {"owner": outside / "crates/owner"}
+            with patch.dict(os.environ, {"CARGO_HOME": str(original)}):
+                environment = packages.validation_environment(outside, {"owner"}, locations, "fixture-nightly", offline=True)
+            home = Path(environment["CARGO_HOME"])
+            self.assertEqual(Path(environment["CARGO_TARGET_DIR"]), outside / "target")
+            self.assertEqual(environment["RUSTUP_TOOLCHAIN"], "fixture-nightly")
+            self.assertEqual(environment["CARGO_NET_OFFLINE"], "true")
+            for name in ("registry", "git"):
+                self.assertEqual((home / name).resolve(), original / name)
+            self.assertEqual(tomllib.loads((home / "config.toml").read_text()), {
+                "patch": {"crates-io": {"owner": {"path": str(locations["owner"])}}}})
+            self.assertEqual(config.read_text(), '[build]\nrustflags=["--cfg", "caller_setting"]\n')
+
+    def test_validation_inside_checkout_is_rejected_before_creating_configuration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with patch.object(packages, "ROOT", root):
+                for outside in (root, root / "target/generated"):
+                    with self.subTest(outside=outside), self.assertRaisesRegex(ValueError, "outside the checkout"):
+                        packages.validation_environment(outside, {}, {}, "fixture-nightly", offline=True)
+                    self.assertFalse((outside / "cargo-home").exists())
+
+    def test_real_child_cargo_configuration_is_isolated_from_checkout_ancestors(self):
+        toolchain = tomllib.loads((packages.ROOT / "rust-toolchain.toml").read_text())["toolchain"]["channel"]
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            checkout = base / "checkout"
+            (checkout / ".cargo").mkdir(parents=True)
+            (checkout / ".cargo/config.toml").write_text('[build]\nrustflags=["--cfg", "checkout_settings"]\n')
+            outside = base / "validation"
+            outside.mkdir()
+            with patch.object(packages, "ROOT", checkout):
+                environment = packages.validation_environment(outside, {}, {}, toolchain, offline=True)
+            # Let the actual ancestor configuration decide the canary, independent of caller flags.
+            for name in ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CARGO_BUILD_RUSTFLAGS"):
+                environment.pop(name, None)
+            for directory, isolated in ((checkout / "target/tests/trybuild/canary", False),
+                                        (Path(environment["CARGO_TARGET_DIR"]) / "tests/trybuild/canary", True)):
+                with self.subTest(isolated=isolated):
+                    (directory / "src").mkdir(parents=True)
+                    (directory / "Cargo.toml").write_text('[package]\nname="archive-config-canary"\nversion="0.0.0"\nedition="2021"\n[workspace]\n')
+                    source = '#![allow(unexpected_cfgs)]\n#[cfg(checkout_settings)]\ncompile_error!("checkout configuration leaked");\nfn main() {}\n'
+                    (directory / "src/main.rs").write_text(source)
+                    result = subprocess.run(["cargo", "+" + toolchain, "check", "--offline", "--quiet"],
+                                            cwd=directory, env=environment, text=True,
+                                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30)
+                    if isolated:
+                        self.assertEqual(result.returncode, 0, result.stdout)
+                    else:
+                        self.assertNotEqual(result.returncode, 0, result.stdout)
+                        self.assertIn("checkout configuration leaked", result.stdout)
+
+
 class ArchiveAdmission(unittest.TestCase):
     """Malformed archives are rejected through valid tar storage before extraction."""
     def inspect(self, *, dependency="", extra=None, schemas=31, omit_license=False):
@@ -152,7 +222,6 @@ class ArchivedTestLinks(unittest.TestCase):
                 "peer": {"version": "=" + packages.RELEASE, "features": ["test-support"], "default-features": False}}}
             sidecar.write_text(json.dumps(declaration))
             packages.restore_test_dependencies(directory, "owner", {"peer"})
-            import tomllib
             result = tomllib.loads(manifest.read_text())
             self.assertEqual(result["dependencies"], {"production": "1"})
             self.assertEqual(result["dev-dependencies"], declaration["dev-dependencies"])
