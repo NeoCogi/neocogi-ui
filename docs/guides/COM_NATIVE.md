@@ -112,6 +112,14 @@ RPATH. Generic Cargo artifact staging still copies selected provider libraries
 and assets beside the executable. Platform/system dependencies remain ordinary
 requirements of those providers.
 
+The demo host treats `RENDER_E_BUSY` during rendering as GPU backpressure. It keeps
+the prepared layout and retries rendering after native yielding or the next browser
+animation callback, without repeating application/update hooks or consuming the
+successful-frame limit. Raw input queues until the next preparation; close requests
+and drawable-size changes remain serviced while waiting. Resize or a vetoed close
+invalidates the prepared layout so the next update uses current geometry/state.
+Other rendering failures preserve their original operation/status and stop the loop.
+
 Host services and loaded provider code remain process/Wasm-instance-lived, so
 returned COM objects and browser callbacks can outlive main's invocation.
 See the [portable host/provider example](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/examples/com-plugin/README.md).
@@ -345,7 +353,9 @@ barrier-controlled concurrent capture/publication with actual applications and
 production macros. Use a new test output directory for each run.
 `scripts/test-native-layout.py --cache
 --run` checks actual Linux binaries, cached backend switches, deleted outputs and
-a renamed full application directory. The plugin regression also relocates its
+a renamed full application directory. Removing its published `libnc_platform.so`,
+UI/compiler DLLs or font must fail without a build-tree fallback.
+The plugin regression also relocates its
 test host and calls a separately built DLL without loader environment overrides.
 Cargo nests unit-test executables in compiler directories. The acceptance scripts
 use `scripts/run-native-test.py` as a Cargo runner to copy an already compiled

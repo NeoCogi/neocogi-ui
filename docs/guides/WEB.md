@@ -57,7 +57,8 @@ Automatic installation applies to the derived default tool path.
 `NEOCOGI_WEB_PROFILE=debug` enables a faster development build.
 The `frames` query parameter, such as `?frames=8`, renders a finite number of frames and then
 releases the session and host. Normal stop and asynchronous frame errors both break the RAF
-ownership cycle. A lost WebGL context requires recreating the window and its GPU resources;
+ownership cycle. GPU Busy reschedules the prepared frame without repeating application
+updates or consuming that limit. A lost WebGL context requires recreating the window and its GPU resources;
 there is no automatic restoration behind retained image or mesh identities. See the
 [package guide](COM_NATIVE.md#browser) for the shared native/browser lifecycle.
 

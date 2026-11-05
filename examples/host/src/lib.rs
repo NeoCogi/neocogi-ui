@@ -125,7 +125,8 @@ pub trait AppState: 'static {
     /// Runs after platform polling and before this frame's single UI update. Return false to stop.
     /// UI input handlers run afterward. Apply deferred publication through apply_pending_changes
     /// within the same update. The host serializes frame edits and message consumption through
-    /// ordinary mutable borrows.
+    /// ordinary mutable borrows. GPU backpressure retries the prepared frame without repeating
+    /// application/update hooks; queued input is delivered when the next frame can be prepared.
     fn frame(&mut self, _host: &Host, _size: Size, _seconds: f64) -> Result<bool, NcStatus> {
         Ok(true)
     }
@@ -229,6 +230,7 @@ impl Host {
             owner,
             remaining: frame_limit()?,
             suspended: false,
+            phase: FramePhase::Preparing,
         };
         #[cfg(target_arch = "wasm32")]
         {
@@ -241,6 +243,8 @@ impl Host {
                 match driver.frame(monotonic_seconds())? {
                     // Successful presentation applies the backend's own pacing policy.
                     FrameOutcome::Presented => {}
+                    // Let native completion advance without an artificial frame-rate cap.
+                    FrameOutcome::Backpressured => std::thread::yield_now(),
                     // No presentation takes place while suspended. Bound idle polling while
                     // retaining a short wakeup for resize, input, and close requests.
                     FrameOutcome::Suspended => std::thread::sleep(std::time::Duration::from_millis(16)),
@@ -339,10 +343,20 @@ impl<State: AppState> neocogi_ui::events::MessageProcessor for Application<State
 enum FrameOutcome {
     /// A drawable frame completed and the application remains active.
     Presented,
+    /// GPU storage is still in use; retry this prepared frame without spending its frame budget.
+    Backpressured,
     /// The window has no drawable area; input was polled but no frame budget was consumed.
     Suspended,
     /// Close, application state, or the rendered-frame limit ended the run.
     Stopped,
+}
+
+/// Preparation commits one layout; backpressure retries only its observational rendering.
+enum FramePhase {
+    /// Drain input and run application/layout hooks before attempting a new presentation.
+    Preparing,
+    /// Retain the prepared extent until presentation; resize or a vetoed close requires preparation.
+    Rendering(Size),
 }
 
 /// Concrete loop ownership is shared by the native iteration and browser scheduling adapter.
@@ -357,9 +371,28 @@ struct Driver<State: AppState> {
     remaining: Option<u32>,
     /// Whether the last observed drawable size was zero; cancellation is sent once per transition.
     suspended: bool,
+    /// Prevents repeated application updates and input delivery while GPU slots are occupied.
+    phase: FramePhase,
 }
 impl<State: AppState> Driver<State> {
-    /// Polls input, applies frame edits, then settles events and layout in one update before rendering.
+    /// Deliver queued observations outside platform calls, only between prepared frames.
+    fn deliver_inputs(&self) -> Result<(), HostError> {
+        let host = &self.host;
+        for observation in host.observations.try_iter() {
+            self.state
+                .try_borrow_mut()?
+                .processor
+                .state
+                .input(observation.event, &observation.text)
+                .map_err(|status| host.frame_error("application input observation", status))?;
+            host.ui
+                .input(observation.event, &observation.text)
+                .map_err(|status| host.frame_error("UI input intake", status))?;
+        }
+        Ok(())
+    }
+
+    /// Polls native events, then either prepares one layout or retries its pending presentation.
     fn frame(&mut self, seconds: f64) -> Result<FrameOutcome, HostError> {
         let host = &self.host;
         loop {
@@ -368,6 +401,11 @@ impl<State: AppState> Driver<State> {
                 .poll(host.input.as_com_ref())
                 .map_err(|status| host.frame_error("platform input polling", status))?;
             let size = host.window.size().map_err(|status| host.frame_error("window size query", status))?;
+            // A prepared layout cannot render at a different extent. Minimize/resize still
+            // progresses while waiting for the GPU, and the next update uses current geometry.
+            if matches!(self.phase, FramePhase::Rendering(prepared) if prepared != size) {
+                self.phase = FramePhase::Preparing;
+            }
             if size.width <= 0 || size.height <= 0 {
                 if !self.suspended {
                     self.suspended = true;
@@ -387,16 +425,8 @@ impl<State: AppState> Driver<State> {
                 for _ in host.observations.try_iter() {}
             } else {
                 self.suspended = false;
-                for observation in host.observations.try_iter() {
-                    self.state
-                        .try_borrow_mut()?
-                        .processor
-                        .state
-                        .input(observation.event, &observation.text)
-                        .map_err(|status| host.frame_error("application input observation", status))?;
-                    host.ui
-                        .input(observation.event, &observation.text)
-                        .map_err(|status| host.frame_error("UI input intake", status))?;
+                if matches!(self.phase, FramePhase::Preparing) {
+                    self.deliver_inputs()?;
                 }
             }
             match status {
@@ -413,6 +443,9 @@ impl<State: AppState> Driver<State> {
                     {
                         return Ok(FrameOutcome::Stopped);
                     }
+                    // A close prompt may have edited the UI; settle it before painting again.
+                    self.phase = FramePhase::Preparing;
+                    self.deliver_inputs()?;
                     break;
                 }
                 _ => return Err(HostError::Message("unknown platform polling result".to_owned())),
@@ -420,7 +453,15 @@ impl<State: AppState> Driver<State> {
         }
         let size = host.window.size().map_err(|status| host.frame_error("window size query", status))?;
         if size.width <= 0 || size.height <= 0 {
+            self.phase = FramePhase::Preparing;
             return Ok(FrameOutcome::Suspended);
+        }
+        if let FramePhase::Rendering(prepared) = self.phase {
+            if prepared == size {
+                return self.present(size);
+            }
+            self.phase = FramePhase::Preparing;
+            self.deliver_inputs()?;
         }
         // Apply frame edits before consuming the input just polled. Handlers can prepare work for
         // the next frame callback; this frame's direct edits and nested events settle in one update.
@@ -454,9 +495,19 @@ impl<State: AppState> Driver<State> {
         host.window
             .text_input(text_area)
             .map_err(|status| host.frame_error("native text input", status))?;
-        host.ui
-            .render(size, host.renderer.as_com_ref())
-            .map_err(|error| render_error("frame rendering", error))?;
+        self.present(size)
+    }
+
+    /// Rendering is retryable only for GPU Busy; success alone consumes a finite frame budget.
+    fn present(&mut self, size: Size) -> Result<FrameOutcome, HostError> {
+        match self.host.ui.render(size, self.host.renderer.as_com_ref()) {
+            Ok(()) => self.phase = FramePhase::Preparing,
+            Err(error) if error.status == neocogi_render_core::abi::RENDER_E_BUSY => {
+                self.phase = FramePhase::Rendering(size);
+                return Ok(FrameOutcome::Backpressured);
+            }
+            Err(error) => return Err(render_error("frame rendering", error)),
+        }
         if let Some(remaining) = self.remaining {
             self.remaining = Some(remaining - 1);
             return Ok(match remaining {

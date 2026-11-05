@@ -248,27 +248,135 @@ fn packaged_full_host_preserves_rejecting_operation() {
     }
 }
 
-/// Renders without exhausting the browser's finite streamed-buffer ring in one JavaScript task.
-/// Native calls remain synchronous; browsers retire GPU fences between event-loop tasks.
+/// Renders without overwriting occupied streamed-buffer slots. Native waits occur only on Busy;
+/// browsers also yield before each render so WebGL can retire fences between event-loop tasks.
 async fn render_frame(host: &Host, size: Size) -> Result<(), HostError> {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        host.ui.render(size, host.renderer.as_com_ref()).map_err(Into::into)
+    for attempt in 0..120 {
+        // Yield before rendering: the caller must inspect the final framebuffer before the
+        // browser can discard its unpreserved contents at the next animation boundary.
+        #[cfg(target_arch = "wasm32")]
+        browser::next_task().await?;
+        match host.ui.render(size, host.renderer.as_com_ref()) {
+            Ok(()) => return Ok(()),
+            Err(error) if error.status == neocogi_render_core::abi::RENDER_E_BUSY && attempt < 119 => {
+                #[cfg(not(target_arch = "wasm32"))]
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            Err(error) => return Err(error.into()),
+        }
     }
+    unreachable!("the final attempt returns either the rendered frame or its original error")
+}
 
-    #[cfg(target_arch = "wasm32")]
-    {
-        for attempt in 0..120 {
-            // Yield before rendering: the caller must inspect the final framebuffer before the
-            // browser can discard its unpreserved contents at the next animation boundary.
-            browser::next_task().await?;
-            match host.ui.render(size, host.renderer.as_com_ref()) {
-                Ok(()) => return Ok(()),
-                Err(error) if error.status == neocogi_render_core::abi::RENDER_E_BUSY && attempt < 119 => {},
-                Err(error) => return Err(error.into()),
+/// Real paint failures exercise host retries, hook ordering and the successful-presentation limit.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+#[ignore = "requires the packaged native plugin graph and a native GPU window"]
+fn packaged_full_host_retries_render_backpressure() {
+    const CHILD: &str = "NEOCOGI_TEST_RENDER_BACKPRESSURE";
+    if let Some(mode) = std::env::var_os(CHILD) {
+        /// Reject two real paint traversals before allowing rendering or returning a terminal error.
+        struct Probe {
+            /// The finite prefix forces retries regardless of actual GPU scheduling.
+            attempts: u32,
+            /// The terminal case proves non-Busy errors still leave the native loop.
+            fatal: bool,
+            /// Observations cross only the test-owned channel, not mutable application borrows.
+            observed: std::sync::mpsc::Sender<NcStatus>,
+        }
+        impl LeafContent for Probe {
+            /// Leave a positive paint target in the real window's content area.
+            fn measure(&self, _: LayoutLimits, _: ComRef<'_, ITextMetricsAbi>) -> Result<Size, NcStatus> {
+                Ok(Size { width: 80, height: 24 })
+            }
+            /// Native focus/input must not change the deliberately controlled paint sequence.
+            fn update(&mut self, _: WidgetUpdate, _: WidgetEvent, _: &str) -> Result<GeometryChange, NcStatus> {
+                Ok(GeometryChange::NoChange)
+            }
+            /// Publish only statuses through the actual UI paint boundary, without GPU substitution.
+            fn paint(&mut self, _: WidgetPaint, _: &mut Painter<'_>) -> Result<(), NcStatus> {
+                self.attempts += 1;
+                let status = if self.attempts <= 2 {
+                    neocogi_render_core::abi::RENDER_E_BUSY
+                } else if self.fatal {
+                    NC_E_INVALID_ARG
+                } else {
+                    neocogi_com::NC_OK
+                };
+                self.observed.send(status).expect("test owns the receiver through teardown");
+                if status.is_err() { Err(status) } else { Ok(()) }
             }
         }
-        unreachable!("the final attempt returns either the rendered frame or its original error")
+        /// Keep all production GPU domains alive and observe each actual preparation callback.
+        struct Prepared {
+            /// Owns the full real scene until the host loop ends.
+            state: State,
+            /// A retry must not prepare or dispatch another application frame.
+            observed: std::sync::mpsc::Sender<()>,
+        }
+        impl AppState for Prepared {
+            type Message = neocogi_ui::events::EventMessage;
+            /// Keep production typed widget handlers active between prepared frames.
+            fn update(&mut self, message: Self::Message) -> Result<(), NcStatus> {
+                self.state.update(message)
+            }
+            /// Each completed preparation is independently observed by the owning test.
+            fn frame(&mut self, host: &Host, size: Size, seconds: f64) -> Result<bool, NcStatus> {
+                self.observed.send(()).expect("test owns the receiver through teardown");
+                self.state.frame(host, size, seconds)
+            }
+        }
+        let fatal = match mode.to_str().unwrap() {
+            "recover" => false,
+            "fatal" => true,
+            _ => panic!("unknown backpressure case"),
+        };
+        let (host, state, events) = create(crate::host_runtime()).unwrap();
+        let (paint_send, paints) = std::sync::mpsc::channel();
+        let probe = viewport(&host.ui, Probe { attempts: 0, fatal, observed: paint_send }).unwrap();
+        let window = host.ui.window("Backpressure", rect(100, 100, 200, 80), probe).unwrap();
+        window.raise().unwrap();
+        let (prepare_send, preparations) = std::sync::mpsc::channel();
+        let result = host.run(Prepared { state, observed: prepare_send }, events);
+        let observed: Vec<_> = paints.try_iter().collect();
+        assert!(observed.len() >= 3, "paint attempts ended before recovery: {result:?}");
+        assert_eq!(&observed[..2], &[neocogi_render_core::abi::RENDER_E_BUSY; 2]);
+        if fatal {
+            let error = result.expect_err("a terminal paint error must stop after the retries");
+            assert!(matches!(error, HostError::Operation { operation: "frame rendering", status: NC_E_INVALID_ARG, .. }), "{error}");
+            assert_eq!(observed[2..], [NC_E_INVALID_ARG]);
+            assert_eq!(preparations.try_iter().count(), 1);
+        } else {
+            result.unwrap();
+            assert!(observed[2..].iter().all(|status| status.is_ok()));
+            assert!(observed.len() >= 4, "two Busy attempts must not consume the two-frame presentation budget");
+            assert_eq!(preparations.try_iter().count(), 2, "render retries must not repeat application updates");
+        }
+        println!("backpressure case completed: {}", mode.to_str().unwrap());
+        return;
+    }
+    // Each case owns its frame-limit environment and SDL runtime in a fresh process.
+    for mode in ["recover", "fatal"] {
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "app::tests::packaged_full_host_retries_render_backpressure", "--ignored", "--nocapture"])
+            .env(CHILD, mode)
+            .env("NEOCOGI_DEMO_FRAMES", "2")
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(40);
+        while child.try_wait().unwrap().is_none() {
+            if std::time::Instant::now() >= deadline {
+                child.kill().unwrap();
+                let output = child.wait_with_output().unwrap();
+                panic!("{mode} backpressure test timed out: {}", String::from_utf8_lossy(&output.stderr));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let output = child.wait_with_output().unwrap();
+        assert!(output.status.success(), "{mode}: {}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+        assert!(String::from_utf8_lossy(&output.stdout).contains(&format!("backpressure case completed: {mode}")));
     }
 }
 
