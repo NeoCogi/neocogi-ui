@@ -241,7 +241,7 @@ weak token. No claim is made that arbitrary foreign raw pointers are safe.
 The COM foundation is committed as `490e24cb`, the IDL transfer contract as
 `8667603d`, concrete initialization access as `db15a693`, and the complete UI and
 consumer migration as `2cb90ec9`. Current library and consumer validation
-commands are recorded in [UI testing](../../crates/ui/runtime/docs/TESTING.md).
+commands are recorded in [UI testing](../../crates/ui/docs/runtime/TESTING.md).
 
 ## Measured implementation cost
 

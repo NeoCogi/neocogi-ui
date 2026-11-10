@@ -78,7 +78,7 @@ binary export and the designer's accepted-edit path reject that source explicitl
 
 ## JSON, catalog descriptions and constructor settings
 
-`neocogi_ui_design::bounded_json` owns exact JSON byte counting and bounded output.
+`neocogi_ui_contracts::design::bounded_json` owns exact JSON byte counting and bounded output.
 Both use the ordinary serde JSON serializer with the selected compact or pretty
 format. Writes check the remaining budget before reserving or extending output;
 capacity requests stay within the selected ceiling and reservation errors propagate.

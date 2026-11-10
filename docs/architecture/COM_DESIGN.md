@@ -78,7 +78,7 @@ ownership transfer and the limits of concurrent Drop.
 
 COM provides ordinary callable interfaces and explicit ownership. Domains can
 use typed observers without depending on UI, as the [standalone example](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/examples/com-plugin/README.md)
-demonstrates. UI owns its [event protocol and deferred delivery](../../crates/ui/api/EVENTS.md),
+demonstrates. UI owns its [event protocol and deferred delivery](../../crates/ui-contracts/EVENTS.md),
 [producer publication](../contracts/UI_EVENT_METADATA.md) and [widget origins](../contracts/WIDGET_EVENT_ORIGINS.md).
 Those contracts do not add event syntax or policy to IDL or the COM process runtime.
 

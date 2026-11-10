@@ -37,7 +37,7 @@ class Consumer:
 
 
 CONSUMERS = (
-    Consumer("neocogi-ui", "crates/ui/api", '''
+    Consumer("neocogi-ui-contracts", "crates/ui-contracts", '''
         let owner = contract::events::text_changed("éx", 2).unwrap();
         {
             let fact = owner.query_ref::<contract::ITextChangedEventAbi>().unwrap();
@@ -46,7 +46,7 @@ CONSUMERS = (
         drop(owner);
         assert!(contract::events::text_changed("éx", 1).is_err());
     ''', namespace="abi::core"),
-    Consumer("neocogi-ui", "crates/ui/api", '''
+    Consumer("neocogi-ui-contracts", "crates/ui-contracts", '''
         let owner = contract::events::numeric_changed(1.5).unwrap();
         {
             let fact = owner.query_ref::<contract::INumericChangedEventAbi>().unwrap();

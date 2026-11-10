@@ -114,7 +114,7 @@ No alternate tree ownership representation or suppression flag is needed.
 
 ## Acceptance coverage
 
-[Real runtime regressions](../../crates/ui/runtime/src/runtime/tests/shutdown.rs)
+[Real runtime regressions](../../crates/ui/src/runtime/runtime/tests/shutdown.rs)
 exercise the public generated COM entry points and actual built-in/composite
 widgets. They cover independent roots, child windows, hidden dialogs, nested
 widgets and an active popup; both accepting and rejecting lifecycle receivers;

@@ -28,7 +28,7 @@ from contract_check_support import child_environment
 # distinguish separate uses of the same identifier, including a constructor field.
 # Client views are unsized projections borrowed from COM handles; the probe must
 # borrow the view too rather than trying to store it directly inside Option.
-PROBE_SOURCE = '''use neocogi_ui::abi::nodes::*;
+PROBE_SOURCE = '''use neocogi_ui_contracts::abi::nodes::*;
 pub fn probe(
     _: Option</*abi*/TextboxAbi>,
     _: Option<&/*client*/TextboxClient>,
@@ -108,7 +108,7 @@ def expected_origin(repository, probe):
     anchors to that declaration so another enum's Fixed/extent cannot substitute
     for LayoutTrack's member. This is fixture expectation lookup, not an IDL parser.
     """
-    path = repository / "crates/build/schemas/neocogi/ui/nodes" / probe.file
+    path = repository / "crates/ui-contracts/schemas/neocogi/ui/nodes" / probe.file
     text = path.read_text(encoding="utf-8")
     if text.count(probe.declaration) != 1:
         raise ValueError("expected authored declaration is ambiguous: " + probe.declaration)
@@ -192,10 +192,10 @@ def prepare_probe(directory, repository):
     source = directory / "src/lib.rs"
     source.parent.mkdir()
     source.write_text(PROBE_SOURCE, encoding="utf-8")
-    dependency = json.dumps(str(repository / "crates/ui/api"))
+    dependency = json.dumps(str(repository / "crates/ui-contracts"))
     (directory / "Cargo.toml").write_text(
         '[package]\nname="neocogi-navigation-probe"\nversion="0.0.0"\nedition="2024"\n'
-        '[workspace]\n[dependencies]\nneocogi-ui={path=' + dependency + '}\n', encoding="utf-8",
+        '[workspace]\n[dependencies]\nneocogi-ui-contracts={path=' + dependency + '}\n', encoding="utf-8",
     )
     return source
 

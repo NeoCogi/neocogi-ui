@@ -1,7 +1,7 @@
 # UI event objects
 
 UI owns the common event protocol, declared in ordinary IDL in
-[UI event IDL](../../crates/build/schemas/neocogi/ui/core/events.ncidl).
+[UI event IDL](../../crates/ui-contracts/schemas/neocogi/ui/core/events.ncidl).
 `IEvent` is its root interface. Concrete events derive from this interface and
 expose immutable snapshots through ordinary typed COM getters. Event data is
 independent of the producer's subsequent edits and lifetime.
@@ -103,8 +103,8 @@ application message enum. Applications read the event getters directly and may c
 
 ## Concrete UI snapshots
 
-The [core](../../crates/build/schemas/neocogi/ui/core/semantic_events.ncidl)
-and [node](../../crates/build/schemas/neocogi/ui/nodes/semantic_events.ncidl)
+The [core](../../crates/ui-contracts/schemas/neocogi/ui/core/semantic_events.ncidl)
+and [node](../../crates/ui-contracts/schemas/neocogi/ui/nodes/semantic_events.ncidl)
 contracts define event meaning independently of the producer's concrete class:
 
 | Interface | Immutable information |
@@ -169,24 +169,24 @@ the status without rolling back committed widget changes.
 
 ## Validation
 
-[Common error regressions](../../crates/ui/api/src/abi/core/event_transport/error.rs) call actual
+[Common error regressions](../../crates/ui-contracts/src/abi/core/event_transport/error.rs) call actual
 generated getters, preserve unknown negative codes and immutable string identity,
 reject success codes and verify independent event/string lifetimes.
-[Native update and error-origin regressions](../../crates/ui/runtime/src/runtime/tests/direct_posting.rs)
+[Native update and error-origin regressions](../../crates/ui/src/runtime/runtime/tests/direct_posting.rs)
 exercise rejection, first-failure stopping, sticky committed geometry, nested host
 scope restoration, missing-scope owner return and reports after source destruction.
 
-[Generated ABI regressions](../../crates/ui/api/tests/event_interfaces.rs) exercise
+[Generated ABI regressions](../../crates/ui-contracts/tests/event_interfaces.rs) exercise
 both origin kinds, live/expired weak fields, missing event interfaces, ABI revision
 mismatches, exclusive destruction and return of the owner after rejected posts.
 The generated receiver and event getters are invoked through actual COM tables.
 
-The [snapshot and channel regressions](../../crates/ui/api/tests/event_snapshots.rs)
+The [snapshot and channel regressions](../../crates/ui-contracts/tests/event_snapshots.rs)
 also verify that the standard inbox preserves allocation identity, keeps facts
 readable after source destruction, and restores the same owner on disconnection.
 Each observed scalar event requires an exclusive allocation.
 
-[Built-in list-item regressions](../../crates/ui/runtime/src/runtime/tests/list_item_events.rs)
+[Built-in list-item regressions](../../crates/ui/src/runtime/runtime/tests/list_item_events.rs)
 also measure empty, nonempty and Unicode labels through real COM updates for
 pointer, Enter and Space activation. They verify one marker allocation per activation independently of label size,
 exact weak source identity after edits/destruction and state preservation on rejected delivery.

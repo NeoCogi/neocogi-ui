@@ -3,29 +3,29 @@
 | Owner | Responsibility |
 | --- | --- |
 | `neocogi-platform-contracts` | Renderer-neutral geometry, images, resources and sealed generic block interfaces. |
-| `neocogi-ui` | Shared widget/layout, window, popup, menu, and file-dialog protocols. |
+| `neocogi-ui-contracts` | Shared widget/layout, window, popup, menu, and file-dialog protocols. |
 | `neocogi-ui` | Concrete built-in widgets, containers, specialized events, and factory. |
-| `neocogi-gfx-support` / `neocogi-gfx` | Portable bundle records, PNG upload, font/icon rasterization, and atlas packing. |
-| `neocogi-skin-authoring` / `neocogi-skin` | Typed appearance derivation and optional external JSON themes. |
-| `neocogi-gfx-support` | Bounded portable data validation, immutable publication, and embedded expansion; no plugin identity. |
-| `crates/gfx/impl` | Private decoder, atlas, bundle, and source-export implementation; no plugin identity. |
-| `crates/appearance` | Pure typed appearance compilation shared with offline resource construction. |
-| `crates/skin/impl` | Private style and optional JSON-theme implementation; no plugin identity. |
-| `crates/skin/authoring` | Concrete theme-file schema, Serde codecs, authoring state and appearance compilation. |
-| `neocogi-ui-support` | Non-plugin table retention, pure geometry/text algorithms, and phase-local presentation helpers; no retained tree or concrete classes. |
-| `neocogi-ui-runtime` | Core retained layout, painting, surfaces, and menu policy. |
-| `neocogi-ui-nodes` | Built-in controls and standard compositions over one bound runtime resource source. |
+| `neocogi_ui_contracts::gfx` / `neocogi_ui::gfx` | Portable bundle records, PNG upload, font/icon rasterization, and atlas packing. |
+| `neocogi_ui::authoring` / `neocogi_ui::skin` | Typed appearance derivation and optional external JSON themes. |
+| `neocogi_ui_contracts::gfx` | Bounded portable data validation, immutable publication, and embedded expansion; no plugin identity. |
+| `neocogi_ui::gfx` | Decoder, atlas, compositor and source-export implementation behind the shared UI root. |
+| `neocogi_ui_contracts::appearance` | Pure typed appearance compilation shared with offline resource construction. |
+| `neocogi_ui::skin` | Private style and optional JSON-theme implementation; no plugin identity. |
+| `neocogi_ui::authoring` | Concrete theme-file schema, Serde codecs, authoring state and appearance compilation. |
+| `neocogi_ui::support` | Non-plugin table retention, pure geometry/text algorithms, and phase-local presentation helpers; no retained tree or concrete classes. |
+| `neocogi_ui::runtime` | Core retained layout, painting, surfaces, and menu policy. |
+| `neocogi_ui::nodes` | Built-in controls and standard compositions over one bound runtime resource source. |
 | [Platform renderer providers](https://github.com/NeoCogi/neocogi-platform/tree/master/crates/platform/src/platform) | Pixel upload, GPU resources and ordered frame execution. |
 
-The GFX plugin has no production dependency on either the UI facade or runtime;
-the skin plugin has no production dependency on `neocogi-ui-runtime`. UI construction
+GFX and Skin services share the static SDK package but use typed resource capabilities
+without retaining a UI tree. Their shared values and ABI live in contracts. UI construction
 fixtures construct canonical `AssetData` directly and pass through its GFX validator.
 Runtime UI code retains the resulting `AssetTables` collection of generated NCIDL records without exporting or reimporting
 a native atlas model. Full pixel copies needed to publish fixture revisions live in
 explicit test setup and do not alter runtime import.
 
-`neocogi-gfx` registers `PngDecoder`; its optional `builder` feature also
-registers `AssetLoader`. `PngDecoder::upload` accepts one complete, nonempty PNG at offset zero and borrows an
+`neocogi_ui::gfx` creates `PngDecoder`; its optional `builder` feature also
+creates `AssetLoader`. `PngDecoder::upload` accepts one complete, nonempty PNG at offset zero and borrows an
 `ITextureFactory` for the upload. Encoded input and decoded RGBA storage each have
 a 64 MiB ceiling; dimensions are checked before pixel allocation and animated PNG
 is rejected. Invalid input never calls the factory. Factory errors preserve their
@@ -47,28 +47,29 @@ admission leaves a builder's name, pixels and packing state unchanged and permit
 a later valid retry. These rules share the existing encoded/decoded budgets and
 do not introduce a second PNG parser in Skin, UI or upload callers.
 
-`neocogi-skin` registers `StyleCompiler`; its optional `theme-json` feature adds
+`neocogi_ui::skin` creates `StyleCompiler`; its optional `theme-json` feature adds
 `ThemeLoader` for external schema and appearance compilation. `StyleCompiler`
 retains a narrow GFX `AssetPublisher`; `ThemeLoader` additionally retains the
-optional `AssetLoader` used for external resources. The Skin plugin declares GFX
-as a hard provider dependency. Skin reads each bounded external font or PNG and
-submits its bytes to the loader; it does not link another copy of the font
-rasterizer, PNG decoder, atlas packer, bundle reader, validator, or publisher.
+optional `AssetLoader` used for external resources. Callers supply both typed
+capabilities explicitly; the shared UI root has no hard provider dependencies.
+Skin reads each bounded external font or PNG and submits its bytes to the loader.
+GFX remains the sole owner of font rasterization, PNG decoding, atlas packing,
+bundle reading, validation and publication.
 After resolving its closed appearance records, Skin calls GFX once to validate
 and publish the immutable revision. Native applications can therefore ship GFX
 services without a JSON/schema surface, while a JSON-enabled Skin deployment
 selects GFX as its one resource owner. Browser assemblies register the same
-selected descriptors statically. The [GFX decoder implementation](../../crates/gfx/impl/src/png.rs)
-produces packed RGBA directly. Neither plugin links the UI runtime implementation.
+UI descriptor statically. The [GFX decoder implementation](../../crates/ui/src/gfx/png.rs)
+produces packed RGBA directly. GFX and Skin can be enabled without the retained UI feature.
 
-The JSON feature uses the concrete schema in `neocogi-skin-authoring`.
-[Theme decoding](../../crates/skin/authoring/src/theme.rs) and
-[record codecs](../../crates/skin/authoring/src/encoding.rs) translate Serde input
-into generated GFX records using explicit field and enum definitions. GFX
-contracts themselves have no Serde dependency. The former generic Serde-to-COM
+The JSON feature uses the concrete schema in `neocogi_ui::authoring`.
+[Theme decoding](../../crates/ui/src/authoring/theme.rs) and
+[record codecs](../../crates/ui/src/authoring/encoding.rs) translate Serde input
+into generated GFX records using explicit field and enum definitions. Theme-file
+Serde models remain in authoring. The former generic Serde-to-COM
 visitor bridge is removed; COM's local persistence protocol is independent of
 the theme-file format. Unknown and duplicate fields and
-[typed role keys](../../crates/skin/authoring/src/role_keys.rs) are rejected during decoding.
+[typed role keys](../../crates/ui/src/authoring/role_keys.rs) are rejected during decoding.
 
 Applications supply one `IAssetBundle` through the typed `UiRuntime` factory and
 bind the native window's `graphics_host()` to that runtime. `Platform::create_window`
@@ -93,26 +94,13 @@ directly from the snapshot and selects a generated appearance record with typed 
 only the short-lived renderer-facing `Visual` is projected at the call site.
 
 GFX support separates `AssetTables` metadata from complete `AssetData`
-pixel-bearing compiler output. The UI facade keeps compatibility re-exports, but
-lower layers depend directly on `neocogi-gfx-support`. `AssetData` produces the same `IAssetBundle` object from
+pixel-bearing compiler output. The static SDK reexports their canonical definitions;
+contract consumers can depend directly on `neocogi_ui_contracts::gfx`. `AssetData` produces the same `IAssetBundle` object from
 borrowed static tables or owned builder output. Neither type contains a UI implementation,
-font rasterizer, PNG decoder or JSON parser. Separate `neocogi-gfx-impl` and
-`neocogi-skin-impl` packages supply private objects to their corresponding
-plugin roots. The small `neocogi-appearance` package contains only pure typed
-appearance compilation used by Skin/offline resource construction and canonical test fixtures.
-The objects expose ordinary typed interfaces and keep
-all native builder/path/decoder state in their owning binary. The
-[JSON compiler](../../crates/skin/authoring/src/theme.rs) submits declared resources to
-GFX and compiles complete appearance tables without copying the bundle into a runtime skin model.
-GFX owns bundle transfer, validation, and publication through the format-neutral
-`AssetPublisher::revise_appearance` transaction. Skin resolves one private typed `ThemeRecipe`
-for both deployment modes. Offline build tools statically instantiate the same GFX loader and
-publisher, execute that recipe, and copy the completed bundle back into `AssetData` for source
-export; Skin contains no second native packing path. Plain geometry and semantic resource names
-live in the GFX contract. The UI resolves those records into its own runtime
-IDs only when a bundle is installed. In-memory offline compilation accepts an
-explicit `AssetSource` implementation for referenced files; runtime filesystem
-compilation uses the bounded `FileAssets` source.
+font rasterizer, PNG decoder or JSON parser. The static SDK's `gfx`, `skin`
+and `authoring` modules implement construction. Pure appearance values live in
+`neocogi_ui_contracts::appearance`. One `neocogi.ui` service root returns the
+independently owned GFX and Skin factories.
 
 ```rust,ignore
 let assets = neocogi_demo_assets::load_bundle(runtime)?;
@@ -122,16 +110,11 @@ let native = platform.create_window(
 )?;
 let renderer = native.query::<IRendererAbi>()?;
 // runtime is passed from the application entry or acquiring host.
-let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(
-    neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"),
-)?;
-let runtime_factory = runtime.acquire_plugin_root::<UiPluginFactoryAbi>(
-    neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"),
-)?;
+let library = neocogi_ui_contracts::services::library(runtime)?;
+let gfx = library.gfx()?;
+let runtime_factory = library.ui()?;
 let mut ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
-let node_provider = runtime.acquire_plugin_root::<NodesPluginFactoryAbi>(
-    neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"),
-)?;
+let node_provider = library.nodes()?;
 let factory = node_provider.bind(ui_runtime.as_com_ref())?;
 let graphics = native.graphics_host()?;
 let surface = graphics.query::<IRenderSurfaceFactoryAbi>()?.create_surface(RenderSurfaceDesc {
@@ -160,7 +143,7 @@ A compositor can no longer be supplied to UI construction. Migrate former
 `create_runtime(assets, compositor)` calls to `create_runtime(assets, gfx)` and remove
 the caller's compositor allocation. `UiPluginFactory` uses the pre-release v1 baseline, so rebuild
 the application and plugins together. Shared libraries, native monoliths, and
-WebAssembly all use this same factory contract; core UI links only GFX contracts.
+WebAssembly all use this same factory contract; retained UI uses GFX through its contracts.
 
 `ui.install_assets(candidate)` requires mutable access to the `Ui` because it
 replaces the resource value shared by that runtime's nodes and services. The call owns
@@ -354,7 +337,7 @@ The receiving GPU may impose a smaller texture dimension limit than the portable
 ## Optional construction and themes
 
 `AssetLoader::create_builder(size, white_path)` starts a native builder.
-Its [implementation](../../crates/gfx/impl/src/atlas.rs) packs RGBA pixels and font
+Its [implementation](../../crates/ui/src/gfx/atlas.rs) packs RGBA pixels and font
 records directly into `AssetData`; it constructs no UI atlas handles or skins.
 `add_icon(name, path)` and `add_font(name, path, pixels)` add distinct names;
 duplicates are rejected. `add_icon_bytes` and `add_font_bytes` provide the same
@@ -463,14 +446,14 @@ Compilation remains usable after a UI closes because the service owns no UI stat
 
 ## Compiled resources and packaging
 
-`neocogi_gfx_impl::export::write_rust(&data, path)` (feature `save-to-rust`)
+`neocogi_ui::gfx::export::write_rust(&data, path)` (feature `save-to-rust`)
 atomically writes one self-contained source
-file from validated `AssetData`. The UI crate has no builder, PNG, JSON or source
-export features. Cargo build scripts and command-line tools call the same asset
+file from validated `AssetData`. These construction features belong to the static
+SDK; contracts and ordinary clients require none of them. Cargo build scripts and command-line tools call the same asset
 compiler directly. `load_bundle()` creates a fresh catalog; `bundle_data()` supplies the same
 tables for `into_revision(base)` when exporting a compatible theme. Both functions
 return `Result`; use `bundle_data()?.into_revision(base)`. Generated code requires
-GFX support `compiled-assets`, borrows names/glyphs/font/icon records, expands compressed
+`neocogi-ui-contracts/compiled-assets`, borrows names/glyphs/font/icon records, expands compressed
 pixels into one owned allocation, and owns the resolved visual arrays. No generated
 file exposes `AtlasHandle`, native IDs, UI implementation storage or parser APIs.
 
@@ -508,7 +491,7 @@ Build-host font/image/theme parsers remain absent from a compiled-only applicati
 target. The optional small inflater has an activation-time and owned-memory cost;
 executable bytes, every shared library, external assets, startup and loaded memory
 all belong in deployment accounting. The full demo's separate sample PNG is decoded
-by its GFX plugin and is not part of the generated pixel-stream format.
+by its GFX service and is not part of the generated pixel-stream format.
 
 
 ## Generated Rust and target profiles

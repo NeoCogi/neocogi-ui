@@ -71,11 +71,11 @@ unchanged. Native plugins continue to share the single global `neocogi_com_host`
 `#[events(...)]` is no longer IDL syntax. Its former compiler validation and
 `IdlEvent` records have been removed rather than retained as compatibility paths.
 
-[UI admission tests](../../crates/ui/api/tests/event_metadata.rs) compile legal
+[UI admission tests](../../crates/ui-contracts/tests/event_metadata.rs) compile legal
 ordinary interfaces and reject invalid snapshots, ambiguous generic getters and
-duplicate lists at publication. [Diamond tests](../../crates/ui/api/tests/event_diamonds.rs)
+duplicate lists at publication. [Diamond tests](../../crates/ui-contracts/tests/event_diamonds.rs)
 exercise real exclusive getters, imported projections and catalog round trips.
-[Construction tests](../../crates/ui/api/tests/construction_events.rs) verify
+[Construction tests](../../crates/ui-contracts/tests/construction_events.rs) verify
 receiver retention, permanent delivery policy and rejected owner transfers.
-[Catalog path tests](../../crates/ui/api/tests/catalog_paths.rs) exercise
+[Catalog path tests](../../crates/ui/tests/runtime/catalog_paths.rs) exercise
 independent Cargo owners, raw identifiers and compiled form exports.

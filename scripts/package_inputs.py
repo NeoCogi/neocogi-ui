@@ -16,42 +16,25 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def release_directories(root=ROOT):
     """Select reusable libraries/providers explicitly enabled for crates.io."""
-    paths = list((root / "crates").rglob("Cargo.toml")) + [root / "examples/ui-samples/Cargo.toml"]
+    paths = list((root / "crates").glob("*/Cargo.toml"))
     return sorted(path.parent for path in paths if tomllib.loads(path.read_text())["package"].get("publish") == ["crates-io"])
 
 
 def fixture_sources(root=ROOT):
-    """Derive fixture bytes and exact test-only peer links from their authoritative inputs."""
-    result = {}
-    for relative in ["crates/gfx/impl", "crates/skin/impl", "crates/skin/authoring"]:
-        destination = root / relative / "tests/package-inputs"
-        files = {"assets/" + source.name: source for source in (root / "assets").iterdir() if source.suffix in {".png", ".ttf"}}
-        if relative == "crates/gfx/impl":
-            files.update({name: root / "examples/assets/src" / name for name in ["recipe.rs", "recipe_data.rs"]})
-        else:
-            files.update({"themes/" + str(source.relative_to(root / "themes")): source for source in (root / "themes").rglob("*") if source.is_file()})
-        result[destination] = files
-    for relative in ["crates/ui/api", "crates/ui/runtime"]:
-        files = {"com_dependencies.rs": root / "scripts/com_dependencies.rs", "workspace.toml": root / "Cargo.toml"}
-        if relative == "crates/ui/runtime":
-            files.update({"button_events.rs": root / "crates/ui/api/docs/button_events.rs", "document.md": root / "crates/ui/document/README.md", "application.md": root / "README.md"})
-            files.update({"document/" + source.name: source for source in (root / "crates/ui/document/tests/fixtures").iterdir() if source.is_file()})
-        result[root / relative / "tests/package-inputs"] = files
-    result = {directory: {name: source.read_bytes() for name, source in files.items()} for directory, files in result.items()}
-    for directory in release_directories(root):
-        manifest = tomllib.loads((directory / "Cargo.toml").read_text())
-        peers = {}
-        for name, dependency in manifest.get("dev-dependencies", {}).items():
-            if not isinstance(dependency, dict) or "path" not in dependency or "version" in dependency:
-                continue
-            version = tomllib.loads((root / "Cargo.toml").read_text())["workspace"]["package"]["version"]
-            peers[name] = {key: value for key, value in dependency.items() if key not in {"path", "workspace"}}
-            peers[name]["version"] = "=" + version
-        if peers:
-            result.setdefault(directory / "tests/package-inputs", {})["dependencies.json"] = (
-                json.dumps({"schema": 1, "package": manifest["package"]["name"], "dev-dependencies": peers}, indent=2, sort_keys=True) + "\n"
-            ).encode()
-    return result
+    """One fixture tree per public package; all copies derive from authored owners."""
+    common = {"com_dependencies.rs": root / "scripts/com_dependencies.rs", "workspace.toml": root / "Cargo.toml"}
+    sdk = dict(common)
+    sdk.update({"assets/" + p.name: p for p in (root / "assets").iterdir() if p.suffix in {".png", ".ttf"}})
+    sdk.update({"themes/" + str(p.relative_to(root / "themes")): p for p in (root / "themes").rglob("*") if p.is_file()})
+    sdk.update({name: root / "examples/assets/src" / name for name in ["recipe.rs", "recipe_data.rs"]})
+    sdk.update({"button_events.rs": root / "crates/ui-contracts/docs/button_events.rs",
+                "document.md": root / "crates/ui/docs/document.md", "application.md": root / "README.md"})
+    sdk.update({"document/" + p.name: p for p in (root / "crates/ui/tests/document/fixtures").iterdir() if p.is_file()})
+    sdk.update({"sample/abi/" + str(p.relative_to(root / "examples/ui-samples/src/abi")): p
+                for p in (root / "examples/ui-samples/src/abi").rglob("*") if p.is_file()})
+    sdk["sample/schemas/neocogi/demo.ncidl"] = root / "examples/ui-samples/schemas/neocogi/demo.ncidl"
+    return {root / relative / "tests/package-inputs": {name: p.read_bytes() for name, p in files.items()}
+            for relative, files in [("crates/ui-contracts", common), ("crates/ui", sdk)]}
 
 
 def reconcile(*, check, root=ROOT):

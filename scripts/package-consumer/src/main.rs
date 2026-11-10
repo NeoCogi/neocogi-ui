@@ -1,7 +1,7 @@
 //! Run real archived providers and independently generated COM calls outside the checkout.
 extern crate self as neocogi_ui_package_consumer;
 use neocogi_com::{ComPtr, ComRef, NcStatus, com_object};
-use neocogi_ui::{abi::core::*, Ui};
+use neocogi_ui_contracts::{abi::core::*, Ui};
 
 /// Independently generated event contracts and their ordinary public COM metadata.
 pub mod contracts {
@@ -25,13 +25,13 @@ struct Renderer;
 impl IRenderDriverBound for Renderer {
     /// No native resource capability is fabricated by this CPU-only consumer.
     fn driver_identity(&self) -> Result<ComPtr<IRenderDriverIdentityAbi>, NcStatus> {
-        neocogi_gfx_support::testing::host().driver_identity()
+        neocogi_ui::gfx::testing::host().driver_identity()
     }
 }
 impl IRenderer for Renderer {
     /// These are actual sealed contributions emitted by the archived compositor, not copied draw fixtures.
     fn render_result(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<IRenderOutcomeAbi>, NcStatus> {
-        let blocks = neocogi_gfx_support::testing::blocks(info, stream)?;
+        let blocks = neocogi_ui::gfx::testing::blocks(info, stream)?;
         assert!(blocks.iter().any(|block| !block.commands().is_empty()));
         Ok(operation_result(Ok(())))
     }
@@ -41,17 +41,8 @@ impl IRenderer for Renderer {
 fn register(runtime: neocogi_com::Runtime) -> Result<(), NcStatus> {
     let libraries: Vec<_> = std::env::args_os().skip(1).collect();
     if libraries.is_empty() {
-        for descriptor in [
-            nc_gfx::plugin_descriptor(),
-            nc_skin::plugin_descriptor(),
-            nc_ui::plugin_descriptor(),
-            nc_ui_nodes::plugin_descriptor(),
-        ] {
-            // SAFETY: all selected descriptors and executable code are linked for process lifetime.
-            unsafe {
-                runtime.register_plugin_descriptor(descriptor)?;
-            }
-        }
+        // SAFETY: the linked descriptor and every reachable function remain mapped for process lifetime.
+        unsafe { runtime.register_plugin_descriptor(neocogi_ui::plugin_descriptor())?; }
     } else {
         for library in libraries {
             // SAFETY: the qualification tool supplies only exact libraries built from inspected archives.
@@ -68,9 +59,9 @@ fn register(runtime: neocogi_com::Runtime) -> Result<(), NcStatus> {
 fn run(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn std::error::Error>> {
     register(runtime)?;
     let plugins = runtime.plugins()?;
-    assert_eq!(plugins.len(), 4);
+    assert_eq!(plugins.len(), 1);
     for plugin in plugins {
-        assert_eq!(plugin.version, "0.1.0-alpha.2");
+        assert_eq!(plugin.version, "0.2.0-alpha.2");
     }
     let event = ReleaseEvent::into_local_box(ReleaseEvent)
         .into_interface::<contracts::IReleaseEventAbi>()
@@ -78,22 +69,22 @@ fn run(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn std::error::Error>> 
     assert_eq!(event.value()?, 73);
     let owned = event.query::<IEventAbi>().map_err(|(status, _)| status)?;
     assert!(owned.query_ref::<contracts::IReleaseEventAbi>().is_ok());
-    let assets = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)]).into_bundle()?;
-    let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
-    let skin = runtime.acquire_plugin_root::<neocogi_appearance::skin::SkinPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.skin.runtime"))?;
+    let assets = neocogi_ui::support::test_support::test_asset_data_with_font_sizes(&[("body", 12)]).into_bundle()?;
+    let gfx = neocogi_ui_contracts::services::gfx(runtime)?;
+    let skin = neocogi_ui_contracts::services::skin(runtime)?;
     let publisher = gfx.asset_publisher()?;
     let compiler = skin.style_compiler(publisher.as_com_ref())?;
-    let assets = compiler.derive_style(assets.as_com_ref(), assets.metrics()?, neocogi_appearance::skin::PaletteEdit::Preserve)?;
-    let factory = runtime.acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
+    let assets = compiler.derive_style(assets.as_com_ref(), assets.metrics()?, neocogi_ui_contracts::appearance::skin::PaletteEdit::Preserve)?;
+    let factory = neocogi_ui_contracts::services::ui(runtime)?;
     let mut core = factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
     core.set_render_host(
-        neocogi_gfx_support::testing::host().as_com_ref(),
-        neocogi_gfx_support::testing::framebuffer().as_com_ref(),
+        neocogi_ui::gfx::testing::host().as_com_ref(),
+        neocogi_ui::gfx::testing::framebuffer().as_com_ref(),
     )?;
-    let nodes = runtime.acquire_plugin_root::<neocogi_ui::nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
+    let nodes = neocogi_ui_contracts::services::nodes(runtime)?;
     let widgets = nodes.bind(core.as_com_ref())?;
     let ui = Ui::from_interfaces(core, widgets)?;
-    let (queue, messages) = neocogi_ui::events::channel();
+    let (queue, messages) = neocogi_ui_contracts::events::channel();
     let button = ui.widgets().button_with_queue("Archived providers", Some(queue.as_com_ref()))?;
     let observed = button.as_interface().downgrade();
     let window = ui
@@ -104,7 +95,7 @@ fn run(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn std::error::Error>> 
         ui.input(
             UiInput::Key(KeyStroke {
                 key,
-                action: neocogi_ui::KeyAction::Pressed { repeat: false },
+                action: neocogi_ui_contracts::KeyAction::Pressed { repeat: false },
                 modifiers: 0,
             }),
             "",

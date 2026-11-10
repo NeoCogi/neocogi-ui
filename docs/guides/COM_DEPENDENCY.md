@@ -43,7 +43,7 @@ and their application compilation profiles; it owns no filesystem staging policy
 Rendering explicitly binds each compositor to a framebuffer or image surface.
 Resource groups select permissions at creation; UI permits color/resource writes
 and image import, with all depth operations disabled. Custom 3D groups retain
-their separately selected permissions. See [rendering](../../crates/ui/runtime/docs/RENDER.md)
+their separately selected permissions. See [rendering](../../crates/ui/docs/runtime/RENDER.md)
 for ownership and per-operation errors. These pre-release interfaces change their
 fingerprints: rebuild hosts and every provider together.
 
@@ -67,14 +67,14 @@ Run these integration checks from NeoCogi UI, sequentially:
 ```sh
 python3 -m unittest discover -s scripts -p 'test_*.py'
 python3 scripts/check-contract-consumers.py
-cargo test --locked -p neocogi-ui -p neocogi-ui-document -p neocogi-ui-runtime -p neocogi-ui-nodes -p neocogi-ui-support -p neocogi-ui-design --features neocogi-com/runtime --all-targets
-cargo test --locked -p neocogi-demo-plugins -p neocogi-ui-support --test shared_runtime --features neocogi-demo-plugins/glow,neocogi-demo-plugins/skin,neocogi-demo-plugins/extension
+cargo test --locked -p neocogi-ui-contracts -p neocogi-ui --all-features --all-targets
+cargo test --locked -p neocogi-demo-plugins --test shared_runtime --features neocogi-demo-plugins/glow,neocogi-demo-plugins/skin,neocogi-demo-plugins/extension
 cargo check --locked -p neocogi-demo-full
 cargo check --locked -p neocogi-demo-full --no-default-features --features monolith,glow,embed-assets
 cargo check --locked -p neocogi-demo-full --target wasm32-unknown-unknown --no-default-features --features webgl
 ```
 
-The document receiver schema belongs to `crates/ui/document/schemas`.
+The document receiver schema belongs to `crates/ui/schemas`.
 SDK unit/ABI/compiler-floor/archive/sanitizer checks belong to the companion
 workspace and its [Rust task runner](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/tools/xtask/README.md).
 

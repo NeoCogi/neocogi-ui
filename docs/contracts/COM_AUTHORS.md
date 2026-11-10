@@ -8,7 +8,7 @@ objects.
 
 ## Linking and ownership
 
-Native applications always link the Rust facade. A dynamic assembly links one shared COM runtime and loads the UI, GFX compositor, selected renderer, and optional Skin plugin. A monolith instead links one runtime implementation plus those component rlibs and registers their descriptors directly. Browser builds use the same static registration model. Never link a separate runtime implementation into each dynamic plugin. Loaded or statically registered plugins remain active for the process lifetime; this design does not support hot unloading.
+Native applications link the typed contracts/clients and own one `neocogi-com-host` runtime. A dynamic assembly loads one UI library and the selected Platform library; the UI root returns runtime, node, GFX and optional Skin factories. A monolith links the same static SDK implementations and registers their descriptors directly. Browser builds use static registration. Runtime access is passed through bootstrap; plugins link no separate host implementation. Loaded code remains mapped for process lifetime; hot unloading is unsupported.
 
 Shared services use `ComPtr`; widgets use one non-clonable `ComBox`. Containers
 consume child owners. Application fields retain cached `WeakComBox` observers,
@@ -213,7 +213,7 @@ call returns before its own value is destroyed; no close retry queue is needed.
 The runtime schedules widgets automatically, including in `Ui::update`.
 It settles child messages and layout before dispatching an application message,
 then settles any resulting private work before continuing. Authors need no private
-dispatch loop, child registry or update-cycle object. The [events guide](../../crates/ui/runtime/docs/EVENTS.md)
+dispatch loop, child registry or update-cycle object. The [events guide](../../crates/ui/docs/runtime/EVENTS.md)
 defines the full descendant-first schedule, destination ownership, work budget,
 reentrancy and failure rules. Posting does not itself request a platform frame.
 Layout/paint remain observational, and asset installation belongs after update.
@@ -228,7 +228,7 @@ until its next eligible update; hidden editors retain those requests. Authors mu
 distinguish geometry invalidation from behavior that needs another update and retain
 such requests explicitly. Shared external state still requires explicit synchronization.
 
-The [events guide](../../crates/ui/runtime/docs/EVENTS.md) gives a complete small example;
+The [events guide](../../crates/ui/docs/runtime/EVENTS.md) gives a complete small example;
 the [independent extension](../../examples/ui-extension) exercises the same generated
 protocol through both ordinary-Cargo plugins and static monoliths.
 
@@ -512,7 +512,7 @@ operation; this contract does not add one or change generic renderer commands.
 
 ## Local custom leaves and solid drawing
 
-The skin plugin's `StyleCompiler` class supports typed palette and metric editors.
+The Skin service's `StyleCompiler` class supports typed palette and metric editors.
 `compiler.derive_style(base, metrics, PaletteEdit::Preserve.into())` keeps the base
 theme artwork; `PaletteEdit::Flat(palette)` compiles complete flat appearance tables.
 Both return a new immutable bundle in the current catalog without installing it

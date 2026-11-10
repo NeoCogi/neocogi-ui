@@ -9,7 +9,7 @@
 - [IDL source maps](IDL_SOURCE_MAPS.md) — generated provenance and source lookup.
 - [IDL compiler library](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/crates/idl/README.md) and
   [COM inspection](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/tools/neocogi-inspect/README.md).
-- [JSON themes](../../crates/ui/runtime/docs/THEMES.md).
+- [JSON themes](../../crates/ui/docs/runtime/THEMES.md).
 
 Exact language, ownership and failure rules are in [contracts](../contracts/README.md).
-Coverage and reproducible checks are in [UI testing](../../crates/ui/runtime/docs/TESTING.md).
+Coverage and reproducible checks are in [UI testing](../../crates/ui/docs/runtime/TESTING.md).

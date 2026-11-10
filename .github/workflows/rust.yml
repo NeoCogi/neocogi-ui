@@ -26,6 +26,12 @@ jobs:
 
   release-archives:
     runs-on: ubuntu-latest
+    env:
+      # Archive tests spawn Cargo consumers; keep their shared build bounded too.
+      CARGO_BUILD_JOBS: "1"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@v6
       # The qualifier invokes cargo +<pinned-toolchain>; explicit overrides do
@@ -58,21 +64,21 @@ jobs:
         run: rustup component add rust-analyzer
       - name: Actual editor definitions and exact authored IDL origins
         run: python3 scripts/check-idl-navigation.py
-      - run: cargo test --locked -p neocogi-ui-runtime -p neocogi-ui-nodes -p neocogi-ui-support
+      - run: cargo test --locked -p neocogi-ui-contracts -p neocogi-ui --all-features
       - name: Check UI libraries and tests for warnings
-        run: cargo clippy --locked -p neocogi-ui-runtime -p neocogi-ui-nodes -p neocogi-ui-support --all-targets -- -D warnings
-      - run: cargo test --locked -p neocogi-ui -p neocogi-ui-document --features neocogi-com/runtime
+        run: cargo clippy --locked -p neocogi-ui-contracts -p neocogi-ui -p neocogi-ui-dylib --all-features --all-targets -- -D warnings
+      - run: cargo test --locked -p neocogi-ui-contracts -p neocogi-ui --all-features --doc
 
   assets:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        features: ["", "gfx", "publisher", "builder", "save-to-rust", "builder,publisher,save-to-rust"]
+        features: ["", "ui", "gfx", "publisher", "builder", "skin", "authoring", "theme-json", "document", "save-to-rust", "builder,publisher,save-to-rust"]
     steps:
       - uses: actions/checkout@v6
-      # Allocation failures run in their own executable, alongside every library feature selection.
-      - run: cargo test --locked -p neocogi-gfx-impl --no-default-features --features '${{ matrix.features }}' --lib --test texture_reservation
+      # Activate the exact production feature set without the broad retained-engine fixtures.
+      - run: cargo test --locked -p neocogi-ui --no-default-features --features '${{ matrix.features }}' --test services
       - name: Execute target-profile source export and compiled COM consumers
         if: matrix.features == 'builder,publisher,save-to-rust'
         run: python3 scripts/test-asset-export.py
@@ -92,7 +98,7 @@ jobs:
           SDL_VIDEODRIVER: offscreen
         run: cargo run --locked -p neocogi-demo-smoke --no-default-features --features monolith-extension,glow,embed-assets -- --smoke
       - name: Host registry identity through a Cargo-built probe DLL
-        run: cargo test --locked -p neocogi-demo-plugins -p neocogi-ui-support --test shared_runtime --features neocogi-demo-plugins/glow,neocogi-demo-plugins/skin,neocogi-demo-plugins/extension
+        run: cargo test --locked -p neocogi-demo-plugins --test shared_runtime --features neocogi-demo-plugins/glow,neocogi-demo-plugins/skin,neocogi-demo-plugins/extension
       - name: Compile the real COM performance harness
         run: cargo check --locked -p neocogi-demo-smoke --no-default-features --features benchmark,glow --bin neocogi-com-bench
   native:
@@ -164,9 +170,9 @@ jobs:
           # PATH alone cannot satisfy nc_platform.dll's SDL2.dll dependency.
           Copy-Item -LiteralPath "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin\SDL2.dll" -Destination "target\debug\lib\SDL2.dll" -ErrorAction Stop
       - name: Relocated host and independent plugin share the runtime
-        run: cargo test --locked -p neocogi-demo-plugins -p neocogi-ui-support --test shared_runtime --features neocogi-demo-plugins/glow,neocogi-demo-plugins/skin,neocogi-demo-plugins/extension
+        run: cargo test --locked -p neocogi-demo-plugins --test shared_runtime --features neocogi-demo-plugins/glow,neocogi-demo-plugins/skin,neocogi-demo-plugins/extension
       - name: Platform-neutral contracts and facade behavior
-        run: cargo test --locked -p neocogi-ui --features neocogi-com/runtime
+        run: cargo test --locked -p neocogi-ui-contracts --features runtime
 
   browser:
     runs-on: ubuntu-latest

@@ -1,9 +1,10 @@
 # Native Cargo builds and browser composition
 
 Cargo owns application compilation, dependency resolution, feature selection and
-native artifact paths. There is one workspace lockfile. There are no generated
-component workspaces, wrapper library packages, assembly variants or `plugins.txt`.
-IDL generation belongs to each consumer’s build script, reading shared subsystem sources.
+native artifact paths through one workspace lockfile. UI contracts, the static SDK
+and its thin final dylib are ordinary packages. Native compositions request the
+UI and Platform cdylib artifacts directly. IDL generation belongs to each
+consumer’s build script, reading shared subsystem sources.
 
 ## Build and run
 
@@ -57,7 +58,7 @@ require neither SDL nor native plugin artifacts.
 
 ## What Cargo builds
 
-Implementation packages own reusable `rlib` targets. Their minimal `dylib/`
+Implementation packages own reusable `rlib` targets. Their minimal dylib
 packages own final `cdylib` targets. Dynamic composition requests these final
 artifacts. Static composition uses normal
 Rust dependencies and registers their descriptor accessors.
@@ -67,7 +68,7 @@ The existing `neocogi-demo-host` handles application startup. Its optional
 
 ```toml
 [dependencies]
-ui-library = { package = "neocogi-ui-runtime-dylib", path = "../../crates/ui/runtime/dylib", artifact = "cdylib" }
+ui-library = { package = "neocogi-ui-dylib", path = "../../crates/ui-dylib", artifact = "cdylib" }
 ```
 
 That dependency has `lib = false`, Cargo's artifact default. It builds a DLL
@@ -89,8 +90,8 @@ unsafe { runtime.load_plugin_library(&path); }
 ```
 
 There is no generated startup file. Registration lists actual selected Cargo
-artifacts in explicit provider order. Nodes requires UI runtime; Skin requires
-GFX. Runtime registration validates those requirements without loading additional
+artifacts in explicit provider order. The one UI root exposes runtime, nodes, GFX
+and Skin factories; it has no hard implementation-plugin dependencies. Runtime registration validates those requirements without loading additional
 libraries. Metadata inspection constructs no objects.
 
 The composition crate exists because Cargo rejects naming the same provider twice
@@ -107,7 +108,7 @@ one supplied handle, with the generated C bootstrap forwarding the immutable
 host service graph. Callbacks execute in that host; plugin code owns no registry.
 
 Reusable providers need the facade and contracts only. They are rlib-only packages
-without a `dynamic-plugin` feature. Each `*-dylib` subpackage is a minimal final
+without a `dynamic-plugin` feature. Each `*-dylib` package is a minimal final
 link root exporting discovery through the published SDK's `return_plugin_descriptor`
 helper and the implementation's existing static descriptor. Static/browser
 composition registers that same descriptor directly. Additive Cargo features cannot
@@ -293,8 +294,9 @@ normal dependencies: build dependencies receive host-tool profiles even with
 packages add only symbol ownership, with no duplicate metadata, factories, runtime,
 generated workspace or dependency resolver.
 
-The host implementation Rust target is `neocogi_com_host`. Native provider names remain `nc_ui`, `nc_ui_nodes`, `nc_platform`,
-`nc_gfx`, `nc_skin` and optional `nc_ui_extension`. The executable is in the usual
+The host implementation Rust target is `neocogi_com_host`. Native provider names
+are `nc_ui` and `nc_platform`, plus `nc_ui_extension` when that independent example
+is selected. Only the selected binary and deployment copies are staged in the
 `target/<profile>` directory when no explicit target is selected. Dependency DLLs
 remain in Cargo's artifact directories as compiler inputs, with deployment copies
 in `lib/`. Registration joins those filenames to the executable directory.
@@ -325,7 +327,7 @@ malformed metadata produces a debugger import error.
 Set breakpoints directly in provider Rust source before starting. They can remain
 unresolved until the provider DLL loads; CodeLLDB then binds them and supports
 ordinary stepping and local-variable inspection. For example, a breakpoint on
-the call to `create_runtime_from_assets` in `crates/ui/runtime/src/lib.rs` stops
+the call to `create_runtime_from_assets` in `crates/ui/src/runtime/mod.rs` stops
 inside the copied `libnc_ui.so`. Generated COM client/thunk frames should open
 their Rust file under `OUT_DIR`, rather than disassembly.
 
@@ -334,7 +336,7 @@ Debug symbols in the copied ELF libraries are preserved. The native acceptance
 test scripts still use their copied test layout; launching an acceptance test's
 compiler-directory binary directly does not supply adjacent resources. Separate
 PDB/dSYM staging and Windows/macOS debugger execution are not covered by the
-Linux checks alone. See the [current debugger validation scope](../../crates/ui/runtime/docs/TESTING.md).
+Linux checks alone. See the [current debugger validation scope](../../crates/ui/docs/runtime/TESTING.md).
 
 ## Browser
 
@@ -369,7 +371,7 @@ use `scripts/run-native-test.py` as a Cargo runner to copy an already compiled
 test and its staged inputs into a temporary application directory. This test-only
 runner never builds; production startup always uses adjacent files directly.
 SDK cross-compiler and ABI qualification belong to the upstream COM workspace.
-The [current native validation guide](../../crates/ui/runtime/docs/TESTING.md)
+The [current native validation guide](../../crates/ui/docs/runtime/TESTING.md)
 lists maintained entrypoints and platform limitations.
 
 The selected platform provider constructs its own fixed-format shader compiler

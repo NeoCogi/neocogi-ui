@@ -128,9 +128,9 @@ sequenceDiagram
 
 This example has no private composite work. When such work exists, the scheduler
 processes it before visiting the application dispatcher. The
-[executable button walkthrough](../../crates/ui/api/docs/button_events.rs)
+[executable button walkthrough](../../crates/ui-contracts/docs/button_events.rs)
 shows the actual queue, processor, construction and `update_with_events` calls.
-Its [runtime test](../../crates/ui/runtime/src/runtime/tests/documentation.rs)
+Its [runtime test](../../crates/ui/src/runtime/runtime/tests/documentation.rs)
 drives real keyboard input and destruction through those exact example sources.
 
 The facade's `Dispatcher` uses a Rust `mpsc::Receiver`, but channel types and
@@ -203,8 +203,8 @@ application operation instead returns the explicit `ApplicationDispatch` enum
 described below. Passive widgets expose no private dispatcher and receive no
 empty-inbox calls. Custom leaves can opt in through `DispatchingLeafContent`.
 
-See the [FileDialog implementation](../../crates/ui/nodes/src/dialogs.rs) and
-[custom leaf adapter](../../crates/ui/api/src/leaf.rs) for these two forms of
+See the [FileDialog implementation](../../crates/ui/src/nodes/dialogs.rs) and
+[custom leaf adapter](../../crates/ui-contracts/src/leaf.rs) for these two forms of
 widget-owned behavior.
 
 ## Scheduling one update
@@ -266,7 +266,7 @@ an inbox: the runtime cannot establish that fact without another visit.
 
 ## Applying deferred application changes
 
-The [application dispatcher](../../crates/ui/api/src/events/dispatcher.rs) calls
+The [application dispatcher](../../crates/ui-contracts/src/events/dispatcher.rs) calls
 `MessageProcessor::handle` to interpret one private message. A processor can accumulate
 work that should be published together, such as a preview revision after several
 editor commands. When its receiver is empty or disconnected, `Dispatcher` calls
@@ -293,8 +293,8 @@ Geometry has its own publication protocol: committed setter changes retain a
 sticky `take_change` marker and notify `IWidgetHost::mark_geometry_changed`.
 Returning a message-work outcome does not replace that notification. The runtime
 also reconciles notifications after an `Idle` application visit. See
-[pending-change regressions](../../crates/ui/runtime/src/runtime/tests/pending_changes.rs)
-and [geometry dispatch regressions](../../crates/ui/runtime/src/runtime/tests/dispatch_geometry.rs).
+[pending-change regressions](../../crates/ui/src/runtime/runtime/tests/pending_changes.rs)
+and [geometry dispatch regressions](../../crates/ui/src/runtime/runtime/tests/dispatch_geometry.rs).
 
 ## Runtime storage and callback access
 
@@ -318,8 +318,8 @@ editing operations, each with its own short transaction. The widget's or
 application dispatcher's own mutable COM gate still protects the active handler.
 
 The runtime releases each context transaction before invoking application code.
-The source is [runtime.rs](../../crates/ui/runtime/src/runtime.rs) and
-[runtime_context.rs](../../crates/ui/runtime/src/runtime_context.rs).
+The source is [retained engine](../../crates/ui/src/runtime/runtime/mod.rs) and
+[runtime_context.rs](../../crates/ui/src/runtime/runtime_context.rs).
 
 ## Failure, removal and rendering boundaries
 
@@ -350,7 +350,7 @@ a display list for GFX composition and renderer submission. This keeps input,
 behavior, geometry publication and native rendering in an explicit order.
 
 For implementation details and existing regression coverage, follow the
-[runtime architecture](../../crates/ui/runtime/docs/ARCHITECTURE.md),
-[event guide](../../crates/ui/runtime/docs/EVENTS.md),
-[dispatch error tests](../../crates/ui/runtime/src/runtime/tests/dispatch_errors.rs),
-and [widget lifetime tests](../../crates/ui/runtime/src/runtime/tests/widget_dispatch.rs).
+[runtime architecture](../../crates/ui/docs/runtime/ARCHITECTURE.md),
+[event guide](../../crates/ui/docs/runtime/EVENTS.md),
+[dispatch error tests](../../crates/ui/src/runtime/runtime/tests/dispatch_errors.rs),
+and [widget lifetime tests](../../crates/ui/src/runtime/runtime/tests/widget_dispatch.rs).

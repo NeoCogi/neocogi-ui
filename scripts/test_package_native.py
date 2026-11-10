@@ -166,6 +166,15 @@ def production(directory):
     ):
         built[name] = packager.package(selection(directory / name, kind, backend, embedded, monolith))
         assert not ({".neocogi-layout.json", ".neocogi-layout.lock"} & files(built[name]))
+    if sys.platform.startswith("linux"):
+        # Old node/GFX/Skin files in the development cache cannot enter the reduced distribution.
+        for name in ("full-a", "basic-a", "full-b", "basic-vulkan", "basic-b", "embedded", "smoke"):
+            libraries = {path for path in files(built[name]) if path.startswith("lib/")}
+            assert libraries == {"lib/libnc_ui.so", "lib/libnc_platform.so"}, (name, libraries)
+        # Full enables Skin in the same UI filename; cached basic/full switches must restore it.
+        assert digest(built["full-a"] / "lib/libnc_ui.so") == digest(built["full-b"] / "lib/libnc_ui.so")
+        assert digest(built["basic-a"] / "lib/libnc_ui.so") == digest(built["basic-b"] / "lib/libnc_ui.so")
+        assert digest(built["full-a"] / "lib/libnc_ui.so") != digest(built["basic-a"] / "lib/libnc_ui.so")
     assert files(built["full-a"]) == files(built["full-b"])
     assert files(built["basic-a"]) == files(built["basic-b"])
     assert not any(name.startswith("themes/") or "FACEPALM" in name or name.endswith(".obj") for name in files(built["basic-a"]))

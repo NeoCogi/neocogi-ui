@@ -56,7 +56,7 @@ The explicit `embed-assets` feature includes their bytes; browser `webgl` enable
 The palette editor exposes 18 RGBA roles and five layout metrics. Default Skin
 permits palette edits; image themes make those color controls inert and retain
 their authored artwork. Scalar metrics remain editable. All four themes are
-available on native and browser targets. Native file packages use the skin plugin's
+available on native and browser targets. Native file packages use the Skin service's
 JSON loader; embedded builds compile them on Cargo's build host.
 Accepted edits publish one immutable revision; animation frames do not repeatedly
 reinstall unchanged styles. The log uses the actual TextBlock as its stored text,

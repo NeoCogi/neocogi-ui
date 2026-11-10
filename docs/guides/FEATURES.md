@@ -1,65 +1,58 @@
 # Cargo features
 
-Features belong to the crate that implements the selected capability. The
-`neocogi-ui` application facade keeps its defaults empty. Its required GFX
-contract and portable bundle values are part of the ordinary API because every
-retained UI imports resources and submits composed frames. Applications opt into
-`skin` only when they need theme-authoring contracts.
+NeoCogi UI publishes exactly three crates at the same version. `neocogi-ui-contracts`
+owns canonical UI/GFX/Skin/document contracts, typed application clients, immutable
+resource values, appearance values, design metadata and shared IDL sources.
+`neocogi-ui` reexports those definitions and owns all concrete implementations.
+`neocogi-ui-dylib` forwards selected implementation features and exports only the
+`nc_get_plugin_descriptor_v1` entrypoint as `nc_ui`.
+
+Both libraries have empty default features. Merely importing contracts or clients
+creates no retained tree, renderer, theme parser or process runtime.
 
 | Crate | Feature | Effect |
 | --- | --- | --- |
-| Native demos | `dynamic` (default) | Build and load Cargo cdylib providers with access supplied by the host runtime. |
-| Native demos | `monolith` | Link the runtime plus only the UI, required shader compiler, renderer, GFX, and Skin implementations selected by that assembly. |
-| `neocogi-com` | defaults: `std`, `macros` | Typed object/data helpers and procedural macros without linking a runtime. |
-| `neocogi-com` | `macros` | Rust object/plugin and persistence procedural macros; callable contracts come from the IDL build dependency. |
-| `neocogi-com` | `std` | Standard-library data/error support; implies `alloc`. No event transport or runtime implementation is selected. |
-| `neocogi-com` | `runtime` | Runtime/persistence clients using supplied access; implies `std` and selects no implementation. |
-| `neocogi-ui` | `runtime` | Expose COM runtime clients; the host supplies access. |
-| `neocogi-gfx-support` | `compiled-assets` | Expand bounded zlib pixels from generated asset tables. |
-| `neocogi-ui` | `skin` | Re-export the optional Skin plugin's typed authoring contracts. |
-| `neocogi-ui-support` | none | Non-plugin resource and presentation helpers; owns no runtime or concrete nodes. |
-| `neocogi-ui-support` | `test-support` | Deterministic canonical resources and phase snapshots; never replaces runtime behavior. |
-| `neocogi-ui-runtime-dylib` | none | Final DLL entrypoint; the reusable `neocogi-ui-runtime` exports no discovery symbol. |
-| `neocogi-ui-nodes-dylib` | none | Final DLL entrypoint; the reusable nodes library has no dynamic export feature. |
-| `neocogi-gfx` | none | PNG decoding, resource publication, and renderer-neutral frame composition. |
-| `neocogi-gfx` | `builder` | Font rasterization and PNG atlas construction into portable tables. |
-| `neocogi-skin` | none | Live typed metric/palette compilation through the always-available GFX publisher. |
-| `neocogi-skin` | `theme-json` | Strict external JSON and appearance compilation; resource baking uses an explicit GFX loader. |
-| `neocogi-gfx-impl` | `save-to-rust` | Build-tool-only atomic source export from validated portable tables. |
-| `neocogi-skin-impl` | `builder` | Offline JSON-theme generation through the GFX implementation; never selected by the Skin plugin. |
-| `neocogi-platform` | `platform` plus `glow` / `vulkan` / `wgpu` / `webgl` | Build exactly one renderer plugin identity; WebGL is the browser choice. |
-| `neocogi-demo-host` | `png-assets` | Expose the host PNG-upload client for applications that select the GFX plugin. |
-| `neocogi-demo-host` | `skin` | Link/register the live appearance compiler for browser or monolithic startup; does not enable JSON parsing. |
-| `neocogi-demo-host` | `monolith-skin` | Add Skin to a native monolith, including its external JSON theme loader. |
-| Full/basic demos | `embed-assets` | Explicitly embed resource bytes; native defaults read adjacent files. |
-| Full/basic demos | `webgl` | Select browser integration and explicitly enable `embed-assets`. |
+| `neocogi-ui-contracts` | `build-support` | Packaged UI and matching Platform schemas, IDL source selection and Cargo generation helpers. |
+| `neocogi-ui-contracts` | `compiled-assets` | Expand bounded zlib pixels from generated portable tables. |
+| `neocogi-ui-contracts` | `test-support` | Client-side event test helpers. |
+| Both libraries | `runtime` | Rich COM runtime clients; the executable still supplies the host. |
+| `neocogi-ui` | `ui` | Retained runtime, built-in nodes, presentation algorithms and resource helpers. |
+| `neocogi-ui` | `publisher` | Immutable asset publication without font rasterization or filesystem loading. |
+| `neocogi-ui` | `gfx` | Graphics service, PNG loader and renderer-neutral compositor; includes `publisher`. |
+| `neocogi-ui` | `builder` | Font rasterization and atlas construction; includes `gfx`. |
+| `neocogi-ui` | `skin` | Appearance service and typed palette/metric derivation using an explicit publisher. |
+| `neocogi-ui` | `authoring` | Strict JSON theme validation and compilation using explicitly supplied graphics capabilities. |
+| `neocogi-ui` | `theme-json` | Skin JSON-loader service; includes `skin` and `authoring`. |
+| `neocogi-ui` | `document` | Authored document model, reconstruction, persistence and generated typed bindings. |
+| `neocogi-ui` | `save-to-rust` | Atomic source export from validated tables; includes `gfx`. |
+| `neocogi-ui` | `compiled-assets` | Forwards contracts' compressed-table support. |
+| `neocogi-ui` | `test-support` | Real CPU render-device and retained-engine fixtures; includes `ui`, `gfx`, `skin`, `document` and Platform test support. Implementation unit suites require this fixture feature; service-feature tests do not. |
+| `neocogi-ui-dylib` | defaults: `ui,gfx` | One loadable UI service root. Additional `builder`, `skin`, `theme-json`, `document` features forward to the static SDK. |
 
-The full demo's `webgl` selection additionally enables the host's `skin` capability. Compiling
-authored themes into embedded tables does not replace the live appearance compiler used by its
-style editor. The browser links/registers that provider without its filesystem-based JSON loader;
-the simple demo does not need it.
+Register the static SDK's `plugin_descriptor()` or load the single UI dylib. Both
+publish `neocogi.ui` with a `UiLibraryFactory` root. Use
+`neocogi_ui_contracts::services::{ui,nodes,gfx,skin}(runtime)` or acquire
+`services::library(runtime)` and call its typed getters. Each call returns an
+independently owned factory. An omitted service returns `NC_E_NOT_FOUND`;
+`publisher` alone exposes direct publication helpers but does not enable the GFX
+service. Builder and JSON-loader operations retain their existing capability
+errors when their optional implementation is absent.
 
-Cargo may freely unify the `runtime` client capability. The executable selects
-`neocogi_com_host` as an ordinary Rust dependency, initializes it through `#[com_main]` and
-passes `Runtime` to providers and reusable libraries. The same ownership applies
-to native dynamic, monolithic and browser applications; final test executables
-select their owner explicitly. Neither COM nor UI facade has a feature that
-selects an implementation. Providers have no implicit initializer or discovery
-fallback. `Runtime` itself is available without the optional rich client feature.
+The root has no hard implementation-plugin dependencies. UI and nodes preserve
+their separate COM factory contracts: binding nodes authenticates the retained
+runtime's public construction capabilities and canonical widget-host identity.
+Skin receives its GFX publisher/loader explicitly. Consolidating crates does not
+make private object state cross these boundaries. Former UI runtime, nodes, GFX
+and Skin plugin identities and their separate dylibs are retired.
 
-The UI implementation has no optional asset features. Applications, plugins and
-native event tests install concrete receivers directly and use the same
-standard `std::sync::mpsc` channels. The facade has no separate event-test feature.
+The executable links `neocogi-com-host`, initializes it through `#[com_main]`, and
+passes `Runtime` to implementations. There is no COM runtime DSO or implicit
+initializer. Platform uses its matching `neocogi-platform-contracts`,
+`neocogi-platform` and `neocogi-platform-dylib` packages; backend selection remains
+under Platform's features.
 
-The native host observes drawable size after each platform poll. When minimized,
-it sends one cancellation to end held gestures and discards subsequent input
-observations until a drawable size returns; no UI update runs at zero size.
-The runtime also bounds input retained between updates to 4,096 transitions
-and 4 MiB of committed text. On overflow it drops the incomplete backlog,
-queues cancellation, then retains the newest transition. An individual text
-commit above 4 MiB is rejected before copying.
-
-Cargo owns native artifact and feature selection:
+Native demos default to `dynamic,glow`. Choose exactly one linkage mode and one
+renderer, using `--no-default-features` when replacing defaults:
 
 ```sh
 cargo run -p neocogi-demo-full
@@ -67,58 +60,26 @@ cargo run -p neocogi-demo-full --no-default-features --features dynamic,vulkan
 cargo run -p neocogi-demo-full --no-default-features --features monolith,vulkan,embed-assets
 ```
 
-Native defaults are `dynamic,glow`. Choose one renderer and one linkage; Cargo
-adds requested features to defaults unless `--no-default-features` is supplied.
-`dynamic` requests DLL artifacts through `neocogi-demo-plugins`; `monolith`
-registers normal Rust dependencies. Browser `webgl` uses static registration and
-embedded resources. Never enable both linkage modes in one build.
+Dynamic composition requests UI and Platform DLLs as Cargo artifact dependencies;
+an independent extension adds its own DLL. Monoliths register the same static
+service roots. Browser `webgl` uses static registration and embedded resources.
+The full browser demo enables the live Skin compiler for its appearance editor.
+Optional native theme parsing is selected with `monolith-skin` or the dynamic
+composition's `skin` feature. Do not enable both native linkage modes.
 
-Generated interface signatures are computed by the IDL library. Rust macro
-expansion does not hash contracts. Both linkage modes perform the same exact
-interface negotiation against one runtime authority.
+Cargo builds providers in the application's target profile. The thin dylibs alone
+own discovery exports; ordinary Rust implementation dependencies remain rlibs.
+`scripts/package-native.py` delegates exact distribution layout to Platform's
+build API. Development profile directories can retain stale files; distributions
+contain only the selected application, UI/Platform providers, optional extension
+and resources. See [native builds](COM_NATIVE.md) and [examples](EXAMPLES.md).
 
-Native file-backed resources are copied beside the executable during compilation.
-Runtime paths use that application directory, independent of the source checkout.
-For a fresh distribution, use [`scripts/package-native.py`](../../scripts/package-native.py)
-with the selected package, binary, profile and features. Shared profile directories
-are development caches and may retain files from other selections; the packager
-publishes only the selected application's exact provider and resource set.
-`embed-assets` instead processes fonts, PNGs and JSON into generated Rust under
-`OUT_DIR`. Dynamic composition currently retains the GFX builder and selected
-Skin JSON support even with embedded resources; the former assembly-specific
-feature overlays are removed. This is a simpler fixed composition rather than
-an automatic size optimizer. See [native Cargo builds](COM_NATIVE.md).
+`embed-assets` compiles fonts, PNGs and themes under `OUT_DIR`; native defaults read
+adjacent files. Both routes use the same Skin recipe and GFX loader/publisher.
+Build tools call `neocogi_ui::gfx::export::write_rust` with `save-to-rust`; generated
+consumers select `neocogi-ui-contracts/compiled-assets`. All paths enforce the
+shared 64 MiB RGBA bound and exact storage/dimensions. See [asset contracts](../contracts/COM_ASSETS.md).
 
-`neocogi-demo-assets/full-demo` adds theme choices, photo and mesh access.
-The asset compiler is an optional host build dependency enabled by `embed-assets`. Both storage
-modes execute the same typed Skin recipe through the same GFX loader and publisher implementation
-and retain the original catalog when switching themes. The offline route instantiates those GFX
-services statically; it does not maintain a second Skin-owned atlas algorithm.
-
-For another application, call `neocogi_gfx_impl::export::write_rust` from a build tool and
-enable `neocogi-gfx-support/compiled-assets` directly in the consumer.
-`load_bundle()` returns a fresh
-immutable catalog; `bundle_data()?` provides tables for a compatible revision.
-The exporter is also available as a workspace command:
-
-```sh
-cargo run -p neocogi-asset-tools --bin neocogi-atlas-export -- --output bundle.rs
-cargo test -p neocogi-demo-assets --features 'full-demo embed-assets'
-```
-
-Asset consumers enforce the shared 64 MiB RGBA limit and exact dimensions/storage.
-UI `ImageError` classifies direct raw image storage. Canonical `AssetData`/`AssetTables`
-validation returns `NC_E_INVALID_ARG` for portable resource violations. Asset construction returns concrete I/O and theme errors; COM methods retain details
-through owned diagnostic interfaces. [COM_ASSETS.md](../contracts/COM_ASSETS.md) describes validation and publication.
-
-CI tests the UI and each compiler feature independently: no features, `builder`,
-`theme-json` and `save-to-rust`. It checks native backends separately and runs browser
-DOM/input regressions. A workspace-wide feature union can hide a broken minimal
-configuration; `--all-features` also does not replace the three native backend runs.
-
-Dynamic compositions select the seven providers' `*-dylib` packages as normal
-Cargo artifacts. These fixed final targets alone own the discovery symbol; they
-forward backend/builder/theme features to the same reusable implementations. The
-implementation packages have no `dynamic-plugin` feature. This preserves target
-release/min-size settings without duplicating descriptors or linking provider
-implementations into a dynamic executable.
+CI checks minimal feature selections separately from the all-feature unit suite,
+then qualifies extracted archives, independent contract consumers, real shared
+libraries, native backends and browser DOM/input behavior.

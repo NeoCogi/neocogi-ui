@@ -44,7 +44,7 @@ version = "0.0.0"
 edition = "2024"
 [workspace]
 [dependencies]
-neocogi-gfx-support = {{ path = {rust_path(ROOT / 'crates/gfx/support')}, features = ["compiled-assets"] }}
+neocogi-ui-contracts = {{ path = {rust_path(ROOT / 'crates/ui-contracts')}, features = ["compiled-assets"] }}
 neocogi-com = {{ version = "=0.1.0", features = ["std", "runtime"] }}
 neocogi-com-host = "=0.1.0"
 {extra}
@@ -62,10 +62,10 @@ def qualify(work: Path) -> None:
     environment = os.environ.copy()
     target = Path(environment.get("CARGO_TARGET_DIR", str(ROOT / "target")))
     environment["CARGO_TARGET_DIR"] = str(target if target.is_absolute() else ROOT / target)
-    fixture = ROOT / "crates/gfx/impl/tests/support/export_data.rs"
+    fixture = ROOT / "crates/ui/tests/gfx/support/export_data.rs"
     generator_source = f'''#[path = {rust_path(fixture)}] mod fixture;
 #[path = {rust_path(ROOT / 'examples/assets/src/recipe_data.rs')}] mod recipe;
-use neocogi_gfx_impl::atlas::{{Builder, Config, FontAsset, IconAsset}};
+use neocogi_ui::gfx::atlas::{{Builder, Config, FontAsset, IconAsset}};
 fn main() {{
     let args = std::env::args().skip(1).collect::<Vec<_>>();
     let work = std::path::Path::new(&args[0]);
@@ -73,7 +73,7 @@ fn main() {{
     let root = std::path::Path::new(&args[2]);
     let data = fixture::data();
     data.validate().unwrap();
-    neocogi_gfx_impl::export::write_rust(&data, &work.join(format!("fixture-{{label}}.rs"))).unwrap();
+    neocogi_ui::gfx::export::write_rust(&data, &work.join(format!("fixture-{{label}}.rs"))).unwrap();
     std::fs::write(work.join(format!("fixture-{{label}}.bin")), fixture::snapshot(&data)).unwrap();
     let config = Config {{ texture_width: recipe::SIZE.0 as usize, texture_height: recipe::SIZE.1 as usize,
         white_icon: root.join(recipe::WHITE),
@@ -85,7 +85,7 @@ fn main() {{
 }}
 '''
     generator = package(work / "generator", "neocogi-export-profile-fixture",
-        f'neocogi-gfx-impl = {{ path = {rust_path(ROOT / "crates/gfx/impl")}, features = ["builder", "save-to-rust"] }}', generator_source)
+        f'neocogi-ui = {{ path = {rust_path(ROOT / "crates/ui")}, features = ["builder", "save-to-rust"] }}', generator_source)
 
     def run(label: str, arguments: list[str]) -> None:
         """Preserve exact command, output and exit without interleaving Cargo builds."""
@@ -112,7 +112,7 @@ fn main() {{
     data.validate().unwrap();
     assert!(fixture::snapshot(&data) == include_bytes!({rust_path(work / (kind + '-dev.bin'))}).as_slice(), "{module}: emitted data differs from input");
     let bundle = {module}::load_bundle().unwrap();
-    let copied = neocogi_gfx_support::AssetData::read(bundle.as_com_ref()).unwrap();
+    let copied = neocogi_ui_contracts::gfx::AssetData::read(bundle.as_com_ref()).unwrap();
     assert!(fixture::snapshot(&copied) == fixture::snapshot(&data), "{module}: COM copy differs");''')
     source = f'''#[path = {rust_path(fixture)}] mod fixture;
 {modules}

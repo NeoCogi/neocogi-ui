@@ -17,21 +17,23 @@ import package_inputs
 
 def metadata():
     """Minimal real metadata shape has one reusable owner and one private application."""
-    public = {"id": "build", "name": packages.SCHEMA_OWNER, "version": packages.RELEASE,
-              "manifest_path": str(packages.ROOT / "crates/build/Cargo.toml"), "publish": ["crates-io"], "dependencies": []}
+    public = [{"id": name, "name": name, "version": packages.RELEASE,
+               "manifest_path": str(packages.ROOT / "crates" / directory / "Cargo.toml"),
+               "publish": ["crates-io"], "dependencies": []}
+              for name, directory in [(packages.SCHEMA_OWNER, "ui-contracts"), ("neocogi-ui", "ui"), ("neocogi-ui-dylib", "ui-dylib")]]
     private = {"id": "app", "name": "application", "version": packages.RELEASE,
                "manifest_path": str(packages.ROOT / "examples/app/Cargo.toml"), "publish": [], "dependencies": []}
-    return {"workspace_members": ["build", "app"], "packages": [public, private]}
+    return {"workspace_members": [p["id"] for p in public] + ["app"], "packages": public + [private]}
 
 
 class ReleaseSelection(unittest.TestCase):
     """Registry policy must reject incomplete, mixed or accidentally expanded releases."""
     def test_private_examples_and_exact_release_are_enforced(self):
         current = metadata()
-        self.assertEqual(set(packages.release_packages(current)), {packages.SCHEMA_OWNER})
+        self.assertEqual(set(packages.release_packages(current)), packages.PUBLIC_PACKAGES)
         for field, value in [("publish", ["crates-io"]), ("version", "0.0.0")]:
             changed = copy.deepcopy(current)
-            changed["packages"][1][field] = value
+            changed["packages"][-1][field] = value
             with self.subTest(field=field), self.assertRaises(ValueError): packages.release_packages(changed)
 
     def test_private_and_floating_internal_dependencies_are_rejected(self):
@@ -40,12 +42,26 @@ class ReleaseSelection(unittest.TestCase):
             current["packages"][0]["dependencies"] = [{"name": name, "path": "/local", "kind": "dev", "req": requirement}]
             with self.subTest(name=name), self.assertRaises(ValueError): packages.release_packages(current)
 
-    def test_only_local_test_peers_may_omit_the_registry_version(self):
+    def test_missing_or_additional_public_package_is_rejected(self):
         current = metadata()
-        current["packages"][0]["dependencies"] = [{"name": packages.SCHEMA_OWNER, "path": "/local", "kind": "dev", "req": "*"}]
-        self.assertEqual(set(packages.release_packages(current)), {packages.SCHEMA_OWNER})
-        current["packages"][0]["dependencies"][0]["kind"] = None
-        with self.assertRaises(ValueError): packages.release_packages(current)
+        current["packages"].pop(1)
+        with self.assertRaisesRegex(ValueError, "exactly"):
+            packages.release_packages(current)
+        current = metadata()
+        extra = copy.deepcopy(current["packages"][0])
+        extra.update(id="extra", name="extra")
+        current["packages"].append(extra)
+        current["workspace_members"].append("extra")
+        with self.assertRaisesRegex(ValueError, "exactly"):
+            packages.release_packages(current)
+
+    def test_internal_dev_dependencies_are_exact_and_self_contained(self):
+        current = metadata()
+        current["packages"][0]["dependencies"] = [{"name": "neocogi-ui", "path": "/local", "kind": "dev", "req": "=" + packages.RELEASE}]
+        self.assertEqual(set(packages.release_packages(current)), packages.PUBLIC_PACKAGES)
+        current["packages"][0]["dependencies"][0]["req"] = "*"
+        with self.assertRaisesRegex(ValueError, "exact"):
+            packages.release_packages(current)
 
     def test_publication_preflight_is_explicitly_nonuploading_and_selective(self):
         for preflight in [False, True]:
@@ -153,7 +169,7 @@ class ValidationIsolation(unittest.TestCase):
 
 class ArchiveAdmission(unittest.TestCase):
     """Malformed archives are rejected through valid tar storage before extraction."""
-    def inspect(self, *, dependency="", extra=None, schemas=31, omit_license=False):
+    def inspect(self, *, dependency="", extra=None, schemas=32, omit_license=False):
         """Build bounded tar inputs with actual normalized manifest text and arbitrary member kinds."""
         package = metadata()["packages"][0]
         prefix = package["name"] + "-" + packages.RELEASE
@@ -187,53 +203,25 @@ class ArchiveAdmission(unittest.TestCase):
     def test_nonregistry_dependencies_and_incomplete_schema_inventory_fail(self):
         for source in ['path="../sibling",version="1"', 'git="https://example.invalid/repo",version="1"', 'workspace=true', 'features=[]']:
             with self.subTest(source=source), self.assertRaises(ValueError): self.inspect(dependency='[dependencies]\npeer={' + source + '}\n')
-        with self.assertRaisesRegex(ValueError, "schema ownership"): self.inspect(schemas=30)
+        with self.assertRaisesRegex(ValueError, "schema ownership"): self.inspect(schemas=31)
 
 
 class ProviderArtifacts(unittest.TestCase):
     """Cargo all-target output includes test harnesses carrying cdylib target metadata."""
     def test_final_library_is_not_overwritten_by_a_test_executable(self):
         for extension in ["so", "dylib", "dll"]:
-            library = {"reason": "compiler-artifact", "package_id": "path+file:///extracted/dylib#neocogi-gfx-dylib@" + packages.RELEASE,
+            library = {"reason": "compiler-artifact", "package_id": "path+file:///extracted/dylib#neocogi-ui-dylib@" + packages.RELEASE,
                        "target": {"crate_types": ["cdylib"]}, "profile": {"test": False},
-                       "filenames": ["/output/libnc_gfx." + extension, "/output/debug-sidecar"]}
+                       "filenames": ["/output/libnc_ui." + extension, "/output/debug-sidecar"]}
             harness = copy.deepcopy(library)
             harness["profile"]["test"] = True
-            harness["filenames"] = ["/output/build/neocogi-gfx-dylib/test-harness"]
+            harness["filenames"] = ["/output/build/neocogi-ui-dylib/test-harness"]
             for records in [[library, harness], [harness, library]]:
                 stream = "\n".join(json.dumps(record) for record in records)
-                self.assertEqual(packages.provider_libraries(stream), {"neocogi-gfx-dylib": library["filenames"][0]})
+                self.assertEqual(packages.provider_libraries(stream), {"neocogi-ui-dylib": library["filenames"][0]})
         library["filenames"] = ["/output/executable"]
         with self.assertRaisesRegex(ValueError, "final provider library"):
             packages.provider_libraries(json.dumps(library))
-
-
-class ArchivedTestLinks(unittest.TestCase):
-    """Publication omits test cycles; test restoration cannot rewrite production dependencies."""
-    def test_exact_test_links_restore_without_changing_production_or_source_bytes(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
-            manifest = directory / "Cargo.toml"
-            original = '[package]\nname="owner"\nversion="' + packages.RELEASE + '"\n[dependencies]\nproduction="1"\n'
-            manifest.write_text(original)
-            sidecar = directory / "tests/package-inputs/dependencies.json"
-            sidecar.parent.mkdir(parents=True)
-            declaration = {"schema": 1, "package": "owner", "dev-dependencies": {
-                "peer": {"version": "=" + packages.RELEASE, "features": ["test-support"], "default-features": False}}}
-            sidecar.write_text(json.dumps(declaration))
-            packages.restore_test_dependencies(directory, "owner", {"peer"})
-            result = tomllib.loads(manifest.read_text())
-            self.assertEqual(result["dependencies"], {"production": "1"})
-            self.assertEqual(result["dev-dependencies"], declaration["dev-dependencies"])
-            self.assertEqual(json.loads(sidecar.read_text()), declaration)
-            for invalid in [{"path": "/checkout"}, {"version": "1"}, {"package": "private"}]:
-                manifest.write_text(original)
-                changed = copy.deepcopy(declaration)
-                changed["dev-dependencies"]["peer"].update(invalid)
-                sidecar.write_text(json.dumps(changed))
-                with self.subTest(invalid=invalid), self.assertRaises(ValueError):
-                    packages.restore_test_dependencies(directory, "owner", {"peer"})
-                self.assertEqual(manifest.read_text(), original)
 
 
 class DerivedInputs(unittest.TestCase):
@@ -245,22 +233,20 @@ class DerivedInputs(unittest.TestCase):
                      "assets/WHITE.png": "pixels", "themes/classic/theme.json": "theme",
                      "examples/ui-samples/Cargo.toml": '[package]\nname="sample"\npublish=false\n',
                      "examples/assets/src/recipe.rs": "recipe", "examples/assets/src/recipe_data.rs": "data",
-                     "scripts/com_dependencies.rs": "helper", "crates/ui/api/docs/button_events.rs": "walkthrough",
-                     "crates/ui/document/README.md": "document", "crates/ui/document/tests/fixtures/view.rs": "binding",
-                     "crates/gfx/impl/Cargo.toml": '[package]\nname="fixture"\npublish=["crates-io"]\n[dev-dependencies]\npeer={path="../peer",features=["test-support"]}\n'}
+                     "scripts/com_dependencies.rs": "helper", "crates/ui-contracts/docs/button_events.rs": "walkthrough",
+                     "crates/ui/docs/document.md": "document", "examples/ui-samples/schemas/neocogi/demo.ncidl": "schema", "crates/ui/tests/document/fixtures/view.rs": "binding",
+                     "crates/ui/Cargo.toml": '[package]\nname="fixture"\npublish=["crates-io"]\n'}
             for name, contents in files.items():
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(contents)
             package_inputs.reconcile(check=False, root=root)
             self.assertEqual(package_inputs.reconcile(check=True, root=root), [])
-            owned = root / "crates/gfx/impl/tests/package-inputs"
-            links = json.loads((owned / "dependencies.json").read_text())
-            self.assertEqual(links["dev-dependencies"]["peer"], {"version": "=" + packages.RELEASE, "features": ["test-support"]})
+            owned = root / "crates/ui/tests/package-inputs"
             stale = owned / "stale"
             stale.write_text("unclaimed")
             (root / "assets/WHITE.png").write_text("new pixels")
-            untouched = root / "crates/gfx/impl/unrelated"
+            untouched = root / "crates/ui/unrelated"
             untouched.write_text("keep")
             with self.assertRaisesRegex(ValueError, "stale derived"): package_inputs.reconcile(check=True, root=root)
             package_inputs.reconcile(check=False, root=root)

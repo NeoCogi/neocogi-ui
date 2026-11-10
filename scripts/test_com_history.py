@@ -74,7 +74,7 @@ class ManifestSources(unittest.TestCase):
 
     def test_workspace_inheritance_and_local_ui_dependencies_are_preserved(self):
         manifest = {"workspace": {"dependencies": {"neocogi-com": self.source()}},
-                    "dependencies": {"neocogi-com": {"workspace": True}, "neocogi-ui": {"path": "crates/ui/api"}}}
+                    "dependencies": {"neocogi-com": {"workspace": True}, "neocogi-ui-contracts": {"path": "crates/ui-contracts"}}}
         self.assertEqual(manifest_links(manifest, GIT_SOURCE), {"neocogi-com"})
 
     def test_alias_and_artifact_policy_does_not_change_source_ownership(self):

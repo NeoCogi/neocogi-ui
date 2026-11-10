@@ -21,8 +21,8 @@ from package_inputs import reconcile
 
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE = tomllib.loads((ROOT / "Cargo.toml").read_text())["workspace"]["package"]["version"]
-SCHEMA_OWNER = "neocogi-ui-build"
-SAMPLE_OWNER = "neocogi-ui-samples"
+SCHEMA_OWNER = "neocogi-ui-contracts"
+PUBLIC_PACKAGES = {"neocogi-ui-contracts", "neocogi-ui", "neocogi-ui-dylib"}
 
 
 def run(arguments, *, cwd=ROOT, env=None, capture=False):
@@ -39,22 +39,22 @@ def release_packages(metadata):
     selected = {}
     for package in members.values():
         path = Path(package["manifest_path"]).relative_to(ROOT)
-        public = path.parts[0] == "crates" or package["name"] == SAMPLE_OWNER
+        public = path.parts[0] == "crates"
         if package["version"] != RELEASE:
             raise ValueError(f"workspace release version differs: {package['name']}")
         if package["publish"] != (["crates-io"] if public else []):
             raise ValueError(f"unexpected publication policy: {package['name']}")
         if public:
             selected[package["name"]] = package
-    if SCHEMA_OWNER not in selected:
-        raise ValueError("shared UI source owner missing from release")
+    if set(selected) != PUBLIC_PACKAGES:
+        raise ValueError("release must contain exactly contracts, static UI and UI dylib")
     for package in selected.values():
         for dependency in package["dependencies"]:
             if not dependency.get("path"):
                 continue
             if dependency["name"] not in selected:
                 raise ValueError(f"release depends on private package: {package['name']} -> {dependency['name']}")
-            expected = "*" if dependency.get("kind") == "dev" else "=" + RELEASE
+            expected = "=" + RELEASE
             if dependency["req"] != expected:
                 raise ValueError(f"internal dependency is not exact: {package['name']} -> {dependency['name']}")
     return selected
@@ -87,8 +87,8 @@ def archive_manifest(archive, package):
                         raise ValueError(f"nonregistry archive dependency: {package['name']} -> {name}")
                     if not dependency.get("version"):
                         raise ValueError(f"unversioned archive dependency: {name}")
-        shared = [name for name in names if "/schemas/neocogi/" in name and name.endswith(".ncidl")]
-        expected = 31 if package["name"] == SCHEMA_OWNER else 1 if package["name"] == SAMPLE_OWNER else 0
+        shared = [name for name in names if name.startswith(prefix + "/schemas/neocogi/") and name.endswith(".ncidl")]
+        expected = 32 if package["name"] == SCHEMA_OWNER else 0
         if len(shared) != expected:
             raise ValueError(f"incorrect shared schema ownership: {package['name']}")
         if any("/scripts/" in name or "/.agents/" in name or "/target/" in name for name in names):
@@ -115,32 +115,6 @@ def provider_libraries(artifacts):
             raise ValueError(f"expected exactly one final provider library: {name}")
         libraries[name] = shared[0]
     return libraries
-
-
-def restore_test_dependencies(directory, package, selected):
-    """Restore only archived test links after unmodified production/consumer qualification.
-
-    Cargo strips path-only dev dependencies to make first-publication order
-    acyclic. Their derived, package-owned sidecar retains exact test requirements;
-    no implementation source or production dependency is changed here.
-    """
-    sidecar = directory / "tests/package-inputs/dependencies.json"
-    if not sidecar.exists():
-        return
-    declarations = json.loads(sidecar.read_text())
-    if declarations.get("schema") != 1 or declarations.get("package") != package:
-        raise ValueError("invalid archived test dependency identity")
-    manifest = directory / "Cargo.toml"
-    original = tomllib.loads(manifest.read_text()).get("dev-dependencies", {})
-    additions = []
-    for name, dependency in declarations["dev-dependencies"].items():
-        peer = dependency.get("package", name)
-        if (peer not in selected or name in original or dependency.get("version") != "=" + RELEASE
-                or set(dependency) - {"version", "features", "default-features", "package"}):
-            raise ValueError(f"invalid archived test dependency: {package} -> {name}")
-        additions.append("\n[dev-dependencies." + json.dumps(name) + "]\n")
-        for key, value in dependency.items(): additions.append(key + "=" + json.dumps(value) + "\n")
-    manifest.write_text(manifest.read_text() + "".join(additions))
 
 
 def archive_command(cargo, packages, flags, resolution, *, allow_dirty, publish_dry_run):
@@ -196,7 +170,7 @@ def qualify(*, offline=False, allow_dirty=False, stable=None, output=None, publi
         resolution.write_text(patch_configuration(packages, {name: Path(p["manifest_path"]).parent for name, p in packages.items()}))
         command = archive_command(cargo, packages, flags, resolution, allow_dirty=allow_dirty, publish_dry_run=publish_dry_run)
         # No checkout code is compiled here. This resolution-only patch handles
-        # legitimate cyclic dev-test edges before registry versions are uploaded.
+        # exact internal registry edges before registry versions are uploaded.
         run(command)
         # The pinned workspace publisher retains its upload candidates separately
         # from `cargo package` output; never inspect stale candidates from the other mode.
@@ -227,7 +201,7 @@ def qualify(*, offline=False, allow_dirty=False, stable=None, output=None, publi
         artifacts = run([*cargo, "build", "--workspace", "--lib", "--bins", "--all-features", "--message-format=json", *flags], cwd=outside, env=environment, capture=True)
         libraries = provider_libraries(artifacts)
         run([*cargo, "run", "-p", "neocogi-ui-package-consumer", *flags], cwd=outside, env=environment)
-        required = ["neocogi-gfx-dylib", "neocogi-skin-dylib", "neocogi-ui-runtime-dylib", "neocogi-ui-nodes-dylib"]
+        required = ["neocogi-ui-dylib"]
         if any(name not in libraries for name in required):
             raise ValueError("real archived provider libraries missing from Cargo artifact output")
         run([*cargo, "run", "-p", "neocogi-ui-package-consumer", *flags, "--", *[libraries[name] for name in required]], cwd=outside, env=environment)
@@ -235,8 +209,6 @@ def qualify(*, offline=False, allow_dirty=False, stable=None, output=None, publi
         if stable:
             stable_environment = dict(environment, RUSTUP_TOOLCHAIN=stable)
             run(["cargo", "+" + stable, "run", "-p", "neocogi-ui-package-consumer", *flags], cwd=outside, env=stable_environment)
-        for name, directory in locations.items():
-            restore_test_dependencies(directory, name, packages)
         run([*cargo, "test", "--workspace", "--all-features", *flags], cwd=outside, env=environment)
         if output:
             output = output.resolve()

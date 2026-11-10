@@ -30,7 +30,7 @@ These guides define current behavior. For component responsibilities see
 - [Exclusive widget ownership](EXCLUSIVE_WIDGET_OWNERSHIP.md).
 - [Provider-owned constructor defaults](WIDGET_CONSTRUCTOR_DEFAULTS.md).
 - [Runtime shutdown](UI_RUNTIME_SHUTDOWN.md) and
-  [runtime event guide](../../crates/ui/runtime/docs/EVENTS.md).
+  [runtime event guide](../../crates/ui/docs/runtime/EVENTS.md).
 - [Grid placement and bounds](GRID_PLACEMENT.md).
 
 Widgets retain one exclusive owner. Private dispatch is an optional capability on

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0-alpha.2
+
+- Reduce the reusable UI release from nineteen crates to contracts, static UI and
+  one thin UI dylib, matching Platform's ownership model.
+- Consolidate activation under `neocogi.ui` with typed runtime, node, GFX and Skin
+  factory getters; disabled services return `NC_E_NOT_FOUND`.
+- Move canonical UI/GFX/Skin/design values, typed clients and packaged schema/build
+  support into `neocogi-ui-contracts`; feature-select concrete implementation
+  modules in `neocogi-ui` without compatibility wrapper crates.
+- Update examples, independent extensions, native/browser composition, archive
+  qualification, tests and documentation for the three-package release.
+- Retain Platform `0.2.0-alpha.2`, rs-math3d `0.21.0` and COM/IDL `0.1.0` APIs.
+
 ## Dependency migration: Platform 0.2 alpha.2 and rs-math3d 0.21
 
 - Consume the three published Platform 0.2.0-alpha.2 packages and rs-math3d 0.21.0.

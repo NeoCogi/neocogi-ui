@@ -108,6 +108,6 @@ expiry makes a fact irrelevant; file completion may remain useful. Document rece
 before event queries. The shared library receiver transports the same COM event and
 adds only the construction attempt's generation.
 
-The [executed button walkthrough](../../crates/ui/api/docs/button_events.rs),
+The [executed button walkthrough](../../crates/ui-contracts/docs/button_events.rs),
 [widget architecture](../architecture/WIDGET_EVENT_MODEL.md), and
 [dispatch contract](WIDGET_EVENT_DISPATCH.md) show the complete scheduling path.

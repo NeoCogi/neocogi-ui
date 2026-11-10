@@ -11,7 +11,7 @@ import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-PROVIDERS = {"nc_ui", "nc_ui_nodes", "nc_platform", "nc_gfx", "nc_skin"}
+PROVIDERS = {"nc_ui", "nc_platform"}
 
 
 class NativeBuildProfiles(unittest.TestCase):
@@ -42,7 +42,7 @@ class NativeBuildProfiles(unittest.TestCase):
         implementations = []
         for unit in artifacts:
             self.assertIn("-dylib@", unit["pkg_id"], "only a final package owns a discovery export")
-            dependency = "neocogi_platform" if unit["target"]["name"] == "nc_platform" else "provider"
+            dependency = "neocogi_platform" if unit["target"]["name"] == "nc_platform" else "neocogi_ui"
             implementation = units[next(edge["index"] for edge in unit["dependencies"] if edge["extern_crate_name"] == dependency)]
             self.assertEqual(implementation["target"]["crate_types"], ["rlib"])
             self.assertNotIn("dynamic-plugin", implementation["features"])

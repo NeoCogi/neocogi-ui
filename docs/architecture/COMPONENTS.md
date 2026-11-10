@@ -1,180 +1,93 @@
 # Component and plugin boundaries
 
-NeoCogi UI owns frontend protocols and composition.
-[NeoCogi Platform](https://github.com/NeoCogi/neocogi-platform) owns the platform,
-renderer, shader and native deployment packages consumed by this workspace.
-Public namespaces and their supplying implementations are:
+UI uses the same three-package release model as Platform. Package boundaries
+express contracts versus implementation versus the final dynamic link root.
+Runtime COM capabilities retain explicit ownership within that implementation.
 
-| Responsibility | Contract | Deployable implementation |
+| Responsibility | Canonical owner | Implementation |
 | --- | --- | --- |
-| Shader compilation | `neocogi.renderer` | Renderer-owned compiler in `neocogi-platform` |
-| Renderer | `neocogi.renderer` | Selected Glow, Vulkan, WGPU, or WebGL backend |
-| Platform | `neocogi.platform` | Currently co-owned by the selected backend artifact |
-| GFX resources | `neocogi.gfx` | `neocogi-gfx` |
-| Skin authoring | `neocogi.skin` | `neocogi-skin` |
-| Retained UI protocols | `neocogi.ui.core` | `neocogi-ui-runtime` |
-| Built-in UI classes and standard composites | `neocogi.ui.nodes` | `neocogi-ui-nodes` |
+| UI, node, GFX, Skin and document interfaces | `neocogi_ui_contracts::abi` and domain modules | `neocogi-ui` modules |
+| Portable asset tables, image/palette values, event owners and typed clients | `neocogi-ui-contracts` | Shared directly; no duplicate representations |
+| Design metadata and bounded settings values | `neocogi_ui_contracts::design` | Document reconstruction in `neocogi_ui::document` |
+| Packaged production schemas and generation helpers | `neocogi_ui_contracts::build` | Host-side `build-support` feature |
+| Retained forest, layout, routing, menus, windows and commit | Public UI contracts | `neocogi_ui::runtime` |
+| Built-in widgets, containers and dialogs | Public node contracts | `neocogi_ui::nodes` |
+| Presentation algorithms, resource imports and geometry/text helpers | Public values | `neocogi_ui::support` |
+| Publication, PNG/font construction and composition | GFX contracts | `neocogi_ui::gfx` |
+| Appearance derivation and external theme services | Skin contracts | `neocogi_ui::skin`, strict syntax/compiler in `authoring` |
+| Sole UI descriptor/root | `abi::library::UiLibraryFactory` | `neocogi_ui::plugin_descriptor()`, thin `neocogi-ui-dylib` export |
+| Platform, renderer, GPU resources and shader compiler | `neocogi-platform-contracts` | Matching static Platform or thin Platform dylib |
 
-The platform contract is independent even though its current SDL/DOM
-implementation shares a binary and COM identity with the renderer. That
-co-location is an ownership decision: native windows, graphics surfaces, and
-device handles remain private instead of crossing an ABI as raw handles. A
-future standalone platform implementation must introduce a typed surface
-capability with explicit lifetime rules before these implementations become
-separate libraries. The contract split allows that work without changing input,
-polling, or IME types again.
+The release has one canonical Rust definition and one authored NCIDL graph for
+each contract. The static SDK reexports contracts for convenience. Independent
+extensions should depend on contracts directly, generating/importing their own
+closed interface sets as appropriate. Contracts has no dependency on the static
+SDK, native renderer, PNG/font construction or filesystem theme loader.
 
-The GFX plugin deliberately groups bounded PNG decoding, font rasterization,
-icon loading, atlas packing, and renderer-neutral frame composition. Resource
-construction operations share one CPU pixel pipeline and produce immutable resource
-bundles or renderer-owned textures; the compositor consumes those same validated
-tables without exposing them to UI or a backend. A UI receives the shareable
-`GfxPluginFactory` and creates a private compositor for its lifetime. Immutable
-bundles may be shared across runtimes; each runtime independently selects its
-revision and owns its mutable frame session. GFX factories return fresh sessions,
-and the core UI implementation depends only on their generated contracts.
+## Activation and lifetime
 
-The skin plugin groups typed palette/metric derivation and optional external JSON theme
-compilation. Its theme loader receives explicit typed `AssetLoader` and
-`AssetPublisher` capabilities from GFX and submits each bounded font or PNG
-buffer to one transactional build session. Live style compilation requires only
-the publisher, so embedded deployments omit the font builder. Skin therefore
-does not compile another copy of GFX's font rasterizer, PNG decoder, atlas packer,
-bundle reader, validator, or publisher. Source bytes, bundle-local image placements, complete appearance
-records, and the completed `IAssetBundle` cross the boundary in coarse calls;
-JSON syntax trees, parser callbacks, atlas drafts, pixels, and decoder state
-remain private to their owners.
+The sole UI plugin is `neocogi.ui`. Its typed `UiLibraryFactory` exposes `ui()`,
+`nodes()`, `gfx()` and `skin()` getters. Every result is an independently owned
+factory; dropping the library root cannot revoke a returned service. Disabled
+features return `NC_E_NOT_FOUND`. The root has no hard implementation-plugin
+dependencies. The SDK's `services` helpers acquire this root and call the typed
+getter; there is no untyped service registry or downcast path.
 
-`neocogi-gfx-support` is an ordinary Rust support crate, not a plugin. It
-publishes and validates concrete `IAssetBundle` objects for the GFX builder,
-embedded resources, and the UI importer. Keeping this code below the UI facade
-prevents a GFX plugin from linking the UI core contract merely to return its own
-resource type.
+Former UI runtime, node, GFX and Skin plugin identities and separate wrappers are
+removed. There is one UI DLL (`nc_ui`), one Platform DLL (`nc_platform`) and, when
+selected, an independent extension DLL. Monolith/browser builds register the
+same descriptors from normal rlibs. Final dylib packages alone export discovery.
+The executable owns `neocogi-com-host` and passes process runtime access through
+bootstrap; no shared COM runtime library is deployed.
 
-The private implementation packages follow the same ownership split.
-`neocogi-gfx-impl` contains decoding, rasterization, packing, bundle storage, and
-publication. `neocogi-skin-impl` contains style policy and optional JSON parsing.
-They share only `neocogi-appearance`, whose pure functions compile typed flat
-appearance records for runtime Skin policy and offline default bundles. A change
-to either heavyweight implementation therefore does not invalidate or relink
-the other plugin.
+Nodes still binds through public runtime capabilities, including
+`IConstructionHost`, `IChoiceMenus`, windows and resource access. The returned
+`UiFactory` is bound to that runtime's canonical `IWidgetHost` identity.
+`Ui::from_interfaces` rejects mismatched hosts. Combining crate ownership does
+not merge object identities or let a node obtain a private forest pointer.
+External widget/container implementations use the same public contracts.
 
-The UI deployment has two ownership boundaries. `neocogi-ui-runtime` owns the retained forest,
-layout traversal, routing, windows, command menus, generic choice-menu popup policy, and frame
-commit. `neocogi-ui-nodes` owns concrete built-in leaves and containers plus standard composites
-such as Combo and `FileDialog`. The nodes root binds through generated public capabilities and
-never receives runtime storage, a root handle, or an implementation callback. Built-ins therefore
-exercise the same cached `IWidget`, `ILeafLayout`, and `IContainerLayout` path as independently
-compiled custom controls.
+Retained traversal caches required projections once, including the inherited
+physical `IWidget` prefix. It does not perform a provider lookup per widget or
+draw. Layout/paint/dispatch order, exclusive widget lifetime, mutation guards and
+replace-on-success commit boundaries are unchanged by this packaging change.
+See [exclusive ownership](../contracts/EXCLUSIVE_WIDGET_OWNERSHIP.md),
+[event dispatch](../contracts/WIDGET_EVENT_DISPATCH.md) and
+[runtime shutdown](../contracts/UI_RUNTIME_SHUTDOWN.md).
 
-The Rust sources follow those boundaries: core implementation and activation live in
-`crates/ui/runtime`; concrete widgets, containers, factory, picker, and node phase adapters live
-in `crates/ui/nodes`. Neither provider has a production dependency on the other provider's
-implementation. `neocogi-ui-support` holds only binary-local resource imports, pure geometry/text
-algorithms, and phase-local recording helpers, with no retained tree, host authority, concrete
-classes, runtime, or plugin getter. There is no shared implementation containing both halves,
-and core's exclusion of concrete nodes does not rely on linker garbage collection.
+## Graphics and appearance
 
-## Dependency direction
+Portable `AssetData`/`AssetTables` live in contracts. Validation and immutable
+publication have one implementation. GFX construction, PNG decoding, font
+rasterization and atlas packing live in the static SDK behind explicit features.
+Skin receives a typed GFX publisher/loader; it has no second atlas algorithm.
+Offline compilation invokes the same capabilities directly. Strict JSON syntax
+and authored theme resolution remain separate from live appearance objects.
 
-The contract graph is acyclic and follows ownership toward lower layers:
+The compositor emits authenticated canonical Platform GPU blocks. The selected
+Platform renderer owns native resource types, driver identity, frame streams,
+shader compilation and backend execution. UI consumes Platform's published
+geometry/image/GPU APIs rather than maintaining a parallel renderer contract.
+See [asset contracts](../contracts/COM_ASSETS.md) and the
+[Platform migration record](../project/PLATFORM_0_2_MIGRATION_2026-11-09.md).
 
-```text
-neocogi.ui.nodes ───────────> neocogi.ui.core
-neocogi.ui.core ────────────> neocogi.gfx ────────> neocogi.platform
-      ├─────────────────────> neocogi.platform             │
-      └─────────────────────> neocogi.renderer <───────────┘
-neocogi.skin ───────────────> neocogi.gfx
-      └─────────────────────> neocogi.platform
-```
+Feature selection controls linked code; a package merge makes no size or speed
+claim. Dynamic assembly currently enables the GFX builder and selected Skin JSON
+support even with embedded resources. Test each minimal configuration as well
+as the all-feature graph. The exact feature map is in [FEATURES.md](../guides/FEATURES.md).
 
-`neocogi.gfx` owns the immutable bundle, fonts, icons, appearance records, and
-their bounded bulk-copy interface. `neocogi.skin` authors new revisions of that
-format; it does not own the runtime value. `neocogi.platform` owns native path
-identity, avoiding a dependency from either loading plugin back into UI.
+## Authoring and validation
 
-Contract build scripts carry these dependencies through Cargo's source graph.
-Generated declaration signatures include their exact transitive revisions.
-Plugins publish a complete root-factory signature; the runtime checks it before
-bootstrap and checks subsequent COM pointer transfers. No contract libraries or
-runtime module graphs are shipped.
+Contracts transports finite design metadata and bounded settings. Document
+syntax, registry resolution, generated fields, construction and live form
+lifetime remain separate responsibilities in the SDK's document module.
+Custom catalogs are ordinary typed COM contracts. An independent example
+extension retains its own source/schema and DLL identity; package reduction does
+not fold extension implementation into UI.
 
-At the provider level, `neocogi.ui.nodes.runtime` has a hard dependency on
-`neocogi.ui.runtime`. The assembly planner loads core first, then activates the nodes root and calls
-`bind(&UiRuntime)`. The core plugin advertises only `neocogi.ui.core`; the nodes plugin advertises
-only `neocogi.ui.nodes`. Neither plugin imports the other's bootstrap entrypoint.
-
-All polymorphism is expressed through named IDL interfaces. No cross-component
-value uses `std::any::Any`, native Rust trait objects, or an untyped property bag.
-IDL enums cross the ABI as generated explicit discriminators and payload layouts;
-receivers validate unknown tags before reading a payload.
-
-## Frame and loading costs
-
-Plugin separation does not add a second per-widget dispatch layer or any per-draw provider lookup:
-
-- Runtime mounting queries each node's public capabilities once. Update, measure, placement, and
-  paint use those cached projections whether the object came from the built-in nodes provider or
-  an application plugin. `NodesPluginFactory::bind` and `Ui::from_interfaces` run only during setup.
-
-- UI records one retained display list and sends one coarse typed call per draw operation
-  to its GFX compositor; there is no per-glyph, per-nine-patch-cell, or per-vertex ABI call.
-  In particular, one `NinePatchDraw` carries destination insets, center policy, and either
-  nine flat colors or one typed bundle-local image description.
-- GFX validates and expands that complete nine-patch operation, including source slicing,
-  tiny-destination partitioning, cell visibility, final clipping, and adjacent batching. It
-  then encodes explicit generic resources and submits one bounded `IRenderStream` of
-  sealed graphics blocks. UI and client blocks execute through the same native path.
-- Skin authoring and GFX construction services run only while loading, rebuilding, or
-  editing an immutable bundle. The GFX compositor remains active for coarse frame
-  execution. A JSON theme crosses the Skin-to-GFX boundary once per
-  referenced resource, once for atlas finalization, and once for bulk appearance
-  publication; those authoring services are absent from ordinary update, layout, and paint.
-- The UI imports font/icon/appearance tables once per installed revision. Its GFX
-  compositor retains the independent `IRgbaImage` returned by `IAssetBundle::image()`.
-  Appearance-only revisions retain its identity; rebuilt pixels have a new identity.
-- GFX compares image identity before preparing its private generic texture through
-  the graphics host. The renderer receives sealed blocks without an implicit atlas.
-- Platform polling transfers normalized copied events. No SDL event, DOM object,
-  or native handle enters UI code.
-
-The remaining performance risks are oversized streams, redundant bundle
-installation, texture churn, and excessive plugin activation. Bounded streams,
-revision/identity checks, retained renderer resources, and activation-time
-capability discovery address those cases. Benchmarks should measure commands,
-vertices, uploads, and dynamic calls per frame so a future boundary change cannot
-silently turn a bulk transaction into fine-grained IPC. Measure actual min-size code and relevant frame workloads before changing
-this boundary.
-
-## Resource deployment
-
-Native assemblies stage fonts, icons, JSON themes, images, and meshes beside the
-executable by default. Embedding is an explicit variant, never the default. The
-GFX and skin plugins receive typed native paths or copied buffers and return
-immutable capabilities; resource directories and JSON representations are not
-part of the runtime renderer or UI abstractions.
-
-Assembly manifests select these plugins independently. Simple, calculator, and
-backend-frame examples stage GFX for their file-backed base bundle but omit Skin;
-the full demo and smoke suite stage Skin because they exercise external themes.
-Their application feature graphs omit the Skin contract descriptor and their
-packages omit the corresponding authored theme directories as well.
-Embedded applications keep the compact GFX compositor but can omit its builder and the
-Skin plugin when their generated bundle is sufficient.
-
-## Portable shader compilation
-
-`neocogi_platform_contracts::render::abi` owns compiler interfaces in the renderer
-namespace. `render::shader` supplies immutable snapshots and bounded readers.
-`neocogi_platform::render::compiler` privately owns Naga admission, validation and
-emission. A device constructs and retains its own compiler for its fixed backend
-format: SPIR-V for Vulkan, GLSL ES300 for Glow/WebGL and WGSL for WGPU.
-Requests carry stage and output budget; results export exactly one typed code
-representation. Dynamic applications load only the platform provider for rendering
-and shader compilation. Rebuild all generated consumers and providers together.
-
-Compiler reflection calls occur only during creation. No compiler object is
-retained in pipeline snapshots or called during drawing/completion. See the
-[shader contract](https://github.com/NeoCogi/neocogi-platform/blob/master/docs/contracts/SHADER_COMPILATION.md) for ownership, quota,
-coordinate semantics and diagnostic behavior. Artifact and timing improvements
-must be measured; extracting the provider alone establishes no size/speed claim.
+Qualification executes real typed factories, cross-library object calls, host
+identity checks, allocation regressions, generated consumers, extracted archives,
+native renderer tests and browser input. Historical dated reports retain their
+original measurements; they describe their stated revision rather than current
+package ownership. Current acceptance is recorded in the three-crate migration
+report and [release guide](../project/RELEASING.md).

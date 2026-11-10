@@ -74,7 +74,8 @@ their exact platform commit in Cargo dependencies and a `NeoCogi-Platform-Commit
 trailer. Those snapshots retain their `NeoCogi-Revision-ID` correlation identifiers
 and reciprocal companion links in `refs/notes/neocogi-companions`.
 
-The current UI consumes the published Platform crates at exactly `0.1.0-alpha.2`.
+The current UI consumes the three published Platform crates at exactly `0.2.0-alpha.2`.
+UI itself now has contracts/static/dylib packages; see the three-crate migration report.
 Its root manifests and registry checksums in `Cargo.lock` control that selection;
 a Platform Git companion trailer is not required for a registry release. See the
 [dependency guide](../guides/COM_DEPENDENCY.md) for source ownership and updates.

@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-LIBRARIES = tuple(f"libnc_{name}.so" for name in ("ui", "ui_nodes", "platform", "gfx", "skin"))
+LIBRARIES = tuple(f"libnc_{name}.so" for name in ("ui", "platform"))
 
 
 def build(profile, renderer="vulkan"):
