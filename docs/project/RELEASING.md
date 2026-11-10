@@ -90,6 +90,11 @@ including every native/backend, macOS/Windows, browser, feature and archive job.
 The annotated release tag must identify that validated commit. Record those
 workflow/job results outside Cargo targets alongside the archive receipts.
 
+The macOS native jobs use `macos-15-intel` after hosted ARM64 capacity prevented
+jobs from starting. Native execution is qualified on x86_64; a separate ARM64
+monolithic consumer check retains compilation coverage without linking the
+runner's Intel Homebrew SDL library. This does not establish ARM64 native execution.
+
 Publish the exact committed packages in dependency order, waiting for each
 version to become visible in the crates.io index before uploading its consumer:
 
