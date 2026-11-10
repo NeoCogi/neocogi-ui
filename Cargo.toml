@@ -22,23 +22,23 @@ members = [
 default-members = ["crates/ui"]
 
 [workspace.package]
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.1"
 authors = ["Raja Lehtihet", "Wael El Oraiby"]
 edition = "2024"
 license = "BSD-3-Clause AND MIT AND OFL-1.1 AND Apache-2.0 AND CC0-1.0"
 repository = "https://github.com/NeoCogi/neocogi-ui"
 
 [workspace.dependencies]
-neocogi-ui-contracts = { path = "crates/ui-contracts", version = "=0.2.0-alpha.2", default-features = false }
-neocogi-ui = { path = "crates/ui", version = "=0.2.0-alpha.2", default-features = false }
+neocogi-ui-contracts = { path = "crates/ui-contracts", version = "=0.2.0-alpha.1", default-features = false }
+neocogi-ui = { path = "crates/ui", version = "=0.2.0-alpha.1", default-features = false }
 neocogi-platform-contracts = { version = "=0.2.0-alpha.2", default-features = false }
 neocogi-platform = { version = "=0.2.0-alpha.2", default-features = false }
-neocogi-ui-samples = { path = "examples/ui-samples", version = "=0.2.0-alpha.2" }
+neocogi-ui-samples = { path = "examples/ui-samples", version = "=0.2.0-alpha.1" }
 neocogi-com = { version = "=0.1.0", default-features = false }
 neocogi-com-host = { version = "=0.1.0", default-features = false }
 neocogi-idl = { version = "=0.1.0" }
-neocogi-demo-assets = { path = "examples/assets", default-features = false, version = "=0.2.0-alpha.2" }
-neocogi-demo-host = { path = "examples/host", default-features = false, version = "=0.2.0-alpha.2" }
+neocogi-demo-assets = { path = "examples/assets", default-features = false, version = "=0.2.0-alpha.1" }
+neocogi-demo-host = { path = "examples/host", default-features = false, version = "=0.2.0-alpha.1" }
 bitflags = "2.4.1"
 fontdue = "0.9.2"
 png = "0.18"

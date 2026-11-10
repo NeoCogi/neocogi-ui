@@ -1,6 +1,6 @@
 # Support and compatibility
 
-NeoCogi UI uses version **0.2.0-alpha.2** across its workspace packages and is
+NeoCogi UI uses version **0.2.0-alpha.1** across its workspace packages and is
 an alpha release, intended for experimentation and early integration. This page records
 what downstream users can rely on without implying guarantees the project does
 not yet make.

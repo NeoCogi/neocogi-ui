@@ -61,7 +61,7 @@ fn run(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn std::error::Error>> 
     let plugins = runtime.plugins()?;
     assert_eq!(plugins.len(), 1);
     for plugin in plugins {
-        assert_eq!(plugin.version, "0.2.0-alpha.2");
+        assert_eq!(plugin.version, "0.2.0-alpha.1");
     }
     let event = ReleaseEvent::into_local_box(ReleaseEvent)
         .into_interface::<contracts::IReleaseEventAbi>()

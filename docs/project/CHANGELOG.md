@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0-alpha.2
+## 0.2.0-alpha.1
 
 - Reduce the reusable UI release from nineteen crates to contracts, static UI and
   one thin UI dylib, matching Platform's ownership model.

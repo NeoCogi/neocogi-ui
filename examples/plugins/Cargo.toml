@@ -16,16 +16,16 @@ extension = ["dep:extension-library"]
 [dependencies]
 neocogi-ui-native-artifacts = { path = "../../tools/native-artifacts" }
 platform-library = { package = "neocogi-platform-dylib", version = "=0.2.0-alpha.2", artifact = "cdylib", default-features = false }
-extension-library = { package = "neocogi-example-ui-extension-dylib", path = "../../examples/ui-extension/dylib", artifact = "cdylib", optional = true, version = "=0.2.0-alpha.2" }
+extension-library = { package = "neocogi-example-ui-extension-dylib", path = "../../examples/ui-extension/dylib", artifact = "cdylib", optional = true, version = "=0.2.0-alpha.1" }
 neocogi-com = { workspace = true, features = ["runtime"] }
-ui-library = { package = "neocogi-ui-dylib", path = "../../crates/ui-dylib", version = "=0.2.0-alpha.2", artifact = "cdylib", default-features = false, features = ["ui", "gfx", "builder"] }
+ui-library = { package = "neocogi-ui-dylib", path = "../../crates/ui-dylib", version = "=0.2.0-alpha.1", artifact = "cdylib", default-features = false, features = ["ui", "gfx", "builder"] }
 
 [target."cfg(not(target_arch = \"wasm32\"))".dev-dependencies]
 neocogi-platform-contracts = { workspace = true, features = ["build-support"] }
 neocogi-com-host = { workspace = true }
 tempfile = { workspace = true }
 libloading = "0.8"
-runtime-probe = { package = "neocogi-cargo-runtime-probe", path = "tests/runtime-probe", artifact = "cdylib", features = ["dynamic-plugin"], version = "=0.2.0-alpha.2" }
+runtime-probe = { package = "neocogi-cargo-runtime-probe", path = "tests/runtime-probe", artifact = "cdylib", features = ["dynamic-plugin"], version = "=0.2.0-alpha.1" }
 
 [build-dependencies]
 neocogi-idl = { workspace = true }

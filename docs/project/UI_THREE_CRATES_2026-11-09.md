@@ -1,6 +1,6 @@
 # Three-crate UI layout, 2026-11-09
 
-The reusable UI release advances to `0.2.0-alpha.2` and follows Platform's
+The reusable UI release is `0.2.0-alpha.1` and follows Platform's
 contracts/static/dylib model. The previous nineteen release packages are replaced
 by exactly three. Platform remains pinned to `0.2.0-alpha.2`, rs-math3d to `0.21.0`
 and COM/IDL to `0.1.0`; the preceding dependency/API migration remains in effect.
@@ -73,7 +73,9 @@ and archive tests without enabling UI in default-feature library tests.
 
 All results below are fresh checks of this refactor. Logs are retained under
 `/tmp/ui-three-*.log`, outside Cargo targets; historical qualification logs were
-not reused.
+not reused. This initial qualification used the provisional UI version
+`0.2.0-alpha.2`; the release label was subsequently finalized as `0.2.0-alpha.1`.
+Platform's independent `0.2.0-alpha.2` dependency version is unchanged.
 
 | Boundary | Actual validation |
 | --- | --- |

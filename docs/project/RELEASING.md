@@ -1,6 +1,6 @@
 # Releasing NeoCogi UI
 
-The coordinated UI release is **0.2.0-alpha.2**. Exactly three reusable packages
+The coordinated UI release is **0.2.0-alpha.1**. Exactly three reusable packages
 are published: `neocogi-ui-contracts`, `neocogi-ui` and `neocogi-ui-dylib`.
 All workspace packages inherit one version. Every internal production, build and
 test dependency has an exact matching registry version alongside its development
