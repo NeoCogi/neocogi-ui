@@ -1,9 +1,8 @@
 # Support and compatibility
 
-NeoCogi UI uses version **0.2.0-alpha.2** across its workspace packages and is
-an alpha release, intended for experimentation and early integration. This page records
-what downstream users can rely on without implying guarantees the project does
-not yet make.
+NeoCogi UI **0.2.0** is the stable release across its three reusable crates and
+workspace packages. This page records its supported configurations and integration
+constraints.
 
 ## Rust toolchain
 
@@ -44,20 +43,22 @@ checks. GitHub Pages publication is a separate trusted deployment workflow.
 
 ## API compatibility
 
-During the alpha series, APIs and data formats may change whenever a simpler, consistent design warrants
-it. There is no compatibility or long-term-support commitment. Pin the same exact release for
-your application and every plugin, and review the [changelog](CHANGELOG.md) before upgrading. The manifest version
-is not a promise that the unreleased checkout matches a published package.
+The stable `0.2.0` release preserves the public APIs, data formats and schemas
+from `0.2.0-alpha.2`. Pin the same exact release for your application and every
+plugin, and review the [changelog](CHANGELOG.md) before upgrading. The manifest
+version alone does not establish binary compatibility between independently built
+hosts and providers or identify the contents of an unreleased checkout. No
+long-term-support period is defined.
 
 The COM SDK, host implementation and IDL compiler use the exact published
 crates.io release `0.1.0`; this checkout owns their UI/render integration. Core, plugin
-descriptor and runtime table ABIs remain at version 1 during pre-alpha.
+descriptor and runtime table ABIs remain at version 1 for this release.
 The [COM ABI-v1 specification](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/docs/abi-v1.md) describes that
 baseline; the [core version constant](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/crates/core/src/metadata/contract.rs)
 is its numeric authority. The compiler owns the separate
 [module fingerprint grammar](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/docs/contracts/IDL_MODULES.md#canonical-signatures)
 and [encoder](https://github.com/NeoCogi/neocogi-com/blob/92fa66ebc70888f71f2d07f2bbc14335a2ffd4e6/crates/idl/src/resolve.rs). None promises
-compatibility across pre-alpha checkout revisions.
+compatibility between arbitrary checkout revisions.
 Use the same exact registry release for hosts and providers; a Git or path dependency
 with the same package version has a different Cargo identity. Native
 modules stay loaded for the process lifetime; hot reload/unload is unsupported.

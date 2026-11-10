@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0
+
+- Promote the coordinated contracts, static UI and UI dylib release to stable
+  `0.2.0`, retaining the public APIs, runtime behavior and schemas of
+  `0.2.0-alpha.2`.
+- Use exact `=0.2.0` requirements for internal UI dependencies and package
+  consumers. Platform remains at `0.2.0`, COM/IDL at `0.1.0` and rs-math3d
+  at `0.21.0`.
+
 ## 0.2.0-alpha.2
 
 - Update the contracts, static implementation and dynamic Platform packages to

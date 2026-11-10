@@ -15,5 +15,5 @@ crate-type = ["cdylib"]
 default = []
 
 [dependencies]
-provider = { package = "neocogi-example-ui-extension", path = "..", default-features = false, version = "=0.2.0-alpha.2" }
+provider = { package = "neocogi-example-ui-extension", path = "..", default-features = false, version = "=0.2.0" }
 neocogi-com = { workspace = true, default-features = false, features = ["std"] }
