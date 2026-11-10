@@ -7,7 +7,7 @@ static implementation and one thin UI shared library; Platform has its own servi
 
 [NeoCogi Platform](https://github.com/NeoCogi/neocogi-platform) supplies native/browser
 platform services, generic graphics resources, shader compilation and renderer
-backends through the published crates.io release `0.2.0-alpha.2`.
+backends through the published crates.io release `0.2.0`.
 
 The coordinated UI release is `0.2.0-alpha.1`. See the
 [release guide](docs/project/RELEASING.md) for archive qualification and publishing.
@@ -57,7 +57,7 @@ SDL2 and the libraries for their selected graphics backend; see
 [backend prerequisites](crates/ui/docs/runtime/BACKENDS.md).
 The checked-in lockfile fixes the standalone dependency graph.
 
-Platform packages use exact `=0.2.0-alpha.2` registry requirements, COM/IDL use
+Platform packages use exact `=0.2.0` registry requirements, COM/IDL use
 `=0.1.0`, and `rs-math3d` uses `=0.21.0`. Internal production/build dependencies
 use the exact UI release `=0.2.0-alpha.1`. All release tests are package-contained;
 normalized archives need no restored dependency declarations.

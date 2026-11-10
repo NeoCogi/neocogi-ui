@@ -22,7 +22,7 @@ complete cache can select `CARGO_NET_OFFLINE=true`.
 
 ## Platform dependencies
 
-The three Platform packages use exact `=0.2.0-alpha.2` requirements from crates.io.
+The three Platform packages use exact `=0.2.0` requirements from crates.io.
 Math uses `rs-math3d = "=0.21.0"`. Update all three packages together:
 
 - `neocogi-platform-contracts` owns renderer, shader, audio and platform contracts,

@@ -58,7 +58,7 @@ class ContractDependencies(unittest.TestCase):
                 '[workspace.dependencies]\n'
                 'neocogi-com={version="=0.1.0",default-features=false}\n'
                 'neocogi-idl={version="=0.1.0"}\n'
-                'neocogi-platform-contracts={version="=0.2.0-alpha.2"}\n'
+                'neocogi-platform-contracts={version="=0.2.0"}\n'
             )
             for index, consumer in enumerate(consumers.CONSUMERS):
                 directory = root / str(index)
@@ -70,7 +70,7 @@ class ContractDependencies(unittest.TestCase):
                     self.assertEqual(data["dependencies"]["neocogi-com"]["features"], ["alloc"])
                     self.assertFalse(data["dependencies"]["neocogi-com"]["default-features"])
                     self.assertEqual(set(data["build-dependencies"]), {"neocogi-idl", "neocogi-platform-contracts"})
-                    self.assertEqual(data["build-dependencies"]["neocogi-platform-contracts"]["version"], "=0.2.0-alpha.2")
+                    self.assertEqual(data["build-dependencies"]["neocogi-platform-contracts"]["version"], "=0.2.0")
                     self.assertEqual(data["build-dependencies"]["neocogi-platform-contracts"]["features"], ["build-support"])
                     for dependency in (data["dependencies"]["neocogi-com"], data["build-dependencies"]["neocogi-idl"]):
                         self.assertEqual(dependency["version"], "=0.1.0")

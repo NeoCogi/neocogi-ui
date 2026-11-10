@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Update the contracts, static implementation and dynamic Platform packages to
+  the published `0.2.0` release together. Their Rust and NCIDL sources are
+  unchanged from `0.2.0-alpha.2`; COM/IDL and rs-math3d remain pinned to `0.1.0`
+  and `0.21.0` respectively.
+
 ## 0.2.0-alpha.1
 
 - Reduce the reusable UI release from nineteen crates to contracts, static UI and

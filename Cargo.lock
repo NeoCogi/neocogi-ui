@@ -943,9 +943,9 @@ dependencies = [
 
 [[package]]
 name = "neocogi-platform"
-version = "0.2.0-alpha.2"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7241379c24cd30617d8c8d27200634b6e425dafeaf67ed7ca64cb773ac8bb7d2"
+checksum = "fde1b3add8ad000fac08a89770dc6fee260e186304485beee7697dcaf8bcdd4b"
 dependencies = [
  "ash",
  "ash-window",
@@ -966,9 +966,9 @@ dependencies = [
 
 [[package]]
 name = "neocogi-platform-contracts"
-version = "0.2.0-alpha.2"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dba8cb28586ffdf17188898343da74a67b231b011c0b998496a5a64519cb7cf4"
+checksum = "edbafb0f41f6a5da149b5aa3ff4d10ba70b7016b8759b3d254945ba4ad3a0101"
 dependencies = [
  "neocogi-com",
  "neocogi-idl",
@@ -983,9 +983,9 @@ dependencies = [
 
 [[package]]
 name = "neocogi-platform-dylib"
-version = "0.2.0-alpha.2"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1a1f2b88633ab4bd4946b6f61242dc2b6c043ca954389bb38a6e12e1af3f70a"
+checksum = "193de87d7592ca8bba27e3be9a5af3f2bcdd7a823af9763afb05aaaed9adbdbb"
 dependencies = [
  "neocogi-com",
  "neocogi-platform",

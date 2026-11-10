@@ -4,7 +4,7 @@ The coordinated UI release is **0.2.0-alpha.1**. Exactly three reusable packages
 are published: `neocogi-ui-contracts`, `neocogi-ui` and `neocogi-ui-dylib`.
 All workspace packages inherit one version. Every internal production, build and
 test dependency has an exact matching registry version alongside its development
-path. Platform uses `=0.2.0-alpha.2`, COM/IDL `=0.1.0`, and rs-math3d `=0.21.0`.
+path. Platform uses `=0.2.0`, COM/IDL `=0.1.0`, and rs-math3d `=0.21.0`.
 Rebuild hosts and providers together; prerelease wire compatibility across
 revisions is not promised.
 
