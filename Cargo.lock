@@ -767,7 +767,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-asset-tools"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "neocogi-ui",
  "png",
@@ -775,7 +775,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-cargo-runtime-probe"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "neocogi-com",
  "neocogi-idl",
@@ -819,7 +819,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-demo-assets"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "neocogi-com",
  "neocogi-platform-contracts",
@@ -830,7 +830,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-demo-basic"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "neocogi-com",
  "neocogi-com-host",
@@ -842,7 +842,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-demo-full"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "js-sys",
  "neocogi-com",
@@ -862,7 +862,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-demo-host"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "neocogi-com",
  "neocogi-demo-assets",
@@ -878,7 +878,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-demo-plugins"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "libloading",
  "neocogi-cargo-runtime-probe",
@@ -895,7 +895,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-demo-smoke"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "neocogi-com",
  "neocogi-com-host",
@@ -911,7 +911,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-example-ui-extension"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "neocogi-com",
  "neocogi-ui-contracts",
@@ -920,7 +920,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-example-ui-extension-dylib"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "neocogi-com",
  "neocogi-example-ui-extension",
@@ -993,7 +993,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-runtime-ui-example"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "neocogi-com",
  "neocogi-com-host",
@@ -1006,7 +1006,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-ui"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "bitflags 2.13.2",
  "fontdue",
@@ -1026,7 +1026,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-ui-contracts"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "miniz_oxide 0.8.9",
  "neocogi-com",
@@ -1042,7 +1042,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-ui-dylib"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "neocogi-com",
  "neocogi-ui",
@@ -1050,7 +1050,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-ui-native-artifacts"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "neocogi-platform-contracts",
  "quote",
@@ -1059,7 +1059,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-ui-platform-tests"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "neocogi-com",
  "neocogi-com-host",
@@ -1075,7 +1075,7 @@ dependencies = [
 
 [[package]]
 name = "neocogi-ui-samples"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "neocogi-com",
  "neocogi-idl",

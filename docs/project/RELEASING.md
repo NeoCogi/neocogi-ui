@@ -1,6 +1,6 @@
 # Releasing NeoCogi UI
 
-The coordinated UI release is **0.2.0-alpha.1**. Exactly three reusable packages
+The coordinated UI release is **0.2.0-alpha.2**. Exactly three reusable packages
 are published: `neocogi-ui-contracts`, `neocogi-ui` and `neocogi-ui-dylib`.
 All workspace packages inherit one version. Every internal production, build and
 test dependency has an exact matching registry version alongside its development
@@ -84,9 +84,24 @@ reduce temporary build storage. These settings propagate to nested test consumer
 
 ## Publication
 
-Qualification does not change registry state. An authenticated maintainer can
-publish the exact committed three-package release after the nonuploading
-preflight, allowing dependencies to become visible before dependent uploads.
+Qualification does not change registry state. Before publishing, require successful
+`Rust` and `WebGL demo` push workflows for the exact release commit on `master`,
+including every native/backend, macOS/Windows, browser, feature and archive job.
+The annotated release tag must identify that validated commit. Record those
+workflow/job results outside Cargo targets alongside the archive receipts.
+
+Publish the exact committed packages in dependency order, waiting for each
+version to become visible in the crates.io index before uploading its consumer:
+
+```sh
+cargo publish --locked -p neocogi-ui-contracts
+cargo publish --locked -p neocogi-ui
+cargo publish --locked -p neocogi-ui-dylib
+```
+
+Keep Cargo's package verification enabled for every upload. Confirm the registry
+versions, downloaded archive checksums and embedded source commit, then run an
+independent consumer against registry dependencies without local patches.
 Follow Cargo's [publishing guide](https://doc.rust-lang.org/cargo/reference/publishing.html).
 Record the release commit/tag and confirm registry-only checksum resolution.
 Local patches establish archive completeness and interoperability; registry

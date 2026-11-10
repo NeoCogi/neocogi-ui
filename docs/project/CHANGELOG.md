@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0-alpha.2
 
 - Update the contracts, static implementation and dynamic Platform packages to
   the published `0.2.0` release together. Their Rust and NCIDL sources are

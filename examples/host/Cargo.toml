@@ -28,12 +28,12 @@ neocogi-platform-contracts = { workspace = true }
 neocogi-demo-assets = { workspace = true }
 neocogi-com = { workspace = true, features = ["std", "macros"] }
 neocogi-platform = { workspace = true, optional = true, features = ["platform"] }
-neocogi-example-ui-extension = { path = "../../examples/ui-extension", optional = true, version = "=0.2.0-alpha.1" }
+neocogi-example-ui-extension = { path = "../../examples/ui-extension", optional = true, version = "=0.2.0-alpha.2" }
 neocogi-ui-contracts = { workspace = true }
 neocogi-ui = { workspace = true, optional = true }
 
 [target."cfg(not(target_arch = \"wasm32\"))".dependencies]
-neocogi-demo-plugins = { path = "../plugins", optional = true, version = "=0.2.0-alpha.1" }
+neocogi-demo-plugins = { path = "../plugins", optional = true, version = "=0.2.0-alpha.2" }
 neocogi-com = { workspace = true, features = ["runtime"] }
 
 [target."cfg(target_arch = \"wasm32\")".dependencies]
