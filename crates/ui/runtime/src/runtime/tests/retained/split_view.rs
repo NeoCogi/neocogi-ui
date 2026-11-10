@@ -103,7 +103,7 @@ fn split_keyboard_and_capture_loss_use_core_routing_on_both_axes() {
         };
         let _owner = window(&fixture.ui, "keyboard", rect, split_owner);
         fixture.frame(VIEW).unwrap();
-        key(&fixture.ui, KeyCode::Tab, 0, 0);
+        key(&fixture.ui, KeyCode::Tab, 0);
         key(
             &fixture.ui,
             if axis == SplitAxis::Horizontal {
@@ -111,7 +111,6 @@ fn split_keyboard_and_capture_loss_use_core_routing_on_both_axes() {
             } else {
                 KeyCode::ArrowDown
             },
-            0,
             0,
         );
         fixture.frame(VIEW).unwrap();

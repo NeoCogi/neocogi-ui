@@ -191,7 +191,7 @@ impl SolidGeometry {
         color: Color4b,
         offset: Vec2f,
     ) -> Result<Option<SolidTriangleRange>, NcStatus> {
-        if points.len() > neocogi_render_core::abi::MAX_POLYGON_POINTS {
+        if points.len() > neocogi_platform_contracts::render::abi::MAX_POLYGON_POINTS {
             return Err(NC_E_OUT_OF_RANGE);
         }
         let offset = geometry::wide_fractional_point(offset)?;

@@ -2,7 +2,7 @@
 
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, NC_E_OUT_OF_MEMORY, com_object};
 use neocogi_gfx_support::abi::{AssetAppearanceRevision, AssetPublisherAbi, GfxPluginFactoryAbi, IAssetBundleAbi};
-use neocogi_render_core::abi::{IRenderStreamAbi, IRenderer, IRendererAbi, IRendererVtblFor, RenderInfo};
+use neocogi_platform_contracts::render::abi::{IRenderStreamAbi, IRenderer, IRendererAbi, IRendererVtblFor, RenderInfo};
 use neocogi_ui::{Rect, Size, TextWrapping, Ui, UI_E_OWNER};
 use std::{
     cell::{Cell, RefCell},
@@ -16,7 +16,7 @@ const SIZE: Size = Size { width: 200, height: 120 };
 mod maintenance {
     use super::*;
     use neocogi_com::ComBox;
-    use neocogi_render_core::abi::*;
+    use neocogi_platform_contracts::render::abi::*;
     use neocogi_ui::{GeometryChange, ITextMetricsAbi, LayoutLimits, LeafContent, Painter, WidgetEvent, WidgetOptions, WidgetPaint, WidgetUpdate};
 
     /// Shared observations bridge generated COM callbacks and the independently owned test caller.
@@ -52,10 +52,18 @@ mod maintenance {
             }
             self.inner.maintain_result()
         }
-        fn import_texture_result(&self, resources: ComRef<'_, IRenderResourcesAbi>, image: ComRef<'_, ITextureAbi>) -> Result<ComBox<ITextureImportResultAbi>, NcStatus> {
+        fn import_texture_result(
+            &self,
+            resources: ComRef<'_, IRenderResourcesAbi>,
+            image: ComRef<'_, ITextureAbi>,
+        ) -> Result<ComBox<ITextureImportResultAbi>, NcStatus> {
             self.inner.import_texture_result(resources, image)
         }
-        fn prepare_texture_result(&self, resources: ComRef<'_, IRenderResourcesAbi>, texture: ComRef<'_, IGpuBufferAbi>) -> Result<ComPtr<IRenderOutcomeAbi>, NcStatus> {
+        fn prepare_texture_result(
+            &self,
+            resources: ComRef<'_, IRenderResourcesAbi>,
+            texture: ComRef<'_, IGpuBufferAbi>,
+        ) -> Result<ComPtr<IRenderOutcomeAbi>, NcStatus> {
             self.inner.prepare_texture_result(resources, texture)
         }
         fn recording_broker(&self) -> Result<ComPtr<IRenderViewBrokerAbi>, NcStatus> {
@@ -63,7 +71,12 @@ mod maintenance {
         }
     }
     impl IRenderClientFactory for Host {
-        fn create_client(&self, limits: RenderClientLimits, surface: ComRef<'_, IRenderSurfaceAbi>, permissions: RenderClientPermissions) -> Result<ComBox<IRenderClientDomainAbi>, NcStatus> {
+        fn create_client(
+            &self,
+            limits: RenderClientLimits,
+            surface: ComRef<'_, IRenderSurfaceAbi>,
+            permissions: RenderClientPermissions,
+        ) -> Result<ComBox<IRenderClientDomainAbi>, NcStatus> {
             self.inner.query::<IRenderClientFactoryAbi>()?.create_client(limits, surface, permissions)
         }
     }
@@ -87,22 +100,30 @@ mod maintenance {
     /// A maintenance failure stops before paint, owns its original error and permits a later retry.
     #[test]
     fn maintenance_precedes_widget_paint_and_preserves_owned_errors() {
-        let assets = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)]).into_bundle().unwrap();
+        let assets = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)])
+            .into_bundle()
+            .unwrap();
         let gfx = neocogi_ui_support::test_support::gfx_factory(super::host_runtime());
         let probe = Rc::new(Probe::default());
         let host: ComPtr<IRenderHostAbi> = Host::from_value(Host {
             inner: neocogi_gfx_support::testing::host(),
             probe: probe.clone(),
-        }).query().unwrap();
+        })
+        .query()
+        .unwrap();
         let mut runtime = nc_ui::create_runtime_from_assets(assets.as_com_ref(), gfx.as_com_ref()).unwrap();
-        runtime.set_render_host(host.as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
+        runtime
+            .set_render_host(host.as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref())
+            .unwrap();
         let factory = nc_ui_nodes::UiFactory::bind(runtime.as_com_ref()).unwrap();
         let ui = Ui::from_interfaces(runtime, factory).unwrap();
         let root = ui.widgets().leaf(Content(probe.clone()), WidgetOptions::NONE).unwrap();
         let _window = ui.window("camera uploads", Rect { x: 0, y: 0, width: 180, height: 100 }, root).unwrap();
         ui.update(SIZE).unwrap();
         let observation = Rc::new(Observation::default());
-        let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { observation: observation.clone() }).query().unwrap();
+        let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { observation: observation.clone() })
+            .query()
+            .unwrap();
         ui.render(SIZE, renderer.as_com_ref()).unwrap();
         assert_eq!(probe.painted.get(), 1);
         assert_eq!(observation.calls.get(), 1);
@@ -142,14 +163,18 @@ struct CaptureRenderer {
     observation: Rc<Observation>,
 }
 
-impl neocogi_render_core::abi::IRenderDriverBound for CaptureRenderer {
-    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+impl neocogi_platform_contracts::render::abi::IRenderDriverBound for CaptureRenderer {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_platform_contracts::render::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
         Err(neocogi_com::NC_E_NOINTERFACE)
     }
 }
 impl IRenderer for CaptureRenderer {
     /// Copies both bounded arrays while the invocation token is valid.
-    fn render_result(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+    fn render_result(
+        &self,
+        info: RenderInfo,
+        stream: ComRef<'_, IRenderStreamAbi>,
+    ) -> Result<ComPtr<neocogi_platform_contracts::render::abi::IRenderOutcomeAbi>, NcStatus> {
         let result = (|| -> Result<(), NcStatus> {
             let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
             self.observation.vertices.set(vertices.len() as u32);
@@ -157,7 +182,7 @@ impl IRenderer for CaptureRenderer {
             self.observation.calls.set(self.observation.calls.get() + 1);
             let blocks = neocogi_gfx_support::testing::blocks(info, stream)?;
             let atlas = blocks.iter().flat_map(|block| block.commands()).find_map(|command| {
-                if let neocogi_render_gpu::command::Command::Draw(draw) = command {
+                if let neocogi_platform::gpu::command::Command::Draw(draw) = command {
                     Some(draw.textures[0].texture.clone())
                 } else {
                     None
@@ -169,7 +194,9 @@ impl IRenderer for CaptureRenderer {
             }
             Ok(())
         })();
-        Ok(neocogi_render_core::abi::operation_result(result.map_err(neocogi_render_core::abi::RenderError::from)))
+        Ok(neocogi_platform_contracts::render::abi::operation_result(
+            result.map_err(neocogi_platform_contracts::render::abi::RenderError::from),
+        ))
     }
 }
 
@@ -181,7 +208,10 @@ fn create_ui(assets: ComRef<'_, IAssetBundleAbi>, gfx: ComRef<'_, GfxPluginFacto
 fn create_ui_with_failure(assets: ComRef<'_, IAssetBundleAbi>, gfx: ComRef<'_, GfxPluginFactoryAbi>, failure: Rc<Cell<Option<NcStatus>>>) -> Ui {
     let mut runtime = nc_ui::create_runtime_from_assets(assets, gfx).unwrap();
     runtime
-        .set_render_host(neocogi_gfx_support::testing::host_with_preparation_failure(failure).as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref())
+        .set_render_host(
+            neocogi_gfx_support::testing::host_with_preparation_failure(failure).as_com_ref(),
+            neocogi_gfx_support::testing::framebuffer().as_com_ref(),
+        )
         .unwrap();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
     let text = ui.widgets().text_block("Independent UI", TextWrapping::None).unwrap();
@@ -199,7 +229,7 @@ fn assert_frame(ui: &Ui, assets: ComRef<'_, IAssetBundleAbi>, renderer: ComRef<'
     ui.render(SIZE, renderer).unwrap();
     assert_eq!(observation.calls.get(), calls + 1);
     let size = image.size().unwrap();
-    let len = neocogi_render_core::abi::rgba_bytes(size).unwrap();
+    let len = neocogi_platform_contracts::render::abi::rgba_bytes(size).unwrap();
     let mut pixels = neocogi_com::NcOutputBuffer::new();
     image.pixels(pixels.output(0, len)).unwrap();
     assert_eq!(observation.size.get(), Some(size));
@@ -231,7 +261,9 @@ fn appearance_revision(base: ComRef<'_, IAssetBundleAbi>) -> ComPtr<IAssetBundle
 /// Construction, successful installation, failed upload, and closure affect only their own UI.
 #[test]
 fn shared_graphics_service_keeps_runtime_resources_independent() {
-    let base = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)]).into_bundle().unwrap();
+    let base = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)])
+        .into_bundle()
+        .unwrap();
     // Rebuild one image deliberately: this isolation regression must still distinguish
     // two atlas identities now that ordinary appearance edits preserve the same image.
     let styled = appearance_revision(base.as_com_ref());
@@ -283,8 +315,12 @@ fn shared_graphics_service_keeps_runtime_resources_independent() {
 /// replacing its namespace with another UI's catalog.
 #[test]
 fn shared_factory_supports_independent_catalogs() {
-    let base = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)]).into_bundle().unwrap();
-    let unrelated = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)]).into_bundle().unwrap();
+    let base = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)])
+        .into_bundle()
+        .unwrap();
+    let unrelated = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)])
+        .into_bundle()
+        .unwrap();
     assert_ne!(base.catalog().unwrap().as_raw().object, unrelated.catalog().unwrap().as_raw().object);
     let gfx = neocogi_ui_support::test_support::gfx_factory(host_runtime());
     let mut first = create_ui(base.as_com_ref(), gfx.as_com_ref());
@@ -304,10 +340,17 @@ fn shared_factory_supports_independent_catalogs() {
 /// Reusing the same bundle must still allocate independent frame state for every factory call.
 #[test]
 fn standalone_compositor_frame_does_not_block_runtime_construction_or_rendering() {
-    let assets = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)]).into_bundle().unwrap();
+    let assets = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)])
+        .into_bundle()
+        .unwrap();
     let gfx = neocogi_ui_support::test_support::gfx_factory(host_runtime());
     let mut standalone = gfx.create_compositor(assets.as_com_ref()).unwrap();
-    standalone.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
+    standalone
+        .bind_render_host(
+            neocogi_gfx_support::testing::host().as_com_ref(),
+            neocogi_gfx_support::testing::framebuffer().as_com_ref(),
+        )
+        .unwrap();
     standalone.begin(SIZE, 0).unwrap();
     // An active standalone frame must remain active while the UI creates and submits its own.
     let ui = create_ui(assets.as_com_ref(), gfx.as_com_ref());
@@ -324,10 +367,17 @@ fn standalone_compositor_frame_does_not_block_runtime_construction_or_rendering(
 /// A production runtime must delegate final expansion and submit exactly one bulk renderer frame.
 #[test]
 fn production_runtime_uses_the_gfx_compositor() {
-    let assets = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)]).into_bundle().expect("valid complete fixture assets");
+    let assets = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)])
+        .into_bundle()
+        .expect("valid complete fixture assets");
     let gfx = neocogi_ui_support::test_support::gfx_factory(host_runtime());
     let mut runtime = nc_ui::create_runtime_from_assets(assets.as_com_ref(), gfx.as_com_ref()).expect("matching UI and GFX resources must create a runtime");
-    runtime.set_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
+    runtime
+        .set_render_host(
+            neocogi_gfx_support::testing::host().as_com_ref(),
+            neocogi_gfx_support::testing::framebuffer().as_com_ref(),
+        )
+        .unwrap();
     let ui = nc_ui_nodes::bind_builtin_nodes(runtime).expect("the object must expose every UI capability");
     let text = ui
         .widgets()
@@ -364,22 +414,26 @@ fn host_runtime() -> neocogi_com::Runtime {
 /// A real COM renderer publishes a different owned native failure for each fixture instance.
 struct ReportedFailure {
     /// Immutable operation data is copied into the result rather than borrowed by the UI.
-    error: neocogi_render_core::abi::RenderError,
+    error: neocogi_platform_contracts::render::abi::RenderError,
     /// Proves that returned failures do not retain the renderer or its device facade.
     dropped: Rc<Cell<bool>>,
 }
-impl neocogi_render_core::abi::IRenderDriverBound for ReportedFailure {
+impl neocogi_platform_contracts::render::abi::IRenderDriverBound for ReportedFailure {
     /// The fixture consumes authentic CPU blocks without publishing native resources.
-    fn driver_identity(&self) -> Result<ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, NcStatus> {
+    fn driver_identity(&self) -> Result<ComPtr<neocogi_platform_contracts::render::abi::IRenderDriverIdentityAbi>, NcStatus> {
         Err(neocogi_com::NC_E_NOINTERFACE)
     }
 }
 impl IRenderer for ReportedFailure {
     /// Validate the production stream before publishing this invocation's independent failure.
-    fn render_result(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+    fn render_result(
+        &self,
+        info: RenderInfo,
+        stream: ComRef<'_, IRenderStreamAbi>,
+    ) -> Result<ComPtr<neocogi_platform_contracts::render::abi::IRenderOutcomeAbi>, NcStatus> {
         let blocks = neocogi_gfx_support::testing::blocks(info, stream)?;
         assert!(blocks.iter().any(|block| !block.commands().is_empty()));
-        Ok(neocogi_render_core::abi::operation_result(Err(self.error.clone())))
+        Ok(neocogi_platform_contracts::render::abi::operation_result(Err(self.error.clone())))
     }
 }
 impl Drop for ReportedFailure {
@@ -392,8 +446,10 @@ impl Drop for ReportedFailure {
 /// Native -> GFX -> UI must preserve exact status/text through repeated failures and successful retry.
 #[test]
 fn operation_errors_survive_renderers_later_failures_and_successful_retry() {
-    use neocogi_render_core::abi::{RenderError, RENDER_E_BACKEND};
-    let assets = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)]).into_bundle().unwrap();
+    use neocogi_platform_contracts::render::abi::{RenderError, RENDER_E_BACKEND};
+    let assets = neocogi_ui_support::test_support::test_asset_data_with_font_sizes(&[("body", 12)])
+        .into_bundle()
+        .unwrap();
     let gfx = neocogi_ui_support::test_support::gfx_factory(host_runtime());
     let ui = create_ui(assets.as_com_ref(), gfx.as_com_ref());
     let mut errors = Vec::new();

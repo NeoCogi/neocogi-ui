@@ -20,8 +20,8 @@ struct ImageTexture {
     /// Test-only observations; the COM allocation itself owns no UI state.
     probe: Rc<ImageProbe>,
 }
-impl neocogi_render_core::abi::IRenderDriverBound for ImageTexture {
-    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+impl neocogi_platform_contracts::render::abi::IRenderDriverBound for ImageTexture {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_platform_contracts::render::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
         Err(neocogi_com::NC_E_NOINTERFACE)
     }
 }
@@ -134,14 +134,18 @@ struct ImageFrameRenderer {
     /// Copied final quads outlive the invocation without retaining renderer resources.
     quads: Rc<RefCell<Vec<[RenderVertex; 4]>>>,
 }
-impl neocogi_render_core::abi::IRenderDriverBound for ImageFrameRenderer {
-    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+impl neocogi_platform_contracts::render::abi::IRenderDriverBound for ImageFrameRenderer {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_platform_contracts::render::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
         Err(neocogi_com::NC_E_NOINTERFACE)
     }
 }
 impl IRenderer for ImageFrameRenderer {
     /// Resolves each texture only during the active stream, then immediately releases the projection.
-    fn render_result(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+    fn render_result(
+        &self,
+        info: RenderInfo,
+        stream: ComRef<'_, IRenderStreamAbi>,
+    ) -> Result<ComPtr<neocogi_platform_contracts::render::abi::IRenderOutcomeAbi>, NcStatus> {
         let result = (|| -> Result<(), NcStatus> {
             let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
             let quads = batches
@@ -157,7 +161,9 @@ impl IRenderer for ImageFrameRenderer {
             *self.quads.borrow_mut() = quads;
             Ok(())
         })();
-        Ok(neocogi_render_core::abi::operation_result(result.map_err(neocogi_render_core::abi::RenderError::from)))
+        Ok(neocogi_platform_contracts::render::abi::operation_result(
+            result.map_err(neocogi_platform_contracts::render::abi::RenderError::from),
+        ))
     }
 }
 

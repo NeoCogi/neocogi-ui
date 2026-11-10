@@ -100,16 +100,20 @@ struct Renderer {
     /// Test-owned count of frame submissions.
     calls: Rc<Cell<usize>>,
 }
-impl neocogi_render_core::abi::IRenderDriverBound for Renderer {
-    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+impl neocogi_platform_contracts::render::abi::IRenderDriverBound for Renderer {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_platform_contracts::render::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
         Err(neocogi_com::NC_E_NOINTERFACE)
     }
 }
 impl IRenderer for Renderer {
     /// Records admitted frame submission.
-    fn render_result(&self, _: RenderInfo, _: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+    fn render_result(
+        &self,
+        _: RenderInfo,
+        _: ComRef<'_, IRenderStreamAbi>,
+    ) -> Result<ComPtr<neocogi_platform_contracts::render::abi::IRenderOutcomeAbi>, NcStatus> {
         self.calls.set(self.calls.get() + 1);
-        Ok(neocogi_render_core::abi::operation_result(Ok(())))
+        Ok(neocogi_platform_contracts::render::abi::operation_result(Ok(())))
     }
 }
 
@@ -121,7 +125,12 @@ fn precommit_callback_errors_recover_without_provider_notification() {
         let assets = neocogi_ui_support::test_support::assets::export_bundle(&neocogi_ui_support::SkinBundle::from_atlas(atlas)).unwrap();
         let gfx = neocogi_ui_support::test_support::gfx_factory(crate::test_support::host_runtime());
         let mut runtime = crate::create_runtime_from_assets(assets.as_com_ref(), gfx.as_com_ref()).unwrap();
-        runtime.set_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
+        runtime
+            .set_render_host(
+                neocogi_gfx_support::testing::host().as_com_ref(),
+                neocogi_gfx_support::testing::framebuffer().as_com_ref(),
+            )
+            .unwrap();
         let host = runtime.construction_host().unwrap().host().unwrap();
         let fail_update = Rc::new(Cell::new(false));
         let fail_properties = Rc::new(Cell::new(false));

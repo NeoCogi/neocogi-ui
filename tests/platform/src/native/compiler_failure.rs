@@ -1,51 +1,27 @@
+//! The renderer owns its compiler; malformed client shaders fail through resource creation.
 use super::*;
-#[com_object(interfaces(neocogi_shader_core::abi::ShaderCompiler))]
-struct RejectedCompiler;
-impl neocogi_shader_core::abi::ShaderCompiler for RejectedCompiler {
-    fn compile_result(
-        &self,
-        request: neocogi_shader_core::abi::ShaderCompileRequest,
-        _: NcCopyFromBufferOffset<'_, u8>,
-        entry: NcCopyFromBufferOffset<'_, u8>,
-    ) -> Result<ComPtr<neocogi_shader_core::abi::IShaderCompilationAbi>, NcStatus> {
-        let root: ComPtr<neocogi_shader_core::abi::ShaderCompilerAbi> =
-            nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query()?;
-        root.compile_result(request, NcCopyFromBufferOffset::new(0, b"rejected_ui_shader_diagnostic"), entry)
-    }
-}
-/// Exercise the actual UI->GFX->resource->compiler first-bind chain; capture detail
-/// before dropping the native window, then prove the owned text remains usable.
+/// Failed compilation returns owned diagnostics that survive the native window.
 #[test]
 #[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
-fn first_ui_bind_shader_rejection_returns_owned_operation_error() {
-    use neocogi_gfx_support::abi::GfxPluginFactoryAbi;
-    use neocogi_ui::abi::core::UiPluginFactoryAbi;
+fn shader_rejection_returns_owned_operation_error() {
     let _session = native_session();
-    let runtime = crate::host_runtime();
-    // SAFETY: linked immutable descriptors and code live for the process.
-    unsafe {
-        runtime.register_plugin_descriptor(nc_gfx::plugin_descriptor()).unwrap();
-        runtime.register_plugin_descriptor(nc_ui::plugin_descriptor()).unwrap();
-    }
-    let gfx = runtime
-        .acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
-        .unwrap();
-    let factory = runtime
-        .acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))
-        .unwrap();
-    let assets = neocogi_demo_assets::load_bundle(runtime).unwrap();
-    let mut ui = factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref()).unwrap();
-    let platform = PlatformObject::new(RejectedCompiler::from_value(RejectedCompiler).query().unwrap());
-    let native = platform.window("first bind rejection", Size { width: 8, height: 8 }).unwrap();
+    crate::host_runtime();
+    let native = testing::window("shader rejection", Size { width: 8, height: 8 }).unwrap();
     let weak = native.probe.clone();
-    let window: ComPtr<IPlatformWindowAbi> = WindowObject::from_value(native).query().unwrap();
-    let renderer: ComPtr<IRendererAbi> = window.query().unwrap();
-    let host = window.graphics_host().unwrap();
+    let host = native.window.graphics_host().unwrap();
     let surface = framebuffer(host.as_com_ref());
-    let error = ui.set_render_host(host.as_com_ref(), surface.as_com_ref()).unwrap_err();
+    let factory = host.query::<IRenderClientFactoryAbi>().unwrap();
+    let domain = factory
+        .create_client(RenderClientLimits::default(), surface.as_com_ref(), RenderClientPermissions::default())
+        .unwrap();
+    let resources = domain.resources().unwrap();
+    let code = neocogi_platform_contracts::render::source::Bytes::source(b"rejected_ui_shader_diagnostic".to_vec());
+    let error = resources
+        .create_shader(GpuShaderStage::Vertex, code.as_com_ref(), NcCopyFromBufferOffset::new(0, b"vs"))
+        .unwrap_err();
     let detail = error.message;
     assert!(detail.contains("rejected_ui_shader_diagnostic"), "{detail}");
-    drop((ui, host, renderer, surface, window, platform));
+    drop((resources, domain, factory, surface, host, native));
     assert!(!weak.is_alive());
     assert!(detail.contains("rejected_ui_shader_diagnostic"));
 }

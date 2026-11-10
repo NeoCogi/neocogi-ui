@@ -10,7 +10,7 @@ fn hiding_nested_menu_suffix_routes_the_first_text_to_the_surviving_scope() {
         let owner = ui.widgets().textbox_unobserved("").unwrap();
         let editor = owner.handle();
         let window = ui.window("nested focus", RECT, owner).unwrap();
-        key(&ui, KeyCode::Tab, 0);
+        key(&ui, KeyCode::Tab);
         ui.update(SIZE).unwrap();
         let menus = ui.menus().unwrap();
         let mut builders = vec![menus.create("Commands").unwrap()];
@@ -23,18 +23,18 @@ fn hiding_nested_menu_suffix_routes_the_first_text_to_the_surviving_scope() {
         drop(builders);
         for partial in [false, true] {
             popup.show_at(RECT).unwrap();
-            key(&ui, KeyCode::ArrowDown, 0);
+            key(&ui, KeyCode::ArrowDown);
             for _ in 1..depth {
-                key(&ui, KeyCode::ArrowRight, 0);
+                key(&ui, KeyCode::ArrowRight);
             }
             ui.update(SIZE).unwrap();
             if partial && depth > 1 {
-                key(&ui, KeyCode::ArrowLeft, 0);
+                key(&ui, KeyCode::ArrowLeft);
                 ui.input(UiInput::Text, "CONSUMED").unwrap();
                 ui.update(SIZE).unwrap();
                 assert_eq!(editor.text().unwrap(), "FIRST");
                 for _ in 1..depth {
-                    key(&ui, KeyCode::Escape, 0);
+                    key(&ui, KeyCode::Escape);
                 }
             } else {
                 popup.hide().unwrap();
@@ -55,7 +55,7 @@ fn callback_hide_preserves_the_first_queued_text_after_popup_activation() {
     let owner = ui.widgets().textbox_unobserved("").unwrap();
     let editor = owner.handle();
     let window = ui.window("callback focus", RECT, owner).unwrap();
-    key(&ui, KeyCode::Tab, 0);
+    key(&ui, KeyCode::Tab);
     ui.update(SIZE).unwrap();
     let (sender, receiver) = std::sync::mpsc::channel();
     let events = neocogi_ui::test_event_queue!(neocogi_ui::ButtonAbi, (), sender, |_queue, _origin, event| {
@@ -72,7 +72,7 @@ fn callback_hide_preserves_the_first_queued_text_after_popup_activation() {
         state.1 += 1;
         Ok(())
     });
-    key(&ui, KeyCode::Enter, 0);
+    key(&ui, KeyCode::Enter);
     ui.input(UiInput::Text, "FIRST").unwrap();
     ui.update_with_events(SIZE, app.as_interface()).unwrap();
     assert_eq!(app.state().1, 1);
@@ -87,7 +87,7 @@ fn nested_hide_restores_its_owner_and_ineligible_owners_fall_back_on_the_first_t
         let owner = ui.widgets().textbox_unobserved("").unwrap();
         let other_text = owner.handle();
         let other = ui.window("other", Rect { x: 430, y: 20, width: 180, height: 200 }, owner).unwrap();
-        key(&ui, KeyCode::Tab, 0);
+        key(&ui, KeyCode::Tab);
         ui.update(SIZE).unwrap();
         let owner = ui.widgets().textbox_unobserved("").unwrap();
         let owner_text = owner.handle();
@@ -113,9 +113,9 @@ fn nested_hide_restores_its_owner_and_ineligible_owners_fall_back_on_the_first_t
         child.submenu("Deep").unwrap().item("Leaf").unwrap();
         let mut popup = menus.popup(window.as_com_ref(), &root).unwrap();
         popup.show_at(RECT).unwrap();
-        key(&ui, KeyCode::ArrowDown, 0);
-        key(&ui, KeyCode::ArrowRight, 0);
-        key(&ui, KeyCode::ArrowRight, 0);
+        key(&ui, KeyCode::ArrowDown);
+        key(&ui, KeyCode::ArrowRight);
+        key(&ui, KeyCode::ArrowRight);
         ui.update(SIZE).unwrap();
         other.raise().unwrap();
         let mut modal_text = None;
@@ -132,7 +132,7 @@ fn nested_hide_restores_its_owner_and_ineligible_owners_fall_back_on_the_first_t
                     .dialog(other.as_com_ref(), "modal", Rect { x: 430, y: 20, width: 180, height: 200 }, owner)
                     .unwrap();
                 dialog.set_visibility(Visibility::Visible).unwrap();
-                key(&ui, KeyCode::Tab, 0);
+                key(&ui, KeyCode::Tab);
                 ui.update(SIZE).unwrap();
                 modal = Some(dialog);
             }
@@ -155,13 +155,11 @@ fn nested_hide_restores_its_owner_and_ineligible_owners_fall_back_on_the_first_t
 }
 
 /// Queues a concrete key including the function-key number carried by FUNCTION.
-fn key(ui: &neocogi_ui::Ui, key: KeyCode, value: u32) {
+fn key(ui: &neocogi_ui::Ui, key: KeyCode) {
     ui.input(
         UiInput::Key(KeyStroke {
             key,
-            value,
-            pressed: true,
-            repeat: false,
+            action: neocogi_ui::KeyAction::Pressed { repeat: false },
             modifiers: 0,
         }),
         "",
@@ -222,11 +220,11 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
     drop(file);
     drop(recent);
     item.set_label("Captured").unwrap();
-    key(&ui, KeyCode::Tab, 0);
-    key(&ui, KeyCode::Function, 10);
-    key(&ui, KeyCode::ArrowDown, 0);
-    key(&ui, KeyCode::ArrowRight, 0);
-    key(&ui, KeyCode::Enter, 0);
+    key(&ui, KeyCode::Tab);
+    key(&ui, KeyCode::Function(10));
+    key(&ui, KeyCode::ArrowDown);
+    key(&ui, KeyCode::ArrowRight);
+    key(&ui, KeyCode::Enter);
     ui.input(UiInput::Text, "focus restored").unwrap();
     ui.update(SIZE).unwrap();
     item.set_label("Later").unwrap();
@@ -235,8 +233,8 @@ fn nested_menu_keyboard_navigation_and_live_item_edits_use_the_authoritative_for
     labels.extend(session.try_iter());
     assert_eq!(&labels, &["menu-command"]);
     assert_eq!(editor.text().unwrap(), "focus restored");
-    for code in [KeyCode::Function, KeyCode::ArrowDown, KeyCode::ArrowRight, KeyCode::Enter] {
-        key(&ui, code, if code == KeyCode::Function { 10 } else { 0 });
+    for code in [KeyCode::Function(10), KeyCode::ArrowDown, KeyCode::ArrowRight, KeyCode::Enter] {
+        key(&ui, code);
     }
     let app = TestApp::new(labels, session, |state, message| {
         state.push(message);
@@ -317,8 +315,8 @@ fn standalone_menu_popup_submits_then_hides_without_destroying_its_live_rows() {
     let labels = Vec::new();
     popup.show_at(Rect { x: 60, y: 60, width: 20, height: 20 }).unwrap();
     // Standalone menus begin without row selection; Down selects their first actionable row.
-    key(&ui, KeyCode::ArrowDown, 0);
-    key(&ui, KeyCode::Enter, 0);
+    key(&ui, KeyCode::ArrowDown);
+    key(&ui, KeyCode::Enter);
     let app = TestApp::new(labels, session, |state, message| {
         state.push(message);
         Ok(())

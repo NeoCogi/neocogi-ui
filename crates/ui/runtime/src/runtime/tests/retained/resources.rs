@@ -17,8 +17,8 @@ struct TemporaryTexture {
     /// Drop publishes a copied lifecycle observation without keeping any UI capability alive.
     attempt: Rc<RefCell<Attempt>>,
 }
-impl neocogi_render_core::abi::IRenderDriverBound for TemporaryTexture {
-    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+impl neocogi_platform_contracts::render::abi::IRenderDriverBound for TemporaryTexture {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_platform_contracts::render::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
         Err(neocogi_com::NC_E_NOINTERFACE)
     }
 }
@@ -80,7 +80,10 @@ fn partial_paint_releases_owned_commands_before_a_later_frame_succeeds() {
     let later_leaf = fixture.ui.widgets().leaf(PartialPaint { attempt: later.clone() }, WidgetOptions::NONE).unwrap();
     let _later_owner = window(&fixture.ui, "later", Rect { x: 140, y: 10, width: 120, height: 80 }, later_leaf);
     fixture.ui.update(VIEW).unwrap();
-    assert_eq!(fixture.ui.render(VIEW, fixture.renderer.as_com_ref()).map_err(|error| error.status), Err(neocogi_com::NC_E_INVALID_ARG));
+    assert_eq!(
+        fixture.ui.render(VIEW, fixture.renderer.as_com_ref()).map_err(|error| error.status),
+        Err(neocogi_com::NC_E_INVALID_ARG)
+    );
     assert_eq!(fixture.snapshot().calls, 0);
     assert_eq!(attempt.borrow().releases, 1);
     assert_eq!(later.borrow().releases, 0);
@@ -111,7 +114,7 @@ enum GpuPaintExit {
 /// An ordinary leaf receives only resource and painter capabilities, without host session access.
 struct GpuPaint {
     /// Same-device factory; the test retains the exclusive domain controller.
-    resources: ComPtr<neocogi_render_core::abi::IRenderResourcesAbi>,
+    resources: ComPtr<neocogi_platform_contracts::render::abi::IRenderResourcesAbi>,
     /// Allows a later frame to succeed without replacing or remounting the leaf.
     exit: Rc<std::cell::Cell<GpuPaintExit>>,
 }
@@ -143,11 +146,11 @@ impl LeafContent for GpuPaint {
         if matches!(self.exit.get(), GpuPaintExit::Retry) {
             assert_eq!(
                 painter.begin_render_view(self.resources.as_com_ref()).err(),
-                Some(neocogi_render_core::abi::RENDER_E_STATE)
+                Some(neocogi_platform_contracts::render::abi::RENDER_E_STATE)
             );
             assert_eq!(
                 painter.begin_render_view(self.resources.as_com_ref()).err(),
-                Some(neocogi_render_core::abi::RENDER_E_STATE)
+                Some(neocogi_platform_contracts::render::abi::RENDER_E_STATE)
             );
         }
         Ok(())
@@ -186,7 +189,7 @@ fn gpu_paint_failure_survives_facade_drop_cancel_and_retry_until_host_return() {
         for _ in 0..2 {
             assert_eq!(
                 fixture.ui.render(VIEW, fixture.renderer.as_com_ref()).map_err(|error| error.status),
-                Err(neocogi_render_core::abi::RENDER_E_STATE)
+                Err(neocogi_platform_contracts::render::abi::RENDER_E_STATE)
             );
             assert_eq!(fixture.snapshot().calls, 0);
             assert_eq!(later.borrow().releases, 0);

@@ -5,7 +5,7 @@ Linux measurements require `perf`, a C compiler, Vulkan development headers and
 loader, and access to the native graphics session.
 
 Build the published dependency set directly; no local override is needed for
-Platform alpha.2 or rs-math3d 0.20.1:
+Platform 0.2 alpha.2 or rs-math3d 0.21.0:
 
 ```sh
 cargo build --locked --profile min-size -p neocogi-demo-full --no-default-features --features dynamic,vulkan

@@ -5,7 +5,7 @@ use super::*;
 use neocogi_com::NcStatus;
 use crate::{color, SliceInsets, Vec2i};
 use neocogi_com::{com_object};
-use neocogi_render_core::abi::*;
+use neocogi_platform_contracts::render::abi::*;
 use neocogi_gfx_support::abi::RenderVertex;
 use std::{cell::RefCell, rc::Rc};
 
@@ -30,14 +30,18 @@ struct Recorder {
     /// IRenderer methods take shared access, so the callback and assertion owner need one cell.
     capture: Rc<RefCell<Capture>>,
 }
-impl neocogi_render_core::abi::IRenderDriverBound for Recorder {
-    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+impl neocogi_platform_contracts::render::abi::IRenderDriverBound for Recorder {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_platform_contracts::render::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
         Err(neocogi_com::NC_E_NOINTERFACE)
     }
 }
 impl IRenderer for Recorder {
     /// Copies the live stream before borrowing assertion storage, keeping foreign calls reentrant.
-    fn render_result(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+    fn render_result(
+        &self,
+        info: RenderInfo,
+        stream: ComRef<'_, IRenderStreamAbi>,
+    ) -> Result<ComPtr<neocogi_platform_contracts::render::abi::IRenderOutcomeAbi>, NcStatus> {
         let result = (|| -> Result<(), NcStatus> {
             let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
             let mut capture = self.capture.borrow_mut();
@@ -47,15 +51,17 @@ impl IRenderer for Recorder {
             capture.stream = Some((stream.try_add_ref()?, info.invocation));
             if capture.fail { Err(NC_E_INVALID_ARG) } else { Ok(()) }
         })();
-        Ok(neocogi_render_core::abi::operation_result(result.map_err(neocogi_render_core::abi::RenderError::from)))
+        Ok(neocogi_platform_contracts::render::abi::operation_result(
+            result.map_err(neocogi_platform_contracts::render::abi::RenderError::from),
+        ))
     }
 }
 
 #[com_object(interfaces(ITexture))]
 /// Immutable texture capability used to verify resource ordering independently of a GPU device.
 struct Texture;
-impl neocogi_render_core::abi::IRenderDriverBound for Texture {
-    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+impl neocogi_platform_contracts::render::abi::IRenderDriverBound for Texture {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_platform_contracts::render::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
         Err(neocogi_com::NC_E_NOINTERFACE)
     }
 }
@@ -84,7 +90,12 @@ impl Composition {
     fn new(atlas: AtlasHandle) -> Self {
         let source = crate::test_support::assets::export_bundle(&crate::SkinBundle::from_atlas(atlas.clone())).unwrap();
         let mut compositor = neocogi_gfx_impl::GfxCompositorObject::create(source.as_com_ref()).unwrap();
-        compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
+        compositor
+            .bind_render_host(
+                neocogi_gfx_support::testing::host().as_com_ref(),
+                neocogi_gfx_support::testing::framebuffer().as_com_ref(),
+            )
+            .unwrap();
         let capture = Rc::new(RefCell::new(Capture::default()));
         let renderer = Recorder::from_value(Recorder { capture: capture.clone() }).query().unwrap();
         Self {
@@ -275,7 +286,10 @@ fn flat_nine_patch_filters_its_hidden_center_during_gfx_expansion() {
 fn frame_finish_failure_is_observable_and_the_next_frame_can_complete() {
     let mut fixture = Composition::new(atlas());
     fixture.capture.borrow_mut().fail = true;
-    assert_eq!(fixture.submit(Size { width: 32, height: 32 }).map_err(|error| error.status), Err(NC_E_INVALID_ARG));
+    assert_eq!(
+        fixture.submit(Size { width: 32, height: 32 }).map_err(|error| error.status),
+        Err(NC_E_INVALID_ARG)
+    );
     assert!(fixture.list.is_empty());
     let (stream, invocation) = fixture.capture.borrow().stream.clone().unwrap();
     assert!(stream.view(invocation, 0).is_err());

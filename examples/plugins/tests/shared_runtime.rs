@@ -7,11 +7,11 @@ mod interface;
 use interface::IRegistryProbeAbi;
 use neocogi_com::guid_from_qualified_name;
 
-use neocogi_native_layout_core as profile;
+use neocogi_platform_contracts::build::layout as profile;
 use std::path::Path;
 
-/// Compiler-only artifact copying leaves only this platform filename in the test host.
-const PROBE: &str = neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_RUNTIME_PROBE_nc_cargo_runtime_probe");
+/// Compiler staging emits only the adjacent probe filename into this test host.
+const PROBE: &str = neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_RUNTIME_PROBE_nc_cargo_runtime_probe");
 
 /// Calls discovery in the actual separately linked DLLs, including the null-output contract.
 /// No implementation Rust dependency or copied fixture descriptor can satisfy this regression.
@@ -27,30 +27,29 @@ fn final_libraries_export_their_real_descriptors() {
     };
     let providers = [
         (
-            neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_UI_LIBRARY_nc_ui"),
+            neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_UI_LIBRARY_nc_ui"),
             "neocogi.ui.runtime",
         ),
         (
-            neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_NODES_LIBRARY_nc_ui_nodes"),
+            neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_NODES_LIBRARY_nc_ui_nodes"),
             "neocogi.ui.nodes.runtime",
         ),
         (
-            neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_SHADER_LIBRARY_nc_shader_compiler"),
-            "neocogi.shader.compiler",
+            neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_PLATFORM_LIBRARY_nc_platform"),
+            renderer,
         ),
-        (neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_PLATFORM_LIBRARY_nc_platform"), renderer),
         (
-            neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_GFX_LIBRARY_nc_gfx"),
+            neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_GFX_LIBRARY_nc_gfx"),
             "neocogi.gfx.runtime",
         ),
         #[cfg(feature = "skin")]
         (
-            neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_SKIN_LIBRARY_nc_skin"),
+            neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_SKIN_LIBRARY_nc_skin"),
             "neocogi.skin.runtime",
         ),
         #[cfg(feature = "extension")]
         (
-            neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_EXTENSION_LIBRARY_nc_ui_extension"),
+            neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_EXTENSION_LIBRARY_nc_ui_extension"),
             "neocogi.example.ui-extension",
         ),
     ];
@@ -120,7 +119,14 @@ fn cargo_host_and_plugin_share_one_runtime_catalog() {
     };
     let catalog = runtime.plugins().unwrap();
     assert!(catalog.iter().any(|plugin| plugin.plugin_id == guid_from_qualified_name(renderer)));
-    assert_eq!(catalog.iter().filter(|plugin| plugin.qualified_name.starts_with("neocogi.platform.")).count(), 1);
+    assert_eq!(
+        catalog.iter().filter(|plugin| plugin.qualified_name.starts_with("neocogi.platform.")).count(),
+        1
+    );
+    assert!(
+        !catalog.iter().any(|plugin| plugin.qualified_name == "neocogi.shader.compiler"),
+        "the renderer owns its compiler; no separate compiler provider is deployed"
+    );
     let count = catalog.len();
     // Re-loading the exact Cargo artifacts must reuse the first registrations.
     neocogi_demo_plugins::register(host_runtime()).unwrap();

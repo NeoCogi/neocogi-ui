@@ -61,8 +61,8 @@ SDL2 and the libraries for their selected graphics backend; see
 [backend prerequisites](crates/ui/runtime/docs/BACKENDS.md).
 The checked-in lockfile fixes the standalone dependency graph.
 
-Platform packages use exact `=0.1.0-alpha.2` registry requirements, COM/IDL use
-`=0.1.0`, and `rs-math3d` uses `=0.20.1`. Internal production/build dependencies
+Platform packages use exact `=0.2.0-alpha.2` registry requirements, COM/IDL use
+`=0.1.0`, and `rs-math3d` uses `=0.21.0`. Internal production/build dependencies
 use the exact UI release `=0.1.0-alpha.2`; test-only
 peer links are omitted from publication and restored from packaged test metadata
 by the archive qualifier.

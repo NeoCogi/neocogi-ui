@@ -8,9 +8,7 @@ fn press(ui: &neocogi_ui::Ui, key: KeyCode) {
     ui.input(
         UiInput::Key(KeyStroke {
             key,
-            value: 0,
-            pressed: true,
-            repeat: false,
+            action: neocogi_ui::KeyAction::Pressed { repeat: false },
             modifiers: 0,
         }),
         "",
@@ -197,9 +195,9 @@ impl neocogi_ui::events::IEventReceiver for RemoveComboDuringPost {
         event_owner: neocogi_com::ComBox<neocogi_ui::events::IEventAbi>,
     ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui::events::IEventAbi>)> {
         let result = (|| -> Result<(), NcStatus> {
-                event_owner.query_weak::<neocogi_ui::IChoiceChangedEventAbi>()?;
-                self.calls.set(self.calls.get() + 1);
-                self.root.clear()
+            event_owner.query_weak::<neocogi_ui::IChoiceChangedEventAbi>()?;
+            self.calls.set(self.calls.get() + 1);
+            self.root.clear()
         })();
         result.map_err(|status| (status, event_owner))
     }

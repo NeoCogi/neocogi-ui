@@ -31,7 +31,7 @@
 //! Bounded raw RGBA storage used by runtime texture and atlas consumers.
 use crate::{Color4b, color4b};
 use std::fmt;
-pub use neocogi_render_core::ImageSource;
+pub use neocogi_platform_contracts::render::ImageSource;
 
 /// Shared upper bound on one raw RGBA image allocation.
 pub const MAX_DECODED_RGBA_BYTES: usize = neocogi_ui::abi::core::MAX_ASSET_PIXELS_BYTES;

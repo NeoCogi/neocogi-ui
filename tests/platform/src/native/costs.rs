@@ -1,23 +1,27 @@
 //! Explicit, non-asserting measurements of real UI recording and native execution.
 use super::*;
 use std::time::Instant;
-use nc_platform::testing::Sample;
+use neocogi_platform::platform::testing::Sample;
 
 #[com_object(interfaces(IRenderer))]
 /// Captures authentic blocks after real UI paint without substituting a fake GPU host.
 struct Capture {
     /// Same logical device as the production window authenticates all stream observers.
-    logical: neocogi_render_gpu::GpuDevice<NativeBackend>,
+    logical: neocogi_platform::gpu::GpuDevice<NativeBackend>,
     /// Only a synchronous COM receiver needs interior mutability; no outward borrow is retained.
-    blocks: Rc<RefCell<Vec<Rc<neocogi_render_gpu::record::Block<NativeBackend>>>>>,
+    blocks: Rc<RefCell<Vec<Rc<neocogi_platform::gpu::record::Block<NativeBackend>>>>>,
 }
-impl neocogi_render_core::abi::IRenderDriverBound for Capture {
-    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+impl neocogi_platform_contracts::render::abi::IRenderDriverBound for Capture {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_platform_contracts::render::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
         Err(neocogi_com::NC_E_NOINTERFACE)
     }
 }
 impl IRenderer for Capture {
-    fn render_result(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+    fn render_result(
+        &self,
+        info: RenderInfo,
+        stream: ComRef<'_, IRenderStreamAbi>,
+    ) -> Result<ComPtr<neocogi_platform_contracts::render::abi::IRenderOutcomeAbi>, NcStatus> {
         let result = (|| -> Result<(), NcStatus> {
             let mut blocks = Vec::new();
             for index in 0..info.block_count {
@@ -27,7 +31,9 @@ impl IRenderer for Capture {
             *self.blocks.borrow_mut() = blocks;
             Ok(())
         })();
-        Ok(neocogi_render_core::abi::operation_result(result.map_err(neocogi_render_core::abi::RenderError::from)))
+        Ok(neocogi_platform_contracts::render::abi::operation_result(
+            result.map_err(neocogi_platform_contracts::render::abi::RenderError::from),
+        ))
     }
 }
 
@@ -47,15 +53,9 @@ fn measure_ui_and_mixed_client_costs() {
     }
     for mixed in [false, true] {
         let setup = Instant::now();
-        let native = PlatformObject::new(
-            nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
-                .query()
-                .unwrap(),
-        )
-        .window("native costs", SIZE)
-        .unwrap();
+        let native = testing::window("native costs", SIZE).unwrap();
         let device = native.probe.clone();
-        let window = WindowObject::from_value(native);
+        let window = native.window;
         let platform: ComPtr<IPlatformWindowAbi> = window.query().unwrap();
         let host = platform.graphics_host().unwrap();
         let assets = neocogi_demo_assets::load_bundle(runtime).unwrap();
@@ -86,7 +86,13 @@ fn measure_ui_and_mixed_client_costs() {
         let record_ns = record.elapsed().as_nanos();
         let mut blocks = captured.borrow().clone();
         let clients: ComPtr<IRenderClientFactoryAbi> = window.query().unwrap();
-        let domain = clients.create_client(Default::default(), framebuffer(host.as_com_ref()).as_com_ref(), RenderClientPermissions::default()).unwrap();
+        let domain = clients
+            .create_client(
+                Default::default(),
+                framebuffer(host.as_com_ref()).as_com_ref(),
+                RenderClientPermissions::default(),
+            )
+            .unwrap();
         let resources = domain.resources().unwrap();
         let client = mixed.then(|| {
             graphics(
@@ -110,7 +116,7 @@ fn measure_ui_and_mixed_client_costs() {
         for block in &blocks {
             commands += block.commands().len();
             for command in block.commands() {
-                if let neocogi_render_gpu::command::Command::Draw(draw) = command {
+                if let neocogi_platform::gpu::command::Command::Draw(draw) = command {
                     draws += 1;
                     pipelines.insert(Rc::as_ptr(&draw.pipeline) as usize);
                     for vertex in &draw.vertex_buffers {

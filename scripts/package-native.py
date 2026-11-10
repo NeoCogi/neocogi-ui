@@ -2,7 +2,7 @@
 """Build one Cargo-selected application into a fresh, exact native distribution.
 
 Shared Cargo outputs remain an additive development cache. Cargo exports the chosen
-executable under its own build coordination; macros copy selected providers/resources
+executable under its own build coordination; compiler hooks/build scripts copy selected providers/resources
 into private candidate storage. Only a validated candidate is renamed into place.
 Concurrent use requires Cargo-supported local filesystem locking. No wrapper build
 lock, second resolver, generated workspace or cache garbage collection is used.

@@ -328,7 +328,7 @@ impl IAssetBundle for RawBundle {
         Ok(self.header)
     }
     /// Delegates to real validated image ownership.
-    fn image(&self) -> Result<ComPtr<neocogi_render_core::abi::IRgbaImageAbi>, NcStatus> {
+    fn image(&self) -> Result<ComPtr<neocogi_platform_contracts::render::abi::IRgbaImageAbi>, NcStatus> {
         self.accessed();
         self.base.image()
     }

@@ -41,7 +41,7 @@ impl NativePath {
     }
 }
 
-pub use neocogi_render_core::platform::path::decode;
+pub use neocogi_platform_contracts::render::platform::path::decode;
 
 #[com_object(interfaces(crate::INativePath))]
 /// Ordinary concrete value owns its native path inside whichever binary created the snapshot.

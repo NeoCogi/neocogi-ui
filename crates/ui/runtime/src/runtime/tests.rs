@@ -278,14 +278,18 @@ struct Renderer {
     probe: Rc<RenderProbe>,
 }
 
-impl neocogi_render_core::abi::IRenderDriverBound for Renderer {
-    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+impl neocogi_platform_contracts::render::abi::IRenderDriverBound for Renderer {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_platform_contracts::render::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
         Err(neocogi_com::NC_E_NOINTERFACE)
     }
 }
 impl IRenderer for Renderer {
     /// Copies bulk geometry during its valid scope and retains authority for later rejection tests.
-    fn render_result(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+    fn render_result(
+        &self,
+        info: RenderInfo,
+        stream: ComRef<'_, IRenderStreamAbi>,
+    ) -> Result<ComPtr<neocogi_platform_contracts::render::abi::IRenderOutcomeAbi>, NcStatus> {
         let result = (|| -> Result<(), NcStatus> {
             let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
             assert_eq!(batches.len(), 1);
@@ -297,7 +301,9 @@ impl IRenderer for Renderer {
             self.probe.streams.borrow_mut().push((stream.try_add_ref()?, info.invocation));
             if self.probe.fail.get() { Err(UI_E_RENDER) } else { Ok(()) }
         })();
-        Ok(neocogi_render_core::abi::operation_result(result.map_err(neocogi_render_core::abi::RenderError::from)))
+        Ok(neocogi_platform_contracts::render::abi::operation_result(
+            result.map_err(neocogi_platform_contracts::render::abi::RenderError::from),
+        ))
     }
 }
 
@@ -340,18 +346,27 @@ fn rendering_requires_synchronized_geometry_and_streams_expire_after_success_and
     let node = button_owner.query().unwrap();
     let _window = mount(&runtime, node).unwrap();
     let (renderer, probe) = renderer();
-    assert_eq!(runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(
+        runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status),
+        Err(UI_E_UPDATE_REQUIRED)
+    );
     runtime.update(SIZE).unwrap();
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     button.set_label(NcCopyFromBufferOffset::new(0, b"longer")).unwrap();
-    assert_eq!(runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(
+        runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status),
+        Err(UI_E_UPDATE_REQUIRED)
+    );
     assert_eq!(probe.calls.get(), 1);
     runtime.update(SIZE).unwrap();
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     button.set_label(NcCopyFromBufferOffset::new(0, b"longer")).unwrap();
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     let resized = Size { width: 800, height: 480 };
-    assert_eq!(runtime.render(resized, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(
+        runtime.render(resized, renderer.as_com_ref()).map_err(|error| error.status),
+        Err(UI_E_UPDATE_REQUIRED)
+    );
     runtime.update(resized).unwrap();
     probe.fail.set(true);
     assert_eq!(runtime.render(resized, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_RENDER));
@@ -819,9 +834,7 @@ fn com_nodes_update_without_activation_and_collect_hidden_widget_changes() {
 
     let tab = UiInput::Key(KeyStroke {
         key: KeyCode::Tab,
-        value: 0,
-        pressed: true,
-        repeat: false,
+        action: neocogi_ui::KeyAction::Pressed { repeat: false },
         modifiers: 0,
     });
     runtime.input(tab, NcCopyFromBufferOffset::new(0, &[])).unwrap();
@@ -829,7 +842,10 @@ fn com_nodes_update_without_activation_and_collect_hidden_widget_changes() {
     let measured = probe.measures.get();
     runtime.input(UiInput::Text, NcCopyFromBufferOffset::new(0, "hello ☃".as_bytes())).unwrap();
     let (renderer, _) = renderer();
-    assert_eq!(runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(
+        runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status),
+        Err(UI_E_UPDATE_REQUIRED)
+    );
     runtime.update(SIZE).unwrap();
     assert_eq!(&*probe.texts.borrow(), &["hello ☃"]);
     assert_eq!(probe.measures.get(), measured, "NoChange text processing must preserve measurement");
@@ -867,10 +883,8 @@ fn input_validation_and_explicit_teardown_preserve_their_error_boundaries() {
     let window = mount(&runtime, object.query().unwrap()).unwrap();
     runtime.update(SIZE).unwrap();
     let bad_key = UiInput::Key(KeyStroke {
-        key: KeyCode::Character,
-        value: 0xd800,
-        pressed: true,
-        repeat: false,
+        key: KeyCode::Character(0xd800),
+        action: neocogi_ui::KeyAction::Pressed { repeat: false },
         modifiers: 0,
     });
     assert_eq!(runtime.input(bad_key, NcCopyFromBufferOffset::new(0, &[])), Err(NC_E_INVALID_ARG));
@@ -1125,9 +1139,7 @@ fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
     ui.input(
         UiInput::Key(KeyStroke {
             key: KeyCode::Tab,
-            value: 0,
-            pressed: true,
-            repeat: false,
+            action: neocogi_ui::KeyAction::Pressed { repeat: false },
             modifiers: 0,
         }),
         "",
@@ -1148,9 +1160,7 @@ fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
     ui.input(
         UiInput::Key(KeyStroke {
             key: KeyCode::Tab,
-            value: 0,
-            pressed: true,
-            repeat: false,
+            action: neocogi_ui::KeyAction::Pressed { repeat: false },
             modifiers: 0,
         }),
         "",
@@ -1159,9 +1169,7 @@ fn builtin_facade_routes_text_and_space_and_renders_every_concrete_leaf() {
     ui.input(
         UiInput::Key(KeyStroke {
             key: KeyCode::Space,
-            value: 0,
-            pressed: true,
-            repeat: false,
+            action: neocogi_ui::KeyAction::Pressed { repeat: false },
             modifiers: 0,
         }),
         "",
@@ -1271,8 +1279,8 @@ impl IPainter for BuiltinPainter {
     fn begin_render_view(
         &mut self,
         _: PaintScope,
-        _: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>,
-    ) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::IRenderViewAbi>, NcStatus> {
+        _: ComRef<'_, neocogi_platform_contracts::render::abi::IRenderResourcesAbi>,
+    ) -> Result<neocogi_com::ComBox<neocogi_platform_contracts::render::abi::IRenderViewAbi>, NcStatus> {
         panic!("unexpected GPU view")
     }
 
@@ -1422,9 +1430,7 @@ fn platform_input_projection_and_committed_text_area_share_runtime_state() {
         .input(
             UiInput::Key(KeyStroke {
                 key: KeyCode::Tab,
-                value: 0,
-                pressed: true,
-                repeat: false,
+                action: neocogi_ui::KeyAction::Pressed { repeat: false },
                 modifiers: 0,
             }),
             NcCopyFromBufferOffset::new(0, &[]),
@@ -1816,7 +1822,10 @@ fn review_independent_sticky_setter_requires_update_before_render() {
     let (renderer, probe) = renderer();
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     text.set_text(NcCopyFromBufferOffset::new(0, b"a much longer label")).unwrap();
-    assert_eq!(runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(
+        runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status),
+        Err(UI_E_UPDATE_REQUIRED)
+    );
     assert_eq!(probe.calls.get(), 1);
 }
 

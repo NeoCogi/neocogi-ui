@@ -30,13 +30,15 @@ impl LeafContent for Scope {
 }
 
 /// Creates a complete key press or release without implicit platform state.
-fn key(code: KeyCode, value: u32, modifiers: u8, pressed: bool) -> UiInput {
+fn key(code: KeyCode, modifiers: u8, pressed: bool) -> UiInput {
     UiInput::Key(KeyStroke {
         key: code,
-        value,
+        action: if pressed {
+            neocogi_ui::KeyAction::Pressed { repeat: false }
+        } else {
+            neocogi_ui::KeyAction::Released
+        },
         modifiers,
-        pressed,
-        repeat: false,
     })
 }
 
@@ -54,25 +56,25 @@ fn embedded_scope_receives_tab_and_menu_keys_until_explicit_exit() {
     column.insert(1, next, LinearEdge::new(LayoutTrack::Content)).unwrap();
     ui.window("scope", RECT, column).unwrap();
     ui.update(SIZE).unwrap();
-    ui.input(key(KeyCode::Tab, 0, 0, true), "").unwrap();
+    ui.input(key(KeyCode::Tab, 0, true), "").unwrap();
     ui.update(SIZE).unwrap();
     assert!(events.try_iter().any(|(focused, _)| focused));
     // These manager-level keys must be delivered to the embedded widget itself.
-    for (code, value, modifiers) in [(KeyCode::Tab, 0, 0), (KeyCode::Function, 10, 0), (KeyCode::Function, 6, 2)] {
-        ui.input(key(code, value, modifiers, true), "").unwrap();
-        ui.input(key(code, value, modifiers, false), "").unwrap();
+    for (code, modifiers) in [(KeyCode::Tab, 0), (KeyCode::Function(10), 0), (KeyCode::Function(6), 2)] {
+        ui.input(key(code, modifiers, true), "").unwrap();
+        ui.input(key(code, modifiers, false), "").unwrap();
         ui.update(SIZE).unwrap();
         let keys = events.try_iter().filter_map(|(_, key)| key).collect::<Vec<_>>();
         assert_eq!(keys.len(), 2);
-        assert!(keys.iter().all(|key| key.key == code && key.value == value));
+        assert!(keys.iter().all(|key| key.key == code));
     }
-    ui.input(key(KeyCode::Tab, 0, 2, true), "").unwrap();
+    ui.input(key(KeyCode::Tab, 2, true), "").unwrap();
     ui.update(SIZE).unwrap();
     let updates = events.try_iter().collect::<Vec<_>>();
     assert!(updates.iter().any(|(focused, _)| !focused));
     assert!(updates.iter().all(|(_, key)| key.is_none()));
     // Ordinary Shift+Tab can return to the scope, without a sticky delegation flag.
-    ui.input(key(KeyCode::Tab, 0, 4, true), "").unwrap();
+    ui.input(key(KeyCode::Tab, 4, true), "").unwrap();
     ui.update(SIZE).unwrap();
     assert!(events.try_iter().any(|(focused, _)| focused));
 }
@@ -92,7 +94,7 @@ fn window_cycle_can_resume_after_focus_moves_through_an_embedded_scope() {
     body.insert(1, next, LinearEdge::new(LayoutTrack::Content)).unwrap();
     ui.window("scope", RECT, body).unwrap();
     ui.update(SIZE).unwrap();
-    ui.input(key(KeyCode::Tab, 0, 0, true), "").unwrap();
+    ui.input(key(KeyCode::Tab, 0, true), "").unwrap();
     ui.update(SIZE).unwrap();
     assert!(events.try_iter().any(|(focused, _)| focused));
 
@@ -118,15 +120,15 @@ fn window_cycle_can_resume_after_focus_moves_through_an_embedded_scope() {
     }
     assert!(matches!(ui.text_input_area().unwrap(), TextInputArea::Area(_)));
     for pressed in [true, false] {
-        ui.input(key(KeyCode::Function, 6, 2, pressed), "").unwrap();
+        ui.input(key(KeyCode::Function(6), 2, pressed), "").unwrap();
         ui.update(SIZE).unwrap();
     }
     assert_eq!(ui.text_input_area().unwrap(), TextInputArea::None);
     for pressed in [true, false] {
-        ui.input(key(KeyCode::Tab, 0, 2, pressed), "").unwrap();
+        ui.input(key(KeyCode::Tab, 2, pressed), "").unwrap();
         ui.update(SIZE).unwrap();
     }
-    ui.input(key(KeyCode::Function, 6, 2, true), "").unwrap();
+    ui.input(key(KeyCode::Function(6), 2, true), "").unwrap();
     ui.update(SIZE).unwrap();
     assert!(
         matches!(ui.text_input_area().unwrap(), TextInputArea::Area(_)),

@@ -13,15 +13,14 @@ pub fn register(runtime: neocogi_com::Runtime) -> std::io::Result<()> {
         .ok_or_else(|| std::io::Error::other("executable has no parent"))?
         .join("lib");
     let filenames = [
-        neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_UI_LIBRARY_nc_ui"),
-        neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_NODES_LIBRARY_nc_ui_nodes"),
-        neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_SHADER_LIBRARY_nc_shader_compiler"),
-        neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_PLATFORM_LIBRARY_nc_platform"),
-        neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_GFX_LIBRARY_nc_gfx"),
+        neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_UI_LIBRARY_nc_ui"),
+        neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_NODES_LIBRARY_nc_ui_nodes"),
+        neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_PLATFORM_LIBRARY_nc_platform"),
+        neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_GFX_LIBRARY_nc_gfx"),
         #[cfg(feature = "extension")]
-        neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_EXTENSION_LIBRARY_nc_ui_extension"),
+        neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_EXTENSION_LIBRARY_nc_ui_extension"),
         #[cfg(feature = "skin")]
-        neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_SKIN_LIBRARY_nc_skin"),
+        neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_SKIN_LIBRARY_nc_skin"),
     ];
     for filename in filenames {
         // SAFETY: the application ships trusted Cargo-built providers in its lib directory.

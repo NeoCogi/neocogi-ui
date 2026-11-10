@@ -2,7 +2,7 @@
 
 use neocogi_gfx_support::testing::UiBatch;
 use neocogi_com::{com_object, ComPtr, ComRef, NcStatus};
-use neocogi_render_core::abi::*;
+use neocogi_platform_contracts::render::abi::*;
 use neocogi_ui::{IAssetBundleAbi, Ui, RenderVertex};
 use std::{cell::RefCell, rc::Rc};
 
@@ -23,14 +23,18 @@ struct CaptureRenderer {
     /// IRenderer has shared receivers, so callback observations require one interior-mutable slot.
     frame: Rc<RefCell<Frame>>,
 }
-impl neocogi_render_core::abi::IRenderDriverBound for CaptureRenderer {
-    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+impl neocogi_platform_contracts::render::abi::IRenderDriverBound for CaptureRenderer {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_platform_contracts::render::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
         Err(neocogi_com::NC_E_NOINTERFACE)
     }
 }
 impl IRenderer for CaptureRenderer {
     /// Reads complete arrays while the token is live, then publishes copied observations.
-    fn render_result(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+    fn render_result(
+        &self,
+        info: RenderInfo,
+        stream: ComRef<'_, IRenderStreamAbi>,
+    ) -> Result<ComPtr<neocogi_platform_contracts::render::abi::IRenderOutcomeAbi>, NcStatus> {
         let result = (|| -> Result<(), NcStatus> {
             let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
             // No observation borrow survives a foreign stream call. This also permits deliberately
@@ -41,7 +45,9 @@ impl IRenderer for CaptureRenderer {
             frame.batches = batches;
             Ok(())
         })();
-        Ok(neocogi_render_core::abi::operation_result(result.map_err(neocogi_render_core::abi::RenderError::from)))
+        Ok(neocogi_platform_contracts::render::abi::operation_result(
+            result.map_err(neocogi_platform_contracts::render::abi::RenderError::from),
+        ))
     }
 }
 

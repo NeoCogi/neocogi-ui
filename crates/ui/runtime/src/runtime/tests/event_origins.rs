@@ -94,9 +94,7 @@ fn text_area_captures_public_identity_and_order_from_its_private_editor() {
     ui.input(
         UiInput::Key(KeyStroke {
             key: KeyCode::Tab,
-            value: 0,
-            pressed: true,
-            repeat: false,
+            action: neocogi_ui::KeyAction::Pressed { repeat: false },
             modifiers: 0,
         }),
         "",

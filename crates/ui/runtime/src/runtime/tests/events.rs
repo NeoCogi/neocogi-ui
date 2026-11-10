@@ -53,9 +53,7 @@ fn key(ui: &neocogi_ui::Ui, key: KeyCode) {
     ui.input(
         UiInput::Key(KeyStroke {
             key,
-            value: 0,
-            pressed: true,
-            repeat: false,
+            action: neocogi_ui::KeyAction::Pressed { repeat: false },
             modifiers: 0,
         }),
         "",
@@ -478,9 +476,7 @@ fn text_editor_and_popup_event_capabilities_preserve_their_independent_native_so
     ui.input(
         UiInput::Key(KeyStroke {
             key: KeyCode::Enter,
-            value: 0,
-            pressed: true,
-            repeat: false,
+            action: neocogi_ui::KeyAction::Pressed { repeat: false },
             modifiers: 2,
         }),
         "",
@@ -697,8 +693,8 @@ fn failed_lifecycle_post_preserves_visibility_and_returns_its_receiver_error() {
             event_owner: neocogi_com::ComBox<neocogi_ui::events::IEventAbi>,
         ) -> Result<(), (NcStatus, neocogi_com::ComBox<neocogi_ui::events::IEventAbi>)> {
             let result = (|| -> Result<(), NcStatus> {
-                    event_owner.query_weak::<IWindowEventAbi>()?;
-                    Err(NC_E_INVALID_ARG)
+                event_owner.query_weak::<IWindowEventAbi>()?;
+                Err(NC_E_INVALID_ARG)
             })();
             result.map_err(|status| (status, event_owner))
         }

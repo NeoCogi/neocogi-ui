@@ -6,8 +6,8 @@
 //! this is not a native image authenticator and must never accept untrusted application images.
 use crate::abi::RenderVertex;
 use neocogi_com::{com_object, ComBox, ComPtr, ComRef, NcStatus, NC_E_INVALID_ARG};
-use neocogi_render_core::{abi::*};
-use neocogi_render_gpu::{
+use neocogi_platform_contracts::render::{abi::*};
+use neocogi_platform::gpu::{
     command::{Command, DrawRange},
     testing::{Backend, Core, Image},
 };
@@ -18,7 +18,7 @@ use std::{
 use std::rc::Rc;
 
 /// Concrete virtual family is selected explicitly by headless tests.
-type GpuDevice = neocogi_render_gpu::GpuDevice<Backend>;
+type GpuDevice = neocogi_platform::gpu::GpuDevice<Backend>;
 
 /// Decoded UI observations used only by headless integration assertions.
 #[derive(Clone, Debug)]
@@ -43,9 +43,9 @@ thread_local! {
     /// Thread affinity matches COM objects and the production graphics recorder.
     static CORE: Rc<Core> = Core::new();
     /// Physical virtual core is shared only on this fixture thread.
-    static DEVICE: GpuDevice = GpuDevice::new(CORE.with(Clone::clone),nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query().unwrap());
+    static DEVICE: GpuDevice = GpuDevice::new(CORE.with(Clone::clone)).unwrap();
     /// Target metadata is shared by all fixture groups without granting UI-specific authority.
-    static TARGET: Rc<neocogi_render_gpu::target::SurfaceTarget<Backend>> = DEVICE.with(|device| device.surface_target(RenderSurfaceKind::Framebuffer).unwrap());
+    static TARGET: Rc<neocogi_platform::gpu::target::SurfaceTarget<Backend>> = DEVICE.with(|device| device.surface_target(RenderSurfaceKind::Framebuffer).unwrap());
     /// Concrete identity authenticates factory requests without calling supplied surface getters.
     static SURFACE: ComPtr<IRenderSurfaceAbi> = Surface::from_value(Surface).query().unwrap();
     /// Keys are explicitly replaced at each fixture-image construction; no COM owner is retained.
@@ -118,7 +118,7 @@ impl IRenderClientFactory for Host {
 impl IRenderSurfaceFactory for Host {
     /// Headless fixtures support only the shared framebuffer; native suites qualify image targets.
     fn create_surface(&self, desc: RenderSurfaceDesc) -> Result<ComPtr<IRenderSurfaceAbi>, NcStatus> {
-        if desc.kind != RenderSurfaceKind::Framebuffer || desc.size != Size::default() {
+        if !matches!(desc, RenderSurfaceDesc::Framebuffer) {
             return Err(NC_E_INVALID_ARG);
         }
         Ok(framebuffer())
@@ -185,7 +185,7 @@ pub fn image_identity(image: &Image) -> Option<usize> {
 }
 
 /// Authenticates a real sealed contribution on this thread's fixture assembly.
-pub fn snapshot(block: ComRef<'_, IRenderViewBlockAbi>) -> Result<Rc<neocogi_render_gpu::record::Block<Backend>>, NcStatus> {
+pub fn snapshot(block: ComRef<'_, IRenderViewBlockAbi>) -> Result<Rc<neocogi_platform::gpu::record::Block<Backend>>, NcStatus> {
     DEVICE.with(|device| device.block_snapshot(block))
 }
 
@@ -193,7 +193,7 @@ pub fn snapshot(block: ComRef<'_, IRenderViewBlockAbi>) -> Result<Rc<neocogi_ren
 pub fn texture(
     resources: ComRef<'_, IRenderResourcesAbi>,
     texture: ComRef<'_, IGpuBufferAbi>,
-) -> Result<Rc<neocogi_render_gpu::resource::TextureVersion<Backend>>, NcStatus> {
+) -> Result<Rc<neocogi_platform::gpu::resource::TextureVersion<Backend>>, NcStatus> {
     DEVICE.with(|device| device.imported_texture_snapshot(resources, texture))
 }
 
@@ -225,7 +225,7 @@ pub fn client_block(root: RenderViewRoot) -> (ComBox<IRenderClientDomainAbi>, Co
 }
 
 /// Authenticates actual generic blocks for CPU benchmarks and assertions, without decoding UI bytes.
-pub fn blocks(info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<Vec<Rc<neocogi_render_gpu::record::Block<Backend>>>, NcStatus> {
+pub fn blocks(info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<Vec<Rc<neocogi_platform::gpu::record::Block<Backend>>>, NcStatus> {
     (0..info.block_count)
         .map(|index| {
             let observer = stream.view(info.invocation, index)?;

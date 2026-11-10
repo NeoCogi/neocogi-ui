@@ -11,7 +11,7 @@ use neocogi_com::{
 };
 use neocogi_gfx_support::abi::*;
 use neocogi_gfx_support::{AssetTables, AsciiGlyphIndex, MAX_UI_BATCHES, MAX_UI_VERTICES};
-use neocogi_render_core::abi::{
+use neocogi_platform_contracts::render::abi::{
     IRenderViewBlockAbi, IRenderStream, IRenderStreamAbi, IRenderStreamVtblFor, IRgbaImageAbi, IRendererAbi, ITextureAbi, RenderInfo, IRenderHostAbi,
     IRenderSurfaceAbi, IRenderOutcomeAbi, RenderError, operation_result,
 };
@@ -88,7 +88,7 @@ struct FrameState {
     /// Packed clear color forwarded unchanged to the renderer.
     clear: u32,
     /// Submitted work is bounded before scanning, converting, or clipping caller buffers.
-    budget: neocogi_render_core::abi::FrameBudget,
+    budget: neocogi_platform_contracts::render::abi::FrameBudget,
 }
 
 /// Nine image/flat cells plus at most nine source-shrink diagnostic overlays, six vertices each.
@@ -583,7 +583,7 @@ impl GfxCompositor for GfxCompositorObject {
         self.frame = Some(FrameState {
             size,
             clear,
-            budget: neocogi_render_core::abi::FrameBudget::new(),
+            budget: neocogi_platform_contracts::render::abi::FrameBudget::new(),
         });
         Ok(())
     }

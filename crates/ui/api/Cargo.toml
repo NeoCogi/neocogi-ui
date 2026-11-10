@@ -11,7 +11,7 @@ repository.workspace = true
 description = "Typed Rust client API for NeoCogi UI components"
 
 [dependencies]
-neocogi-render-core.workspace = true
+neocogi-platform-contracts.workspace = true
 neocogi-gfx-support.workspace = true
 neocogi-appearance = { workspace = true, optional = true }
 neocogi-com = { workspace = true, features = ["macros", "std"] }

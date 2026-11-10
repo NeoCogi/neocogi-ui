@@ -4,7 +4,7 @@ use crate::atlas::{Builder, Config};
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, INcStringAbi, NC_E_INVALID_ARG, com_object};
 use neocogi_gfx_support::abi::*;
 use neocogi_gfx_support::AssetData;
-use neocogi_render_core::platform::INativePathAbi;
+use neocogi_platform_contracts::render::platform::INativePathAbi;
 use std::cell::RefCell;
 use std::path::Path;
 

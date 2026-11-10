@@ -85,15 +85,17 @@ fn probe<const KEYBOARD: u16>(ui: &Ui, size: Size, options: WidgetOptions) -> (O
 }
 
 /// Queues one complete key transition with explicit modifiers and function/character payload.
-fn key(ui: &Ui, code: KeyCode, value: u32, modifiers: u8) {
+fn key(ui: &Ui, code: KeyCode, modifiers: u8) {
     for pressed in [true, false] {
         ui.input(
             UiInput::Key(KeyStroke {
                 key: code,
-                value,
+                action: if pressed {
+                    neocogi_ui::KeyAction::Pressed { repeat: false }
+                } else {
+                    neocogi_ui::KeyAction::Released
+                },
                 modifiers,
-                pressed,
-                repeat: false,
             }),
             "",
         )
@@ -148,7 +150,7 @@ fn invalid_update_dimensions_preserve_pending_input() {
     let editor_owner = fixture.ui.widgets().textbox_unobserved("").unwrap();
     let editor = editor_owner.handle();
     let _window = window(&fixture.ui, "input", Rect { x: 10, y: 10, width: 200, height: 100 }, editor_owner);
-    key(&fixture.ui, KeyCode::Tab, 0, 0);
+    key(&fixture.ui, KeyCode::Tab, 0);
     fixture.ui.input(UiInput::Text, "kept").unwrap();
     for size in [Size { width: 0, height: 20 }, Size { width: 20, height: -1 }] {
         assert_eq!(fixture.ui.update(size), Err(neocogi_com::NC_E_INVALID_ARG));
@@ -169,7 +171,10 @@ fn auto_width_consumes_typed_measurement_invalidation_before_intrinsic_measureme
     fixture.frame(VIEW).unwrap();
     let first = window.snapshot().unwrap().rect;
     text.set_text("aaaa").unwrap();
-    assert_eq!(fixture.ui.render(VIEW, fixture.renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(
+        fixture.ui.render(VIEW, fixture.renderer.as_com_ref()).map_err(|error| error.status),
+        Err(UI_E_UPDATE_REQUIRED)
+    );
     fixture.frame(VIEW).unwrap();
     let next = window.snapshot().unwrap().rect;
     assert_eq!(next.width, first.width + 24);
@@ -248,7 +253,7 @@ fn modal_activation_suspends_underlying_focus_and_restores_it_when_closed() {
     let parent_text_owner = fixture.ui.widgets().textbox_unobserved("").unwrap();
     let parent_text = parent_text_owner.handle();
     let parent = window(&fixture.ui, "parent", Rect { x: 10, y: 10, width: 200, height: 120 }, parent_text_owner);
-    key(&fixture.ui, KeyCode::Tab, 0, 0);
+    key(&fixture.ui, KeyCode::Tab, 0);
     fixture.ui.input(UiInput::Text, "before").unwrap();
     fixture.frame(VIEW).unwrap();
     let dialog_text_owner = fixture.ui.widgets().textbox_unobserved("").unwrap();
@@ -259,7 +264,7 @@ fn modal_activation_suspends_underlying_focus_and_restores_it_when_closed() {
         .unwrap();
     dialog.set_options(PLAIN).unwrap();
     dialog.set_visibility(Visibility::Visible).unwrap();
-    key(&fixture.ui, KeyCode::Tab, 0, 0);
+    key(&fixture.ui, KeyCode::Tab, 0);
     fixture.ui.input(UiInput::Text, "modal").unwrap();
     fixture.frame(VIEW).unwrap();
     assert_eq!(parent_text.text().unwrap(), "before");

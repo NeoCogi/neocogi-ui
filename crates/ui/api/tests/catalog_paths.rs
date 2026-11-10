@@ -17,6 +17,7 @@ fn raw_identifier_catalog_paths_compile_in_exported_forms() {
     fs::write(directory.join("Cargo.toml"), "[workspace]\nmembers=['contracts','app']\nresolver='3'\n").unwrap();
     // The provider and application share source, not a Cargo graph owner.
     for (source_root, namespace) in [
+        (Path::new(env!("OUT_DIR")).join("neocogi-shared-sources"), "neocogi/audio"),
         (Path::new(env!("OUT_DIR")).join("neocogi-shared-sources"), "neocogi/renderer"),
         (Path::new(env!("OUT_DIR")).join("neocogi-shared-sources"), "neocogi/platform"),
         (Path::new(env!("OUT_DIR")).join("neocogi-ui-sources"), "neocogi/gfx"),
@@ -52,8 +53,9 @@ fn raw_identifier_catalog_paths_compile_in_exported_forms() {
             for module in neocogi_idl::cargo::SharedSources::new("../idl")
                 .module("example.paths", "path_contracts::r#type")
                 .import("neocogi.ui.core", "neocogi_ui::abi::core")
-                .import("neocogi.renderer", "neocogi_render_core::abi")
-                .import("neocogi.platform", "neocogi_render_core::platform")
+                .import("neocogi.audio", "neocogi_platform_contracts::audio")
+                .import("neocogi.renderer", "neocogi_platform_contracts::render::abi")
+                .import("neocogi.platform", "neocogi_platform_contracts::render::platform")
                 .import("neocogi.gfx", "neocogi_gfx_support::abi")
                 .build().unwrap() {
                 println!("cargo::rustc-env=PATH_BINDINGS={}", module.include.display());

@@ -144,15 +144,16 @@ ownership, validation, viewport and work-budget rules.
 | `render/painter.rs` | Private built-in geometry recording |
 | `render/display_list.rs` | Owned ordered operations and reusable geometry |
 | `render/compositor.rs` | Thin production replay into the GFX compositor |
-| [crates/render/core](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/core) | Backend-neutral frame contracts, texture identity, color, and upload validation |
-| [crates/platform/plugin](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/platform/plugin) | Backend plugin identity, window/device ownership, and checked COM GPU submission |
-| [crates/render/gpu/src/backends](BACKENDS.md#backend-sources) | Concrete GPU implementations linked into one selected plugin |
-| [crates/render/support](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/support) | Shared frame preparation and resource validation |
+| [crates/platform-contracts/src/render](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/platform-contracts/src/render) | Backend-neutral frame contracts, texture identity, color, and upload validation |
+| [crates/platform/src/platform](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/platform/src/platform) | Backend plugin identity, window/device ownership, and checked COM GPU submission |
+| [crates/platform/src/gpu/backends](BACKENDS.md#backend-sources) | Concrete GPU implementations linked into one selected plugin |
+| [crates/platform/src/platform](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/platform/src/platform) | Shared frame preparation and resource validation |
 
-A backend acquires one exclusive frame through `RendererBackend::frame`. Its quad and
-triangle methods may batch geometry, `flush` preserves operation order, and consuming
-`finish` reports submission/presentation failures. Drop abandons pending work. GPU state
-and resource obligations are detailed in [BACKENDS.md](BACKENDS.md).
+A backend acquires one exclusive frame through `RendererBackend::frame` and executes
+authenticated generic draw/clear commands in their recorded order. Consuming
+`RendererFrame::finish` returns the optional immutable image result or an owned
+submission/presentation failure. Drop abandons pending work. GPU state and resource
+obligations are detailed in [BACKENDS.md](BACKENDS.md).
 
 Headless tests inspect the actual compositor stream through `IRenderer`. They
 cover command order, resource expiry, texture UVs, clipped triangle attributes,

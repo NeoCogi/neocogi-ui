@@ -213,7 +213,7 @@ impl Camera {
     /// This demo refuses numeric envelopes that collapse its eye/basis or matrix inversion.
     pub(super) fn is_usable(&self) -> bool {
         fn finite(matrix: &Mat4f) -> bool {
-            matrix.col.iter().all(|c| [c.x, c.y, c.z, c.w].into_iter().all(f32::is_finite))
+            matrix.col.iter().all(RealVector::is_finite)
         }
         let pvm = self.projection * self.view;
         let displacement = self.target - self.pos;

@@ -22,16 +22,14 @@ vulkan = ["neocogi-demo-host/vulkan"]
 wgpu = ["neocogi-demo-host/wgpu"]
 
 [dependencies]
-neocogi-render-core.workspace = true
+neocogi-platform-contracts.workspace = true
 neocogi-com-host.workspace = true
 neocogi-ui-samples.workspace = true
 neocogi-ui = { workspace = true, features = ["skin"] }
 neocogi-com = { workspace = true, default-features = false, features = ["std", "macros"] }
-neocogi-render-gpu.workspace = true
 neocogi-demo-assets = { workspace = true, features = ["full-demo"] }
 neocogi-demo-host = { workspace = true, features = ["png-assets"] }
 rs-math3d.workspace = true
-
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen.workspace = true
@@ -42,6 +40,5 @@ wasm-bindgen-futures = "=0.4.77"
 pollster = "1"
 
 [dev-dependencies]
-neocogi-render-gpu = {workspace=true,features=["test-support"]}
-neocogi-shader-compiler.workspace = true
+neocogi-platform = { workspace = true, features = ["test-support"] }
 neocogi-ui = { workspace = true, features = ["test-support"] }

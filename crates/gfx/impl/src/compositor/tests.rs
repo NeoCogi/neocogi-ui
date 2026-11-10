@@ -3,7 +3,7 @@ use neocogi_gfx_support::testing::UiBatch;
 use super::*;
 use crate::test_support::{test_bundle, data};
 use neocogi_com::{com_object};
-use neocogi_render_core::abi::{IRenderer, IRendererVtblFor};
+use neocogi_platform_contracts::render::abi::{IRenderer, IRendererVtblFor};
 
 /// Native preparation observations remain separate from immutable asset ownership.
 #[derive(Default)]
@@ -11,43 +11,54 @@ struct UploadProbe {
     /// Every attempted native preparation, including injected failures.
     calls: std::cell::Cell<u32>,
     /// Exact delegated authority requested by the real compositor during group creation.
-    permissions: std::cell::Cell<Option<neocogi_render_core::abi::RenderClientPermissions>>,
+    permissions: std::cell::Cell<Option<neocogi_platform_contracts::render::abi::RenderClientPermissions>>,
     /// Simulates a recoverable native allocation failure before candidate publication.
     fail: std::cell::Cell<bool>,
 }
 
-#[com_object(interfaces(neocogi_render_core::abi::IRenderHost, neocogi_render_core::abi::IRenderClientFactory))]
+#[com_object(interfaces(
+    neocogi_platform_contracts::render::abi::IRenderHost,
+    neocogi_platform_contracts::render::abi::IRenderClientFactory
+))]
 /// Count and reject native preparation while retaining the real CPU graphics contracts.
 struct UploadHost {
     /// Shared fixture device supplies canonical resources and blocks.
-    inner: ComPtr<neocogi_render_core::abi::IRenderHostAbi>,
+    inner: ComPtr<neocogi_platform_contracts::render::abi::IRenderHostAbi>,
     /// No callback or UI owner participates in this observation state.
     probe: std::rc::Rc<UploadProbe>,
 }
-impl neocogi_render_core::abi::IRenderDriverBound for UploadHost {
-    fn driver_identity(&self) -> Result<ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, NcStatus> {
+impl neocogi_platform_contracts::render::abi::IRenderDriverBound for UploadHost {
+    fn driver_identity(&self) -> Result<ComPtr<neocogi_platform_contracts::render::abi::IRenderDriverIdentityAbi>, NcStatus> {
         self.inner.driver_identity()
     }
 }
-impl neocogi_render_core::abi::IRenderHost for UploadHost {
-    fn maintain_result(&self) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+impl neocogi_platform_contracts::render::abi::IRenderHost for UploadHost {
+    fn maintain_result(&self) -> Result<ComPtr<neocogi_platform_contracts::render::abi::IRenderOutcomeAbi>, NcStatus> {
         self.inner.maintain_result()
     }
-    fn import_texture_result(&self, resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>, image: ComRef<'_, neocogi_render_core::abi::ITextureAbi>) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::ITextureImportResultAbi>, NcStatus> {
+    fn import_texture_result(
+        &self,
+        resources: ComRef<'_, neocogi_platform_contracts::render::abi::IRenderResourcesAbi>,
+        image: ComRef<'_, neocogi_platform_contracts::render::abi::ITextureAbi>,
+    ) -> Result<neocogi_com::ComBox<neocogi_platform_contracts::render::abi::ITextureImportResultAbi>, NcStatus> {
         self.inner.import_texture_result(resources, image)
     }
-    fn prepare_texture_result(&self, resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>, texture: ComRef<'_, neocogi_render_core::abi::IGpuBufferAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
-        let result = (|| -> Result<(), neocogi_render_core::abi::RenderError> {
+    fn prepare_texture_result(
+        &self,
+        resources: ComRef<'_, neocogi_platform_contracts::render::abi::IRenderResourcesAbi>,
+        texture: ComRef<'_, neocogi_platform_contracts::render::abi::IGpuBufferAbi>,
+    ) -> Result<ComPtr<neocogi_platform_contracts::render::abi::IRenderOutcomeAbi>, NcStatus> {
+        let result = (|| -> Result<(), neocogi_platform_contracts::render::abi::RenderError> {
             self.probe.calls.set(self.probe.calls.get() + 1);
             if self.probe.fail.get() {
                 return Err(NC_E_OUT_OF_MEMORY.into());
             }
             self.inner.prepare_texture(resources, texture)
         })();
-        Ok(neocogi_render_core::abi::operation_result(result))
+        Ok(neocogi_platform_contracts::render::abi::operation_result(result))
     }
 
-    fn recording_broker(&self) -> Result<ComPtr<neocogi_render_core::abi::IRenderViewBrokerAbi>, NcStatus> {
+    fn recording_broker(&self) -> Result<ComPtr<neocogi_platform_contracts::render::abi::IRenderViewBrokerAbi>, NcStatus> {
         self.inner.recording_broker()
     }
 }
@@ -58,13 +69,15 @@ fn compositor_prepares_only_changed_atlases_and_publishes_revisions_atomically()
     let bundle = test_bundle();
     let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
     let probe = std::rc::Rc::new(UploadProbe::default());
-    let host: ComPtr<neocogi_render_core::abi::IRenderHostAbi> = UploadHost::from_value(UploadHost {
+    let host: ComPtr<neocogi_platform_contracts::render::abi::IRenderHostAbi> = UploadHost::from_value(UploadHost {
         inner: neocogi_gfx_support::testing::host(),
         probe: probe.clone(),
     })
     .query()
     .unwrap();
-    compositor.bind_render_host(host.as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
+    compositor
+        .bind_render_host(host.as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref())
+        .unwrap();
     assert_eq!(probe.calls.get(), 1);
     let permissions = probe.permissions.get().expect("the compositor must create an explicit resource group");
     assert!(permissions.write_color && permissions.write_resources && permissions.import_images);
@@ -84,7 +97,10 @@ fn compositor_prepares_only_changed_atlases_and_publishes_revisions_atomically()
     let capture = std::rc::Rc::new(RenderCapture::default());
     let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { capture: capture.clone() }).query().unwrap();
     probe.fail.set(true);
-    assert_eq!(compositor.install_assets(changed_image.as_com_ref()).map_err(|error| error.status), Err(NC_E_OUT_OF_MEMORY));
+    assert_eq!(
+        compositor.install_assets(changed_image.as_com_ref()).map_err(|error| error.status),
+        Err(NC_E_OUT_OF_MEMORY)
+    );
     let clip = Rect { x: 0, y: 0, width: 80, height: 60 };
     for expected in [line_size, line_size + 5] {
         compositor.begin(Size { width: 80, height: 60 }, 0xff000000).unwrap();
@@ -124,14 +140,18 @@ struct CaptureRenderer {
     capture: std::rc::Rc<RenderCapture>,
 }
 
-impl neocogi_render_core::abi::IRenderDriverBound for CaptureRenderer {
-    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+impl neocogi_platform_contracts::render::abi::IRenderDriverBound for CaptureRenderer {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_platform_contracts::render::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
         Err(neocogi_com::NC_E_NOINTERFACE)
     }
 }
 impl IRenderer for CaptureRenderer {
     /// Copies every declared record while the invocation is active, then retains the stream.
-    fn render_result(&self, info: RenderInfo, stream: neocogi_com::ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+    fn render_result(
+        &self,
+        info: RenderInfo,
+        stream: neocogi_com::ComRef<'_, IRenderStreamAbi>,
+    ) -> Result<ComPtr<neocogi_platform_contracts::render::abi::IRenderOutcomeAbi>, NcStatus> {
         let result = (|| -> Result<(), NcStatus> {
             let (vertices, batches) = neocogi_gfx_support::testing::read(info, stream)?;
             *self.capture.vertices.borrow_mut() = vertices;
@@ -140,7 +160,9 @@ impl IRenderer for CaptureRenderer {
             self.capture.calls.set(self.capture.calls.get() + 1);
             Ok(())
         })();
-        Ok(neocogi_render_core::abi::operation_result(result.map_err(neocogi_render_core::abi::RenderError::from)))
+        Ok(neocogi_platform_contracts::render::abi::operation_result(
+            result.map_err(neocogi_platform_contracts::render::abi::RenderError::from),
+        ))
     }
 }
 
@@ -160,7 +182,12 @@ fn quad_bounds(vertices: &[RenderVertex]) -> (f32, f32, f32, f32) {
 fn compositor_extreme_patch_sides_cover_an_ordinary_destination() {
     let bundle = test_bundle();
     let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
-    compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
+    compositor
+        .bind_render_host(
+            neocogi_gfx_support::testing::host().as_com_ref(),
+            neocogi_gfx_support::testing::framebuffer().as_com_ref(),
+        )
+        .unwrap();
     let capture = std::rc::Rc::new(RenderCapture::default());
     let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { capture: capture.clone() }).query().unwrap();
     let destination = Rect { x: 5, y: 7, width: 100, height: 10 };
@@ -239,7 +266,12 @@ fn compositor_source_shrink_overlays_pink_and_preserves_valid_frame_work() {
     let stored_visual = imported.tables.surfaces[SurfaceRole::Panel.raw() as usize].normal;
     assert_eq!(stored_visual.patch, visual.patch);
     let mut compositor = GfxCompositorObject::create(source.as_com_ref()).unwrap();
-    compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
+    compositor
+        .bind_render_host(
+            neocogi_gfx_support::testing::host().as_com_ref(),
+            neocogi_gfx_support::testing::framebuffer().as_com_ref(),
+        )
+        .unwrap();
     let capture = std::rc::Rc::new(RenderCapture::default());
     let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { capture: capture.clone() }).query().unwrap();
     for visual in [visual, stored_visual] {
@@ -341,7 +373,12 @@ fn compositor_expands_typed_image_patch_and_rejects_invalid_payloads() {
     let source = tables.icons[close as usize].rect;
     assert!(source.width >= 2 && source.height >= 2, "the fixture must provide four nonempty source corners");
     let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
-    compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
+    compositor
+        .bind_render_host(
+            neocogi_gfx_support::testing::host().as_com_ref(),
+            neocogi_gfx_support::testing::framebuffer().as_com_ref(),
+        )
+        .unwrap();
     let clip = Rect { x: 0, y: 0, width: 32, height: 32 };
     let destination = Rect { x: 4, y: 4, width: 16, height: 16 };
     compositor.begin(Size { width: 32, height: 32 }, 0xff000000).unwrap();
@@ -414,7 +451,12 @@ fn compositor_expands_typed_image_patch_and_rejects_invalid_payloads() {
 fn compositor_clips_triangles_without_changing_visible_attributes() {
     let bundle = test_bundle();
     let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
-    compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
+    compositor
+        .bind_render_host(
+            neocogi_gfx_support::testing::host().as_com_ref(),
+            neocogi_gfx_support::testing::framebuffer().as_com_ref(),
+        )
+        .unwrap();
     let capture = std::rc::Rc::new(RenderCapture::default());
     let renderer: ComPtr<IRendererAbi> = CaptureRenderer::from_value(CaptureRenderer { capture: capture.clone() }).query().unwrap();
     let clip = Rect { x: 0, y: 0, width: 10, height: 10 };
@@ -512,7 +554,12 @@ fn compositor_text_preserves_empty_run_validation_and_line_placement() {
         .unwrap();
     assert!(space.rect.width == 0 || space.rect.height == 0, "fixture space contributes no drawable area");
     let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
-    compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
+    compositor
+        .bind_render_host(
+            neocogi_gfx_support::testing::host().as_com_ref(),
+            neocogi_gfx_support::testing::framebuffer().as_com_ref(),
+        )
+        .unwrap();
     let origin = DrawPoint { x: 40, y: 40 };
     let full_clip = Rect {
         x: -100,
@@ -581,7 +628,12 @@ fn compositor_owns_final_geometry_batching_and_stream_scope() {
         .position(|icon| tables.name(icon.name) == Ok("close"))
         .expect("test bundle contains close") as u32;
     let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
-    compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
+    compositor
+        .bind_render_host(
+            neocogi_gfx_support::testing::host().as_com_ref(),
+            neocogi_gfx_support::testing::framebuffer().as_com_ref(),
+        )
+        .unwrap();
     compositor.begin(Size { width: 80, height: 60 }, 0xff000000).unwrap();
     compositor
         .solid_triangles(
@@ -632,7 +684,10 @@ fn compositor_owns_final_geometry_batching_and_stream_scope() {
     // Equal table positions from a separately constructed bundle do not establish revision
     // compatibility. The failed replacement leaves the compositor ready for a later frame.
     let unrelated = test_bundle();
-    assert_eq!(compositor.install_assets(unrelated.as_com_ref()).map_err(|error| error.status), Err(NC_E_INVALID_ARG));
+    assert_eq!(
+        compositor.install_assets(unrelated.as_com_ref()).map_err(|error| error.status),
+        Err(NC_E_INVALID_ARG)
+    );
     compositor.begin(Size { width: 1, height: 1 }, 0).unwrap();
     compositor.cancel().unwrap();
 }
@@ -665,10 +720,15 @@ fn extreme_finite_crossings_have_finite_interpolated_attributes() {
 /// Fully clipped and empty input still consumes the command budget; cancelling begins a fresh frame.
 #[test]
 fn compositor_intake_limits_apply_before_expansion_and_reset_with_frames() {
-    use neocogi_render_core::abi::{MAX_DRAW_COMMANDS, MAX_DRAW_WORK};
+    use neocogi_platform_contracts::render::abi::{MAX_DRAW_COMMANDS, MAX_DRAW_WORK};
     let bundle = test_bundle();
     let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
-    compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
+    compositor
+        .bind_render_host(
+            neocogi_gfx_support::testing::host().as_com_ref(),
+            neocogi_gfx_support::testing::framebuffer().as_com_ref(),
+        )
+        .unwrap();
     let size = Size { width: 32, height: 32 };
     let clip = Rect { x: 0, y: 0, width: 0, height: 0 };
     compositor.begin(size, 0).unwrap();
@@ -773,9 +833,16 @@ fn glyph_acceleration_preserves_unicode_fallback_and_revision_publication() {
 }
 
 /// Delegates group creation while retaining the fixture's upload/quota observations.
-impl neocogi_render_core::abi::IRenderClientFactory for UploadHost {
-    fn create_client(&self, limits: neocogi_render_core::abi::RenderClientLimits, surface: ComRef<'_, neocogi_render_core::abi::IRenderSurfaceAbi>, permissions: neocogi_render_core::abi::RenderClientPermissions) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::IRenderClientDomainAbi>, NcStatus> {
+impl neocogi_platform_contracts::render::abi::IRenderClientFactory for UploadHost {
+    fn create_client(
+        &self,
+        limits: neocogi_platform_contracts::render::abi::RenderClientLimits,
+        surface: ComRef<'_, neocogi_platform_contracts::render::abi::IRenderSurfaceAbi>,
+        permissions: neocogi_platform_contracts::render::abi::RenderClientPermissions,
+    ) -> Result<neocogi_com::ComBox<neocogi_platform_contracts::render::abi::IRenderClientDomainAbi>, NcStatus> {
         self.probe.permissions.set(Some(permissions));
-        self.inner.query::<neocogi_render_core::abi::IRenderClientFactoryAbi>()?.create_client(limits, surface, permissions)
+        self.inner
+            .query::<neocogi_platform_contracts::render::abi::IRenderClientFactoryAbi>()?
+            .create_client(limits, surface, permissions)
     }
 }

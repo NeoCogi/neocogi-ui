@@ -6,7 +6,7 @@
 
 use neocogi_com::{NC_E_INVALID_ARG, NC_E_OUT_OF_RANGE, NcStatus};
 use neocogi_gfx_support::abi::{AssetIcon, AssetPatch, Insets, NinePatchDraw};
-use neocogi_render_core::abi::Rect;
+use neocogi_platform_contracts::render::abi::Rect;
 
 /// Number of rows and columns in the fixed patch grid.
 const PATCH_AXIS_CELLS: usize = 3;

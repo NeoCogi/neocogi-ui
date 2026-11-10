@@ -7,17 +7,14 @@ license.workspace = true
 
 [features]
 default = ["glow"]
-glow = ["neocogi-platform-plugin/glow"]
-vulkan = ["neocogi-platform-plugin/vulkan"]
-wgpu = ["neocogi-platform-plugin/wgpu"]
-webgl = ["neocogi-platform-plugin/webgl"]
+glow = ["neocogi-platform/glow"]
+vulkan = ["neocogi-platform/vulkan"]
+wgpu = ["neocogi-platform/wgpu"]
+webgl = ["neocogi-platform/webgl"]
 
 [dev-dependencies]
-neocogi-render-core.workspace = true
-neocogi-render-gpu.workspace = true
-neocogi-platform-plugin = { workspace = true, features = ["test-support"] }
-neocogi-shader-core.workspace = true
-neocogi-shader-compiler.workspace = true
+neocogi-platform-contracts.workspace = true
+neocogi-platform = { workspace = true, features = ["platform", "test-support"] }
 neocogi-ui.workspace = true
 neocogi-ui-runtime.workspace = true
 neocogi-ui-nodes.workspace = true
@@ -29,4 +26,5 @@ neocogi-com-host.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen.workspace = true
+wasm-bindgen-futures = "=0.4.77"
 web-sys = { workspace = true, features = ["Window", "Document", "HtmlCanvasElement", "HtmlTextAreaElement", "CssStyleDeclaration", "Element", "EventTarget", "KeyboardEvent", "CompositionEvent", "FocusEvent"] }

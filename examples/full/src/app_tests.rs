@@ -34,7 +34,9 @@ fn packaged_full_viewport_wheel_routing() {
     let leaf = viewport(ui, WheelProbe(send)).unwrap();
     let mut observed = leaf.handle();
     let window = ui.window("Wheel routing", rect(10, 10, 200, 100), leaf).unwrap();
-    window.set_options(WindowOptions::NO_TITLE | WindowOptions::NO_PADDING | WindowOptions::NO_RESIZE).unwrap();
+    window
+        .set_options(WindowOptions::NO_TITLE | WindowOptions::NO_PADDING | WindowOptions::NO_RESIZE)
+        .unwrap();
     window.raise().unwrap();
     ui.update(size).unwrap();
     ui.input(UiInput::Pointer(Point { x: 30, y: 30 }), "").unwrap();
@@ -258,7 +260,7 @@ async fn render_frame(host: &Host, size: Size) -> Result<(), HostError> {
         browser::next_task().await?;
         match host.ui.render(size, host.renderer.as_com_ref()) {
             Ok(()) => return Ok(()),
-            Err(error) if error.status == neocogi_render_core::abi::RENDER_E_BUSY && attempt < 119 => {
+            Err(error) if error.status == neocogi_platform_contracts::render::abi::RENDER_E_BUSY && attempt < 119 => {
                 #[cfg(not(target_arch = "wasm32"))]
                 std::thread::sleep(std::time::Duration::from_millis(1));
             }
@@ -297,7 +299,7 @@ fn packaged_full_host_retries_render_backpressure() {
             fn paint(&mut self, _: WidgetPaint, _: &mut Painter<'_>) -> Result<(), NcStatus> {
                 self.attempts += 1;
                 let status = if self.attempts <= 2 {
-                    neocogi_render_core::abi::RENDER_E_BUSY
+                    neocogi_platform_contracts::render::abi::RENDER_E_BUSY
                 } else if self.fatal {
                     NC_E_INVALID_ARG
                 } else {
@@ -340,10 +342,20 @@ fn packaged_full_host_retries_render_backpressure() {
         let result = host.run(Prepared { state, observed: prepare_send }, events);
         let observed: Vec<_> = paints.try_iter().collect();
         assert!(observed.len() >= 3, "paint attempts ended before recovery: {result:?}");
-        assert_eq!(&observed[..2], &[neocogi_render_core::abi::RENDER_E_BUSY; 2]);
+        assert_eq!(&observed[..2], &[neocogi_platform_contracts::render::abi::RENDER_E_BUSY; 2]);
         if fatal {
             let error = result.expect_err("a terminal paint error must stop after the retries");
-            assert!(matches!(error, HostError::Operation { operation: "frame rendering", status: NC_E_INVALID_ARG, .. }), "{error}");
+            assert!(
+                matches!(
+                    error,
+                    HostError::Operation {
+                        operation: "frame rendering",
+                        status: NC_E_INVALID_ARG,
+                        ..
+                    }
+                ),
+                "{error}"
+            );
             assert_eq!(observed[2..], [NC_E_INVALID_ARG]);
             assert_eq!(preparations.try_iter().count(), 1);
         } else {
@@ -358,7 +370,12 @@ fn packaged_full_host_retries_render_backpressure() {
     // Each case owns its frame-limit environment and SDL runtime in a fresh process.
     for mode in ["recover", "fatal"] {
         let mut child = std::process::Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", "app::tests::packaged_full_host_retries_render_backpressure", "--ignored", "--nocapture"])
+            .args([
+                "--exact",
+                "app::tests::packaged_full_host_retries_render_backpressure",
+                "--ignored",
+                "--nocapture",
+            ])
             .env(CHILD, mode)
             .env("NEOCOGI_DEMO_FRAMES", "2")
             .stdout(std::process::Stdio::piped())
@@ -375,7 +392,12 @@ fn packaged_full_host_retries_render_backpressure() {
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
         let output = child.wait_with_output().unwrap();
-        assert!(output.status.success(), "{mode}: {}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "{mode}: {}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
         assert!(String::from_utf8_lossy(&output.stdout).contains(&format!("backpressure case completed: {mode}")));
     }
 }
@@ -403,7 +425,7 @@ async fn select_win311_from_menu(host: &Host, app: &TestApp<State, neocogi_ui::e
     }
     // Focus the main window, open View -> Theme and activate its second radio item.
     for key in [
-        KeyCode::Function,
+        KeyCode::Function(10),
         KeyCode::ArrowRight,
         KeyCode::ArrowDown,
         KeyCode::ArrowDown,
@@ -416,9 +438,7 @@ async fn select_win311_from_menu(host: &Host, app: &TestApp<State, neocogi_ui::e
         host.ui.input(
             UiInput::Key(KeyStroke {
                 key,
-                value: if key == KeyCode::Function { 10 } else { 0 },
-                pressed: true,
-                repeat: false,
+                action: neocogi_ui::KeyAction::Pressed { repeat: false },
                 modifiers: 0,
             }),
             "",
@@ -525,9 +545,7 @@ async fn popup_scrolling_checks(host: &Host, size: Size) -> Result<(), HostError
         host.ui.input(
             UiInput::Key(KeyStroke {
                 key,
-                value: 0,
-                pressed: true,
-                repeat: false,
+                action: neocogi_ui::KeyAction::Pressed { repeat: false },
                 modifiers: 0,
             }),
             "",
@@ -740,9 +758,7 @@ mod browser {
     /// The HTML harness also checks that both platform-owned canvases and input textareas disappeared.
     #[wasm_bindgen]
     pub fn demo_loops_released() -> bool {
-        RELEASED.with_borrow(|stored| {
-            stored.as_ref().is_some_and(|counts| counts[0].get() == Some(3) && counts[1].get() == Some(1))
-        })
+        RELEASED.with_borrow(|stored| stored.as_ref().is_some_and(|counts| counts[0].get() == Some(3) && counts[1].get() == Some(1)))
     }
     /// Diagnoses early render failures separately from a loop that still owns its state.
     #[wasm_bindgen]

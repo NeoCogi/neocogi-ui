@@ -23,7 +23,7 @@ extension = []
 dynamic-extension = ["extension", "dynamic", "neocogi-demo-host/dynamic-extension"]
 monolith-extension = ["extension", "monolith", "neocogi-demo-host/monolith-extension"]
 # Standalone development benchmark; no counters or recorder enter the normal demo executable.
-benchmark = ["embed-assets", "monolith", "dep:neocogi-ui-nodes", "dep:neocogi-gfx", "dep:neocogi-gfx-support"]
+benchmark = ["embed-assets", "monolith", "dep:neocogi-ui-nodes", "dep:neocogi-gfx", "dep:neocogi-gfx-support", "dep:neocogi-platform"]
 embed-assets = ["neocogi-demo-assets/embed-assets"]
 
 [dependencies]
@@ -31,7 +31,8 @@ neocogi-gfx-support = { workspace = true, features = ["test-support"], optional 
 neocogi-com-host.workspace = true
 neocogi-demo-host.workspace = true
 neocogi-ui-samples.workspace = true
-neocogi-render-gpu.workspace = true
+neocogi-platform-contracts.workspace = true
+neocogi-platform = { workspace = true, features = ["test-support"], optional = true }
 rs-math3d.workspace = true
 neocogi-ui = { workspace = true, features = ["skin"] }
 neocogi-com = { workspace = true, default-features = false, features = ["runtime", "macros", "std"] }

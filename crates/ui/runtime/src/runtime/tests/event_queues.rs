@@ -292,9 +292,7 @@ fn one_application_queue_handles_two_widget_types_without_retaining_origins() {
         ui.input(
             UiInput::Key(KeyStroke {
                 key,
-                value: 0,
-                pressed: true,
-                repeat: false,
+                action: neocogi_ui::KeyAction::Pressed { repeat: false },
                 modifiers: 0,
             }),
             "",
@@ -391,9 +389,7 @@ fn key_for_origin_test(ui: &neocogi_ui::Ui, key: KeyCode) {
     ui.input(
         UiInput::Key(KeyStroke {
             key,
-            value: 0,
-            pressed: true,
-            repeat: false,
+            action: neocogi_ui::KeyAction::Pressed { repeat: false },
             modifiers: 0,
         }),
         "",

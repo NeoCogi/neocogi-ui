@@ -71,18 +71,16 @@ fn native_textbox_commits_before_post_and_stops_emitting_after_rejection() {
         let origin = EventOrigin::Widget(widget.clone().into_unknown());
         // Drain constructor flags to isolate the edit's sticky invalidation.
         widget.take_change().unwrap();
-        let key = |key, value, modifiers| {
+        let key = |key, modifiers| {
             WidgetEvent::Key(KeyStroke {
                 key,
-                value,
-                pressed: true,
-                repeat: false,
+                action: neocogi_ui::KeyAction::Pressed { repeat: false },
                 modifiers,
             })
         };
         driver
             .with_origin(origin.clone(), || {
-                widget.update(focused(), key(KeyCode::Character, 'v' as u32, 2), NcCopyFromBufferOffset::new(0, b""))
+                widget.update(focused(), key(KeyCode::Character('v' as u32), 2), NcCopyFromBufferOffset::new(0, b""))
             })
             .unwrap()
             .unwrap();
@@ -90,7 +88,7 @@ fn native_textbox_commits_before_post_and_stops_emitting_after_rejection() {
         completion.complete(0, NcCopyFromBufferOffset::new(0, "pasted α".as_bytes())).unwrap();
         let result = driver
             .with_origin(origin.clone(), || {
-                widget.update(focused(), key(KeyCode::Enter, 0, 0), NcCopyFromBufferOffset::new(0, b""))
+                widget.update(focused(), key(KeyCode::Enter, 0), NcCopyFromBufferOffset::new(0, b""))
             })
             .unwrap();
         assert_eq!(result, if reject { Err(neocogi_com::NC_E_CLOSED) } else { Ok(GeometryChange::Changed) });

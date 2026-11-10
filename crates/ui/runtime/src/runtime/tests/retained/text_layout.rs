@@ -49,18 +49,18 @@ fn overhanging_text_area_navigation_uses_the_same_wrapped_rows() {
         area.clear_flags(WidgetOptions::FRAME).unwrap();
         let mut editor = area.handle();
         let _owner = window(&fixture.ui, "editor", Rect { x: 10, y: 10, width: 14, height: 64 }, area);
-        key(&fixture.ui, KeyCode::Tab, 0, 0);
+        key(&fixture.ui, KeyCode::Tab, 0);
         fixture.frame(VIEW).unwrap();
         editor.set_cursor(0).unwrap();
-        key(&fixture.ui, KeyCode::End, 0, 0);
+        key(&fixture.ui, KeyCode::End, 0);
         fixture.frame(VIEW).unwrap();
         assert_eq!(editor.cursor().unwrap(), 3, "the exactly fitting word must remain on row zero");
         if wrapping == TextWrapping::WordOrCharacter {
             editor.set_text("a aéééé").unwrap();
             editor.set_cursor(0).unwrap();
             fixture.frame(VIEW).unwrap();
-            key(&fixture.ui, KeyCode::ArrowDown, 0, 0);
-            key(&fixture.ui, KeyCode::End, 0, 0);
+            key(&fixture.ui, KeyCode::ArrowDown, 0);
+            key(&fixture.ui, KeyCode::End, 0);
             fixture.frame(VIEW).unwrap();
             assert_eq!(editor.cursor().unwrap(), 7, "the next row contains the complete aéé slice");
             assert!(editor.text().unwrap().is_char_boundary(editor.cursor().unwrap() as usize));

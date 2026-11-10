@@ -14,8 +14,8 @@ include!(env!("IDL_NEOCOGI_UI_CORE"));
 
 // Preserve the facade's established Rust import surface while declaration
 // ownership and native metadata live exclusively in `neocogi.renderer`.
-pub use neocogi_render_core::abi::*;
-pub use neocogi_render_core::platform::*;
+pub use neocogi_platform_contracts::render::abi::*;
+pub use neocogi_platform_contracts::render::platform::*;
 pub use neocogi_gfx_support::abi::*;
 
 mod helpers;

@@ -259,32 +259,43 @@ struct Probe {
     /// The observer must see the exact atlas version accepted by native preparation.
     prepared: Cell<usize>,
 }
-#[com_object(interfaces(neocogi_render_core::abi::IRenderHost, neocogi_render_core::abi::IRenderClientFactory))]
+#[com_object(interfaces(
+    neocogi_platform_contracts::render::abi::IRenderHost,
+    neocogi_platform_contracts::render::abi::IRenderClientFactory
+))]
 /// Native preparation probes run through the private graphics host, without owning their runtime.
 struct UploadHost {
     /// CPU assembly authenticates real generic resources and blocks.
-    inner: ComPtr<neocogi_render_core::abi::IRenderHostAbi>,
+    inner: ComPtr<neocogi_platform_contracts::render::abi::IRenderHostAbi>,
     /// Runtime and widget observations are weak to avoid a host-to-runtime ownership cycle.
     probe: Rc<Probe>,
 }
-impl neocogi_render_core::abi::IRenderDriverBound for UploadHost {
-    fn driver_identity(&self) -> Result<ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, NcStatus> {
+impl neocogi_platform_contracts::render::abi::IRenderDriverBound for UploadHost {
+    fn driver_identity(&self) -> Result<ComPtr<neocogi_platform_contracts::render::abi::IRenderDriverIdentityAbi>, NcStatus> {
         self.inner.driver_identity()
     }
 }
-impl neocogi_render_core::abi::IRenderHost for UploadHost {
-    fn maintain_result(&self) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+impl neocogi_platform_contracts::render::abi::IRenderHost for UploadHost {
+    fn maintain_result(&self) -> Result<ComPtr<neocogi_platform_contracts::render::abi::IRenderOutcomeAbi>, NcStatus> {
         self.inner.maintain_result()
     }
-    fn import_texture_result(&self, resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>, image: ComRef<'_, neocogi_render_core::abi::ITextureAbi>) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::ITextureImportResultAbi>, NcStatus> {
+    fn import_texture_result(
+        &self,
+        resources: ComRef<'_, neocogi_platform_contracts::render::abi::IRenderResourcesAbi>,
+        image: ComRef<'_, neocogi_platform_contracts::render::abi::ITextureAbi>,
+    ) -> Result<neocogi_com::ComBox<neocogi_platform_contracts::render::abi::ITextureImportResultAbi>, NcStatus> {
         self.inner.import_texture_result(resources, image)
     }
 
-    fn recording_broker(&self) -> Result<ComPtr<neocogi_render_core::abi::IRenderViewBrokerAbi>, NcStatus> {
+    fn recording_broker(&self) -> Result<ComPtr<neocogi_platform_contracts::render::abi::IRenderViewBrokerAbi>, NcStatus> {
         self.inner.recording_broker()
     }
-    fn prepare_texture_result(&self, resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>, texture: ComRef<'_, neocogi_render_core::abi::IGpuBufferAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
-        let result = (|| -> Result<(), neocogi_render_core::abi::RenderError> {
+    fn prepare_texture_result(
+        &self,
+        resources: ComRef<'_, neocogi_platform_contracts::render::abi::IRenderResourcesAbi>,
+        texture: ComRef<'_, neocogi_platform_contracts::render::abi::IGpuBufferAbi>,
+    ) -> Result<ComPtr<neocogi_platform_contracts::render::abi::IRenderOutcomeAbi>, NcStatus> {
+        let result = (|| -> Result<(), neocogi_platform_contracts::render::abi::RenderError> {
             let version = neocogi_gfx_support::testing::texture(resources, texture)?;
             self.inner.prepare_texture(resources, texture)?;
             if self.probe.armed.get() {
@@ -305,26 +316,30 @@ impl neocogi_render_core::abi::IRenderHost for UploadHost {
             self.probe.prepared.set(Rc::as_ptr(&version) as usize);
             Ok(())
         })();
-        Ok(neocogi_render_core::abi::operation_result(result))
+        Ok(neocogi_platform_contracts::render::abi::operation_result(result))
     }
 }
 
 #[com_object(interfaces(IRenderer))]
 /// Observes actual recorded atlas versions, independently of source image identity.
 struct UploadRenderer(Rc<Probe>);
-impl neocogi_render_core::abi::IRenderDriverBound for UploadRenderer {
-    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+impl neocogi_platform_contracts::render::abi::IRenderDriverBound for UploadRenderer {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_platform_contracts::render::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
         Err(neocogi_com::NC_E_NOINTERFACE)
     }
 }
 impl IRenderer for UploadRenderer {
-    fn render_result(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+    fn render_result(
+        &self,
+        info: RenderInfo,
+        stream: ComRef<'_, IRenderStreamAbi>,
+    ) -> Result<ComPtr<neocogi_platform_contracts::render::abi::IRenderOutcomeAbi>, NcStatus> {
         let result = (|| -> Result<(), NcStatus> {
             let blocks = neocogi_gfx_support::testing::blocks(info, stream)?;
             let mut draws = 0;
             for block in blocks {
                 for command in block.commands() {
-                    if let neocogi_render_gpu::command::Command::Draw(draw) = command {
+                    if let neocogi_platform::gpu::command::Command::Draw(draw) = command {
                         assert_eq!(Rc::as_ptr(&draw.textures[0].texture) as usize, self.0.prepared.get());
                         draws += 1;
                     }
@@ -333,19 +348,23 @@ impl IRenderer for UploadRenderer {
             assert!(draws > 0);
             Ok(())
         })();
-        Ok(neocogi_render_core::abi::operation_result(result.map_err(neocogi_render_core::abi::RenderError::from)))
+        Ok(neocogi_platform_contracts::render::abi::operation_result(
+            result.map_err(neocogi_platform_contracts::render::abi::RenderError::from),
+        ))
     }
 }
 /// Bind real host preparation before arming injection; no observer owns a strong runtime cycle.
 fn upload_renderer(probe: Rc<Probe>) -> ComPtr<IRendererAbi> {
-    let host: ComPtr<neocogi_render_core::abi::IRenderHostAbi> = UploadHost::from_value(UploadHost {
+    let host: ComPtr<neocogi_platform_contracts::render::abi::IRenderHostAbi> = UploadHost::from_value(UploadHost {
         inner: neocogi_gfx_support::testing::host(),
         probe: probe.clone(),
     })
     .query()
     .unwrap();
     let mut runtime = probe.runtime.upgrade().unwrap().as_ref().clone();
-    runtime.set_render_host(host.as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
+    runtime
+        .set_render_host(host.as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref())
+        .unwrap();
     probe.armed.set(true);
     UploadRenderer::from_value(UploadRenderer(probe)).query().unwrap()
 }
@@ -415,9 +434,7 @@ fn event_callback_cannot_install_until_shared_runtime_dispatch_returns() {
         ui.input(
             UiInput::Key(KeyStroke {
                 key,
-                value: 0,
-                pressed: true,
-                repeat: false,
+                action: neocogi_ui::KeyAction::Pressed { repeat: false },
                 modifiers: 0,
             }),
             "",
@@ -581,8 +598,15 @@ fn asset_style_derivation_shares_flat_rules_and_preserves_the_installed_revision
 }
 
 /// Delegates group creation while retaining the fixture's upload/quota observations.
-impl neocogi_render_core::abi::IRenderClientFactory for UploadHost {
-    fn create_client(&self, limits: neocogi_render_core::abi::RenderClientLimits, surface: ComRef<'_, neocogi_render_core::abi::IRenderSurfaceAbi>, permissions: neocogi_render_core::abi::RenderClientPermissions) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::IRenderClientDomainAbi>, NcStatus> {
-        self.inner.query::<neocogi_render_core::abi::IRenderClientFactoryAbi>()?.create_client(limits, surface, permissions)
+impl neocogi_platform_contracts::render::abi::IRenderClientFactory for UploadHost {
+    fn create_client(
+        &self,
+        limits: neocogi_platform_contracts::render::abi::RenderClientLimits,
+        surface: ComRef<'_, neocogi_platform_contracts::render::abi::IRenderSurfaceAbi>,
+        permissions: neocogi_platform_contracts::render::abi::RenderClientPermissions,
+    ) -> Result<neocogi_com::ComBox<neocogi_platform_contracts::render::abi::IRenderClientDomainAbi>, NcStatus> {
+        self.inner
+            .query::<neocogi_platform_contracts::render::abi::IRenderClientFactoryAbi>()?
+            .create_client(limits, surface, permissions)
     }
 }

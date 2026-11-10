@@ -1,6 +1,6 @@
 //! Independent host widget inserts real native 3D work among ordinary UI and texture draws.
 use neocogi_ui::*;
-use neocogi_render_gpu::{
+use neocogi_platform_contracts::render::{
     source::{Bytes, PipelineDesc},
 };
 use neocogi_ui::com::widget::WidgetState;
@@ -108,19 +108,24 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let image_size = Size { width: 2, height: 2 };
     assert_eq!(
         factory
-            .create_texture(image_size, neocogi_render_gpu::source::initial_bytes(pixels[..15].to_vec()).borrow()?)
-            .unwrap_err().status,
+            .create_texture(
+                image_size,
+                neocogi_platform_contracts::render::source::initial_bytes(pixels[..15].to_vec()).borrow()?
+            )
+            .unwrap_err()
+            .status,
         NC_E_INVALID_ARG
     );
     let texture = factory.create_texture(
         image_size,
-        neocogi_render_gpu::source::initial_bytes((NcCopyFromBufferOffset::new(0, &pixels)).as_slice().to_vec()).borrow()?,
+        neocogi_platform_contracts::render::source::initial_bytes((NcCopyFromBufferOffset::new(0, &pixels)).as_slice().to_vec()).borrow()?,
     )?;
     assert_eq!(texture.size()?, image_size);
     let clients: ComPtr<IRenderClientFactoryAbi> = renderer.try_add_ref()?.query()?;
-    let surface = renderer.try_add_ref()?.query::<IRenderSurfaceFactoryAbi>()?.create_surface(RenderSurfaceDesc {
-        kind: RenderSurfaceKind::Framebuffer, size: Size::default(),
-    })?;
+    let surface = renderer
+        .try_add_ref()?
+        .query::<IRenderSurfaceFactoryAbi>()?
+        .create_surface(RenderSurfaceDesc::Framebuffer)?;
     let controller = clients.create_client(RenderClientLimits::default(), surface.as_com_ref(), RenderClientPermissions::default())?;
     let resources = controller.resources()?;
     assert!(resources.query::<IRendererAbi>().is_err());
@@ -164,10 +169,7 @@ pub(super) fn smoke(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
         .into_iter()
         .flat_map(f32::to_le_bytes)
         .collect();
-    let vertices = resources.create_static_buffer(
-        GpuBufferDesc::Vertex { byte_len: payload.len() as u64 },
-        Bytes::source(payload).as_com_ref(),
-    )?;
+    let vertices = resources.create_static_buffer(GpuBufferDesc::Vertex { byte_len: payload.len() as u64 }, Bytes::source(payload).as_com_ref())?;
     let mut indices = resources.create_dynamic_buffer(GpuBufferDesc::Index { byte_len: 6 })?;
     let invalid_indices: Vec<_> = [0u16, 1, 3].into_iter().flat_map(u16::to_le_bytes).collect();
     indices.upload(NcCopyFromBufferOffset::new(0, &invalid_indices))?;

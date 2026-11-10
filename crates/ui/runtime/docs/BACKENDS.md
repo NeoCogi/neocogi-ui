@@ -1,8 +1,9 @@
 # Backend ownership and COM rendering
 
 Each renderer is a plugin: `neocogi.platform.glow`, `neocogi.platform.vulkan`,
-`neocogi.platform.wgpu`, or `neocogi.platform.webgl`. A build of `neocogi-platform-plugin`
-produces exactly one of those identities and links its concrete renderer. Browser
+`neocogi.platform.wgpu`, or `neocogi.platform.webgl`. Enabling `platform` with one
+backend in `neocogi-platform` selects one identity and its concrete renderer.
+GPU-only SDK consumers can combine native backend features. Browser
 builds statically register the WebGL descriptor; native assemblies dynamically load
 one of the other three.
 
@@ -13,17 +14,17 @@ frame. Applications retain `IPlatformWindow`, `IRenderer`, `ITexture` and scoped
 interfaces through the facade; native GPU objects never leave the plugin.
 
 Renderer-neutral ABI declarations live in the independent `neocogi.renderer`
-contract module under `crates/render/core`. The module owns `Size`, `Rect`,
+contract module under `crates/platform-contracts/src/render`. The module owns `Size`, `Rect`,
 `Color`, `IRgbaImage`, texture/resource capabilities, and the sealed block stream.
 It has no widget, font, icon, skin, chrome, palette, or platform-window declarations.
 `neocogi.ui.core` imports the small set of renderer types needed by its public UI
 methods instead of owning duplicate declarations.
 
 Normalized input, native-window polling, and IME placement live in the separate
-`neocogi.platform` contract module under `crates/render/core`. Its factory
+`neocogi.platform` contract module under `crates/platform-contracts/src/render`. Its factory
 creates windows from a title and size, without UI assets or a UI-core dependency. The current backend artifacts implement
 the platform and renderer projections on one object; this keeps native handles
-private while leaving their ABI ownership separate for the staged implementation split.
+private while preserving their distinct ABI projections.
 
 `RendererBackend::Frame<'a>` is an implementation-local generic associated type. The
 frame borrows its backend exclusively until `finish(self)` submits it, or Drop abandons
@@ -39,24 +40,25 @@ swapchain creation, with an opaque-composition diagnostic. Other composition
 modes are not transparent-window fallbacks; they need their own pixel-alpha
 contract. A failed destructive rebuild leaves presentation unavailable.
 
-GPU backends live in `crates/render/gpu/src/backends`. The platform plugin under
-`crates/platform/plugin` owns window/input assembly and selects one backend. Core
+GPU backends live in `crates/platform/src/gpu/backends`. The platform plugin under
+`crates/platform/src/platform` owns window/input assembly and selects one backend. Core
 and support remain ordinary Rust libraries linked into that plugin artifact.
 
 | Source | Responsibility |
 | --- | --- |
-| [crates/platform/plugin](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/platform/plugin) | Plugin descriptor plus window, input, and device ownership |
-| [crates/render/core](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/core) | Backend-neutral frame, texture, color, and validated upload SPI used by renderer implementations and native test fixtures |
-| [crates/render/gpu/src/backends/glow](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/gpu/src/backends/glow) | Glow rendering shared by native OpenGL and WebGL |
-| [crates/render/gpu/src/backends/vulkan](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/gpu/src/backends/vulkan) | Vulkan target and command execution |
-| [crates/render/gpu/src/backends/wgpu](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/gpu/src/backends/wgpu) | WGPU rendering |
-| [crates/render/gpu/src/backends/webgl](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/gpu/src/backends/webgl) | Browser canvas backend using the Glow renderer |
-| [crates/render/support](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/render/support) | Shared frame preparation and resource validation |
+| [crates/platform/src/platform](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/platform/src/platform) | Plugin descriptor plus window, input, and device ownership |
+| [crates/platform-contracts/src/render](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/platform-contracts/src/render) | Backend-neutral frame, texture, color, and validated upload SPI used by renderer implementations and native test fixtures |
+| [crates/platform/src/gpu/backends/glow](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/platform/src/gpu/backends/glow) | Glow rendering shared by native OpenGL and WebGL |
+| [crates/platform/src/gpu/backends/vulkan](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/platform/src/gpu/backends/vulkan) | Vulkan target and command execution |
+| [crates/platform/src/gpu/backends/wgpu](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/platform/src/gpu/backends/wgpu) | WGPU rendering |
+| [crates/platform/src/gpu/backends/webgl](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/platform/src/gpu/backends/webgl) | Browser canvas backend using the Glow renderer |
+| [crates/platform/src/platform](https://github.com/NeoCogi/neocogi-platform/blob/master/crates/platform/src/platform) | Shared frame preparation and resource validation |
 
-`core` is a statically linked Rust SPI, not a COM component or deployment plugin. It
-lets native test fixtures and concrete backends share renderer implementation types
-without making a renderer plugin link the UI implementation. Production UI-to-GFX and
-GFX-to-renderer boundaries use generated contracts and one complete COM frame.
+The contracts crate supplies the same ABI and Rust values to callers and backends.
+Concrete resource/command implementations and opt-in CPU fixtures belong to
+`neocogi_platform::gpu`. Renderer providers do not link UI implementations.
+Production UI-to-GFX and GFX-to-renderer boundaries use generated contracts and one
+complete COM frame.
 
 ## Ordered application drawing
 

@@ -45,9 +45,9 @@ use rs_math3d::{Color4b, Recti, Vec2f, Vec2i};
 #[derive(Default)]
 pub struct DisplayList {
     /// Foreign primitive intake is charged before validation scans and retained geometry copies.
-    input_budget: neocogi_render_core::abi::FrameBudget,
+    input_budget: neocogi_platform_contracts::render::abi::FrameBudget,
     /// Bounds retained commands, copied bytes, and tessellation for every producer, including chrome.
-    retained_budget: neocogi_render_core::abi::FrameBudget,
+    retained_budget: neocogi_platform_contracts::render::abi::FrameBudget,
     /// Operations in final painter order.
     pub ops: Vec<DrawOp>,
     /// Retained solid geometry and its reusable tessellation workspace.
@@ -71,7 +71,7 @@ pub enum DrawKind {
     /// Reserved painter-order position; None means explicitly cancelled or not yet harvested.
     GpuView {
         /// Exclusive sealed block owned through the synchronous GFX submission.
-        block: Option<neocogi_com::ComBox<neocogi_render_core::abi::IRenderViewBlockAbi>>,
+        block: Option<neocogi_com::ComBox<neocogi_platform_contracts::render::abi::IRenderViewBlockAbi>>,
     },
     /// Atlas geometry already expanded by a COM widget's private UI algorithms.
     AtlasTriangles {
@@ -132,8 +132,8 @@ impl DisplayList {
     /// Creates an empty display list.
     pub const fn new() -> Self {
         Self {
-            input_budget: neocogi_render_core::abi::FrameBudget::new(),
-            retained_budget: neocogi_render_core::abi::FrameBudget::new(),
+            input_budget: neocogi_platform_contracts::render::abi::FrameBudget::new(),
+            retained_budget: neocogi_platform_contracts::render::abi::FrameBudget::new(),
             ops: Vec::new(),
             solid_geometry: SolidGeometry::new(),
             atlas_vertices: Vec::new(),
@@ -143,8 +143,8 @@ impl DisplayList {
 
     /// Removes every recorded operation and triangle while retaining allocated storage for reuse.
     pub fn clear(&mut self) {
-        self.input_budget = neocogi_render_core::abi::FrameBudget::new();
-        self.retained_budget = neocogi_render_core::abi::FrameBudget::new();
+        self.input_budget = neocogi_platform_contracts::render::abi::FrameBudget::new();
+        self.retained_budget = neocogi_platform_contracts::render::abi::FrameBudget::new();
         self.ops.clear();
         self.solid_geometry.clear();
         self.atlas_vertices.clear();
@@ -159,7 +159,7 @@ impl DisplayList {
 
     /// Bounds both retained point storage and worst-case ear-clipping work before tessellation.
     pub fn reserve_polygon(&mut self, points: usize) -> Result<(), neocogi_com::NcStatus> {
-        if points > neocogi_render_core::abi::MAX_POLYGON_POINTS {
+        if points > neocogi_platform_contracts::render::abi::MAX_POLYGON_POINTS {
             return Err(neocogi_com::NC_E_OUT_OF_RANGE);
         }
         self.reserve_draw(points * core::mem::size_of::<neocogi_ui::abi::core::PaintPoint>(), points * points)
@@ -172,7 +172,7 @@ impl DisplayList {
 
     /// Bounds polygon scanning, scratch storage, output triangles, and quadratic triangulation work.
     fn reserve_retained_polygon(&mut self, points: usize) -> Result<(), neocogi_com::NcStatus> {
-        if points > neocogi_render_core::abi::MAX_POLYGON_POINTS {
+        if points > neocogi_platform_contracts::render::abi::MAX_POLYGON_POINTS {
             return Err(neocogi_com::NC_E_OUT_OF_RANGE);
         }
         // Simplification appends behind the copied boundary, so reserve/charge both fixed spans.
@@ -193,7 +193,7 @@ impl DisplayList {
     pub fn complete_gpu_view(
         &mut self,
         slot: usize,
-        block: neocogi_com::ComBox<neocogi_render_core::abi::IRenderViewBlockAbi>,
+        block: neocogi_com::ComBox<neocogi_platform_contracts::render::abi::IRenderViewBlockAbi>,
     ) -> Result<(), neocogi_com::NcStatus> {
         match self.ops.get_mut(slot).map(|operation| &mut operation.kind) {
             Some(DrawKind::GpuView { block: output @ None }) => {
@@ -570,7 +570,7 @@ mod tests {
     fn internal_commands_are_bounded_and_clear_restores_capacity() {
         let mut list = DisplayList::new();
         let clip = Recti::new(0, 0, 20, 20);
-        for _ in 0..neocogi_render_core::abi::MAX_DRAW_COMMANDS {
+        for _ in 0..neocogi_platform_contracts::render::abi::MAX_DRAW_COMMANDS {
             list.push_solid_triangles(clip, &[]).unwrap();
         }
         assert_eq!(
@@ -590,12 +590,12 @@ mod tests {
         let clip = Recti::new(0, 0, 20, 20);
         let atlas = test_atlas();
         let font = atlas.font_id("body").unwrap();
-        let oversized = "x".repeat(neocogi_render_core::abi::MAX_DRAW_WORK + 1);
+        let oversized = "x".repeat(neocogi_platform_contracts::render::abi::MAX_DRAW_WORK + 1);
         assert_eq!(
             list.push_text(clip, font, Vec2i::default(), color(1, 2, 3, 255), &oversized),
             Err(neocogi_com::NC_E_OUT_OF_RANGE)
         );
-        let points = vec![Vec2f::new(f32::NAN, 0.0); neocogi_render_core::abi::MAX_POLYGON_POINTS + 1];
+        let points = vec![Vec2f::new(f32::NAN, 0.0); neocogi_platform_contracts::render::abi::MAX_POLYGON_POINTS + 1];
         assert_eq!(
             list.push_polygon(clip, &points, color4b(1, 2, 3, 255), Vec2f::default()),
             Err(neocogi_com::NC_E_OUT_OF_RANGE)

@@ -1,0 +1,14 @@
+[package]
+name = "neocogi-ui-native-artifacts"
+version.workspace = true
+publish = false
+edition.workspace = true
+license.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+neocogi-platform-contracts = { workspace = true, features = ["build-support"] }
+syn = "2"
+quote = "1"

@@ -1,16 +1,18 @@
-use neocogi_com::{com_object, ComRef, ComPtr, NcCopyFromBufferOffset, NcStatus};
+use neocogi_com::{ComRef, ComPtr, NcCopyFromBufferOffset};
 #[cfg(feature = "glow")]
-use neocogi_com::{ComBox, IUnknown, ComInterface, NC_E_INVALID_ARG};
-use neocogi_render_core::{abi::*, platform::*};
+use neocogi_com::{com_object, ComBox, IUnknown, ComInterface, NcStatus, NC_E_INVALID_ARG};
+use neocogi_platform_contracts::render::abi::*;
+#[cfg(feature = "glow")]
+use neocogi_platform_contracts::render::platform::*;
 #[cfg(feature = "glow")]
 use neocogi_gfx_support::abi::RenderVertex;
 #[cfg(feature = "glow")]
 use std::{cell::RefCell, rc::Rc};
-use nc_platform::testing::NativeWindow;
+use neocogi_platform::platform::testing;
 #[cfg(feature = "glow")]
-use nc_platform::testing::NativeBackend;
+use neocogi_platform::platform::testing::NativeBackend;
 #[cfg(feature = "glow")]
-use neocogi_render_gpu::source::{Bytes, PipelineDesc};
+use neocogi_platform::gpu::source::{Bytes, PipelineDesc};
 mod compiler_failure;
 #[cfg(feature = "glow")]
 mod costs;
@@ -28,29 +30,6 @@ fn native_session() -> std::sync::MutexGuard<'static, ()> {
 }
 #[cfg(feature = "glow")]
 const SIZE: Size = Size { width: 64, height: 64 };
-/// Owned compiler selection reused by windows within one test.
-struct PlatformObject {
-    /// Strong compiler capability remains available during native construction.
-    compiler: ComPtr<neocogi_shader_core::abi::ShaderCompilerAbi>,
-}
-impl PlatformObject {
-    /// Selects the test compiler without creating a native device yet.
-    fn new(compiler: ComPtr<neocogi_shader_core::abi::ShaderCompilerAbi>) -> Self {
-        Self { compiler }
-    }
-    /// Uses the public opt-in platform fixture, including its weak observations.
-    fn window(&self, title: &str, size: Size) -> Result<NativeWindow, RenderError> {
-        nc_platform::testing::window(self.compiler.clone(), title, size)
-    }
-}
-/// Transfers the factory-issued production window into its public COM capability.
-struct WindowObject;
-impl WindowObject {
-    /// Transfers the strong window capability without retaining its probe.
-    fn from_value(native: NativeWindow) -> ComPtr<IPlatformWindowAbi> {
-        native.window
-    }
-}
 #[cfg(feature = "glow")]
 fn identity<I: ComInterface>(value: &ComPtr<I>) -> Result<usize, NcStatus> {
     Ok(value.query::<IUnknown>()?.as_raw().object as usize)
@@ -118,7 +97,10 @@ fn quad(rect: Rect) -> [RenderVertex; 4] {
 
 /// Creates an explicit view of the production window framebuffer for this fixture.
 fn framebuffer(host: ComRef<'_, IRenderHostAbi>) -> ComPtr<IRenderSurfaceAbi> {
-    host.try_add_ref().unwrap().query::<IRenderSurfaceFactoryAbi>().unwrap().create_surface(RenderSurfaceDesc {
-        kind: RenderSurfaceKind::Framebuffer, size: Size::default(),
-    }).unwrap()
+    host.try_add_ref()
+        .unwrap()
+        .query::<IRenderSurfaceFactoryAbi>()
+        .unwrap()
+        .create_surface(RenderSurfaceDesc::Framebuffer)
+        .unwrap()
 }

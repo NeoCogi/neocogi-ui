@@ -5,7 +5,7 @@
 
 use crate::abi::*;
 use neocogi_com::NcStatus;
-use neocogi_render_core::abi::{Color, Rect, Size};
+use neocogi_platform_contracts::render::abi::{Color, Rect, Size};
 
 /// A GFX construction session was consumed and cannot accept more edits.
 pub const GFX_E_CLOSED: NcStatus = NcStatus::from_code(-1000);
@@ -103,7 +103,7 @@ impl Default for Insets {
 pub const ASSET_SCHEMA_VERSION: u32 = 3;
 
 /// Maximum uncompressed RGBA storage accepted by all asset consumers.
-pub const MAX_ASSET_PIXELS_BYTES: usize = neocogi_render_core::abi::MAX_IMAGE_BYTES;
+pub const MAX_ASSET_PIXELS_BYTES: usize = neocogi_platform_contracts::render::abi::MAX_IMAGE_BYTES;
 
 /// Maximum glyph records in a complete bundle, across every font.
 pub const MAX_ASSET_GLYPHS: u32 = 1024 * 1024;

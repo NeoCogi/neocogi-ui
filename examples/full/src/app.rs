@@ -206,7 +206,7 @@ pub(super) struct State {
     /// Plain owned control identities and the one shared posting capability.
     inputs: Inputs,
     /// Trusted application ownership controls client-domain closure; widgets receive factories only.
-    gpu_domains: Vec<ComBox<neocogi_render_core::abi::IRenderClientDomainAbi>>,
+    gpu_domains: Vec<ComBox<neocogi_platform_contracts::render::abi::IRenderClientDomainAbi>>,
     /// A retained runtime projection reads during handlers and installs after dispatch returns.
     pub(super) ui: Ui,
     /// Named palette authoring and the actual retained editor controls.
@@ -754,7 +754,7 @@ fn build_controls(
         let pixels = color.repeat(size.width as usize * size.height as usize);
         let image = factory.create_texture(
             size,
-            neocogi_render_core::source::initial_bytes((NcCopyFromBufferOffset::new(0, &pixels)).as_slice().to_vec()).borrow()?,
+            neocogi_platform_contracts::render::source::initial_bytes((NcCopyFromBufferOffset::new(0, &pixels)).as_slice().to_vec()).borrow()?,
         )?;
         let mut control = button(ui, events_tx, name, Action::Log)?;
         control.set_image(image.as_com_ref(), false)?;
@@ -775,7 +775,7 @@ fn build_controls(
     }
     let image = factory.create_texture(
         Size { width: 24, height: 32 },
-        neocogi_render_core::source::initial_bytes((NcCopyFromBufferOffset::new(0, &pixels)).as_slice().to_vec()).borrow()?,
+        neocogi_platform_contracts::render::source::initial_bytes((NcCopyFromBufferOffset::new(0, &pixels)).as_slice().to_vec()).borrow()?,
     )?;
     let mut control = button(ui, events_tx, "Texture 4 - Noise", Action::Log)?;
     control.set_image(image.as_com_ref(), false)?;
@@ -785,8 +785,12 @@ fn build_controls(
 
 /// Mounts the log, typography, layout and custom drawing examples as ordinary structural children.
 fn build_examples(host: &Host, state: &mut State, log_owner: OwnedWidget<ScrollAreaAbi>, entry_owner: OwnedWidget<TextboxAbi>) -> Result<(), HostError> {
-    let clients = host.renderer.query::<neocogi_render_core::abi::IRenderClientFactoryAbi>()?;
-    let domain = clients.create_client(neocogi_render_core::abi::RenderClientLimits::default(), host.surface.as_com_ref(), neocogi_render_core::abi::RenderClientPermissions::default())?;
+    let clients = host.renderer.query::<neocogi_platform_contracts::render::abi::IRenderClientFactoryAbi>()?;
+    let domain = clients.create_client(
+        neocogi_platform_contracts::render::abi::RenderClientLimits::default(),
+        host.surface.as_com_ref(),
+        neocogi_platform_contracts::render::abi::RenderClientPermissions::default(),
+    )?;
     let resources = domain.resources()?;
     state.gpu_domains.push(domain);
     let events_tx = &mut state.inputs;

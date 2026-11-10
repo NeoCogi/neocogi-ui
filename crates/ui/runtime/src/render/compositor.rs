@@ -8,7 +8,7 @@ use super::{Color, DisplayList};
 use crate::{AtlasHandle, Recti};
 use neocogi_com::{ComPtr, ComRef, NC_E_INVALID_ARG, NcCopyFromBufferOffset};
 use neocogi_gfx_support::abi::{AssetPatch, DrawPoint, GfxCompositorAbi, Insets, NinePatchDraw, SolidVertex};
-use neocogi_render_core::abi::{IRendererAbi, RenderError, Rect, Size};
+use neocogi_platform_contracts::render::abi::{IRendererAbi, RenderError, Rect, Size};
 
 /// Replays one complete display list and clears it on success or failure.
 pub(crate) fn submit(

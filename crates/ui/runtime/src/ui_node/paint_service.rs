@@ -6,7 +6,9 @@ use crate::{FontRole, WidgetOption, ControlRole};
 use crate::math::RectExt;
 #[path = "paint_service/gpu.rs"]
 mod gpu;
-use neocogi_render_core::abi::{IRenderResourcesAbi, IRenderViewAbi, IRenderViewSessionAbi, IRenderViewBrokerAbi, RenderViewRoot, RenderViewState, RENDER_E_STATE};
+use neocogi_platform_contracts::render::abi::{
+    IRenderResourcesAbi, IRenderViewAbi, IRenderViewSessionAbi, IRenderViewBrokerAbi, RenderViewRoot, RenderViewState, RENDER_E_STATE,
+};
 use neocogi_com::ComBox;
 
 /// One reserved list position and its private revocation/transfer controller.
@@ -438,7 +440,7 @@ mod gpu_tests;
 #[cfg(test)]
 mod intake_tests {
     use super::*;
-    use neocogi_render_core::abi::{MAX_DRAW_INPUT_BYTES, MAX_POLYGON_POINTS};
+    use neocogi_platform_contracts::render::abi::{MAX_DRAW_INPUT_BYTES, MAX_POLYGON_POINTS};
 
     /// Budget rejection precedes input parsing/tessellation and survives changes of widget scope.
     #[test]

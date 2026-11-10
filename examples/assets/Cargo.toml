@@ -15,9 +15,6 @@ external-themes = ["dep:neocogi-skin-authoring"]
 # Explicit opt-in for self-contained resources, including browser deployments.
 embed-assets = ["neocogi-gfx-support/compiled-assets", "dep:neocogi-gfx-impl", "dep:neocogi-skin-impl", "dep:neocogi-gfx-support", "dep:neocogi-gfx-support"]
 
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-neocogi-native-layout.workspace = true
-
 [dependencies]
 neocogi-ui.workspace = true
 neocogi-com = { workspace = true, features = ["runtime"] }
@@ -25,6 +22,7 @@ neocogi-gfx-support = { workspace = true, optional = true }
 
 # Cargo builds these APIs for the host even when the demo target is WebAssembly.
 [build-dependencies]
+neocogi-platform-contracts = { workspace = true, features = ["build-support"] }
 # Resolve the host facade only when the asset generator actually runs.
 neocogi-gfx-support = { workspace = true, optional = true }
 neocogi-gfx-impl = { workspace = true, optional = true, features = ["builder", "save-to-rust"] }

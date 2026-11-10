@@ -158,7 +158,7 @@ pub fn materialize(output: &Path) -> Result<PathBuf, BuildError> {
 /// The caller must supply Cargo's OUT_DIR and handle any source preparation error.
 pub fn sources(local: &[Module]) -> Result<SharedSources, BuildError> {
     let output = std::env::var_os("OUT_DIR").ok_or(BuildError::MissingEnvironment("OUT_DIR"))?;
-    let mut request = neocogi_platform_build::sources(&[])?.include_root(materialize(Path::new(&output))?);
+    let mut request = neocogi_platform_contracts::build::sources(&[])?.include_root(materialize(Path::new(&output))?);
     for module in [
         Module::Gfx,
         Module::Skin,

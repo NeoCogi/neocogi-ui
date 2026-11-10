@@ -10,7 +10,7 @@ use crate::{
 };
 use neocogi_com::{ComPtr, ComRef, NcStatus};
 use neocogi_gfx_support::abi::GfxCompositorAbi;
-use neocogi_render_core::abi::{IRendererAbi, IRenderHostAbi, IRenderSurfaceAbi, RenderError, Size};
+use neocogi_platform_contracts::render::abi::{IRendererAbi, IRenderHostAbi, IRenderSurfaceAbi, RenderError, Size};
 
 /// Production UI state with no renderer executor or render-stream implementation.
 /// Shutdown drops this owner directly after idle preflight. Field destruction releases

@@ -224,7 +224,7 @@ impl<'a> Painter<'a> {
     /// non-finite, and self-invalidating inputs safely emit no operation.
     pub fn fill_polygon(&mut self, points: &[Vec2f], color: Color) -> Result<(), neocogi_com::NcStatus> {
         // Reject oversized inputs before even the visibility bounds scan.
-        if points.len() > neocogi_render_core::abi::MAX_POLYGON_POINTS {
+        if points.len() > neocogi_platform_contracts::render::abi::MAX_POLYGON_POINTS {
             return Err(neocogi_com::NC_E_OUT_OF_RANGE);
         }
 
@@ -244,7 +244,7 @@ impl<'a> Painter<'a> {
 
     /// Uses validated integer pixel inputs without a temporary conversion vector.
     pub fn fill_integer_polygon(&mut self, points: &[neocogi_ui::Point], color: Color) -> Result<(), neocogi_com::NcStatus> {
-        if points.len() > neocogi_render_core::abi::MAX_POLYGON_POINTS {
+        if points.len() > neocogi_platform_contracts::render::abi::MAX_POLYGON_POINTS {
             return Err(neocogi_com::NC_E_OUT_OF_RANGE);
         }
         for point in points {
@@ -263,7 +263,7 @@ impl<'a> Painter<'a> {
 
     /// Tessellates copied COM polygon points directly into this painter's retained frame storage.
     pub fn fill_contract_polygon(&mut self, points: &[neocogi_ui::abi::core::PaintPoint], color: Color) -> Result<(), neocogi_com::NcStatus> {
-        if points.len() > neocogi_render_core::abi::MAX_POLYGON_POINTS {
+        if points.len() > neocogi_platform_contracts::render::abi::MAX_POLYGON_POINTS {
             return Err(neocogi_com::NC_E_OUT_OF_RANGE);
         }
         for point in points {

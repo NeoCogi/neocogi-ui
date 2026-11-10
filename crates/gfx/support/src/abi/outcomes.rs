@@ -1,7 +1,7 @@
 //! Rust clients retain each graphics operation's status and owned failure text.
 use super::*;
 use neocogi_com::ComRef;
-use neocogi_render_core::abi::{IRenderHostAbi, IRenderSurfaceAbi, IRendererAbi, RenderError, check_outcome};
+use neocogi_platform_contracts::render::abi::{IRenderHostAbi, IRenderSurfaceAbi, IRendererAbi, RenderError, check_outcome};
 
 impl GfxCompositorClient {
     /// Prepares a complete candidate for the selected surface before replacing the current binding.

@@ -25,9 +25,7 @@ fn activations() -> [WidgetEvent; 3] {
     let key = |key| {
         WidgetEvent::Key(KeyStroke {
             key,
-            value: 0,
-            pressed: true,
-            repeat: false,
+            action: neocogi_ui::KeyAction::Pressed { repeat: false },
             modifiers: 0,
         })
     };

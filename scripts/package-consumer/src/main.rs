@@ -104,9 +104,7 @@ fn run(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn std::error::Error>> 
         ui.input(
             UiInput::Key(KeyStroke {
                 key,
-                value: 0,
-                pressed: true,
-                repeat: false,
+                action: neocogi_ui::KeyAction::Pressed { repeat: false },
                 modifiers: 0,
             }),
             "",

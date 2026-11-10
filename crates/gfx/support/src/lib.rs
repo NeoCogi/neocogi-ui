@@ -8,7 +8,7 @@
 extern crate self as neocogi_gfx_support;
 extern crate alloc;
 use neocogi_gfx_support::abi::*;
-use neocogi_render_core::abi::{IRgbaImageAbi, IRgbaImageVtblFor};
+use neocogi_platform_contracts::render::abi::{IRgbaImageAbi, IRgbaImageVtblFor};
 use neocogi_com::{ComPtr, ComRef, NcOutputWriter, NcStatus, NC_E_INVALID_ARG, com_object};
 use std::borrow::Cow;
 
@@ -312,11 +312,11 @@ pub mod abi;
 
 /// Permissions delegated to a UI compositor on either a framebuffer or an image surface.
 /// UI writes color and resources and imports images; depth and attachment clears remain denied.
-pub const fn compositor_permissions() -> neocogi_render_core::abi::RenderClientPermissions {
-    neocogi_render_core::abi::RenderClientPermissions {
+pub const fn compositor_permissions() -> neocogi_platform_contracts::render::abi::RenderClientPermissions {
+    neocogi_platform_contracts::render::abi::RenderClientPermissions {
         write_color: true,
         write_resources: true,
         import_images: true,
-        ..neocogi_render_core::abi::RenderClientPermissions::none()
+        ..neocogi_platform_contracts::render::abi::RenderClientPermissions::none()
     }
 }

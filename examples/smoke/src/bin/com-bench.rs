@@ -31,7 +31,7 @@ pub extern "C" fn neocogi_bench_end() {
 struct Buffers {
     /// Authenticated immutable captures use the explicit CPU probe family selected by this
     /// benchmark's headless render host, matching gfx-support::testing::blocks.
-    blocks: Vec<std::rc::Rc<neocogi_render_gpu::record::Block<neocogi_render_gpu::testing::Backend>>>,
+    blocks: Vec<std::rc::Rc<neocogi_platform::gpu::record::Block<neocogi_platform::gpu::testing::Backend>>>,
 }
 impl Buffers {
     /// Reads real generic capabilities; no obsolete UI vertex transport is measured.
@@ -55,14 +55,16 @@ impl IRenderDriverBound for Recorder {
 }
 impl IRenderer for Recorder {
     /// Always restores capacity after an outward call, including failed stream reads.
-    fn render_result(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_render_gpu::abi::IRenderOutcomeAbi>, NcStatus> {
+    fn render_result(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_platform::gpu::abi::IRenderOutcomeAbi>, NcStatus> {
         let result = (|| -> Result<(), NcStatus> {
             let mut buffers = self.buffers.borrow_mut().take().ok_or(UI_E_BUSY)?;
             let result = buffers.copy(info, stream);
             *self.buffers.borrow_mut() = Some(buffers);
             result
         })();
-        Ok(neocogi_render_gpu::abi::operation_result(result.map_err(neocogi_render_gpu::abi::RenderError::from)))
+        Ok(neocogi_platform::gpu::abi::operation_result(
+            result.map_err(neocogi_platform::gpu::abi::RenderError::from),
+        ))
     }
 }
 
@@ -273,7 +275,10 @@ fn run(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
     let runtime_factory = runtime.acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
     let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
     let mut ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
-    ui_runtime.set_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref())?;
+    ui_runtime.set_render_host(
+        neocogi_gfx_support::testing::host().as_com_ref(),
+        neocogi_gfx_support::testing::framebuffer().as_com_ref(),
+    )?;
     let node_provider = runtime.acquire_plugin_root::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
     let node_factory = node_provider.bind(ui_runtime.as_com_ref())?;
     let ui = Ui::from_interfaces(ui_runtime, node_factory)?;

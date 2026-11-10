@@ -12,7 +12,7 @@ readme = "README.md"
 
 [dependencies]
 neocogi-com = { workspace = true, features = ["alloc"] }
-neocogi-render-core.workspace = true
+neocogi-platform-contracts.workspace = true
 neocogi-gfx-support.workspace = true
 
 [build-dependencies]

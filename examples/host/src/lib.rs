@@ -187,11 +187,11 @@ impl Host {
         let mut ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
         ui_runtime.set_clipboard(window.clipboard()?.as_com_ref())?;
         let render_host = window.graphics_host()?;
-        let surface = render_host.query::<IRenderSurfaceFactoryAbi>()?.create_surface(RenderSurfaceDesc {
-            kind: RenderSurfaceKind::Framebuffer,
-            size: Size::default(),
-        })?;
-        ui_runtime.set_render_host(render_host.as_com_ref(), surface.as_com_ref())
+        let surface = render_host
+            .query::<IRenderSurfaceFactoryAbi>()?
+            .create_surface(RenderSurfaceDesc::Framebuffer)?;
+        ui_runtime
+            .set_render_host(render_host.as_com_ref(), surface.as_com_ref())
             .map_err(|error| render_error("UI renderer setup", error))?;
         let node_provider = runtime.acquire_plugin_root::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
         let factory = node_provider.bind(ui_runtime.as_com_ref())?;
@@ -502,7 +502,7 @@ impl<State: AppState> Driver<State> {
     fn present(&mut self, size: Size) -> Result<FrameOutcome, HostError> {
         match self.host.ui.render(size, self.host.renderer.as_com_ref()) {
             Ok(()) => self.phase = FramePhase::Preparing,
-            Err(error) if error.status == neocogi_render_core::abi::RENDER_E_BUSY => {
+            Err(error) if error.status == neocogi_platform_contracts::render::abi::RENDER_E_BUSY => {
                 self.phase = FramePhase::Rendering(size);
                 return Ok(FrameOutcome::Backpressured);
             }
@@ -539,7 +539,9 @@ fn render_error(operation: &'static str, error: RenderError) -> HostError {
 
 impl From<RenderError> for HostError {
     /// Native setup failures own their message before reaching application formatting.
-    fn from(error: RenderError) -> Self { render_error("platform operation", error) }
+    fn from(error: RenderError) -> Self {
+        render_error("platform operation", error)
+    }
 }
 
 /// Registers the process plugin catalog before loading assets or constructing windows.
@@ -567,8 +569,7 @@ fn register(runtime: neocogi_com::Runtime) -> Result<(), HostError> {
     let descriptors = [
         nc_ui::plugin_descriptor(),
         nc_ui_nodes::plugin_descriptor(),
-        nc_shader_compiler::plugin_descriptor(),
-        nc_platform::plugin_descriptor(),
+        neocogi_platform::platform::plugin_descriptor(),
         #[cfg(feature = "monolith-extension")]
         nc_ui_extension::plugin_descriptor(),
         #[cfg(any(target_arch = "wasm32", feature = "monolith-gfx"))]

@@ -11,19 +11,18 @@ fn point(value: crate::Vec2i) -> Point {
 
 /// Preserves the complete key identity and modifier snapshot at the ABI boundary.
 fn key(event: KeyEvent) -> KeyStroke {
-    let (key, value) = match event.key {
-        Key::Character(value) => (KeyCode::Character, value as u32),
-        Key::Function(value) => (KeyCode::Function, u32::from(value)),
-        key => (
-            NAMED_KEYS.iter().find(|(_, candidate)| *candidate == key).expect("all named keys are mapped").0,
-            0,
-        ),
+    let key = match event.key {
+        Key::Character(value) => KeyCode::Character(value as u32),
+        Key::Function(value) => KeyCode::Function(value),
+        key => NAMED_KEYS.iter().find(|(_, candidate)| *candidate == key).expect("all named keys are mapped").0,
     };
     KeyStroke {
         key,
-        value,
-        pressed: event.is_pressed(),
-        repeat: event.repeat,
+        action: if event.is_pressed() {
+            KeyAction::Pressed { repeat: event.repeat }
+        } else {
+            KeyAction::Released
+        },
         modifiers: event.modifiers.bits(),
     }
 }
@@ -127,15 +126,19 @@ const NAMED_KEYS: &[(KeyCode, Key)] = &[
 pub fn host_key(event: KeyStroke) -> Result<KeyEvent, NcStatus> {
     event.validate()?;
     let key = match event.key {
-        KeyCode::Character => Key::Character(char::from_u32(event.value).ok_or(NC_E_INVALID_ARG)?),
-        KeyCode::Function => Key::Function(event.value as u8),
+        KeyCode::Character(value) => Key::Character(char::from_u32(value).ok_or(NC_E_INVALID_ARG)?),
+        KeyCode::Function(value) => Key::Function(value),
         code => NAMED_KEYS.iter().find(|(candidate, _)| *candidate == code).ok_or(NC_E_INVALID_ARG)?.1,
     };
     Ok(KeyEvent {
         key,
-        state: if event.pressed { crate::KeyState::Pressed } else { crate::KeyState::Released },
+        state: if matches!(event.action, KeyAction::Pressed { .. }) {
+            crate::KeyState::Pressed
+        } else {
+            crate::KeyState::Released
+        },
         modifiers: crate::Modifiers::from_bits_retain(event.modifiers),
-        repeat: event.repeat,
+        repeat: matches!(event.action, KeyAction::Pressed { repeat: true }),
     })
 }
 
@@ -173,4 +176,61 @@ pub fn local_event(event: WidgetEvent, bytes: NcCopyFromBufferOffset<'_, u8>) ->
         WidgetEvent::Key(event) => UiInputEvent::Key { event: host_key(event)? },
         WidgetEvent::Text => UiInputEvent::Text { text: text.to_owned() },
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every named identity and payload round-trips without losing action or modifiers.
+    #[test]
+    fn platform_keys_preserve_payload_action_and_modifiers() {
+        let keys = NAMED_KEYS
+            .iter()
+            .map(|(code, _)| *code)
+            .chain(['a', 'é', '🦀'].map(|ch| KeyCode::Character(ch as u32)))
+            .chain((1..=24).map(KeyCode::Function));
+        for code in keys {
+            for action in [KeyAction::Pressed { repeat: false }, KeyAction::Pressed { repeat: true }, KeyAction::Released] {
+                for modifiers in 0..=15 {
+                    let wire = KeyStroke { key: code, action, modifiers };
+                    let copied = key(host_key(wire).unwrap());
+                    assert_eq!((copied.key, copied.action, copied.modifiers), (code, action, modifiers));
+                }
+            }
+        }
+    }
+
+    /// Canonical validation rejects invalid payloads and modifier bits before local conversion.
+    #[test]
+    fn invalid_platform_keys_do_not_enter_the_retained_router() {
+        for code in [
+            KeyCode::Character(0xd800),
+            KeyCode::Character(0x110000),
+            KeyCode::Function(0),
+            KeyCode::Function(25),
+            KeyCode::Function(255),
+        ] {
+            assert_eq!(
+                host_key(KeyStroke {
+                    key: code,
+                    action: KeyAction::Released,
+                    modifiers: 0
+                })
+                .unwrap_err(),
+                NC_E_INVALID_ARG
+            );
+        }
+        for modifiers in 16..=255 {
+            assert_eq!(
+                host_key(KeyStroke {
+                    key: KeyCode::Tab,
+                    action: KeyAction::Pressed { repeat: true },
+                    modifiers
+                })
+                .unwrap_err(),
+                NC_E_INVALID_ARG
+            );
+        }
+    }
 }

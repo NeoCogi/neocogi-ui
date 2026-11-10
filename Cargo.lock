@@ -772,7 +772,7 @@ dependencies = [
  "neocogi-com",
  "neocogi-gfx-support",
  "neocogi-idl",
- "neocogi-render-core",
+ "neocogi-platform-contracts",
  "neocogi-ui-build",
 ]
 
@@ -835,7 +835,7 @@ dependencies = [
  "neocogi-com",
  "neocogi-gfx-impl",
  "neocogi-gfx-support",
- "neocogi-native-layout",
+ "neocogi-platform-contracts",
  "neocogi-skin-authoring",
  "neocogi-skin-impl",
  "neocogi-ui",
@@ -863,9 +863,8 @@ dependencies = [
  "neocogi-com-host",
  "neocogi-demo-assets",
  "neocogi-demo-host",
- "neocogi-render-core",
- "neocogi-render-gpu",
- "neocogi-shader-compiler",
+ "neocogi-platform",
+ "neocogi-platform-contracts",
  "neocogi-ui",
  "neocogi-ui-samples",
  "pollster",
@@ -883,9 +882,8 @@ dependencies = [
  "neocogi-demo-plugins",
  "neocogi-example-ui-extension",
  "neocogi-gfx",
- "neocogi-platform-plugin",
- "neocogi-render-core",
- "neocogi-shader-compiler",
+ "neocogi-platform",
+ "neocogi-platform-contracts",
  "neocogi-skin",
  "neocogi-ui",
  "neocogi-ui-nodes",
@@ -905,11 +903,10 @@ dependencies = [
  "neocogi-example-ui-extension-dylib",
  "neocogi-gfx-dylib",
  "neocogi-idl",
- "neocogi-native-layout",
- "neocogi-native-layout-core",
- "neocogi-platform-plugin-dylib",
- "neocogi-shader-compiler-dylib",
+ "neocogi-platform-contracts",
+ "neocogi-platform-dylib",
  "neocogi-skin-dylib",
+ "neocogi-ui-native-artifacts",
  "neocogi-ui-nodes-dylib",
  "neocogi-ui-runtime-dylib",
  "tempfile",
@@ -925,7 +922,8 @@ dependencies = [
  "neocogi-demo-host",
  "neocogi-gfx",
  "neocogi-gfx-support",
- "neocogi-render-gpu",
+ "neocogi-platform",
+ "neocogi-platform-contracts",
  "neocogi-ui",
  "neocogi-ui-nodes",
  "neocogi-ui-samples",
@@ -977,9 +975,8 @@ dependencies = [
  "neocogi-com",
  "neocogi-com-host",
  "neocogi-gfx-support",
- "neocogi-render-core",
- "neocogi-render-gpu",
- "neocogi-render-support",
+ "neocogi-platform",
+ "neocogi-platform-contracts",
  "neocogi-ui",
  "neocogi-ui-support",
  "png",
@@ -993,9 +990,8 @@ dependencies = [
  "miniz_oxide 0.8.9",
  "neocogi-com",
  "neocogi-idl",
- "neocogi-render-core",
- "neocogi-render-gpu",
- "neocogi-shader-compiler",
+ "neocogi-platform",
+ "neocogi-platform-contracts",
  "neocogi-ui-build",
  "rs-math3d",
 ]
@@ -1016,111 +1012,53 @@ dependencies = [
 ]
 
 [[package]]
-name = "neocogi-native-layout"
-version = "0.1.0-alpha.2"
+name = "neocogi-platform"
+version = "0.2.0-alpha.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12e0f565c32e11d2d83c4287bdb238857d4b2d7cee7509cc51ca1c829183264a"
+checksum = "7241379c24cd30617d8c8d27200634b6e425dafeaf67ed7ca64cb773ac8bb7d2"
 dependencies = [
- "neocogi-native-layout-core",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
- "tempfile",
-]
-
-[[package]]
-name = "neocogi-native-layout-core"
-version = "0.1.0-alpha.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52270b7eb1e7b5452dcc476ffaa88ecdee9961fc3cf7391d8ffcdab518ff5766"
-dependencies = [
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
-]
-
-[[package]]
-name = "neocogi-platform-build"
-version = "0.1.0-alpha.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83ea4070ed67804bb760fca011bf1a8e4a5c079cc919b183a79bfafb51d960db"
-dependencies = [
- "neocogi-idl",
-]
-
-[[package]]
-name = "neocogi-platform-plugin"
-version = "0.1.0-alpha.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d9aa3d385d3295419cfa81996da40942da731a8abdcfa487cc09012c5dcbe9a"
-dependencies = [
+ "ash",
+ "ash-window",
  "glow 0.18.0",
  "js-sys",
+ "naga",
  "neocogi-com",
- "neocogi-render-core",
- "neocogi-render-gpu",
- "neocogi-render-support",
- "neocogi-shader-compiler",
- "neocogi-shader-core",
+ "neocogi-platform-contracts",
+ "pollster",
+ "raw-window-handle",
  "rs-math3d",
  "sdl2",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
-]
-
-[[package]]
-name = "neocogi-platform-plugin-dylib"
-version = "0.1.0-alpha.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b2f37cbb87af213b08ee2c726ea4acd1950de8ab330ad43c080afde4f833ea5"
-dependencies = [
- "neocogi-com",
- "neocogi-platform-plugin",
-]
-
-[[package]]
-name = "neocogi-render-core"
-version = "0.1.0-alpha.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78ba6a44fc030658b485e9b69945d7ae3fe4ee3eac447abf2d0676d6ccb33464"
-dependencies = [
- "neocogi-com",
- "neocogi-platform-build",
- "quote",
- "rs-math3d",
- "syn 2.0.119",
-]
-
-[[package]]
-name = "neocogi-render-gpu"
-version = "0.1.0-alpha.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55e310ad09dcd4b711befa61313534d2e3412ef78254a852a8fcc58922207896"
-dependencies = [
- "ash",
- "ash-window",
- "glow 0.18.0",
- "neocogi-com",
- "neocogi-render-core",
- "neocogi-shader-core",
- "pollster",
- "raw-window-handle",
- "sdl2",
- "web-sys",
  "wgpu",
 ]
 
 [[package]]
-name = "neocogi-render-support"
-version = "0.1.0-alpha.2"
+name = "neocogi-platform-contracts"
+version = "0.2.0-alpha.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "498fd059c8e46bbd2a1bd10c1f2a66358a05097a3f941a61e5e61465178963da"
+checksum = "dba8cb28586ffdf17188898343da74a67b231b011c0b998496a5a64519cb7cf4"
 dependencies = [
  "neocogi-com",
- "neocogi-render-core",
- "neocogi-render-gpu",
+ "neocogi-idl",
+ "quote",
+ "rs-math3d",
+ "serde",
+ "serde_json",
+ "sha2",
+ "syn 2.0.119",
+ "tempfile",
+]
+
+[[package]]
+name = "neocogi-platform-dylib"
+version = "0.2.0-alpha.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1a1f2b88633ab4bd4946b6f61242dc2b6c043ca954389bb38a6e12e1af3f70a"
+dependencies = [
+ "neocogi-com",
+ "neocogi-platform",
 ]
 
 [[package]]
@@ -1137,40 +1075,6 @@ dependencies = [
  "neocogi-ui-runtime",
  "neocogi-ui-support",
  "tempfile",
-]
-
-[[package]]
-name = "neocogi-shader-compiler"
-version = "0.1.0-alpha.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ec1431f1cad314f4f2fe4ca5146c291327b344e282733c4f0b4734ac3d15529"
-dependencies = [
- "naga",
- "neocogi-com",
- "neocogi-platform-build",
- "neocogi-render-core",
- "neocogi-shader-core",
-]
-
-[[package]]
-name = "neocogi-shader-compiler-dylib"
-version = "0.1.0-alpha.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fc9cfa5cf53223ae3f6ad5a9e2c5117d74d3fb78bee5d0a9cc36dcd68e63943"
-dependencies = [
- "neocogi-com",
- "neocogi-shader-compiler",
-]
-
-[[package]]
-name = "neocogi-shader-core"
-version = "0.1.0-alpha.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f82847b8fea83f91266ae393bc3894fed564611240dbaa2c493867888c6ddc9"
-dependencies = [
- "neocogi-com",
- "neocogi-platform-build",
- "neocogi-render-core",
 ]
 
 [[package]]
@@ -1191,7 +1095,7 @@ dependencies = [
  "neocogi-com",
  "neocogi-gfx-impl",
  "neocogi-gfx-support",
- "neocogi-render-core",
+ "neocogi-platform-contracts",
  "neocogi-ui-support",
  "serde",
  "serde_json",
@@ -1213,7 +1117,7 @@ dependencies = [
  "neocogi-com",
  "neocogi-gfx-impl",
  "neocogi-gfx-support",
- "neocogi-render-core",
+ "neocogi-platform-contracts",
  "neocogi-skin-authoring",
  "neocogi-ui",
  "neocogi-ui-support",
@@ -1229,7 +1133,7 @@ dependencies = [
  "neocogi-com-host",
  "neocogi-gfx-support",
  "neocogi-idl",
- "neocogi-render-core",
+ "neocogi-platform-contracts",
  "neocogi-ui-build",
  "rs-math3d",
  "tempfile",
@@ -1241,7 +1145,7 @@ name = "neocogi-ui-build"
 version = "0.1.0-alpha.2"
 dependencies = [
  "neocogi-idl",
- "neocogi-platform-build",
+ "neocogi-platform-contracts",
  "tempfile",
 ]
 
@@ -1267,6 +1171,15 @@ dependencies = [
  "neocogi-ui-samples",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "neocogi-ui-native-artifacts"
+version = "0.1.0-alpha.2"
+dependencies = [
+ "neocogi-platform-contracts",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -1300,15 +1213,13 @@ dependencies = [
  "neocogi-demo-assets",
  "neocogi-gfx",
  "neocogi-gfx-support",
- "neocogi-platform-plugin",
- "neocogi-render-core",
- "neocogi-render-gpu",
- "neocogi-shader-compiler",
- "neocogi-shader-core",
+ "neocogi-platform",
+ "neocogi-platform-contracts",
  "neocogi-ui",
  "neocogi-ui-nodes",
  "neocogi-ui-runtime",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
  "web-sys",
 ]
 
@@ -1323,9 +1234,8 @@ dependencies = [
  "neocogi-gfx-impl",
  "neocogi-gfx-support",
  "neocogi-idl",
- "neocogi-render-core",
- "neocogi-render-gpu",
- "neocogi-shader-compiler",
+ "neocogi-platform",
+ "neocogi-platform-contracts",
  "neocogi-skin-impl",
  "neocogi-ui",
  "neocogi-ui-build",
@@ -1364,7 +1274,7 @@ dependencies = [
  "neocogi-com",
  "neocogi-com-host",
  "neocogi-gfx",
- "neocogi-render-core",
+ "neocogi-platform-contracts",
  "neocogi-ui",
  "rs-math3d",
 ]
@@ -1668,9 +1578,9 @@ checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
 
 [[package]]
 name = "rs-math3d"
-version = "0.20.1"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3cbaeb2ff97fb73ddd89959e55529979448f5fc0f5a0fe07f65697970b43d8d8"
+checksum = "3241d808bd9afbf38711e20eb83514c6a8b156d1019daaa91a0fd4cb4ba2faa4"
 dependencies = [
  "num-traits",
 ]

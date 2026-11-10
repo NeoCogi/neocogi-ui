@@ -7,7 +7,7 @@
 import init, { run_browser_input_tests } from './input-test.js';
 try {
     await init();
-    run_browser_input_tests();
+    await run_browser_input_tests();
     document.getElementById('result').textContent = 'PASS';
 } catch (error) {
     document.getElementById('result').textContent = `FAIL ${error.stack}`;

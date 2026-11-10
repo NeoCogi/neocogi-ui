@@ -788,7 +788,7 @@ fn textbox_enum_stream_drives_form_action_and_public_sink() {
     assert_eq!(value.cursor(), Ok(3));
     preview.set_text(&value.text().unwrap().to_string().unwrap()).unwrap();
     assert_eq!(preview.text().unwrap(), "Ada");
-    key(&fixture.ui, KeyCode::Enter, 0, 0);
+    key(&fixture.ui, KeyCode::Enter, 0);
     fixture.frame(VIEW).unwrap();
     assert_eq!(
         events

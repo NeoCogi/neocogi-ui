@@ -26,7 +26,7 @@ fn sequential_focus_wraps_in_retained_order_and_skips_ineligible_nodes() {
     let column = column(&fixture.ui, [first, disabled, last]);
     let _window = window(&fixture.ui, "focus", Rect { x: 10, y: 10, width: 200, height: 140 }, column);
     for (modifiers, expected) in [(0, [true, false]), (0, [false, true]), (0, [true, false]), (4, [false, true])] {
-        key(&fixture.ui, KeyCode::Tab, 0, modifiers);
+        key(&fixture.ui, KeyCode::Tab, modifiers);
         fixture.frame(VIEW).unwrap();
         assert_eq!([update(&a).focused, update(&c).focused], expected);
         assert!(!update(&b).focused);

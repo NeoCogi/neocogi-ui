@@ -201,10 +201,12 @@ fn failed_widget_dispatch_preserves_later_raw_text_input() {
         ui.input(
             UiInput::Key(KeyStroke {
                 key: KeyCode::Tab,
-                value: 0,
+                action: if pressed {
+                    neocogi_ui::KeyAction::Pressed { repeat: false }
+                } else {
+                    neocogi_ui::KeyAction::Released
+                },
                 modifiers: 0,
-                pressed,
-                repeat: false,
             }),
             "",
         )

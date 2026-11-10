@@ -213,7 +213,7 @@ def production(directory):
 
 
 def recipe_fixture(directory):
-    """Removed optional inputs and missing required inputs cross real production macros.
+    """Removed optional inputs and missing required inputs cross real production build APIs.
 
     A small authored Cargo fixture isolates deletions from the user's actual assets.
     It shares the repository target cache and pinned configuration, without a copied
@@ -227,27 +227,32 @@ def recipe_fixture(directory):
         (fixture / "Cargo.toml").write_text('[workspace]\nmembers=["app","assets"]\nresolver="3"\n')
         for name in ("app", "assets"):
             (fixture / name / "src").mkdir(parents=True)
-        from contract_check_support import workspace_dependency
-        layout = workspace_dependency(ROOT, "neocogi-native-layout")
+        from contract_check_support import registry_dependency
+        layout = registry_dependency(ROOT, "neocogi-platform-contracts", ["build-support"])
         (fixture / "app/Cargo.toml").write_text('[package]\nname="recipe-fixture"\nversion="0.0.0"\nedition="2024"\n[dependencies]\nneocogi-demo-assets={path="../assets"}\n')
         (fixture / "app/src/main.rs").write_text('fn main(){neocogi_demo_assets::ready();}\n')
-        (fixture / "assets/Cargo.toml").write_text('[package]\nname="neocogi-demo-assets"\nversion="0.0.0"\nedition="2024"\n[dependencies]\n' + layout)
-        (fixture / "assets/src/lib.rs").write_text('include!(concat!(env!("OUT_DIR"),"/resources.rs"));\npub fn ready(){}\n')
+        (fixture / "assets/Cargo.toml").write_text('[package]\nname="neocogi-demo-assets"\nversion="0.0.0"\nedition="2024"\n[build-dependencies]\n' + layout)
+        (fixture / "assets/src/lib.rs").write_text('pub fn ready(){}\n')
         (fixture / "assets/required.txt").write_text("required")
         (fixture / "assets/optional.txt").write_text("optional")
         (fixture / "assets/build.rs").write_text(r'''
 fn main() {
     println!("cargo:rerun-if-changed=.");
-    let mut code=String::from("const _:()=neocogi_native_layout::stage_resources!(");
+    use neocogi_platform_contracts::build::layout::{Resource, output_root, stage_resources};
+    use std::path::PathBuf;
+    let mut resources=Vec::new();
     let mut paths=Vec::new();
     for name in ["required.txt","optional.txt"] {
         if name=="required.txt" || std::path::Path::new(name).is_file() {
-            code.push_str(&format!("{name:?}=>{name:?},"));
+            resources.push(Resource { source: PathBuf::from(name), destination: PathBuf::from(name) });
             paths.push(format!("{name:?}"));
         }
     }
-    code.push_str(");");
-    std::fs::write(std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap()).join("resources.rs"),code).unwrap();
+    let anchor=PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
+    println!("cargo:rerun-if-env-changed=NEOCOGI_NATIVE_OUTPUT_DIR");
+    let root=output_root(Some(&anchor),std::env::var_os("NEOCOGI_NATIVE_OUTPUT_DIR").map(Into::into)).unwrap();
+    let staged=stage_resources(&PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap()),&root,&resources).unwrap();
+    for path in staged.inputs.iter().chain(&staged.outputs) { println!("cargo:rerun-if-changed={}",path.display()); }
     println!("cargo:rustc-env=NEOCOGI_RESOURCE_FILES=[{}]",paths.join(","));
 }
 ''')
@@ -290,7 +295,7 @@ fn main() {
                 os.environ.pop("CARGO_TARGET_DIR", None)
             else:
                 os.environ["CARGO_TARGET_DIR"] = original_target
-    print("Production resource macro deletion, required-input failure and prior-output preservation passed")
+    print("Production resource staging deletion, required-input failure and prior-output preservation passed")
 
 
 if __name__ == "__main__":

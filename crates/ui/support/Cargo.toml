@@ -20,7 +20,7 @@ neocogi-appearance = { workspace = true, optional = true }
 neocogi-gfx = { workspace = true, optional = true }
 neocogi-ui.workspace = true
 neocogi-com = { workspace = true, default-features = false, features = ["macros", "std"] }
-neocogi-render-core.workspace = true
+neocogi-platform-contracts.workspace = true
 bitflags.workspace = true
 rs-math3d.workspace = true
 

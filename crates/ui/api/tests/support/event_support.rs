@@ -5,6 +5,7 @@ use neocogi_idl::{Module, ResolvedModules, ModuleGraphError};
 /// Loads each contract owner, preserving its complete authored ABI fingerprint.
 pub fn resolve(mut consumers: Vec<Module>) -> Result<ResolvedModules, ModuleGraphError> {
     for (source_root, path) in [
+        (Path::new(env!("OUT_DIR")).join("neocogi-shared-sources"), "neocogi/audio"),
         (Path::new(env!("OUT_DIR")).join("neocogi-shared-sources"), "neocogi/renderer"),
         (Path::new(env!("OUT_DIR")).join("neocogi-shared-sources"), "neocogi/platform"),
         (Path::new(env!("OUT_DIR")).join("neocogi-ui-sources"), "neocogi/gfx"),
@@ -19,8 +20,9 @@ pub fn resolve(mut consumers: Vec<Module>) -> Result<ResolvedModules, ModuleGrap
 pub fn paths() -> neocogi_idl::generate::RustModulePaths {
     let mut paths = neocogi_idl::generate::RustModulePaths::default();
     for (logical, rust) in [
-        ("neocogi.renderer", "neocogi_render_core::abi"),
-        ("neocogi.platform", "neocogi_render_core::platform"),
+        ("neocogi.audio", "neocogi_platform_contracts::audio"),
+        ("neocogi.renderer", "neocogi_platform_contracts::render::abi"),
+        ("neocogi.platform", "neocogi_platform_contracts::render::platform"),
         ("neocogi.gfx", "neocogi_gfx_support::abi"),
         ("neocogi.ui.core", "neocogi_ui::abi::core"),
     ] {

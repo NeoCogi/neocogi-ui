@@ -1,6 +1,6 @@
 //! Private CPU-frame lifetime shared by traversal and its separately allocated paint facades.
 use neocogi_com::{ComBox, ComPtr, ComRef, NcStatus, NC_E_BUSY, NC_E_NOT_FOUND};
-use neocogi_render_core::abi::*;
+use neocogi_platform_contracts::render::abi::*;
 use std::{cell::RefCell, rc::Rc};
 
 /// Short checkout slots bridge runtime frame boundaries and sequential widget paint calls.

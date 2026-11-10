@@ -90,7 +90,7 @@ fn full_demo_assets(base: &AssetData) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// Generates tracked staging code and publishes its relative file set through Cargo build metadata.
+/// Stages recipe inputs through Platform's build API and reports its exact relative file set.
 /// Packaging reads that same build's JSON event; no persistent output ownership ledger is needed.
 fn stage_recipe() -> Result<(), Box<dyn Error>> {
     use std::collections::BTreeMap;
@@ -134,11 +134,16 @@ fn stage_recipe() -> Result<(), Box<dyn Error>> {
                 return Err(error);
             }
             let staged = PathBuf::from(env::var_os("OUT_DIR").ok_or("Cargo provides OUT_DIR")?).join(format!("{name}-adjacent.json"));
-            std::fs::write(&staged, theme.to_bytes()?)?;
+            let bytes = theme.to_bytes()?;
+            // This generated input is tracked by the staging build API. Preserve its
+            // timestamp when the normalized recipe is unchanged so cached builds settle.
+            if std::fs::read(&staged).ok().as_deref() != Some(bytes.as_slice()) {
+                std::fs::write(&staged, &bytes)?;
+            }
             files.insert(relative.into(), staged);
         }
     }
-    let mut code = String::from("const _: () = neocogi_native_layout::stage_resources!(\n");
+    let mut resources = Vec::new();
     for (destination, source) in &files {
         let output = PathBuf::from(env::var_os("OUT_DIR").ok_or("Cargo provides OUT_DIR")?);
         // Generated normalized JSON is trusted build output. Every authored input,
@@ -155,17 +160,18 @@ fn stage_recipe() -> Result<(), Box<dyn Error>> {
         if !generated {
             println!("cargo:rerun-if-changed={}", source.display());
         }
-        code.push_str(&format!(
-            "    {:?} => {:?},\n",
-            source.to_str().ok_or("resource path is not UTF-8")?,
-            destination
-        ));
+        resources.push(neocogi_platform_contracts::build::layout::Resource { source, destination: destination.into() });
     }
-    code.push_str(");\n");
-    std::fs::write(
-        PathBuf::from(env::var_os("OUT_DIR").ok_or("Cargo provides OUT_DIR")?).join("staged_resources.rs"),
-        code,
-    )?;
+    if env::var("CARGO_CFG_TARGET_ARCH")? != "wasm32" {
+        use neocogi_platform_contracts::build::layout::{output_root, stage_resources};
+        println!("cargo::rerun-if-env-changed=NEOCOGI_NATIVE_OUTPUT_DIR");
+        let anchor = PathBuf::from(env::var_os("OUT_DIR").ok_or("Cargo OUT_DIR")?);
+        let output = output_root(Some(&anchor), env::var_os("NEOCOGI_NATIVE_OUTPUT_DIR").map(Into::into))?;
+        let staged = stage_resources(&PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").ok_or("Cargo manifest")?), &output, &resources)?;
+        for path in staged.inputs.iter().chain(&staged.outputs) {
+            println!("cargo::rerun-if-changed={}", path.display());
+        }
+    }
     let paths: Vec<_> = files.keys().collect();
     println!("cargo:rustc-env=NEOCOGI_RESOURCE_FILES={}", serde_json::to_string(&paths)?);
     Ok(())

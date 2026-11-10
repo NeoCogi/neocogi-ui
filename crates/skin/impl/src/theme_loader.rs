@@ -3,7 +3,7 @@
 use super::Diagnostic;
 use neocogi_com::{ComPtr, ComRef, INcStringAbi, NcStatus, com_object};
 use neocogi_gfx_support::abi::{AssetLoaderAbi, AssetPublisherAbi, IAssetBundleAbi};
-use neocogi_render_core::platform::INativePathAbi;
+use neocogi_platform_contracts::render::platform::INativePathAbi;
 use neocogi_appearance::skin::{ISkinDiagnostics, ThemeLoader};
 
 /// External theme compiler retaining the one explicit GFX construction capability it needs.

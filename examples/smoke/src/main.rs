@@ -87,9 +87,9 @@ fn run(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
     let runtime_factory = runtime.acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
     let mut ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
     let render_host = native.graphics_host()?;
-    let surface = render_host.query::<IRenderSurfaceFactoryAbi>()?.create_surface(RenderSurfaceDesc {
-        kind: RenderSurfaceKind::Framebuffer, size: Size::default(),
-    })?;
+    let surface = render_host
+        .query::<IRenderSurfaceFactoryAbi>()?
+        .create_surface(RenderSurfaceDesc::Framebuffer)?;
     ui_runtime.set_render_host(render_host.as_com_ref(), surface.as_com_ref())?;
     let node_provider = runtime.acquire_plugin_root::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
     let node_factory = node_provider.bind(ui_runtime.as_com_ref())?;
@@ -222,9 +222,11 @@ fn key(ui: &Ui, key: KeyCode) -> Result<(), NcStatus> {
         ui.input(
             UiInput::Key(KeyStroke {
                 key,
-                value: 0,
-                pressed,
-                repeat: false,
+                action: if pressed {
+                    neocogi_ui::KeyAction::Pressed { repeat: false }
+                } else {
+                    neocogi_ui::KeyAction::Released
+                },
                 modifiers: 0,
             }),
             "",
@@ -302,13 +304,11 @@ impl Drop for SmokeDirectory {
     }
 }
 /// Queues one concrete key used by the independently compiled menu and standard-dialog implementations.
-fn smoke_key(ui: &Ui, key: KeyCode, value: u32) -> Result<(), NcStatus> {
+fn smoke_key(ui: &Ui, key: KeyCode) -> Result<(), NcStatus> {
     ui.input(
         UiInput::Key(KeyStroke {
             key,
-            value,
-            pressed: true,
-            repeat: false,
+            action: neocogi_ui::KeyAction::Pressed { repeat: false },
             modifiers: 0,
         }),
         "",
@@ -379,8 +379,8 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let owner = app.query::<IApplicationDispatcherAbi>()?;
     ui.update_with_events(size, owner.as_com_ref())?;
     ui.render(size, renderer)?;
-    for (key, value) in [(KeyCode::Function, 10), (KeyCode::ArrowDown, 0), (KeyCode::Enter, 0)] {
-        smoke_key(ui, key, value)?;
+    for key in [KeyCode::Function(10), KeyCode::ArrowDown, KeyCode::Enter] {
+        smoke_key(ui, key)?;
     }
     ui.update_with_events(size, owner.as_com_ref())?;
     assert_eq!(app.try_borrow()?.processor.count, 1);
@@ -391,13 +391,13 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     ui.update_with_events(size, owner.as_com_ref())?;
     ui.render(size, renderer)?;
     for _ in 0..6 {
-        smoke_key(ui, KeyCode::Tab, 0)?;
+        smoke_key(ui, KeyCode::Tab)?;
     }
     ui.input(UiInput::Text, " native file ")?;
     for _ in 0..2 {
-        smoke_key(ui, KeyCode::Tab, 0)?;
+        smoke_key(ui, KeyCode::Tab)?;
     }
-    smoke_key(ui, KeyCode::Space, 0)?;
+    smoke_key(ui, KeyCode::Space)?;
     ui.update_with_events(size, owner.as_com_ref())?;
     assert_eq!(app.try_borrow()?.processor.count, 2);
     assert_eq!(picker.active(), Ok(false));

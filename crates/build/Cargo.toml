@@ -11,7 +11,7 @@ readme = "README.md"
 include = ["Cargo.toml", "README.md", "LICENSE", "src/**", "schemas/**"]
 
 [dependencies]
-neocogi-platform-build.workspace = true
+neocogi-platform-contracts = { workspace = true, features = ["build-support"] }
 neocogi-idl.workspace = true
 
 [dev-dependencies]

@@ -1,10 +1,9 @@
-//! Real CPU allocation failures cross generated texture calls and the production frame importer.
+//! Real CPU allocation failures cross generated texture calls and the canonical GPU block snapshots.
 use neocogi_gfx_support::testing::UiBatch;
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, NC_E_BUSY, NC_E_OUT_OF_MEMORY, com_object};
 use neocogi_gfx_support::abi::{GfxCompositorAbi, SolidVertex, RenderVertex};
 use neocogi_gfx_impl::GfxCompositorObject;
-use neocogi_render_support::com::{PreparedFrame, Resources};
-use neocogi_render_core::abi::*;
+use neocogi_platform_contracts::render::abi::*;
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -25,8 +24,8 @@ struct Texture {
     /// No test observer owns the texture; only this scalar counter is shared.
     drops: Rc<Cell<u32>>,
 }
-impl neocogi_render_core::abi::IRenderDriverBound for Texture {
-    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+impl neocogi_platform_contracts::render::abi::IRenderDriverBound for Texture {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_platform_contracts::render::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
         Err(neocogi_com::NC_E_NOINTERFACE)
     }
 }
@@ -50,24 +49,12 @@ fn texture() -> (ComPtr<ITextureAbi>, Rc<Cell<u32>>) {
     (value, drops)
 }
 
-/// CPU import retains concrete texture owners; this fixture does not model device authentication.
-struct OwnedTextures;
-impl Resources for OwnedTextures {
-    type Backend = neocogi_render_gpu::testing::Backend;
-    fn view(
-        &self,
-        view: neocogi_com::WeakComBox<IRenderViewBlockAbi>,
-    ) -> Result<Rc<neocogi_render_gpu::record::Block<neocogi_render_gpu::testing::Backend>>, NcStatus> {
-        neocogi_gfx_support::testing::snapshot(view.as_com_ref())
-    }
-}
-
 /// Observations retain copied geometry and identities, without keeping textures alive.
 #[derive(Default)]
 struct Capture {
-    /// Number of successfully validated frames.
+    /// Number of captured compositor submissions.
     calls: Cell<u32>,
-    /// Complete geometry copied by the production importer.
+    /// Complete geometry copied by the canonical GPU snapshot reader.
     vertices: RefCell<Vec<RenderVertex>>,
     /// Pointer-free batch records copied while the stream token remains active.
     batches: RefCell<Vec<UiBatch>>,
@@ -82,26 +69,28 @@ struct Renderer {
     /// Independent observation storage is mutated only during a synchronous submission.
     capture: Rc<Capture>,
 }
-impl neocogi_render_core::abi::IRenderDriverBound for Renderer {
-    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+impl neocogi_platform_contracts::render::abi::IRenderDriverBound for Renderer {
+    fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_platform_contracts::render::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
         Err(neocogi_com::NC_E_NOINTERFACE)
     }
 }
 impl IRenderer for Renderer {
-    /// The shared production importer rejects orphan vertices before resolving any texture.
-    fn render_result(&self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<ComPtr<neocogi_render_core::abi::IRenderOutcomeAbi>, NcStatus> {
+    /// Authenticates sealed blocks whose draw coverage was validated by the canonical recorder.
+    fn render_result(
+        &self,
+        info: RenderInfo,
+        stream: ComRef<'_, IRenderStreamAbi>,
+    ) -> Result<ComPtr<neocogi_platform_contracts::render::abi::IRenderOutcomeAbi>, NcStatus> {
         let result = (|| -> Result<(), NcStatus> {
-            let mut frame = PreparedFrame::default();
-            frame.read(info, stream, &OwnedTextures)?;
+            let blocks = neocogi_gfx_support::testing::blocks(info, stream)?;
             let (vertices, records) = neocogi_gfx_support::testing::read(info, stream)?;
             *self.capture.vertices.borrow_mut() = vertices;
             *self.capture.batches.borrow_mut() = records;
-            *self.capture.textures.borrow_mut() = frame
-                .blocks()
+            *self.capture.textures.borrow_mut() = blocks
                 .iter()
                 .flat_map(|block| {
                     block.commands().iter().filter_map(|command| {
-                        let neocogi_render_gpu::command::Command::Draw(draw) = command else {
+                        let neocogi_platform::gpu::command::Command::Draw(draw) = command else {
                             return None;
                         };
                         draw.textures[0]
@@ -112,13 +101,15 @@ impl IRenderer for Renderer {
                 })
                 .collect();
             self.capture.calls.set(self.capture.calls.get() + 1);
-            frame.clear();
+            drop(blocks);
             match self.capture.failure.get() {
                 Some(status) => Err(status),
                 None => Ok(()),
             }
         })();
-        Ok(neocogi_render_core::abi::operation_result(result.map_err(neocogi_render_core::abi::RenderError::from)))
+        Ok(neocogi_platform_contracts::render::abi::operation_result(
+            result.map_err(neocogi_platform_contracts::render::abi::RenderError::from),
+        ))
     }
 }
 
@@ -152,7 +143,7 @@ impl Failure {
 struct Recording {
     /// Mutable compositor session exercised solely through generated ABI calls.
     compositor: ComPtr<GfxCompositorAbi>,
-    /// Calls the common production partition validator.
+    /// Authenticates canonical sealed blocks before observing their geometry.
     renderer: ComPtr<IRendererAbi>,
     /// Captures values independently of compositor and texture ownership.
     capture: Rc<Capture>,
@@ -165,7 +156,12 @@ const CLIP: Rect = Rect { x: 0, y: 0, width: 16, height: 16 };
 fn recording(failure: Failure) -> Recording {
     let bundle = fixture::test_bundle();
     let mut compositor = GfxCompositorObject::create(bundle.as_com_ref()).unwrap();
-    compositor.bind_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
+    compositor
+        .bind_render_host(
+            neocogi_gfx_support::testing::host().as_com_ref(),
+            neocogi_gfx_support::testing::framebuffer().as_com_ref(),
+        )
+        .unwrap();
     compositor.begin(Size { width: 16, height: 16 }, 0xff000000).unwrap();
     let solid = [
         SolidVertex { x: 0., y: 0., rgba: 0xff0000ff },
@@ -325,7 +321,10 @@ fn texture_reservation_errors_allow_failed_submit_and_next_frame() {
     for failure in [Failure::Vertices, Failure::Batches] {
         let mut failed = fail_draw(failure);
         failed.capture.failure.set(Some(neocogi_com::NC_E_NOT_FOUND));
-        assert_eq!(failed.compositor.submit(failed.renderer.as_com_ref()).map_err(|error| error.status), Err(neocogi_com::NC_E_NOT_FOUND));
+        assert_eq!(
+            failed.compositor.submit(failed.renderer.as_com_ref()).map_err(|error| error.status),
+            Err(neocogi_com::NC_E_NOT_FOUND)
+        );
         assert_frame(&failed.capture, failure.prefix());
         assert_eq!(failed.earlier_drops.get(), 1);
         failed.capture.failure.set(None);

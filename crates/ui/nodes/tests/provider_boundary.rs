@@ -10,9 +10,7 @@ fn key(ui: &Ui, key: KeyCode) {
     ui.input(
         UiInput::Key(KeyStroke {
             key,
-            value: 0,
-            pressed: true,
-            repeat: false,
+            action: neocogi_ui::KeyAction::Pressed { repeat: false },
             modifiers: 0,
         }),
         "",

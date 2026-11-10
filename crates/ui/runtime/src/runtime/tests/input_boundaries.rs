@@ -100,9 +100,7 @@ fn scopes_follow_actual_input_and_settle_messages_before_end() {
         ui.input(
             UiInput::Key(KeyStroke {
                 key,
-                value: 0,
-                pressed: true,
-                repeat: false,
+                action: neocogi_ui::KeyAction::Pressed { repeat: false },
                 modifiers: 0,
             }),
             "",
@@ -127,9 +125,7 @@ fn failed_begin_handler_and_end_close_scopes_and_allow_next_input_recovery() {
         ui.input(
             UiInput::Key(KeyStroke {
                 key: KeyCode::Tab,
-                value: 0,
-                pressed: true,
-                repeat: false,
+                action: neocogi_ui::KeyAction::Pressed { repeat: false },
                 modifiers: 0,
             }),
             "",

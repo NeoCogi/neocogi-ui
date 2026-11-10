@@ -28,7 +28,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 //! Checked decoder for the demo's positive absolute-index OBJ subset.
-use rs_math3d::{Box3f, Vec2f, Vec3f, Vector};
+use rs_math3d::{Box3f, Vec2f, Vec3f, Vector3, Vector, RealVector, CrossProduct};
 
 /// Fully resolved GPU input; absent attributes have already acquired their per-corner defaults.
 pub(super) struct MeshVertex {
@@ -116,13 +116,14 @@ fn corner(token: &str, line: usize) -> Result<Corner, String> {
     })
 }
 
-/// Normalizes in f64 so finite f32 geometry cannot overflow/underflow the cross-product length.
-fn unit(value: [f64; 3], line: usize) -> Result<Vec3f, String> {
-    let length = value.iter().map(|v| v * v).sum::<f64>().sqrt();
-    if !length.is_finite() || length == 0. {
-        return Err(at(line, "zero or nonfinite normal/triangle area"));
-    }
-    Ok(Vec3f::new((value[0] / length) as f32, (value[1] / length) as f32, (value[2] / length) as f32))
+/// Normalizes widened geometry through rs-math3d's scale-aware checked operation.
+/// A zero epsilon rejects only collapsed normals; all finite f32 source scales remain usable.
+fn unit(value: Vector3<f64>, line: usize) -> Result<Vec3f, String> {
+    value
+        .checked_normalize(0.)
+        .map_err(|_| at(line, "zero or nonfinite normal/triangle area"))?
+        .try_cast()
+        .ok_or_else(|| at(line, "normal exceeds f32 range"))
 }
 
 /// Checks triangle and explicit byte counts before any output or GPU allocation.
@@ -163,7 +164,7 @@ impl MeshData {
                 }
                 "vn" => {
                     let [x, y, z] = components(&parts[1..], line)?;
-                    normals.push(unit([f64::from(x), f64::from(y), f64::from(z)], line)?);
+                    normals.push(unit(Vec3f::new(x, y, z).map(f64::from), line)?);
                 }
                 "vt" => {
                     let [x, y] = components(&parts[1..], line)?;
@@ -222,10 +223,8 @@ impl MeshData {
                 .collect::<Result<Vec<_>, String>>()?;
             for i in 2..resolved.len() {
                 let triangle = [resolved[0], resolved[i - 1], resolved[i]];
-                let p = triangle.map(|(p, _, _)| [f64::from(p.x), f64::from(p.y), f64::from(p.z)]);
-                let a: [f64; 3] = std::array::from_fn(|j| p[1][j] - p[0][j]);
-                let b: [f64; 3] = std::array::from_fn(|j| p[2][j] - p[0][j]);
-                let flat = unit([a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]], face.line)?;
+                let p = triangle.map(|(p, _, _)| p.map(f64::from));
+                let flat = unit(Vector3::cross(&(p[1] - p[0]), &(p[2] - p[0])), face.line)?;
                 for (position, normal, uv) in triangle {
                     bounds = Some(match bounds {
                         Some(bounds) => bounds.add(&position),

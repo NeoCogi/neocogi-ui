@@ -6,12 +6,13 @@
 //! object support.
 
 pub use neocogi_gfx_support::abi::RenderVertex;
-pub use neocogi_render_core::abi::{
-    Color, IRenderStream, IRenderStreamAbi, IRenderer, IRendererAbi, IRgbaImage, IRgbaImageAbi, ITexture,
-    ITextureAbi, ITextureFactory, ITextureFactoryAbi, MAX_IMAGE_BYTES, Rect, RenderInfo, Size, TextureRegion, color, rgba_bytes,
+pub use neocogi_platform_contracts::render::abi::{
+    Color, IRenderStream, IRenderStreamAbi, IRenderer, IRendererAbi, IRgbaImage, IRgbaImageAbi, ITexture, ITextureAbi, ITextureFactory, ITextureFactoryAbi,
+    MAX_IMAGE_BYTES, Rect, RenderInfo, Size, TextureRegion, color, rgba_bytes,
 };
-pub use neocogi_render_core::platform::{
-    IInputSink, IInputSinkAbi, IPlatformWindow, IPlatformWindowAbi, KeyCode, KeyStroke, Platform, PlatformAbi, Point, PollStatus, TextInputArea, UiInput,
+pub use neocogi_platform_contracts::render::platform::{
+    IInputSink, IInputSinkAbi, IPlatformWindow, IPlatformWindowAbi, KeyAction, KeyCode, KeyStroke, Platform, PlatformAbi, Point, PollStatus, TextInputArea,
+    UiInput,
 };
 pub use neocogi_ui::abi::core::*;
 /// Complete generated built-in node contract namespace, including its distinct module metadata.
@@ -542,8 +543,8 @@ impl<'a> Painter<'a> {
     /// Begins generic graphics recording in this widget's committed visible client rectangle.
     pub fn begin_render_view(
         &mut self,
-        resources: ComRef<'_, neocogi_render_core::abi::IRenderResourcesAbi>,
-    ) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::IRenderViewAbi>, NcStatus> {
+        resources: ComRef<'_, neocogi_platform_contracts::render::abi::IRenderResourcesAbi>,
+    ) -> Result<neocogi_com::ComBox<neocogi_platform_contracts::render::abi::IRenderViewAbi>, NcStatus> {
         self.interface.begin_render_view(self.scope, resources)
     }
 

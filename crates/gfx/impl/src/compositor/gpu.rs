@@ -5,7 +5,7 @@ use neocogi_com::{
     com_object, ComBox, ComPtr, ComRef, NcCopyFromBufferOffset, NcOutputBuffer, NcOutputWriter, NcStatus, NC_E_INVALID_ARG, NC_E_OUT_OF_MEMORY,
     NC_E_OUT_OF_RANGE,
 };
-use neocogi_render_core::{
+use neocogi_platform_contracts::render::{
     abi::*,
     source::{Bytes, PipelineDesc},
 };
@@ -85,14 +85,15 @@ impl Graphics {
         let fragment = resources.create_shader(GpuShaderStage::Fragment, code.as_com_ref(), NcCopyFromBufferOffset::new(0, b"fs"))?;
         let desc = PipelineDesc {
             state: GpuPipelineInfo {
-                blend: GpuBlendState {
-                    enabled: true,
-                    src_color: GpuBlendFactor::SrcAlpha,
-                    dst_color: GpuBlendFactor::OneMinusSrcAlpha,
-                    color_op: GpuBlendOp::Add,
-                    src_alpha: GpuBlendFactor::One,
-                    dst_alpha: GpuBlendFactor::OneMinusSrcAlpha,
-                    alpha_op: GpuBlendOp::Add,
+                blend: GpuBlendState::Blend {
+                    color: GpuBlendEquation::Add {
+                        src: GpuBlendFactor::SrcAlpha,
+                        dst: GpuBlendFactor::OneMinusSrcAlpha,
+                    },
+                    alpha: GpuBlendEquation::Add {
+                        src: GpuBlendFactor::One,
+                        dst: GpuBlendFactor::OneMinusSrcAlpha,
+                    },
                 },
                 ..Default::default()
             },
@@ -125,14 +126,12 @@ impl Graphics {
                 GpuShaderBinding {
                     stage: GpuShaderStage::Vertex,
                     slot: 0,
-                    kind: GpuBindingKind::Uniform,
-                    byte_len: 16,
+                    kind: GpuBindingKind::Uniform(16),
                 },
                 GpuShaderBinding {
                     stage: GpuShaderStage::Fragment,
                     slot: 0,
                     kind: GpuBindingKind::SampledTexture,
-                    byte_len: 0,
                 },
             ],
         }
@@ -185,7 +184,12 @@ impl Graphics {
     }
 
     /// Pack geometry once, then preserve client positions with UI blocks using the same resources.
-    pub(super) fn lower(&mut self, frame: FrameState, vertices: &[RenderVertex], batches: &[Batch]) -> Result<Vec<Rc<ComBox<IRenderViewBlockAbi>>>, RenderError> {
+    pub(super) fn lower(
+        &mut self,
+        frame: FrameState,
+        vertices: &[RenderVertex],
+        batches: &[Batch],
+    ) -> Result<Vec<Rc<ComBox<IRenderViewBlockAbi>>>, RenderError> {
         // Drain again before compositor uploads: standalone GFX callers own their client
         // preparation, and UI painting may have released additional resource owners.
         self.host.maintain()?;
@@ -251,7 +255,9 @@ impl Graphics {
     /// prior snapshots stay immutable even if a later chunk's upload rejects this frame.
     fn geometry(&mut self, vertices: &[RenderVertex], batches: &[Batch]) -> Result<(), NcStatus> {
         let chunks = pack_geometry(vertices, batches, CHUNK_VERTICES)?;
-        self.vertices.try_reserve(chunks.len().saturating_sub(self.vertices.len())).map_err(|_| NC_E_OUT_OF_MEMORY)?;
+        self.vertices
+            .try_reserve(chunks.len().saturating_sub(self.vertices.len()))
+            .map_err(|_| NC_E_OUT_OF_MEMORY)?;
         for (index, bytes) in chunks.into_iter().enumerate() {
             if self.vertices.get(index).is_none_or(|slot| slot.capacity < bytes.len()) {
                 // Geometric growth avoids replacing native storage for small layout changes.
@@ -407,7 +413,11 @@ mod tests {
         let host = neocogi_gfx_support::testing::host();
         let surface = neocogi_gfx_support::testing::framebuffer();
         let mut graphics = Graphics::new(host.as_com_ref(), surface.as_com_ref(), assets.image().unwrap().as_com_ref()).unwrap();
-        let frame = FrameState { size: Size { width: 80, height: 60 }, clear: 0, budget: FrameBudget::default() };
+        let frame = FrameState {
+            size: Size { width: 80, height: 60 },
+            clear: 0,
+            budget: FrameBudget::default(),
+        };
         let batches = [Batch::Atlas { first: 0, count: 3 }];
         let mut held = Vec::new();
         for x in [1., 2., 3.] {
@@ -424,7 +434,9 @@ mod tests {
         assert_eq!(graphics.vertices.len(), 1);
         for (index, blocks) in held.iter().enumerate() {
             let block = neocogi_gfx_support::testing::snapshot(blocks[0].as_ref().as_com_ref()).unwrap();
-            let neocogi_render_gpu::command::Command::Draw(draw) = &block.commands()[0] else { panic!("missing UI draw") };
+            let neocogi_platform::gpu::command::Command::Draw(draw) = &block.commands()[0] else {
+                panic!("missing UI draw")
+            };
             let bytes = draw.vertex_buffers[0].buffer.bytes().as_slice();
             assert_eq!(f32::from_le_bytes(bytes[..4].try_into().unwrap()), index as f32 + 1.);
             assert_eq!(draw.uniforms[0].data.bytes(), [80f32, 60., 0., 0.].map(f32::to_le_bytes).as_flattened());
@@ -434,8 +446,13 @@ mod tests {
         assert_eq!(graphics.vertices[0].buffer.as_raw().object, vertex_owner);
         assert_eq!(graphics.uniform.as_raw().object, uniform_owner);
         let block = neocogi_gfx_support::testing::snapshot(blocks[0].as_ref().as_com_ref()).unwrap();
-        let neocogi_render_gpu::command::Command::Draw(draw) = &block.commands()[0] else { panic!("missing UI draw") };
-        assert_eq!(f32::from_le_bytes(draw.vertex_buffers[0].buffer.bytes().as_slice()[..4].try_into().unwrap()), 4.);
+        let neocogi_platform::gpu::command::Command::Draw(draw) = &block.commands()[0] else {
+            panic!("missing UI draw")
+        };
+        assert_eq!(
+            f32::from_le_bytes(draw.vertex_buffers[0].buffer.bytes().as_slice()[..4].try_into().unwrap()),
+            4.
+        );
     }
 
     /// Explicit growth preserves retained old draws; smaller frames reuse capacity and clear tails.
@@ -445,7 +462,11 @@ mod tests {
         let host = neocogi_gfx_support::testing::host();
         let surface = neocogi_gfx_support::testing::framebuffer();
         let mut graphics = Graphics::new(host.as_com_ref(), surface.as_com_ref(), assets.image().unwrap().as_com_ref()).unwrap();
-        let frame = FrameState { size: Size { width: 80, height: 60 }, clear: 0, budget: FrameBudget::default() };
+        let frame = FrameState {
+            size: Size { width: 80, height: 60 },
+            clear: 0,
+            budget: FrameBudget::default(),
+        };
         let mut vertices = [RenderVertex { x: 1., ..Default::default() }; 6];
         let first = graphics.lower(frame, &vertices, &[Batch::Atlas { first: 0, count: 3 }]).unwrap();
         let original = graphics.vertices[0].buffer.as_raw().object;
@@ -462,8 +483,13 @@ mod tests {
         // Keeping old sealed blocks alive must not let a later upload rewrite their contents.
         for blocks in [&first, &grown] {
             let block = neocogi_gfx_support::testing::snapshot(blocks[0].as_ref().as_com_ref()).unwrap();
-            let neocogi_render_gpu::command::Command::Draw(draw) = &block.commands()[0] else { panic!("missing UI draw") };
-            assert_eq!(f32::from_le_bytes(draw.vertex_buffers[0].buffer.bytes().as_slice()[..4].try_into().unwrap()), 1.);
+            let neocogi_platform::gpu::command::Command::Draw(draw) = &block.commands()[0] else {
+                panic!("missing UI draw")
+            };
+            assert_eq!(
+                f32::from_le_bytes(draw.vertex_buffers[0].buffer.bytes().as_slice()[..4].try_into().unwrap()),
+                1.
+            );
         }
         drop((first, grown, shorter));
         for _ in 0..12 {

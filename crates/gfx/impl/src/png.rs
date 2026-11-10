@@ -131,7 +131,7 @@ impl PngDecoder for PngDecoderObject {
             .map_err(|error| self.diagnostic.failure(error))?;
         // Transfer the decoded allocation into a source; the factory finishes bounded reads before native upload.
         target
-            .create_texture(image.size, neocogi_render_core::source::initial_bytes(image.pixels).borrow()?)
+            .create_texture(image.size, neocogi_platform_contracts::render::source::initial_bytes(image.pixels).borrow()?)
             .map_err(|error| {
                 self.diagnostic.failure(&error);
                 error.status
@@ -149,7 +149,7 @@ impl IGfxDiagnostics for PngDecoderObject {
 mod tests {
     use super::*;
     use neocogi_com::{INcStringComPtrExt, NC_E_INVALID_ARG, com_object};
-    use neocogi_render_core::abi::RENDER_E_BACKEND;
+    use neocogi_platform_contracts::render::abi::RENDER_E_BACKEND;
     use std::{cell::Cell, rc::Rc};
 
     /// Encodes one tiny source image using an independent writer configuration.
@@ -207,8 +207,8 @@ mod tests {
         /// Immutable dimensions supplied by the decoder.
         size: Size,
     }
-    impl neocogi_render_core::abi::IRenderDriverBound for Texture {
-        fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+    impl neocogi_platform_contracts::render::abi::IRenderDriverBound for Texture {
+        fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_platform_contracts::render::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
             Err(neocogi_com::NC_E_NOINTERFACE)
         }
     }
@@ -229,8 +229,8 @@ mod tests {
         /// Retained diagnostics exercise reentry across the borrowed upload boundary.
         diagnostics: ComPtr<IGfxDiagnosticsAbi>,
     }
-    impl neocogi_render_core::abi::IRenderDriverBound for Factory {
-        fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_render_core::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
+    impl neocogi_platform_contracts::render::abi::IRenderDriverBound for Factory {
+        fn driver_identity(&self) -> Result<neocogi_com::ComPtr<neocogi_platform_contracts::render::abi::IRenderDriverIdentityAbi>, neocogi_com::NcStatus> {
             Err(neocogi_com::NC_E_NOINTERFACE)
         }
     }
@@ -239,11 +239,11 @@ mod tests {
         fn create_texture_result(
             &self,
             size: Size,
-            pixels: neocogi_com::NcValueRef<'_, neocogi_render_core::abi::InitialGpuData>,
-        ) -> Result<neocogi_com::ComBox<neocogi_render_core::abi::ITextureCreationResultAbi>, NcStatus> {
+            pixels: neocogi_com::NcValueRef<'_, neocogi_platform_contracts::render::abi::InitialGpuData>,
+        ) -> Result<neocogi_com::ComBox<neocogi_platform_contracts::render::abi::ITextureCreationResultAbi>, NcStatus> {
             let result = (|| -> Result<ComPtr<ITextureAbi>, NcStatus> {
                 self.calls.set(self.calls.get() + 1);
-                let pixels = neocogi_render_core::source::read_initial(pixels, size.width as usize * size.height as usize * 4)?.unwrap();
+                let pixels = neocogi_platform_contracts::render::source::read_initial(pixels, size.width as usize * size.height as usize * 4)?.unwrap();
                 assert!(pixels.iter().all(|channel| *channel == 255));
                 self.diagnostics.diagnostic()?.to_string()?;
                 if self.fail.get() {
@@ -251,7 +251,9 @@ mod tests {
                 }
                 Texture::from_value(Texture { size }).query()
             })();
-            Ok(neocogi_render_core::abi::texture_creation_result(result.map_err(neocogi_render_core::abi::RenderError::from)))
+            Ok(neocogi_platform_contracts::render::abi::texture_creation_result(
+                result.map_err(neocogi_platform_contracts::render::abi::RenderError::from),
+            ))
         }
     }
 

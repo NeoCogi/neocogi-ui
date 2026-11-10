@@ -53,7 +53,8 @@
 //! Suzanne owns its vertex layout, shaders and camera; the renderer executes only generic commands.
 use super::{camera::Camera, graphics::*, obj_loader::MeshData, view3d::View3D};
 use neocogi_com::ComBox;
-use neocogi_render_gpu::{
+use neocogi_platform_contracts::render::buffer::{TypedGpuBuffer, TypedGpuBufferDesc, TypedGpuBufferFactory};
+use neocogi_platform_contracts::render::{
     source::{Bytes, PipelineDesc},
 };
 
@@ -90,29 +91,24 @@ struct Geometry {
     /// Persistent restricted factory, safe to use during ordinary widget updates.
     resources: ComPtr<IRenderResourcesAbi>,
     /// Exclusive owners define public lifetime; draws capture private immutable versions.
-    vertices: ComBox<IGpuBufferAbi>,
+    vertices: TypedGpuBuffer<[f32; 8]>,
     /// Separate index role remains portable to WebGL 2.
-    indices: ComBox<IGpuBufferAbi>,
-    /// Persistent three-slot camera upload, retaining older draws until their owners retire.
-    uniform: ComBox<IGpuBufferAbi>,
+    indices: TypedGpuBuffer<u32>,
+    /// Streamed camera elements retain earlier draws until their backing storage retires.
+    uniform: TypedGpuBuffer<[f32; 32]>,
     /// Explicit encoded layout and this example's programmable shading.
     pipeline: ComBox<IGpuPipelineAbi>,
     /// Complete triangle-list index extent.
     index_count: u32,
 }
 impl Geometry {
-    /// Uploads explicit byte arrays and declares their exact shader interpretation.
-    fn new(resources: ComRef<'_, IRenderResourcesAbi>, vertices: Vec<u8>, indices: Vec<u32>) -> Result<Self, RenderError> {
-        let vertex = resources.create_static_buffer(
-            GpuBufferDesc::Vertex { byte_len: vertices.len() as u64 },
-            Bytes::source(vertices).as_com_ref(),
-        )?;
+    /// Authors packed scalar arrays through the canonical typed factory.
+    /// Shader layout remains this client's responsibility; the factory checks element ranges.
+    fn new(resources: ComRef<'_, IRenderResourcesAbi>, vertices: Vec<[f32; 8]>, indices: Vec<u32>) -> Result<Self, RenderError> {
+        let factory = TypedGpuBufferFactory::new(resources.try_add_ref()?);
+        let vertex = factory.create_static(TypedGpuBufferDesc::Vertex { element_count: vertices.len() as u64 }, &vertices)?;
         let index_count = indices.len().try_into().map_err(|_| neocogi_com::NC_E_OUT_OF_RANGE)?;
-        let indices: Vec<_> = indices.into_iter().flat_map(u32::to_le_bytes).collect();
-        let index = resources.create_static_buffer(
-            GpuBufferDesc::Index { byte_len: indices.len() as u64 },
-            Bytes::source(indices).as_com_ref(),
-        )?;
+        let index = factory.create_static(TypedGpuBufferDesc::Index { element_count: indices.len() as u64 }, &indices)?;
         let code = Bytes::source(SHADER.as_bytes().to_vec());
         let vs = resources.create_shader(GpuShaderStage::Vertex, code.as_com_ref(), NcCopyFromBufferOffset::new(0, b"vs"))?;
         let fs = resources.create_shader(GpuShaderStage::Fragment, code.as_com_ref(), NcCopyFromBufferOffset::new(0, b"fs"))?;
@@ -150,13 +146,12 @@ impl Geometry {
             bindings: vec![GpuShaderBinding {
                 stage: GpuShaderStage::Vertex,
                 slot: 0,
-                kind: GpuBindingKind::Uniform,
-                byte_len: 128,
+                kind: GpuBindingKind::Uniform(128),
             }],
         }
         .source()?;
         let pipeline = resources.create_pipeline(descriptor.as_com_ref(), vs.as_com_ref(), fs.as_com_ref())?;
-        let uniform = resources.create_streamed_buffer(GpuBufferDesc::Uniform { byte_len: 128 })?;
+        let uniform = factory.create_streamed(TypedGpuBufferDesc::Uniform { element_count: 1 })?;
         Ok(Self {
             resources: resources.try_add_ref()?,
             vertices: vertex,
@@ -182,7 +177,7 @@ impl Suzanne {
         Self::from_bytes(resources, &bytes)
     }
 
-    /// Completes decoding, framing and CPU encoding before the first mesh-client factory call.
+    /// Completes decoding, framing and CPU packing before the first mesh-client factory call.
     fn from_bytes(resources: ComRef<'_, IRenderResourcesAbi>, bytes: &[u8]) -> Result<Self, neocogi_demo_host::HostError> {
         let prepare = || -> Result<_, String> {
             let mesh = MeshData::parse(bytes)?;
@@ -220,7 +215,7 @@ impl LeafContent for Suzanne {
                 let pixels = if delta.y != 0 { delta.y } else { delta.x };
                 self.view.apply_scroll(pixels as f32 * MESH_WHEEL_DISTANCE_SCALE);
             }
-            WidgetEvent::Key(key) if key.pressed => {
+            WidgetEvent::Key(key) if matches!(key.action, neocogi_ui::KeyAction::Pressed { .. }) => {
                 let delta = match key.key {
                     KeyCode::ArrowLeft => Vec2i::new(-20, 0),
                     KeyCode::ArrowRight => Vec2i::new(20, 0),
@@ -259,47 +254,49 @@ impl LeafContent for Suzanne {
         }
         let mut commands = painter.begin_render_view(self.geometry.resources.as_com_ref())?;
         self.view.set_viewport(local_rect(commands.info()?.client));
-        let uniforms = camera_bytes(&self.view.pvm(), &self.view.view_matrix());
+        let uniforms = camera_values(&self.view.pvm(), &self.view.view_matrix());
         commands.bind_pipeline(self.geometry.pipeline.as_com_ref())?;
-        commands.bind_vertex_buffer(0, self.geometry.vertices.as_com_ref(), 0)?;
-        commands.bind_index_buffer(self.geometry.indices.as_com_ref(), GpuIndexFormat::U32, 0)?;
-        self.geometry.uniform.upload(NcCopyFromBufferOffset::new(0, &uniforms))?;
-        commands.bind_uniform_buffer(GpuShaderStage::Vertex, 0, self.geometry.uniform.as_com_ref(), 0, 128)?;
+        commands.bind_vertex_buffer(0, self.geometry.vertices.as_gpu_buffer(), 0)?;
+        commands.bind_index_buffer(self.geometry.indices.as_gpu_buffer(), GpuIndexFormat::U32, 0)?;
+        self.geometry.uniform.upload(0, &[uniforms])?;
+        commands.bind_uniform_buffer(GpuShaderStage::Vertex, 0, self.geometry.uniform.as_gpu_buffer(), 0, 128)?;
         commands.draw_indexed(self.geometry.index_count, 1, 0)?;
         commands.finish()
     }
 }
 
-/// Explicitly encodes this client's eight floats; no semantic record is borrowed as GPU bytes.
-fn vertex_bytes(output: &mut Vec<u8>, position: Vec3f, normal: Vec3f, uv: Vec2f) {
-    output.extend(
-        [position.x, position.y, position.z, normal.x, normal.y, normal.z, uv.x, uv.y]
-            .into_iter()
-            .flat_map(f32::to_le_bytes),
-    );
+/// Eight consecutive scalars declare this client's position, normal and UV layout.
+/// Plain arrays use the SDK's existing GpuElement proof, without a local unsafe cast.
+fn vertex_values(position: Vec3f, normal: Vec3f, uv: Vec2f) -> [f32; 8] {
+    let [x, y, z] = position.to_array();
+    let [nx, ny, nz] = normal.to_array();
+    let [u, v] = uv.to_array();
+    [x, y, z, nx, ny, nz, u, v]
 }
-/// Encodes already finalized values; no unresolved OBJ indices reach this GPU boundary.
-fn mesh_buffers(mesh: &MeshData) -> (Vec<u8>, Vec<u32>) {
-    let mut vertices = Vec::with_capacity(mesh.vertices().len() * STRIDE as usize);
-    for vertex in mesh.vertices() {
-        vertex_bytes(&mut vertices, vertex.position, vertex.normal, vertex.uv);
-    }
+/// Finalized typed elements keep unresolved OBJ indices out of GPU authoring.
+fn mesh_buffers(mesh: &MeshData) -> (Vec<[f32; 8]>, Vec<u32>) {
+    let vertices = mesh
+        .vertices()
+        .iter()
+        .map(|vertex| vertex_values(vertex.position, vertex.normal, vertex.uv))
+        .collect();
     (vertices, mesh.indices().to_vec())
 }
 
 /// Chooses finite framing/zoom/clips once from referenced extents using f64 intermediates.
 /// Unsupported f32 scales/translations return an error; geometry is never implicitly rescaled.
 fn mesh_view(bounds: Box3f) -> Result<View3D, String> {
-    let low = [bounds.min.x, bounds.min.y, bounds.min.z].map(f64::from);
-    let high = [bounds.max.x, bounds.max.y, bounds.max.z].map(f64::from);
-    let center: [f64; 3] = std::array::from_fn(|i| (low[i] + high[i]) * 0.5);
-    let radius = (0..3).map(|i| ((high[i] - low[i]) * 0.5).powi(2)).sum::<f64>().sqrt();
+    let low = bounds.min.map(f64::from);
+    let high = bounds.max.map(f64::from);
+    let wide_bounds = rs_math3d::Box3::new(&low, &high);
+    let center = wide_bounds.center();
+    let radius = wide_bounds.extent().length();
     let values = [radius * 2.5, radius * 4., radius * 20., radius * 0.01, radius * 24.].map(|n| n as f32);
-    if !center.iter().all(|n| n.is_finite()) || !values.iter().all(|n| n.is_finite() && *n > 0.) {
+    if !center.is_finite() || !values.iter().all(|n| n.is_finite() && *n > 0.) {
         return Err("unsupported camera bounds/scale".into());
     }
     let [minimum, distance, maximum, near, far] = values;
-    let target = Vec3f::new(center[0] as f32, center[1] as f32, center[2] as f32);
+    let target = center.map(|value| value as f32);
     let camera = Camera::new(target, distance, Quatf::identity(), PI / 4., 1., near, far);
     // Validate actual f32 clip coverage at both zoom limits and the initial framing.
     // The f64 formulas above cannot detect precision lost when translated f32 matrices cancel.
@@ -313,11 +310,7 @@ fn mesh_view(bounds: Box3f) -> Result<View3D, String> {
             for y in [bounds.min.y, bounds.max.y] {
                 for z in [bounds.min.z, bounds.max.z] {
                     let clip = pvm * Vec4f::new(x, y, z, 1.);
-                    if ![clip.x, clip.y, clip.z, clip.w].into_iter().all(f32::is_finite)
-                        || clip.w <= 0.
-                        || clip.z.abs() >= clip.w
-                        || (d == distance && (clip.x.abs() >= clip.w || clip.y.abs() >= clip.w))
-                    {
+                    if !clip.is_finite() || clip.w <= 0. || clip.z.abs() >= clip.w || (d == distance && (clip.x.abs() >= clip.w || clip.y.abs() >= clip.w)) {
                         return Err("camera cannot represent mesh framing/clip coverage".into());
                     }
                 }
@@ -327,19 +320,22 @@ fn mesh_view(bounds: Box3f) -> Result<View3D, String> {
     View3D::new(camera, Dimensioni::new(1, 1), (minimum, maximum))
 }
 /// The shader consumes two column-major matrices with sixteen-byte column alignment.
-fn camera_bytes(projection: &Mat4f, view: &Mat4f) -> Vec<u8> {
-    [projection, view]
-        .into_iter()
-        .flat_map(|matrix| matrix.col.iter())
-        .flat_map(|column| [column.x, column.y, column.z, column.w])
-        .flat_map(f32::to_le_bytes)
-        .collect()
+fn camera_values(projection: &Mat4f, view: &Mat4f) -> [f32; 32] {
+    let mut values = [0.; 32];
+    values[..16].copy_from_slice(&projection.to_cols_array());
+    values[16..].copy_from_slice(&view.to_cols_array());
+    values
 }
 
 #[cfg(test)]
 mod viewport_tests {
     use super::*;
-    use neocogi_render_gpu::command::Command;
+    use neocogi_platform::gpu::command::Command;
+
+    /// Independently observes the encoded command payload at the COM boundary.
+    fn camera_bytes(projection: &Mat4f, view: &Mat4f) -> Vec<u8> {
+        camera_values(projection, view).into_iter().flat_map(f32::to_le_bytes).collect()
+    }
 
     /// Refuses every resource operation while counting actual COM calls before any allocation.
     #[neocogi_com::com_object(interfaces(IRenderResources))]
@@ -360,11 +356,7 @@ mod viewport_tests {
         }
     }
     impl IRenderResources for UnreachableResources {
-        fn create_static_buffer(
-            &self,
-            _: GpuBufferDesc,
-            _: ComRef<'_, IGpuDataSourceAbi>,
-        ) -> Result<ComBox<IGpuBufferAbi>, NcStatus> {
+        fn create_static_buffer(&self, _: GpuBufferDesc, _: ComRef<'_, IGpuDataSourceAbi>) -> Result<ComBox<IGpuBufferAbi>, NcStatus> {
             self.reject()
         }
         fn create_dynamic_buffer(&self, _: GpuBufferDesc) -> Result<ComBox<IGpuBufferAbi>, NcStatus> {
@@ -420,7 +412,7 @@ mod viewport_tests {
         let mesh = MeshData::parse(include_bytes!("../../../assets/suzanne.obj")).unwrap();
         let mut view = mesh_view(mesh.bounds()).unwrap();
         let (vertices, indices) = mesh_buffers(&mesh);
-        assert_eq!(vertices.len(), mesh.vertices().len() * STRIDE as usize);
+        assert_eq!(vertices.len(), mesh.vertices().len());
         assert!(indices.iter().all(|i| (*i as usize) < mesh.vertices().len()));
         view.set_viewport(Recti::new(10, 20, 800, 400));
         for scale in [1e-30, 1e-8, 1., 2e20] {
@@ -433,7 +425,7 @@ mod viewport_tests {
                             view.set_viewport(Recti::new(2, 3, 320, 240));
                             view.update_drag(Vec2i::new(100, 100), Vec2i::new(101, 102));
                             for matrix in [view.pvm(), view.projection_matrix(), view.view_matrix()] {
-                                assert!(matrix.col.iter().all(|c| [c.x, c.y, c.z, c.w].into_iter().all(f32::is_finite)));
+                                assert!(matrix.col.iter().all(RealVector::is_finite));
                                 assert_ne!(matrix.determinant(), 0.);
                             }
                         }
@@ -449,25 +441,29 @@ mod viewport_tests {
 
     /// Distinct named values pin the layout read by all three declared shader attributes.
     #[test]
-    fn explicit_vertex_encoding_has_no_rust_layout_dependency() {
-        let mut bytes = Vec::new();
-        vertex_bytes(&mut bytes, Vec3f::new(1., 2., 3.), Vec3f::new(4., 5., 6.), Vec2f::new(7., 8.));
-        assert_eq!(bytes.len(), 32);
-        let values: Vec<_> = bytes.as_chunks::<4>().0.iter().map(|value| f32::from_le_bytes(*value)).collect();
+    fn typed_vertex_elements_match_the_declared_shader_layout() {
+        let values = vertex_values(Vec3f::new(1., 2., 3.), Vec3f::new(4., 5., 6.), Vec2f::new(7., 8.));
+        assert_eq!(std::mem::size_of_val(&values), STRIDE as usize);
         assert_eq!(values, [1., 2., 3., 4., 5., 6., 7., 8.]);
     }
 
     /// Pixel wheel input shares the checked camera path with W/S without jumping to a limit.
     #[test]
     fn wheel_zoom_preserves_direction_pixel_scale_and_camera_limits() {
-        let device = neocogi_render_gpu::testing::device(
-            nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject).query().unwrap(),
+        let device = neocogi_platform::gpu::testing::device(
+            neocogi_platform::render::compiler::CompilerObject::from_value(
+                neocogi_platform::render::compiler::CompilerObject::new(neocogi_platform_contracts::render::shader::ShaderTarget::Wgsl).unwrap(),
+            )
+            .query()
+            .unwrap(),
         );
-        let domain = device.create_client(
-            RenderClientLimits::default(),
-            device.surface_target(RenderSurfaceKind::Framebuffer).unwrap(),
-            RenderClientPermissions::default(),
-        ).unwrap();
+        let domain = device
+            .create_client(
+                RenderClientLimits::default(),
+                device.surface_target(RenderSurfaceKind::Framebuffer).unwrap(),
+                RenderClientPermissions::default(),
+            )
+            .unwrap();
         let resources = domain.resources().unwrap();
         let asset = include_bytes!("../../../assets/suzanne.obj");
         let bounds = MeshData::parse(asset).unwrap().bounds();
@@ -493,7 +489,16 @@ mod viewport_tests {
             let mut reference = mesh_view(bounds).unwrap();
             reference.set_viewport(local_rect(rect));
             reference.apply_scroll(distance);
-            widget.update(state, WidgetEvent::Scroll { position: Point { x: 150, y: 100 }, delta }, "").unwrap();
+            widget
+                .update(
+                    state,
+                    WidgetEvent::Scroll {
+                        position: Point { x: 150, y: 100 },
+                        delta,
+                    },
+                    "",
+                )
+                .unwrap();
             let actual = camera_bytes(&widget.view.pvm(), &widget.view.view_matrix());
             assert_eq!(actual, camera_bytes(&reference.pvm(), &reference.view_matrix()), "delta={delta:?}");
             assert_eq!(actual == before, distance == 0., "delta={delta:?}");
@@ -504,7 +509,16 @@ mod viewport_tests {
             }
             // Empty visible clients must never change navigation, even with captured input.
             let hidden = crate::viewport_test_support::update_state(rect, Rect::default());
-            widget.update(hidden, WidgetEvent::Scroll { position: Point { x: 150, y: 100 }, delta }, "").unwrap();
+            widget
+                .update(
+                    hidden,
+                    WidgetEvent::Scroll {
+                        position: Point { x: 150, y: 100 },
+                        delta,
+                    },
+                    "",
+                )
+                .unwrap();
             assert_eq!(actual, camera_bytes(&widget.view.pvm(), &widget.view.view_matrix()));
         }
     }
@@ -512,16 +526,24 @@ mod viewport_tests {
     /// Final paint uses a real scoped view and captures the late visible aspect as generic uniforms.
     #[test]
     fn paint_captures_the_final_visible_aspect_and_skips_empty_clients() {
-        let device = neocogi_render_gpu::testing::device(
-            nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
-                .query()
-                .unwrap(),
+        let device = neocogi_platform::gpu::testing::device(
+            neocogi_platform::render::compiler::CompilerObject::from_value(
+                neocogi_platform::render::compiler::CompilerObject::new(neocogi_platform_contracts::render::shader::ShaderTarget::Wgsl).unwrap(),
+            )
+            .query()
+            .unwrap(),
         );
-        let domain = device.create_client(RenderClientLimits::default(), device.surface_target(RenderSurfaceKind::Framebuffer).unwrap(), RenderClientPermissions::default()).unwrap();
+        let domain = device
+            .create_client(
+                RenderClientLimits::default(),
+                device.surface_target(RenderSurfaceKind::Framebuffer).unwrap(),
+                RenderClientPermissions::default(),
+            )
+            .unwrap();
         let resources = domain.resources().unwrap();
         let mut bytes = Vec::new();
         for position in [Vec3f::new(-1., -1., 0.), Vec3f::new(1., -1., 0.), Vec3f::new(0., 1., 0.)] {
-            vertex_bytes(&mut bytes, position, Vec3f::new(0., 0., 1.), Vec2f::new(0., 0.));
+            bytes.push(vertex_values(position, Vec3f::new(0., 0., 1.), Vec2f::new(0., 0.)));
         }
         let mut widget = Suzanne {
             view: crate::grid::create_grid_view_3d(),
@@ -581,21 +603,12 @@ mod viewport_tests {
                 ),
                 WidgetEvent::Key(KeyStroke {
                     key: KeyCode::ArrowRight,
-                    value: 0,
-                    pressed: true,
-                    repeat: false,
+                    action: neocogi_ui::KeyAction::Pressed { repeat: false },
                     modifiers: 0,
                 }),
                 "",
             )
             .unwrap();
-        assert!(
-            widget
-                .view
-                .pvm()
-                .col
-                .iter()
-                .all(|column| [column.x, column.y, column.z, column.w].iter().all(|value| value.is_finite()))
-        );
+        assert!(widget.view.pvm().col.iter().all(RealVector::is_finite));
     }
 }

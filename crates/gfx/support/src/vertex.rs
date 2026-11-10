@@ -1,6 +1,6 @@
 //! UI vertex helpers belong to GFX; native renderers consume only explicit generic buffer layouts.
 use crate::abi::RenderVertex;
-use rs_math3d::{Color4b, Vec2f, color4b};
+use rs_math3d::{Color4b, Vec2f};
 
 /// Maximum expanded vertices retained by one compositor frame before generic lowering.
 pub const MAX_UI_VERTICES: u32 = 16 * 1024 * 1024;
@@ -24,7 +24,7 @@ impl RenderVertex {
             y: position.y,
             u: tex_coord.x,
             v: tex_coord.y,
-            rgba: u32::from_le_bytes([color.x, color.y, color.z, color.w]),
+            rgba: u32::from_le_bytes(color.to_array()),
         }
     }
 
@@ -40,8 +40,7 @@ impl RenderVertex {
 
     /// Decodes the packed UI color into channel storage.
     pub fn color(&self) -> Color4b {
-        let [r, g, b, a] = self.rgba.to_le_bytes();
-        color4b(r, g, b, a)
+        Color4b::from_array(self.rgba.to_le_bytes())
     }
 
     /// Linearly interpolates every attribute for geometry clipping.

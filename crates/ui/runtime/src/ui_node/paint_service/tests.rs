@@ -1,6 +1,6 @@
 //! Real generated painter calls prove the runtime's private slot/revocation boundary.
 use super::*;
-use neocogi_render_gpu::{command::Command};
+use neocogi_platform::gpu::{command::Command};
 
 /// Installs ordinary imported UI assets, identical to the non-GPU painter tests.
 fn assets() -> super::super::SharedAssets {
@@ -37,12 +37,20 @@ fn scope(invocation: u64) -> PaintScope {
 /// Reserve order at begin, preserve trusted visible fitting, and revoke an escaped finished facade.
 #[test]
 fn committed_views_keep_their_original_position_and_visible_client_root() {
-    let device = neocogi_render_gpu::testing::device(
-        nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
-            .query()
-            .unwrap(),
+    let device = neocogi_platform::gpu::testing::device(
+        neocogi_platform::render::compiler::CompilerObject::from_value(
+            neocogi_platform::render::compiler::CompilerObject::new(neocogi_platform_contracts::render::shader::ShaderTarget::Wgsl).unwrap(),
+        )
+        .query()
+        .unwrap(),
     );
-    let domain = device.create_client(RenderClientLimits::default(), device.surface_target(RenderSurfaceKind::Framebuffer).unwrap(), RenderClientPermissions::default()).unwrap();
+    let domain = device
+        .create_client(
+            RenderClientLimits::default(),
+            device.surface_target(RenderSurfaceKind::Framebuffer).unwrap(),
+            RenderClientPermissions::default(),
+        )
+        .unwrap();
     let resources = domain.resources().unwrap();
     let frames = std::rc::Rc::new(gpu::Frames::default());
     frames.install(device.broker());
@@ -80,12 +88,20 @@ fn committed_views_keep_their_original_position_and_visible_client_root() {
 /// Unfinished work cannot disappear after a failed new begin; payload retires and error stays sticky.
 #[test]
 fn unhandled_view_failure_rejects_the_whole_invocation_even_if_the_widget_retries() {
-    let device = neocogi_render_gpu::testing::device(
-        nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
-            .query()
-            .unwrap(),
+    let device = neocogi_platform::gpu::testing::device(
+        neocogi_platform::render::compiler::CompilerObject::from_value(
+            neocogi_platform::render::compiler::CompilerObject::new(neocogi_platform_contracts::render::shader::ShaderTarget::Wgsl).unwrap(),
+        )
+        .query()
+        .unwrap(),
     );
-    let domain = device.create_client(RenderClientLimits::default(), device.surface_target(RenderSurfaceKind::Framebuffer).unwrap(), RenderClientPermissions::default()).unwrap();
+    let domain = device
+        .create_client(
+            RenderClientLimits::default(),
+            device.surface_target(RenderSurfaceKind::Framebuffer).unwrap(),
+            RenderClientPermissions::default(),
+        )
+        .unwrap();
     let resources = domain.resources().unwrap();
     let frames = std::rc::Rc::new(gpu::Frames::default());
     frames.install(device.broker());
@@ -106,12 +122,20 @@ fn unhandled_view_failure_rejects_the_whole_invocation_even_if_the_widget_retrie
 #[test]
 fn dropped_and_cancelled_rejections_remain_sticky_at_the_host_harvest_boundary() {
     for (reject, cancel) in [(false, false), (true, false), (true, true)] {
-        let device = neocogi_render_gpu::testing::device(
-            nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
-                .query()
-                .unwrap(),
+        let device = neocogi_platform::gpu::testing::device(
+            neocogi_platform::render::compiler::CompilerObject::from_value(
+                neocogi_platform::render::compiler::CompilerObject::new(neocogi_platform_contracts::render::shader::ShaderTarget::Wgsl).unwrap(),
+            )
+            .query()
+            .unwrap(),
         );
-        let domain = device.create_client(RenderClientLimits::default(), device.surface_target(RenderSurfaceKind::Framebuffer).unwrap(), RenderClientPermissions::default()).unwrap();
+        let domain = device
+            .create_client(
+                RenderClientLimits::default(),
+                device.surface_target(RenderSurfaceKind::Framebuffer).unwrap(),
+                RenderClientPermissions::default(),
+            )
+            .unwrap();
         let resources = domain.resources().unwrap();
         let frames = std::rc::Rc::new(gpu::Frames::default());
         frames.install(device.broker());
@@ -141,16 +165,22 @@ fn dropped_and_cancelled_rejections_remain_sticky_at_the_host_harvest_boundary()
 /// Cancel is explicit abandonment, while a later token never revives a previous painter identity.
 #[test]
 fn cancelled_views_are_empty_and_retained_painters_cannot_join_a_later_widget() {
-    let device = neocogi_render_gpu::testing::device(
-        nc_shader_compiler::CompilerObject::from_value(nc_shader_compiler::CompilerObject)
-            .query()
-            .unwrap(),
+    let device = neocogi_platform::gpu::testing::device(
+        neocogi_platform::render::compiler::CompilerObject::from_value(
+            neocogi_platform::render::compiler::CompilerObject::new(neocogi_platform_contracts::render::shader::ShaderTarget::Wgsl).unwrap(),
+        )
+        .query()
+        .unwrap(),
     );
     let domain = device
-        .create_client(RenderClientLimits {
-            frame_draws: 2,
-            ..RenderClientLimits::default()
-        }, device.surface_target(RenderSurfaceKind::Framebuffer).unwrap(), RenderClientPermissions::default())
+        .create_client(
+            RenderClientLimits {
+                frame_draws: 2,
+                ..RenderClientLimits::default()
+            },
+            device.surface_target(RenderSurfaceKind::Framebuffer).unwrap(),
+            RenderClientPermissions::default(),
+        )
         .unwrap();
     let resources = domain.resources().unwrap();
     let frames = std::rc::Rc::new(gpu::Frames::default());

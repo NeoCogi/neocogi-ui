@@ -17,7 +17,12 @@ fn disclosure_tiny_allocations_survive_initial_layout_resize_and_keyboard_expans
                 let value = create_runtime_value(source.as_com_ref(), gfx.as_com_ref()).unwrap();
                 let storage = value.storage.clone();
                 let mut runtime: ComPtr<UiRuntimeAbi> = Runtime::from_value(value).query().unwrap();
-                runtime.set_render_host(neocogi_gfx_support::testing::host().as_com_ref(), neocogi_gfx_support::testing::framebuffer().as_com_ref()).unwrap();
+                runtime
+                    .set_render_host(
+                        neocogi_gfx_support::testing::host().as_com_ref(),
+                        neocogi_gfx_support::testing::framebuffer().as_com_ref(),
+                    )
+                    .unwrap();
                 let ui = nc_ui_nodes::bind_builtin_nodes(runtime.clone()).unwrap();
                 let owner = ui.widgets().disclosure("ab", style, initially_expanded).unwrap();
                 let mut disclosure = owner.handle();
@@ -42,9 +47,7 @@ fn disclosure_tiny_allocations_survive_initial_layout_resize_and_keyboard_expans
                             .input(
                                 UiInput::Key(KeyStroke {
                                     key,
-                                    value: 0,
-                                    pressed: true,
-                                    repeat: false,
+                                    action: neocogi_ui::KeyAction::Pressed { repeat: false },
                                     modifiers: 0,
                                 }),
                                 NcCopyFromBufferOffset::new(0, &[]),
@@ -314,7 +317,10 @@ fn nested_container_layout_scopes_expire_and_teardown_closes_descendants() {
     }
     // Setter collection reaches descendants through the actual stored tree.
     leaf.set_label(NcCopyFromBufferOffset::new(0, b"a changed descendant")).unwrap();
-    assert_eq!(runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(
+        runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status),
+        Err(UI_E_UPDATE_REQUIRED)
+    );
     runtime.update(SIZE).unwrap();
     window.close().unwrap();
     assert_eq!(child_view.child_count(), Err(UI_E_CLOSED));
@@ -636,7 +642,10 @@ fn builtin_scroll_area_uses_real_children_and_shared_sticky_invalidation() {
     // the parent collects its shared marker even before an eventless update.
     horizontal.set_offset(info.maximum.x / 2).unwrap();
     assert_eq!(scroll.info().unwrap().requested.x, info.maximum.x / 2);
-    assert_eq!(runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(
+        runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status),
+        Err(UI_E_UPDATE_REQUIRED)
+    );
     runtime.update(SIZE).unwrap();
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     scroll.scroll_to_end().unwrap();
@@ -743,9 +752,7 @@ fn disclosure_com_header_controls_the_actual_body_without_a_parent_backpointer()
             .input(
                 UiInput::Key(KeyStroke {
                     key,
-                    value: 0,
-                    pressed: true,
-                    repeat: false,
+                    action: neocogi_ui::KeyAction::Pressed { repeat: false },
                     modifiers: 0,
                 }),
                 NcCopyFromBufferOffset::new(0, &[]),
@@ -758,7 +765,10 @@ fn disclosure_com_header_controls_the_actual_body_without_a_parent_backpointer()
     assert_eq!(probe.latest.get().unwrap().screen.height, 33);
     runtime.render(SIZE, renderer.as_com_ref()).unwrap();
     disclosure.set_expanded(false).unwrap();
-    assert_eq!(runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(
+        runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status),
+        Err(UI_E_UPDATE_REQUIRED)
+    );
     runtime.update(SIZE).unwrap();
     body.set_edge(0, LinearEdge::new(LayoutTrack::Fixed { extent: 61 })).unwrap();
     header.set_text("Longer tree label").unwrap();
@@ -811,9 +821,7 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
         .input(
             UiInput::Key(KeyStroke {
                 key: KeyCode::Tab,
-                value: 0,
-                pressed: true,
-                repeat: false,
+                action: neocogi_ui::KeyAction::Pressed { repeat: false },
                 modifiers: 0,
             }),
             NcCopyFromBufferOffset::new(0, &[]),
@@ -827,9 +835,7 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
         .input(
             UiInput::Key(KeyStroke {
                 key: KeyCode::Enter,
-                value: 0,
-                pressed: true,
-                repeat: false,
+                action: neocogi_ui::KeyAction::Pressed { repeat: false },
                 modifiers: 0,
             }),
             NcCopyFromBufferOffset::new(0, &[]),
@@ -840,14 +846,20 @@ fn textarea_com_preserves_inherited_editing_caret_reveal_and_fixed_content_ident
 
     let document = "a moderately long line of text\n".repeat(90);
     area.set_text(&document).unwrap();
-    assert_eq!(runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(
+        runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status),
+        Err(UI_E_UPDATE_REQUIRED)
+    );
     runtime.update(SIZE).unwrap();
     assert!(scroll.info().unwrap().maximum.y > 0);
     assert_eq!(scroll.info().unwrap().requested.y, scroll.info().unwrap().maximum.y);
     // Cursor-only editing returns NoChange from the text algorithm, but caret
     // reveal marks the shared scroll model and produces current parent placement.
     area.set_cursor(0).unwrap();
-    assert_eq!(runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
+    assert_eq!(
+        runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status),
+        Err(UI_E_UPDATE_REQUIRED)
+    );
     runtime.update(SIZE).unwrap();
     assert_eq!(scroll.info().unwrap().requested.y, 0);
     assert_eq!(area.text().unwrap(), document);
@@ -896,7 +908,10 @@ fn disclosure_headers_use_the_common_frame_policy_for_both_variants() {
         runtime.render(SIZE, renderer.as_com_ref()).unwrap();
         header.replace_flags(WidgetOptions::FRAME).unwrap();
         assert_eq!(header.properties().unwrap().options, WidgetOptions::FRAME);
-        assert_eq!(runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status), Err(UI_E_UPDATE_REQUIRED));
+        assert_eq!(
+            runtime.render(SIZE, renderer.as_com_ref()).map_err(|error| error.status),
+            Err(UI_E_UPDATE_REQUIRED)
+        );
         runtime.update(SIZE).unwrap();
         runtime.render(SIZE, renderer.as_com_ref()).unwrap();
         header.replace_flags(WidgetOptions::FRAME).unwrap();

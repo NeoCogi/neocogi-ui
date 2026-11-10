@@ -1,3 +1,3 @@
 //! Private host-native conversion for immutable platform path capabilities.
 
-pub(crate) use neocogi_render_core::platform::path::decode;
+pub(crate) use neocogi_platform_contracts::render::platform::path::decode;

@@ -91,12 +91,12 @@ def write_consumer(consumer, repository, directory):
                 '[workspace]\n[dependencies]\n')
     if consumer.generated_module:
         manifest += registry_dependency(repository, "neocogi-com", ["alloc"])
-        manifest += '[build-dependencies]\n' + registry_dependency(repository, "neocogi-idl") + registry_dependency(repository, "neocogi-platform-build")
+        manifest += '[build-dependencies]\n' + registry_dependency(repository, "neocogi-idl") + registry_dependency(repository, "neocogi-platform-contracts", ["build-support"])
         (directory / "build.rs").write_text(
-            'fn main() { for module in neocogi_platform_build::sources(&[neocogi_platform_build::Module::Renderer]).unwrap()'
+            'fn main() { for module in neocogi_platform_contracts::build::sources(&[neocogi_platform_contracts::build::Module::Renderer]).unwrap()'
             '.build().unwrap() {'
             'println!("cargo::rustc-env=CONSUMER_BINDINGS={}", module.include.display()); } }\n')
-        prefix = 'extern crate self as neocogi_render_core;\nmod abi { include!(env!("CONSUMER_BINDINGS")); }\nuse abi as contract;\n'
+        prefix = 'extern crate self as neocogi_platform_contracts;\nmod abi { include!(env!("CONSUMER_BINDINGS")); }\nuse abi as contract;\n'
     else:
         manifest += 'library={package=' + json.dumps(consumer.package) + ',path=' + json.dumps(str(repository / consumer.path)) + '}\n'
         prefix = 'use library::' + consumer.namespace + ' as contract;\n'
