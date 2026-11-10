@@ -2,7 +2,7 @@
 
 | Owner | Responsibility |
 | --- | --- |
-| `neocogi-render-core` | Renderer-neutral geometry, images, resources and sealed generic block interfaces. |
+| `neocogi-platform-contracts` | Renderer-neutral geometry, images, resources and sealed generic block interfaces. |
 | `neocogi-ui` | Shared widget/layout, window, popup, menu, and file-dialog protocols. |
 | `neocogi-ui` | Concrete built-in widgets, containers, specialized events, and factory. |
 | `neocogi-gfx-support` / `neocogi-gfx` | Portable bundle records, PNG upload, font/icon rasterization, and atlas packing. |
@@ -15,7 +15,7 @@
 | `neocogi-ui-support` | Non-plugin table retention, pure geometry/text algorithms, and phase-local presentation helpers; no retained tree or concrete classes. |
 | `neocogi-ui-runtime` | Core retained layout, painting, surfaces, and menu policy. |
 | `neocogi-ui-nodes` | Built-in controls and standard compositions over one bound runtime resource source. |
-| [Platform renderer providers](https://github.com/NeoCogi/neocogi-platform/tree/master/crates/platform/plugin) | Pixel upload, GPU resources and ordered frame execution. |
+| [Platform renderer providers](https://github.com/NeoCogi/neocogi-platform/tree/master/crates/platform/src/platform) | Pixel upload, GPU resources and ordered frame execution. |
 
 The GFX plugin has no production dependency on either the UI facade or runtime;
 the skin plugin has no production dependency on `neocogi-ui-runtime`. UI construction

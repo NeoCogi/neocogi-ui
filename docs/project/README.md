@@ -5,6 +5,7 @@
 - [Asset attribution and licenses](ASSETS.md).
 - [Project overview](../../README.md).
 
+- [Platform 0.2 and math 0.21 migration](PLATFORM_0_2_MIGRATION_2026-11-09.md).
 - [UI and COM history](HISTORY.md).
 - [Vulkan performance investigation](VULKAN_PERFORMANCE_2026-11-04.md).
 

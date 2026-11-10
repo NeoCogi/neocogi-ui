@@ -322,7 +322,7 @@ The app queues raw input and then updates explicitly:
 
 ```rust,ignore
 ui.input(UiInput::Key(KeyStroke {
-    key: KeyCode::Tab, value: 0, pressed: true, repeat: false, modifiers: 0,
+    key: KeyCode::Tab, action: KeyAction::Pressed { repeat: false }, modifiers: 0,
 }), "")?;
 ui.input(UiInput::Text, "complete Unicode commit ☃")?;
 ui.update(drawable_size)?;
@@ -462,7 +462,7 @@ rejected geometry does not publish a partial window edit or input transition.
 Localized pointer differences can span both ends of the domain and remain wide until
 conversion to the existing integer event records.
 
-The shared `neocogi_ui::geometry` policy uses rs-math3d 0.20.1. Integer pixels convert
+The shared `neocogi_ui::geometry` policy uses rs-math3d 0.21.0. Integer pixels convert
 exactly to `Fixed<i32, 6>`. Explicit fractional drawing inputs round once to its
 1/64-pixel grid, nearest with ties to even, after validating the original finite
 value and range. `Fixed<i64, 12>` working vectors/rectangles retain products of two
@@ -1185,8 +1185,9 @@ after successful updates. Repeated activation preserves an in-progress native
 composition. SDL's process-wide IME is controlled only by the focused native
 window, so synchronizing an unfocused window cannot disable another's editor.
 
-Logical key presses/releases carry the complete modifier snapshot and repeat
-state. They never synthesize committed text. SDL TextInput and the DOM text
+`KeyStroke` carries a complete modifier snapshot and a `KeyAction`: presses
+carry their repeat flag, and releases carry no repeat payload. `KeyCode::Character`
+contains a validated Unicode scalar; `KeyCode::Function` contains 1 through 24. They never synthesize committed text. SDL TextInput and the DOM text
 commit are authoritative, including complete Unicode strings; composition
 previews remain platform-owned. Widget/app authors must not insert key scalars
 again on the text path. Focus/capture cancellation is queued in input order and

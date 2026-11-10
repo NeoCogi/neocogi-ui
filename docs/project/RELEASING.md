@@ -4,8 +4,8 @@ The coordinated release is **0.1.0-alpha.2**. All workspace packages inherit
 one version, and internal production/build dependencies specify the same exact
 registry version alongside their development paths. Test-only peers use local
 paths without versions so Cargo omits their cyclic registry edges on publication.
-Platform dependencies use exact `=0.1.0-alpha.2` registry requirements; COM and
-IDL use `=0.1.0`, and `rs-math3d` uses `=0.20.1`. Rebuild hosts and providers together;
+Platform dependencies use exact `=0.2.0-alpha.2` registry requirements; COM and
+IDL use `=0.1.0`, and `rs-math3d` uses `=0.21.0`. Rebuild hosts and providers together;
 pre-release wire compatibility across revisions is not promised.
 
 ## Release boundary

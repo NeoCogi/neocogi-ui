@@ -71,11 +71,16 @@ ui-library = { package = "neocogi-ui-runtime-dylib", path = "../../crates/ui/run
 ```
 
 That dependency has `lib = false`, Cargo's artifact default. It builds a DLL
-without linking the provider's Rust library into the host. A compiler-only macro
-copies the selected artifact and emits only its platform filename:
+without linking the provider's Rust library into the host. Normal dependency
+edges preserve the application's optimization and panic profile; build artifact
+dependencies receive Cargo's build-tool settings even with `target = "target"`.
+Cargo exposes normal artifact paths to the compiler rather than the build script.
+The development-only `neocogi-ui-native-artifacts` hook therefore calls
+`neocogi_platform_contracts::build::layout::stage_library` during compilation,
+tracks the source and deployed output, and emits only the filename:
 
 ```rust,ignore
-let filename = neocogi_native_layout::stage_library!("CARGO_CDYLIB_FILE_UI_LIBRARY_nc_ui");
+let filename = neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_UI_LIBRARY_nc_ui");
 let executable = std::env::current_exe()?;
 let path = executable.parent().unwrap().join("lib").join(filename);
 // SAFETY: this is the trusted artifact built from the selected Cargo graph.
@@ -185,7 +190,7 @@ python3 scripts/package-native.py --package neocogi-demo-full --bin neocogi-demo
 ```
 
 The destination must not exist. Cargo exports the selected executable into private
-scratch while holding its build lock; the production macros stage selected DLLs
+scratch while holding its build lock; the production compiler hooks and build scripts stage selected DLLs
 and recipe resources there. The packager checks exact file membership, private
 paths and native loader metadata, then publishes the complete directory by rename.
 After Cargo exits, it removes only Platform's reserved root `.neocogi-layout.json`
@@ -204,7 +209,8 @@ artifact paths therefore never appear in generated runtime code.
 
 Staging reads exactly Cargo-selected artifact paths and literal resource inputs;
 it invokes no Cargo subprocess and constructs no dependency graph. It tracks
-source files, resource directory membership and copied files in compiler dep-info.
+library inputs/outputs through compiler dep-info and resource inputs/outputs
+through Cargo build-script rerun directives.
 Deleted outputs and cached renderer switches trigger copying again. Identical
 contents retain their timestamps; changed libraries are replaced atomically,
 without truncating a mapped Unix library. An in-use Windows DLL can reject
@@ -221,8 +227,9 @@ fail compilation. Copied theme
 JSON uses normalized relative references, so discarded `directory/..` prefixes do
 not require extra directories in the distribution. General theme-authoring APIs
 may still accept absolute user paths outside this adjacent-resource recipe.
-Restoring outputs during macro expansion can require one following compilation
-to settle Cargo's timestamp-based dep-info; subsequent unchanged builds are fresh.
+Resource build scripts track deployed outputs as well as source inputs, so deleted
+files are restored on the next Cargo build. Compiler-tracked library restoration
+can require one following compilation to settle timestamp-based dep-info.
 
 The pinned Cargo version marks each profile output directory with `.cargo-lock`.
 Staging locates that marker among ancestors of the consuming package's `OUT_DIR`;
@@ -286,7 +293,7 @@ normal dependencies: build dependencies receive host-tool profiles even with
 packages add only symbol ownership, with no duplicate metadata, factories, runtime,
 generated workspace or dependency resolver.
 
-The host implementation Rust target is `neocogi_com_host`. Native provider names remain `nc_ui`, `nc_ui_nodes`, `nc_shader_compiler`, `nc_platform`,
+The host implementation Rust target is `neocogi_com_host`. Native provider names remain `nc_ui`, `nc_ui_nodes`, `nc_platform`,
 `nc_gfx`, `nc_skin` and optional `nc_ui_extension`. The executable is in the usual
 `target/<profile>` directory when no explicit target is selected. Dependency DLLs
 remain in Cargo's artifact directories as compiler inputs, with deployment copies
@@ -350,11 +357,11 @@ builds and application tests.
 The build itself copies its selected files. `python3 scripts/test_package_native.py
 --production /tmp/neocogi-packaging-tests` checks fresh composition membership and
 barrier-controlled concurrent capture/publication with actual applications and
-production macros. Use a new test output directory for each run.
+production compiler hooks and resource build scripts. Use a new test output directory for each run.
 `scripts/test-native-layout.py --cache
 --run` checks actual Linux binaries, cached backend switches, deleted outputs and
 a renamed full application directory. Removing its published `libnc_platform.so`,
-UI/compiler DLLs or font must fail without a build-tree fallback.
+UI/Platform DLLs or font must fail without a build-tree fallback.
 The plugin regression also relocates its
 test host and calls a separately built DLL without loader environment overrides.
 Cargo nests unit-test executables in compiler directories. The acceptance scripts
@@ -365,8 +372,7 @@ SDK cross-compiler and ABI qualification belong to the upstream COM workspace.
 The [current native validation guide](../../crates/ui/runtime/docs/TESTING.md)
 lists maintained entrypoints and platform limitations.
 
-The required CPU shader provider is staged and registered before the renderer.
-Native dynamic hosts reference its cdylib as a Cargo artifact; native monoliths
-and WebGL assemblies register its statically linked descriptor before activating
-the selected renderer. The renderer uses the SDK runtime client API without
-linking a host implementation or a fallback compiler.
+The selected platform provider constructs its own fixed-format shader compiler
+before creating GPU resources. Native dynamic hosts stage one platform DLL;
+monoliths and WebGL assemblies register the platform's linked descriptor. Compiler
+interfaces live in the renderer namespace and have no separate plugin identity.

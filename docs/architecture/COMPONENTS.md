@@ -3,11 +3,11 @@
 NeoCogi UI owns frontend protocols and composition.
 [NeoCogi Platform](https://github.com/NeoCogi/neocogi-platform) owns the platform,
 renderer, shader and native deployment packages consumed by this workspace.
-Public responsibilities retain their independent deployment contracts:
+Public namespaces and their supplying implementations are:
 
 | Responsibility | Contract | Deployable implementation |
 | --- | --- | --- |
-| Shader compilation | `neocogi.shader` | CPU-only `neocogi-shader-compiler` |
+| Shader compilation | `neocogi.renderer` | Renderer-owned compiler in `neocogi-platform` |
 | Renderer | `neocogi.renderer` | Selected Glow, Vulkan, WGPU, or WebGL backend |
 | Platform | `neocogi.platform` | Currently co-owned by the selected backend artifact |
 | GFX resources | `neocogi.gfx` | `neocogi-gfx` |
@@ -164,18 +164,14 @@ Skin plugin when their generated bundle is sufficient.
 
 ## Portable shader compilation
 
-`neocogi-shader-core` owns generated contracts, plain reflection and bounded
-artifact readers. Its only contract dependency is render-core's graphics stage;
-render-core does not import shader-core. `neocogi-shader-compiler` privately owns
-Naga admission, validation and guarded emission. Every renderer plugin requires
-`neocogi.shader.compiler` and acquires its root before native construction.
-
-Shader creation imports owned COM outputs into the existing immutable artifact
-snapshot. Vulkan consumes guarded SPIR-V, Glow/WebGL ES300 and native names,
-and WGPU returned validated WGSL. Native realization, target adaptation and
-completion retention remain renderer responsibilities. Neither GPU resource
-management nor Glow/Vulkan normally links Naga or the compiler implementation;
-WGPU's checked native translator legitimately has its own Naga dependency.
+`neocogi_platform_contracts::render::abi` owns compiler interfaces in the renderer
+namespace. `render::shader` supplies immutable snapshots and bounded readers.
+`neocogi_platform::render::compiler` privately owns Naga admission, validation and
+emission. A device constructs and retains its own compiler for its fixed backend
+format: SPIR-V for Vulkan, GLSL ES300 for Glow/WebGL and WGSL for WGPU.
+Requests carry stage and output budget; results export exactly one typed code
+representation. Dynamic applications load only the platform provider for rendering
+and shader compilation. Rebuild all generated consumers and providers together.
 
 Compiler reflection calls occur only during creation. No compiler object is
 retained in pipeline snapshots or called during drawing/completion. See the

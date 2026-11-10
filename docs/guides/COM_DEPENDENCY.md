@@ -22,16 +22,23 @@ complete cache can select `CARGO_NET_OFFLINE=true`.
 
 ## Platform dependencies
 
-The Platform packages use exact `=0.1.0-alpha.2` requirements from crates.io.
-Math uses `rs-math3d = "=0.20.1"`.
-Update renderer core, GPU, support, shader core/compiler, native layout, and both
-static/dynamic platform assemblies together. The provider packages are
-`neocogi-platform-plugin` and `neocogi-platform-plugin-dylib`, with library name
-`nc_platform` and catalog identities `neocogi.platform.<backend>`.
-`neocogi-platform-build` supplies shared IDL to build scripts; target libraries
-no longer publish `SCHEMA_ROOT`. The UI helper combines those packaged inputs
-with UI-owned schemas, and each consumer generates in its own `OUT_DIR`.
-Native staging policy comes from the build-only `neocogi-native-layout-core`.
+The three Platform packages use exact `=0.2.0-alpha.2` requirements from crates.io.
+Math uses `rs-math3d = "=0.21.0"`. Update all three packages together:
+
+- `neocogi-platform-contracts` owns renderer, shader, audio and platform contracts,
+  shared validation, upload producers and typed GPU buffers. Build dependencies enable
+  `build-support` for consumer-owned IDL generation and native staging.
+- `neocogi-platform` implements renderers and their fixed-format shader compilers.
+  Static hosts enable `platform` and exactly one hosting backend.
+- `neocogi-platform-dylib` exports the final `nc_platform` provider with catalog
+  identity `neocogi.platform.<backend>`. The compiler is owned by that provider.
+
+The UI helper combines the contracts package's embedded schemas with UI-owned
+sources. Each consumer generates in its own `OUT_DIR`. Resource build scripts
+and the native artifact compiler hook use
+`neocogi_platform_contracts::build::layout` and track both source and deployed
+output paths for cached rebuilds. The hook preserves normal Cargo artifact edges
+and their application compilation profiles; it owns no filesystem staging policy.
 
 Rendering explicitly binds each compositor to a framebuffer or image surface.
 Resource groups select permissions at creation; UI permits color/resource writes

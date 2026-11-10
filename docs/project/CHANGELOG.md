@@ -1,5 +1,15 @@
 # Changelog
 
+## Dependency migration: Platform 0.2 alpha.2 and rs-math3d 0.21
+
+- Consume the three published Platform 0.2.0-alpha.2 packages and rs-math3d 0.21.0.
+- Use canonical renderer-owned shader compilation, typed keyboard identities/actions,
+  surface descriptors, binding sizes and blend equations. Remove the compiler DLL.
+- Stage native artifacts and resources through the contracts build-support API.
+- Use shared checked vector normalization, cross products, bounds and column packing.
+- Author mesh vertices, indices and streamed camera uniforms through typed GPU buffers.
+
+
 ## 0.1.0-alpha.2
 
 - Advance all workspace packages, exact internal requirements and provider

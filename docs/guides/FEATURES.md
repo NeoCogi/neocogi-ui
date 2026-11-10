@@ -27,8 +27,7 @@ retained UI imports resources and submits composed frames. Applications opt into
 | `neocogi-skin` | `theme-json` | Strict external JSON and appearance compilation; resource baking uses an explicit GFX loader. |
 | `neocogi-gfx-impl` | `save-to-rust` | Build-tool-only atomic source export from validated portable tables. |
 | `neocogi-skin-impl` | `builder` | Offline JSON-theme generation through the GFX implementation; never selected by the Skin plugin. |
-| `neocogi-shader-compiler-dylib` | none | Final CPU compiler DLL; monolith/WebGL links `neocogi-shader-compiler` directly. |
-| `neocogi-platform-plugin` | `glow` / `vulkan` / `wgpu` / `webgl` | Build exactly one renderer plugin identity; WebGL is the browser choice. |
+| `neocogi-platform` | `platform` plus `glow` / `vulkan` / `wgpu` / `webgl` | Build exactly one renderer plugin identity; WebGL is the browser choice. |
 | `neocogi-demo-host` | `png-assets` | Expose the host PNG-upload client for applications that select the GFX plugin. |
 | `neocogi-demo-host` | `skin` | Link/register the live appearance compiler for browser or monolithic startup; does not enable JSON parsing. |
 | `neocogi-demo-host` | `monolith-skin` | Add Skin to a native monolith, including its external JSON theme loader. |

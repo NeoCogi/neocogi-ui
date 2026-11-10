@@ -1,7 +1,7 @@
 # WebGL canvas demo
 
 The browser demo compiles `neocogi-demo-full` directly for Rust's
-`wasm32-unknown-unknown` target. `neocogi-platform-plugin` owns DOM input, canvas sizing and WebGL2, while the concrete demo
+`wasm32-unknown-unknown` target. `neocogi-platform` owns DOM input, canvas sizing and WebGL2, while the concrete demo
 host owns `requestAnimationFrame`. UI, platform and PNG descriptors register in one static neocogi-com
 runtime in the same wasm module. SDL remains a native-only dependency.
 The demo's `webgl` feature explicitly selects `embed-assets`; fonts, themes, photo
@@ -90,7 +90,9 @@ and accessibility. Browser callbacks are unregistered and the textarea removed w
 
 ## Browser regression
 
-After the web build installs the matching bindings tool, run `./scripts/test-browser-input.sh input`
+The input fixture awaits Platform's asynchronous DOM/GPU checks and the exported
+JavaScript promise before reporting success. After the web build installs the
+matching bindings tool, run `./scripts/test-browser-input.sh input`
 and `./scripts/test-browser-input.sh full`. The full suite renders every compiled theme, exercises
 the photograph and typed application actions, and checks both successful and failed animation-loop
 teardown, including final application-state and canvas/textarea release.
