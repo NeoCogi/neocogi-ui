@@ -1,0 +1,22 @@
+extern neocogi.ui.core;
+extern neocogi.ui.nodes;
+extern neocogi.gfx;
+extern neocogi.skin;
+use neocogi.ui.core::UiPluginFactory;
+use neocogi.ui.nodes::NodesPluginFactory;
+use neocogi.gfx::GfxPluginFactory;
+use neocogi.skin::SkinPluginFactory;
+
+#[version(1)]
+/// One UI library root with explicitly typed, independently owned service factories.
+/// Disabled implementation features return NC_E_NOT_FOUND from their getter.
+interface UiLibraryFactory {
+    /// Creates a retained-runtime factory when the ui feature is enabled.
+    fn ui(&self) -> Result<ComPtr<UiPluginFactory>>;
+    /// Creates a built-in-node factory when the ui feature is enabled.
+    fn nodes(&self) -> Result<ComPtr<NodesPluginFactory>>;
+    /// Creates a graphics factory when the gfx feature is enabled.
+    fn gfx(&self) -> Result<ComPtr<GfxPluginFactory>>;
+    /// Creates an appearance factory when the skin feature is enabled.
+    fn skin(&self) -> Result<ComPtr<SkinPluginFactory>>;
+}

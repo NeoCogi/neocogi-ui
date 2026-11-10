@@ -3,7 +3,7 @@
 extern crate self as neocogi_ui_samples;
 extern crate alloc;
 use neocogi_com::{ComBox, ComInterface, ComRef, NcStatus, ThreadLocal};
-use neocogi_ui::*;
+use neocogi_ui_contracts::*;
 
 /// One built sample and the real buttons created with the caller's queue.
 pub struct Sample {
@@ -16,7 +16,7 @@ pub struct Sample {
 const FLEX: LayoutTrack = LayoutTrack::Flex { weight: 1.0 };
 
 /// Preserves the full demo's two opposing vertical stacks and their original dimensions.
-pub fn directions(ui: &Ui, queue: Option<ComRef<'_, neocogi_ui::events::IEventReceiverAbi>>) -> Result<Sample, NcStatus> {
+pub fn directions(ui: &Ui, queue: Option<ComRef<'_, neocogi_ui_contracts::events::IEventReceiverAbi>>) -> Result<Sample, NcStatus> {
     let mut content = ui.widgets().linear(FlowDirection::LeftToRight, CrossSize::Content)?;
     let mut buttons = Vec::new();
     for (name, direction) in [("Top to bottom", FlowDirection::TopToBottom), ("Bottom to top", FlowDirection::BottomToTop)] {
@@ -35,7 +35,7 @@ pub fn directions(ui: &Ui, queue: Option<ComRef<'_, neocogi_ui::events::IEventRe
 }
 
 /// Preserves the full demo's weighted row and grid; preview and demo use identical retained nodes.
-pub fn weights(ui: &Ui, queue: Option<ComRef<'_, neocogi_ui::events::IEventReceiverAbi>>) -> Result<Sample, NcStatus> {
+pub fn weights(ui: &Ui, queue: Option<ComRef<'_, neocogi_ui_contracts::events::IEventReceiverAbi>>) -> Result<Sample, NcStatus> {
     let mut content = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     let mut buttons = Vec::new();
     append(
@@ -58,7 +58,7 @@ pub fn weights(ui: &Ui, queue: Option<ComRef<'_, neocogi_ui::events::IEventRecei
     let mut grid = ui.widgets().grid(
         &[FLEX; 3],
         &[FLEX, LayoutTrack::Flex { weight: 2.0 }],
-        neocogi_ui::GridLimits { max_columns: 3, max_rows: 2 },
+        neocogi_ui_contracts::GridLimits { max_columns: 3, max_rows: 2 },
     )?;
     for index in 0..6 {
         let control = button(ui, &format!("Cell {}", index + 1), queue)?;
@@ -73,7 +73,7 @@ pub fn weights(ui: &Ui, queue: Option<ComRef<'_, neocogi_ui::events::IEventRecei
 }
 
 /// Creates the same framed centered control as the full demo without prescribing its application action.
-fn button(ui: &Ui, text: &str, queue: Option<ComRef<'_, neocogi_ui::events::IEventReceiverAbi>>) -> Result<OwnedWidget<ButtonAbi>, NcStatus> {
+fn button(ui: &Ui, text: &str, queue: Option<ComRef<'_, neocogi_ui_contracts::events::IEventReceiverAbi>>) -> Result<OwnedWidget<ButtonAbi>, NcStatus> {
     let mut button = ui.widgets().button_with_queue(text, queue)?;
     button.replace_flags(WidgetOptions::FRAME | WidgetOptions::ALIGN_CENTER)?;
     Ok(button)

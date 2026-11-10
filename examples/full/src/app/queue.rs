@@ -1,13 +1,13 @@
 //! The demo's one queue object posts snapshots without application callbacks.
 use super::{Action, NumericTarget};
 use neocogi_com::WeakComPtr;
-use neocogi_ui::*;
+use neocogi_ui_contracts::*;
 
 /// Ordinary application-owned construction and command identities.
 /// Only &mut Inputs registers controls; no second COM borrow gate protects this data.
 pub(crate) struct Inputs {
     /// Common receiver projection shared directly with every observed factory.
-    pub(super) queue: neocogi_com::ComPtr<neocogi_ui::events::IEventReceiverAbi>,
+    pub(super) queue: neocogi_com::ComPtr<neocogi_ui_contracts::events::IEventReceiverAbi>,
     /// Weak identities keep action lookup independent of labels and address reuse.
     pub(super) buttons: Vec<(neocogi_com::WeakComBox<ButtonAbi>, Action)>,
     /// Menu entries retain only their explicit application command.
@@ -17,7 +17,7 @@ pub(crate) struct Inputs {
 }
 impl Inputs {
     /// Constructs the sole queue before creating any eventful widgets.
-    pub(super) fn new(queue: neocogi_com::ComPtr<neocogi_ui::events::IEventReceiverAbi>) -> Self {
+    pub(super) fn new(queue: neocogi_com::ComPtr<neocogi_ui_contracts::events::IEventReceiverAbi>) -> Self {
         Self {
             queue,
             buttons: Vec::new(),

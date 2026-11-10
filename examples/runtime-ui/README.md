@@ -39,5 +39,5 @@ and preserves the current view. Browser builds start with the built-in document;
 is an application transport concern. Resource image keys require a host-supplied
 `Resources` directory; this minimal example supplies none.
 
-See [the runtime document guide](../../crates/ui/document/README.md) for schema,
+See [the runtime document guide](../../crates/ui/README.md) for schema,
 resource ownership, generated typed forms, generation filtering, and save semantics.

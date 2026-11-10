@@ -1,7 +1,7 @@
 //! Separately linked CPU benchmark of real COM trees; never part of an application binary.
 //! The recorder copies the ordinary bulk stream but deliberately performs no GPU work.
 
-use neocogi_ui::*;
+use neocogi_ui_contracts::*;
 use neocogi_com::{ComPtr, ComRef, NcStatus, com_object};
 use std::{
     cell::RefCell,
@@ -37,7 +37,7 @@ impl Buffers {
     /// Reads real generic capabilities; no obsolete UI vertex transport is measured.
     fn copy(&mut self, info: RenderInfo, stream: ComRef<'_, IRenderStreamAbi>) -> Result<(), NcStatus> {
         self.blocks.clear();
-        self.blocks = neocogi_gfx_support::testing::blocks(info, stream)?;
+        self.blocks = neocogi_ui::gfx::testing::blocks(info, stream)?;
         black_box(&self.blocks);
         Ok(())
     }
@@ -123,7 +123,7 @@ impl Workload {
         let mut buttons = Vec::new();
         let root = if shape == "wide" {
             let tracks = [LayoutTrack::Fixed { extent: 24 }; 32];
-            let mut grid = factory.grid(&tracks, &tracks, neocogi_ui::GridLimits { max_columns: 32, max_rows: 32 })?;
+            let mut grid = factory.grid(&tracks, &tracks, neocogi_ui_contracts::GridLimits { max_columns: 32, max_rows: 32 })?;
             for index in 0..1024 {
                 let mut button = factory.button_unobserved("MMMM")?;
                 button.replace_flags(WidgetOptions::NONE)?;
@@ -264,22 +264,22 @@ fn run(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
     // SAFETY: These linked descriptors and their code/data remain in this
     // executable for the entire registry lifetime, including benchmark teardown.
     unsafe {
-        runtime.register_plugin_descriptor(nc_gfx::plugin_descriptor())?;
-        runtime.register_plugin_descriptor(nc_ui_nodes::plugin_descriptor())?;
+        runtime.register_plugin_descriptor(neocogi_ui::plugin_descriptor())?;
+        runtime.register_plugin_descriptor(neocogi_ui::plugin_descriptor())?;
     }
     let loaded = start.elapsed();
     let start = Instant::now();
     let assets = neocogi_demo_assets::load_bundle(runtime)?;
     let decoded = start.elapsed();
     let start = Instant::now();
-    let runtime_factory = runtime.acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
-    let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+    let runtime_factory = neocogi_ui_contracts::services::ui(runtime)?;
+    let gfx = neocogi_ui_contracts::services::gfx(runtime)?;
     let mut ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
     ui_runtime.set_render_host(
-        neocogi_gfx_support::testing::host().as_com_ref(),
-        neocogi_gfx_support::testing::framebuffer().as_com_ref(),
+        neocogi_ui::gfx::testing::host().as_com_ref(),
+        neocogi_ui::gfx::testing::framebuffer().as_com_ref(),
     )?;
-    let node_provider = runtime.acquire_plugin_root::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
+    let node_provider = neocogi_ui_contracts::services::nodes(runtime)?;
     let node_factory = node_provider.bind(ui_runtime.as_com_ref())?;
     let ui = Ui::from_interfaces(ui_runtime, node_factory)?;
     let created = start.elapsed();

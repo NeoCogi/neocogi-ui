@@ -7,16 +7,14 @@ use neocogi_platform::gpu::source::{Bytes, PipelineDesc};
 #[test]
 #[ignore = "requires SDL GL; run with SDL_VIDEODRIVER=offscreen"]
 fn gfx_generic_blocks_preserve_window_order_and_immutable_surface_output() {
-    use neocogi_gfx_support::abi::{GfxPluginFactoryAbi, SolidVertex};
+    use neocogi_ui_contracts::gfx::abi::SolidVertex;
     let _session = native_session();
     let runtime = crate::host_runtime();
     // SAFETY: this statically linked descriptor and its implementation live for this process.
     unsafe {
-        runtime.register_plugin_descriptor(nc_gfx::plugin_descriptor()).unwrap();
+        runtime.register_plugin_descriptor(neocogi_ui::plugin_descriptor()).unwrap();
     }
-    let gfx = runtime
-        .acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
-        .unwrap();
+    let gfx = neocogi_ui_contracts::services::gfx(runtime).unwrap();
     let assets = neocogi_demo_assets::load_bundle(runtime).unwrap();
     let native = testing::window("GFX generic executor", SIZE).unwrap();
     let weak = native.probe.clone();
@@ -57,7 +55,7 @@ fn gfx_generic_blocks_preserve_window_order_and_immutable_surface_output() {
     let broker = host.recording_broker().unwrap();
     let root = Rect { x: 16, y: 16, width: 32, height: 32 };
     let bounds = Rect { x: 0, y: 0, width: 64, height: 64 };
-    let fill = |compositor: &mut neocogi_com::ComPtr<neocogi_gfx_support::abi::GfxCompositorAbi>, rect: Rect, rgba| {
+    let fill = |compositor: &mut neocogi_com::ComPtr<neocogi_ui_contracts::gfx::abi::GfxCompositorAbi>, rect: Rect, rgba| {
         let v = rectangle(rect, rgba)
             .into_iter()
             .map(|v| SolidVertex { x: v.x, y: v.y, rgba: v.rgba })
@@ -185,7 +183,7 @@ fn surfaces_recheck_ui_domains_and_exclude_resource_reentry_after_foreign_callba
             .create_client(
                 RenderClientLimits::default(),
                 surface.as_com_ref(),
-                neocogi_gfx_support::compositor_permissions(),
+                neocogi_ui_contracts::gfx::compositor_permissions(),
             )
             .unwrap();
         let second = host
@@ -194,7 +192,7 @@ fn surfaces_recheck_ui_domains_and_exclude_resource_reentry_after_foreign_callba
             .create_client(
                 RenderClientLimits::default(),
                 surface.as_com_ref(),
-                neocogi_gfx_support::compositor_permissions(),
+                neocogi_ui_contracts::gfx::compositor_permissions(),
             )
             .unwrap();
         let first_resources = first.resources().unwrap();
@@ -230,21 +228,19 @@ fn surfaces_recheck_ui_domains_and_exclude_resource_reentry_after_foreign_callba
 
 /// Submit UI/client/UI through the actual GFX producer, with no renderer UI command vocabulary.
 fn submit_interleaved(host: ComRef<'_, IRenderHostAbi>, renderer: ComRef<'_, IRendererAbi>, block: ComBox<IRenderViewBlockAbi>, vertices: &[RenderVertex]) {
-    use neocogi_gfx_support::abi::{GfxPluginFactoryAbi, SolidVertex};
+    use neocogi_ui_contracts::gfx::abi::SolidVertex;
     let runtime = crate::host_runtime();
     // SAFETY: the linked descriptor and all implementation data live for the process.
     unsafe {
-        runtime.register_plugin_descriptor(nc_gfx::plugin_descriptor()).unwrap();
+        runtime.register_plugin_descriptor(neocogi_ui::plugin_descriptor()).unwrap();
     }
-    let gfx = runtime
-        .acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
-        .unwrap();
+    let gfx = neocogi_ui_contracts::services::gfx(runtime).unwrap();
     let assets = neocogi_demo_assets::load_bundle(runtime).unwrap();
     let mut compositor = gfx.create_compositor(assets.as_com_ref()).unwrap();
     compositor.bind_render_host(host, framebuffer(host).as_com_ref()).unwrap();
     compositor.begin(SIZE, 0xff000000).unwrap();
     let bounds = Rect { x: 0, y: 0, width: 64, height: 64 };
-    let draw = |compositor: &mut ComPtr<neocogi_gfx_support::abi::GfxCompositorAbi>, vertices: &[RenderVertex]| {
+    let draw = |compositor: &mut ComPtr<neocogi_ui_contracts::gfx::abi::GfxCompositorAbi>, vertices: &[RenderVertex]| {
         let vertices = vertices.iter().map(|v| SolidVertex { x: v.x, y: v.y, rgba: v.rgba }).collect::<Vec<_>>();
         compositor.solid_triangles(bounds, NcCopyFromBufferOffset::new(0, &vertices)).unwrap();
     };
@@ -304,7 +300,7 @@ fn permitted_image_import_retains_native_pixels_without_a_com_image_cycle() {
         .create_client(
             RenderClientLimits::default(),
             framebuffer(graphics.as_com_ref()).as_com_ref(),
-            neocogi_gfx_support::compositor_permissions(),
+            neocogi_ui_contracts::gfx::compositor_permissions(),
         )
         .unwrap();
     let resources = ui.resources().unwrap();

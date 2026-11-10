@@ -1,0 +1,61 @@
+use neocogi.ui.core::{EventBinding, IEvent};
+extern neocogi.ui.core;
+extern neocogi.ui.document;
+use neocogi.ui.core::{IActivatedEvent, IWidget, ILeafLayout, IWidgetHost, IContainer};
+use neocogi.ui.document::IDesignWidgetCatalog;
+
+#[version(1)]
+/// Immutable counter fact available through the common event receiver.
+interface ICounterChangedEvent: IEvent {
+    /// Committed count captured independently of later counter edits or removal.
+    fn value(&self) -> Result<u32>;
+}
+
+#[version(1)]
+/// Observable phase attempts on one example widget, without exposing its native state.
+struct WidgetCalls {
+    /// Preferred-size queries that reached the widget's algorithm.
+    measures: u64,
+    /// Placement queries that reached the container's algorithm.
+    placements: u64,
+    /// Routed or eventless update attempts.
+    updates: u64,
+    /// Paint attempts, including a failed outward painter call.
+    paints: u64,
+
+}
+
+#[version(1)]
+/// Example diagnostics are available only while the widget owner remains live.
+interface IWidgetProbe {
+    /// Returns counts from the actual allocation, with no callback or copied semantic model.
+    fn calls(&self) -> Result<WidgetCalls>;
+}
+
+#[version(1)]
+/// A custom control with one enum-valued event port and a concrete editing interface.
+interface Counter: IWidget + ILeafLayout + IWidgetProbe {
+    /// Reads the actual current activation count.
+    fn count(&self) -> Result<u32>;
+    /// Silently replaces the displayed count and invalidates its preferred text size when changed.
+    fn set_count(&mut self, value: u32) -> Result<()>;
+
+}
+
+#[version(1)]
+/// A one-child container demonstrates a domain-specific layout policy over the shared child editor.
+interface IInset: IContainer {
+    /// Installs or replaces its one child; removed-child teardown uses the ordinary committed outcome.
+    fn set_child(&mut self, child: ComBox<IWidget>) -> Result<()>;
+    /// Sets a nonnegative inset, bounded to avoid arithmetic overflow in doubled extents.
+    fn set_padding(&mut self, padding: i32) -> Result<()>;
+}
+
+#[version(1)]
+/// Stateless plugin interface receiving runtime authority explicitly for each custom object.
+interface ExtensionProvider: IDesignWidgetCatalog {
+    /// Creates a counter whose complete state belongs to the returned COM identity.
+    fn counter(&self, host: &IWidgetHost, events: &EventBinding) -> Result<ComBox<Counter>>;
+    /// Creates an empty custom container; child attachment follows the same rules as built-ins.
+    fn inset(&self, host: &IWidgetHost) -> Result<ComBox<IInset>>;
+}

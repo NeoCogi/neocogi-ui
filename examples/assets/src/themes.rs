@@ -1,5 +1,5 @@
 //! Complete theme choices from the skin plugin, or explicitly embedded build-time tables.
-use neocogi_ui::IAssetBundleAbi;
+use neocogi_ui_contracts::IAssetBundleAbi;
 use neocogi_com::{ComPtr, ComRef, NcStatus};
 
 /// Windows 3.11 compiled data also remains usable as an independent source bundle.
@@ -63,7 +63,7 @@ impl Theme {
         }
         #[cfg(not(feature = "embed-assets"))]
         {
-            use neocogi_ui::{GfxPluginFactoryAbi, NativePath, SkinPluginFactoryAbi};
+            use neocogi_ui_contracts::NativePath;
             let path = match self {
                 Self::Windows311 => super::recipe_data::THEMES[0].1,
                 Self::Windows95 => super::recipe_data::THEMES[1].1,
@@ -71,17 +71,17 @@ impl Theme {
                 Self::Default => unreachable!(),
             };
             let path = super::files::asset_path(path).map_err(|_| neocogi_com::NC_E_LOAD_FAILED)?;
-            let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+            let gfx = neocogi_ui_contracts::services::gfx(runtime)?;
             let assets = gfx.asset_loader()?;
             let publisher = gfx.asset_publisher()?;
-            let factory = runtime.acquire_plugin_root::<SkinPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.skin.runtime"))?;
+            let factory = neocogi_ui_contracts::services::skin(runtime)?;
             let loader = factory.theme_loader(assets.as_com_ref(), publisher.as_com_ref())?;
             loader.load_theme(NativePath::new(&path).as_interface(), base).inspect_err(|status| {
                 // The theme ABI returns a status only. Preserve the loader's owned diagnostic
                 // before this short-lived service is released, so native demo failures retain
                 // their JSON/resource/GFX cause instead of reporting only NC_E_INVALID_ARG.
                 let detail = loader
-                    .query::<neocogi_ui::ISkinDiagnosticsAbi>()
+                    .query::<neocogi_ui_contracts::ISkinDiagnosticsAbi>()
                     .and_then(|diagnostics| diagnostics.diagnostic())
                     .and_then(|text| neocogi_com::INcStringComPtrExt::to_string(&text))
                     .unwrap_or_default();

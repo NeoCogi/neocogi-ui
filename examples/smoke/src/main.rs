@@ -1,6 +1,6 @@
 //! Small native host using the static facade/contracts and runtime binding.
 //! Implementations may be loaded from an assembly or linked into one monolith.
-use neocogi_ui::*;
+use neocogi_ui_contracts::*;
 use neocogi_com::{ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus};
 use std::{error::Error, time::Duration};
 #[cfg(feature = "extension")]
@@ -15,7 +15,7 @@ struct ClickModel {
     button: ButtonWidget,
 }
 impl events::MessageProcessor for ClickModel {
-    type Message = neocogi_ui::events::EventMessage;
+    type Message = neocogi_ui_contracts::events::EventMessage;
     /// Uses exact source identity and commits presentation before later input.
     fn handle(&mut self, message: Self::Message) -> Result<(), NcStatus> {
         let Some(origin) = message.origin.widget::<ButtonAbi>()? else {
@@ -83,20 +83,20 @@ fn run(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
     let assets = neocogi_demo_assets::load_bundle(runtime)?;
     let native = platform.create_window(NcCopyFromBufferOffset::new(0, b"NeoCogi UI"), Size { width: 640, height: 400 })?;
     let renderer: ComPtr<IRendererAbi> = native.query()?;
-    let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
-    let runtime_factory = runtime.acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
+    let gfx = neocogi_ui_contracts::services::gfx(runtime)?;
+    let runtime_factory = neocogi_ui_contracts::services::ui(runtime)?;
     let mut ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
     let render_host = native.graphics_host()?;
     let surface = render_host
         .query::<IRenderSurfaceFactoryAbi>()?
         .create_surface(RenderSurfaceDesc::Framebuffer)?;
     ui_runtime.set_render_host(render_host.as_com_ref(), surface.as_com_ref())?;
-    let node_provider = runtime.acquire_plugin_root::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
+    let node_provider = neocogi_ui_contracts::services::nodes(runtime)?;
     let node_factory = node_provider.bind(ui_runtime.as_com_ref())?;
     let mut ui = Ui::from_interfaces(ui_runtime, node_factory)?;
     if options.rebuild_assets {
         // The optional builder owns packing/font/PNG implementation; the host sees only typed roots.
-        let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+        let gfx = neocogi_ui_contracts::services::gfx(runtime)?;
         let loader = gfx
             .asset_loader()
             .map_err(|status| format!("--rebuild-assets requires a files package: {status}"))?;
@@ -118,10 +118,10 @@ fn run(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
         } else {
             std::env::current_exe()?.parent().ok_or("executable has no parent")?.join(path)
         };
-        let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+        let gfx = neocogi_ui_contracts::services::gfx(runtime)?;
         let assets_loader = gfx.asset_loader().map_err(|status| format!("--theme requires a GFX files package: {status}"))?;
         let publisher = gfx.asset_publisher().map_err(|status| format!("--theme requires GFX publication: {status}"))?;
-        let skin = runtime.acquire_plugin_root::<SkinPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.skin.runtime"))?;
+        let skin = neocogi_ui_contracts::services::skin(runtime)?;
         let loader = skin
             .theme_loader(assets_loader.as_com_ref(), publisher.as_com_ref())
             .map_err(|status| format!("--theme requires a Skin files package: {status}"))?;
@@ -139,7 +139,7 @@ fn run(runtime: neocogi_com::Runtime) -> Result<(), Box<dyn Error>> {
     if options.smoke {
         assert_eq!(ui.widgets().host()?.as_raw().object, host.as_raw().object);
     }
-    let (queue, session) = neocogi_ui::events::channel();
+    let (queue, session) = neocogi_ui_contracts::events::channel();
     let button = ui.widgets().button_with_queue("Hello across COM", Some(queue.as_com_ref()))?;
     let button_handle = button.handle();
     let window = ui
@@ -223,9 +223,9 @@ fn key(ui: &Ui, key: KeyCode) -> Result<(), NcStatus> {
             UiInput::Key(KeyStroke {
                 key,
                 action: if pressed {
-                    neocogi_ui::KeyAction::Pressed { repeat: false }
+                    neocogi_ui_contracts::KeyAction::Pressed { repeat: false }
                 } else {
-                    neocogi_ui::KeyAction::Released
+                    neocogi_ui_contracts::KeyAction::Released
                 },
                 modifiers: 0,
             }),
@@ -251,7 +251,7 @@ fn smoke_containers(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let mut grid = ui.widgets().grid(
         &[LayoutTrack::Flex { weight: 1.0 }],
         &[],
-        neocogi_ui::GridLimits { max_columns: 1, max_rows: 2 },
+        neocogi_ui_contracts::GridLimits { max_columns: 1, max_rows: 2 },
     )?;
     grid.insert(0, section, GridExtent { columns: 1, rows: 1 })
         .map_err(|(status, _candidate)| status)?;
@@ -308,7 +308,7 @@ fn smoke_key(ui: &Ui, key: KeyCode) -> Result<(), NcStatus> {
     ui.input(
         UiInput::Key(KeyStroke {
             key,
-            action: neocogi_ui::KeyAction::Pressed { repeat: false },
+            action: neocogi_ui_contracts::KeyAction::Pressed { repeat: false },
             modifiers: 0,
         }),
         "",
@@ -322,7 +322,7 @@ struct ComponentModel {
     expected_path: std::path::PathBuf,
 }
 impl events::MessageProcessor for ComponentModel {
-    type Message = neocogi_ui::events::EventMessage;
+    type Message = neocogi_ui_contracts::events::EventMessage;
     /// Checks the captured fact and mutates ordinary host state after traversal.
     fn handle(&mut self, event: Self::Message) -> Result<(), NcStatus> {
         if let Some(origin) = event.origin.service::<IMenuItemAbi>()? {
@@ -339,7 +339,7 @@ impl events::MessageProcessor for ComponentModel {
             let Some(event) = event.query::<IFileAcceptedEventAbi>()? else {
                 return Ok(());
             };
-            assert_eq!(neocogi_ui::path::decode(event.path()?.as_com_ref())?, self.expected_path);
+            assert_eq!(neocogi_ui_contracts::path::decode(event.path()?.as_com_ref())?, self.expected_path);
         } else {
             return Ok(());
         }
@@ -364,10 +364,11 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     let combo = combo_handle;
     let menus = ui.menus()?;
     let bar = menus.create("")?;
-    let (queue, events) = neocogi_ui::events::channel();
-    let item = bar
-        .submenu("File")?
-        .item_with_queue("Menu command", Some(queue.query::<neocogi_ui::events::IEventReceiverAbi>()?.as_com_ref()))?;
+    let (queue, events) = neocogi_ui_contracts::events::channel();
+    let item = bar.submenu("File")?.item_with_queue(
+        "Menu command",
+        Some(queue.query::<neocogi_ui_contracts::events::IEventReceiverAbi>()?.as_com_ref()),
+    )?;
     menus.attach_bar(window.as_com_ref(), &bar)?;
     let app = events::Dispatcher::into_local(events::Dispatcher::new(
         ComponentModel {
@@ -384,7 +385,10 @@ fn smoke_components(ui: &Ui, size: Size, renderer: ComRef<'_, IRendererAbi>) -> 
     }
     ui.update_with_events(size, owner.as_com_ref())?;
     assert_eq!(app.try_borrow()?.processor.count, 1);
-    let mut picker = ui.file_dialog_with_queue(window.as_com_ref(), Some(queue.query::<neocogi_ui::events::IEventReceiverAbi>()?.as_com_ref()))?;
+    let mut picker = ui.file_dialog_with_queue(
+        window.as_com_ref(),
+        Some(queue.query::<neocogi_ui_contracts::events::IEventReceiverAbi>()?.as_com_ref()),
+    )?;
     let mut request = FileDialogRequest::new(&directory.0);
     request.rect = Rect { x: 10, y: 10, width: 620, height: 370 };
     picker.open(&request)?;

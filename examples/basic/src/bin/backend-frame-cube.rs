@@ -31,7 +31,7 @@
 //!
 //! The application owns only camera/animation data. No backend frame, native handle, callback or
 //! atlas packing detail crosses the widget boundary. The same code runs on every platform backend.
-use neocogi_ui::*;
+use neocogi_ui_contracts::*;
 use neocogi_demo_host::{AppState, Host, HostError, report_exit};
 use neocogi_com::{ComRef, NcStatus};
 use rs_math3d::{EPS_F32, Vec2f, Vec3f, Quatf, lookat, perspective, project3};

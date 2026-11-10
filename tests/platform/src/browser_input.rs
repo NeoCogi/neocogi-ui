@@ -1,11 +1,7 @@
 use neocogi_com::NcCopyFromBufferOffset;
 use web_sys::{EventTarget, HtmlTextAreaElement};
 use neocogi_platform_contracts::render::{abi::*, platform::*};
-use neocogi_gfx_support::abi::GfxPluginFactoryAbi;
-use neocogi_ui::{
-    UI_E_UPDATE_REQUIRED,
-    abi::{core::UiPluginFactoryAbi, nodes::NodesPluginFactoryAbi},
-};
+use neocogi_ui_contracts::UI_E_UPDATE_REQUIRED;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::HtmlCanvasElement;
@@ -72,9 +68,7 @@ fn static_com_editing_and_webgl() {
     let runtime = crate::host_runtime();
     // SAFETY: All descriptions and referenced code/data live in this statically linked wasm.
     unsafe {
-        runtime.register_plugin_descriptor(nc_ui::plugin_descriptor()).unwrap();
-        runtime.register_plugin_descriptor(nc_ui_nodes::plugin_descriptor()).unwrap();
-        runtime.register_plugin_descriptor(nc_gfx::plugin_descriptor()).unwrap();
+        runtime.register_plugin_descriptor(neocogi_ui::plugin_descriptor()).unwrap();
         runtime.register_plugin_descriptor(neocogi_platform::platform::plugin_descriptor()).unwrap();
     }
     let platform = runtime
@@ -88,12 +82,8 @@ fn static_com_editing_and_webgl() {
     let canvas = document.query_selector("canvas").unwrap().unwrap().dyn_into::<HtmlCanvasElement>().unwrap();
     canvas.style().set_css_text("width:640px;height:400px");
     let renderer: ComPtr<IRendererAbi> = native.query().unwrap();
-    let factory = runtime
-        .acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))
-        .unwrap();
-    let gfx = runtime
-        .acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
-        .unwrap();
+    let factory = neocogi_ui_contracts::services::ui(runtime).unwrap();
+    let gfx = neocogi_ui_contracts::services::gfx(runtime).unwrap();
     let mut core = factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref()).unwrap();
     let host = native.graphics_host().unwrap();
     let surface = host
@@ -102,11 +92,9 @@ fn static_com_editing_and_webgl() {
         .create_surface(RenderSurfaceDesc::Framebuffer)
         .unwrap();
     core.set_render_host(host.as_com_ref(), surface.as_com_ref()).unwrap();
-    let nodes = runtime
-        .acquire_plugin_root::<NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))
-        .unwrap();
+    let nodes = neocogi_ui_contracts::services::nodes(runtime).unwrap();
     let widgets = nodes.bind(core.as_com_ref()).unwrap();
-    let ui = neocogi_ui::Ui::from_interfaces(core, widgets).unwrap();
+    let ui = neocogi_ui_contracts::Ui::from_interfaces(core, widgets).unwrap();
     let editor_owner = ui.widgets().textbox_unobserved("").unwrap();
     // The window takes exclusive ownership; later assertions use only a typed weak handle.
     let editor = editor_owner.handle();

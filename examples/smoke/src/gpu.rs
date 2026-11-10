@@ -1,9 +1,9 @@
 //! Independent host widget inserts real native 3D work among ordinary UI and texture draws.
-use neocogi_ui::*;
+use neocogi_ui_contracts::*;
 use neocogi_platform_contracts::render::{
     source::{Bytes, PipelineDesc},
 };
-use neocogi_ui::com::widget::WidgetState;
+use neocogi_ui_contracts::com::widget::WidgetState;
 use neocogi_com::{ComBox, ComPtr, ComRef, NcCopyFromBufferOffset, NcStatus, NC_E_INVALID_ARG, com_object};
 
 #[com_object(interfaces(IWidget, ILeafLayout), ownership = exclusive)]

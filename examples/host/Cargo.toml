@@ -9,42 +9,34 @@ repository.workspace = true
 
 [features]
 default = []
-# Cargo builds these DLLs; no Rust implementation is linked into a dynamic host.
 dynamic = ["dep:neocogi-demo-plugins"]
 dynamic-skin = ["dynamic", "neocogi-demo-plugins/skin"]
 dynamic-extension = ["dynamic", "neocogi-demo-plugins/extension"]
 monolith-extension = ["monolith", "dep:neocogi-example-ui-extension"]
-# Native selection belongs to the separately built renderer plugin.
 glow = ["neocogi-platform?/glow", "neocogi-demo-plugins?/glow"]
 vulkan = ["neocogi-platform?/vulkan", "neocogi-demo-plugins?/vulkan"]
 wgpu = ["neocogi-platform?/wgpu", "neocogi-demo-plugins?/wgpu"]
-webgl = ["dep:neocogi-ui-runtime", "dep:neocogi-ui-nodes", "dep:neocogi-platform", "dep:neocogi-gfx", "neocogi-platform/webgl"]
-# Expose PNG upload through the GFX plugin selected by the owning application.
+webgl = ["dep:neocogi-ui", "neocogi-ui/ui", "neocogi-ui/gfx", "dep:neocogi-platform", "neocogi-platform/webgl"]
 png-assets = []
-# Link/register live appearance compilation without the native JSON theme loader.
-skin = ["dep:neocogi-skin"]
-# Native monoliths retain only the implementations selected by their assembly.
-monolith = ["neocogi-com/runtime", "dep:neocogi-ui-runtime", "dep:neocogi-ui-nodes", "dep:neocogi-platform"]
-monolith-gfx = ["monolith", "dep:neocogi-gfx", "neocogi-gfx/builder"]
-monolith-skin = ["monolith", "skin", "neocogi-skin/theme-json"]
+skin = ["dep:neocogi-ui", "neocogi-ui/skin"]
+monolith = ["neocogi-com/runtime", "dep:neocogi-ui", "neocogi-ui/ui", "dep:neocogi-platform"]
+monolith-gfx = ["monolith", "neocogi-ui/builder"]
+monolith-skin = ["monolith", "skin", "neocogi-ui/theme-json"]
 
 [dependencies]
-neocogi-platform-contracts.workspace = true
-neocogi-demo-assets.workspace = true
-neocogi-ui.workspace = true
+neocogi-platform-contracts = { workspace = true }
+neocogi-demo-assets = { workspace = true }
 neocogi-com = { workspace = true, features = ["std", "macros"] }
-neocogi-ui-runtime = { path = "../../crates/ui/runtime", optional = true , version = "=0.1.0-alpha.2" }
-neocogi-ui-nodes = { workspace = true, optional = true }
 neocogi-platform = { workspace = true, optional = true, features = ["platform"] }
-neocogi-gfx = { workspace = true, optional = true, default-features = false }
-neocogi-skin = { workspace = true, optional = true, default-features = false }
-neocogi-example-ui-extension = { path = "../../examples/ui-extension", optional = true , version = "=0.1.0-alpha.2" }
+neocogi-example-ui-extension = { path = "../../examples/ui-extension", optional = true, version = "=0.2.0-alpha.2" }
+neocogi-ui-contracts = { workspace = true }
+neocogi-ui = { workspace = true, optional = true }
 
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-neocogi-demo-plugins = { path = "../plugins", optional = true , version = "=0.1.0-alpha.2" }
+[target."cfg(not(target_arch = \"wasm32\"))".dependencies]
+neocogi-demo-plugins = { path = "../plugins", optional = true, version = "=0.2.0-alpha.2" }
 neocogi-com = { workspace = true, features = ["runtime"] }
 
-[target.'cfg(target_arch = "wasm32")'.dependencies]
+[target."cfg(target_arch = \"wasm32\")".dependencies]
 neocogi-com = { workspace = true, features = ["runtime"] }
-wasm-bindgen.workspace = true
+wasm-bindgen = { workspace = true }
 web-sys = { workspace = true, features = ["Window", "Performance", "Location", "UrlSearchParams", "console"] }

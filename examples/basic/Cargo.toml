@@ -1,5 +1,4 @@
 [package]
-# Installed executable names are declared explicitly below.
 autobins = false
 name = "neocogi-demo-basic"
 version.workspace = true
@@ -12,23 +11,20 @@ repository.workspace = true
 [features]
 dynamic = ["neocogi-demo-host/dynamic"]
 default = ["glow", "dynamic"]
-# Link only the runtime, UI, renderer, and required GFX builder into one executable.
 monolith = ["neocogi-demo-host/monolith-gfx"]
 glow = ["neocogi-demo-host/glow"]
 webgl = ["neocogi-demo-host/webgl", "embed-assets"]
-# Native deployments read adjacent files unless this feature is explicitly requested.
 embed-assets = ["neocogi-demo-assets/embed-assets"]
 vulkan = ["neocogi-demo-host/vulkan"]
 wgpu = ["neocogi-demo-host/wgpu"]
 
 [dependencies]
-neocogi-com-host.workspace = true
-neocogi-ui.workspace = true
+neocogi-com-host = { workspace = true }
 neocogi-com = { workspace = true, default-features = false, features = ["std", "macros"] }
-neocogi-demo-assets.workspace = true
-neocogi-demo-host.workspace = true
-rs-math3d.workspace = true
-
+neocogi-demo-assets = { workspace = true }
+neocogi-demo-host = { workspace = true }
+rs-math3d = { workspace = true }
+neocogi-ui-contracts = { workspace = true }
 
 [[bin]]
 name = "neocogi-demo-cube"

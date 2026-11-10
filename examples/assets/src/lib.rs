@@ -70,7 +70,7 @@ pub use prebuilt::bundle_data;
 
 /// Loads compiled assets without using services; native file loading uses the supplied host.
 #[cfg(feature = "embed-assets")]
-pub fn load_bundle(_runtime: neocogi_com::Runtime) -> Result<neocogi_com::ComPtr<neocogi_ui::IAssetBundleAbi>, neocogi_com::NcStatus> {
+pub fn load_bundle(_runtime: neocogi_com::Runtime) -> Result<neocogi_com::ComPtr<neocogi_ui_contracts::IAssetBundleAbi>, neocogi_com::NcStatus> {
     prebuilt::load_bundle()
 }
 

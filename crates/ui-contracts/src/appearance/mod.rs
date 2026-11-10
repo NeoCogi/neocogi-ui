@@ -1,0 +1,283 @@
+//
+// Copyright 2026-Present (c) Raja Lehtihet & Wael El Oraiby
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the conditions in LICENSE are met.
+//
+
+//! Pure appearance compilation shared by resource construction and Skin policy.
+#![deny(missing_docs)]
+
+use neocogi_ui_contracts::gfx::abi::*;
+use neocogi_ui_contracts::gfx::AssetData;
+pub use neocogi_ui_contracts::gfx::{ChromeState, ControlState, MenuState, PointerState, SurfaceState};
+
+/// Complete appearance-only tables independent of bundle storage and plugin objects.
+pub struct AppearanceTables {
+    /// One record for every dense structural surface role.
+    pub surfaces: [AssetSurfaceVisuals; SurfaceRole::COUNT],
+    /// One record for every dense interactive control role.
+    pub controls: [AssetControlVisuals; ControlRole::COUNT],
+    /// One record for every dense menu role.
+    pub menus: [AssetMenuVisuals; MenuRole::COUNT],
+    /// One record for every dense window-chrome role.
+    pub window_chrome: [AssetChromeVisuals; ChromeRole::COUNT],
+}
+
+impl AppearanceTables {
+    /// Resolves one flat palette into complete records without reading or publishing a bundle.
+    pub fn flat(insets: Insets, palette: &FlatPalette) -> Self {
+        // Role order remains the generated dense IDL axis. State structure is expressed by named
+        // record fields, so adding or moving a state cannot silently change an arithmetic offset.
+        let surfaces = SurfaceRole::ALL.map(|role| AssetSurfaceVisuals {
+            normal: flat_surface_visual(insets, palette, role, SurfaceState::Normal),
+            disabled: flat_surface_visual(insets, palette, role, SurfaceState::Disabled),
+        });
+        let controls = ControlRole::ALL.map(|role| flat_control_visuals(insets, palette, role));
+        let menus = MenuRole::ALL.map(|role| AssetMenuVisuals {
+            normal: flat_menu_visual(insets, palette, role, MenuState::Normal),
+            hovered: flat_menu_visual(insets, palette, role, MenuState::Hovered),
+            pressed: flat_menu_visual(insets, palette, role, MenuState::Pressed),
+            focused: flat_menu_visual(insets, palette, role, MenuState::Focused),
+            open: flat_menu_visual(insets, palette, role, MenuState::Open),
+            disabled: flat_menu_visual(insets, palette, role, MenuState::Disabled),
+        });
+        let window_chrome = ChromeRole::ALL.map(|role| AssetChromeVisuals {
+            base: flat_chrome_visual(insets, palette, role, ChromeState::Base),
+            active: flat_chrome_visual(insets, palette, role, ChromeState::Active),
+            disabled: flat_chrome_visual(insets, palette, role, ChromeState::Disabled),
+        });
+        Self { surfaces, controls, menus, window_chrome }
+    }
+}
+
+/// Resolves every state once, so UI painting only selects stored values.
+pub fn apply_flat(data: &mut AssetData, insets: Insets, palette: &FlatPalette) {
+    let tables = AppearanceTables::flat(insets, palette);
+    data.tables.surfaces = Vec::from(tables.surfaces).into();
+    data.tables.controls = Vec::from(tables.controls).into();
+    data.tables.menus = Vec::from(tables.menus).into();
+    data.tables.window_chrome = Vec::from(tables.window_chrome).into();
+}
+
+/// Compiles one control role into its explicit disabled, enabled, and focused branches.
+fn flat_control_visuals(insets: Insets, palette: &FlatPalette, role: ControlRole) -> AssetControlVisuals {
+    AssetControlVisuals {
+        disabled: flat_control_visual(insets, palette, role, ControlState::Disabled),
+        enabled: flat_pointer_visuals(insets, palette, role, ControlState::Enabled),
+        focused: flat_pointer_visuals(insets, palette, role, ControlState::Focused),
+    }
+}
+
+/// Compiles every pointer state beneath one concrete control-state constructor.
+fn flat_pointer_visuals(insets: Insets, palette: &FlatPalette, role: ControlRole, state: fn(PointerState) -> ControlState) -> AssetPointerVisuals {
+    // The function pointer is one of the two concrete enum constructors supplied immediately by
+    // `flat_control_visuals`; it is never stored or exposed as an extensible callback surface.
+    AssetPointerVisuals {
+        normal: flat_control_visual(insets, palette, role, state(PointerState::Normal)),
+        hovered: flat_control_visual(insets, palette, role, state(PointerState::Hovered)),
+        pressed: flat_control_visual(insets, palette, role, state(PointerState::Pressed)),
+    }
+}
+
+/// Returns the conventional caption geometry in its checked transfer form.
+pub fn default_chrome() -> AssetChrome {
+    // Keep builder output identical to the default JSON document without
+    // constructing a runtime-only skin representation in this plugin.
+    AssetChrome {
+        title_alignment: TitleAlignment::Leading,
+        close_side: CaptionSide::Trailing,
+        minimize_side: CaptionSide::Trailing,
+        maximize_side: CaptionSide::Trailing,
+        vertical_spacing: 2,
+        minimum_extent: 0,
+        inner_spacing: 0,
+        show_without_activation: 1,
+        minimized_content_height: 2,
+        has_backdrop: 0,
+        backdrop_rgba: 0,
+        backdrop_padding: 0,
+    }
+}
+
+/// Packs channels in the renderer's explicit little-endian RGBA convention.
+pub const fn rgba(color: Color) -> u32 {
+    u32::from_le_bytes([color.r, color.g, color.b, color.a])
+}
+
+/// Produces a solid center with collapsed border geometry.
+fn solid(fill: Color) -> AssetVisual {
+    framed(Insets::default(), Color::default(), Some(fill))
+}
+
+/// Produces eight equal border cells and an optional center, retaining exact insets.
+fn framed(insets: Insets, border: Color, fill: Option<Color>) -> AssetVisual {
+    // Canonicalize fully transparent cells just like the runtime drawing vocabulary.
+    let border = if border.a == 0 { 0 } else { rgba(border) };
+    let center = match fill {
+        Some(color) if color.a != 0 => rgba(color),
+        _ => 0,
+    };
+    AssetVisual {
+        insets,
+        center_visible: 1,
+        content_color: 0,
+        patch: AssetPatch::Flat {
+            top_left: border,
+            top: border,
+            top_right: border,
+            left: border,
+            center,
+            right: border,
+            bottom_left: border,
+            bottom: border,
+            bottom_right: border,
+        },
+    }
+}
+
+/// Resolves one structural surface from the flat fallback palette.
+fn flat_surface_visual(frame_insets: Insets, palette: &FlatPalette, role: SurfaceRole, state: SurfaceState) -> AssetVisual {
+    // Surfaces react only to inherited availability. Window owns the root fill independently of
+    // activation, GenericFrame remains hollow, and Panel combines its border with its own fill.
+    let mut patch = match (role, state) {
+        (SurfaceRole::Window, SurfaceState::Normal) => solid(palette.window_background),
+        (SurfaceRole::Window, SurfaceState::Disabled) => solid(palette.disabled_background),
+        (SurfaceRole::GenericFrame, _) => framed(frame_insets, palette.border, None),
+        (SurfaceRole::Panel, SurfaceState::Normal) => framed(frame_insets, palette.border, Some(palette.panel_background)),
+        (SurfaceRole::Panel, SurfaceState::Disabled) => framed(frame_insets, palette.border, Some(palette.disabled_background)),
+        _ => unreachable!("flat styles iterate only known surface roles and states"),
+    };
+    let content_color = match state {
+        SurfaceState::Normal => palette.text,
+        SurfaceState::Disabled => palette.disabled_foreground,
+    };
+    patch.content_color = rgba(content_color);
+    patch
+}
+
+/// Resolves one interactive control from its concrete role and nested control state.
+fn flat_control_visual(frame_insets: Insets, palette: &FlatPalette, role: ControlRole, state: ControlState) -> AssetVisual {
+    // Each role group spells out its meaningful fill policy. A newly added role therefore fails
+    // this exhaustive match instead of inheriting a generic button or body fallback.
+    let transparent = Color { r: 0, g: 0, b: 0, a: 0 };
+    let mut patch = match role {
+        ControlRole::Button
+        | ControlRole::Combo
+        | ControlRole::SliderThumb
+        | ControlRole::CloseButton
+        | ControlRole::MinimizeButton
+        | ControlRole::MaximizeButton
+        | ControlRole::RestoreButton => match state {
+            ControlState::Disabled => framed(frame_insets, palette.border, Some(palette.disabled_background)),
+            ControlState::Enabled(PointerState::Normal) => framed(frame_insets, palette.border, Some(palette.button)),
+            ControlState::Enabled(PointerState::Hovered) => framed(frame_insets, palette.border, Some(palette.button_hovered)),
+            ControlState::Enabled(PointerState::Pressed) => framed(frame_insets, palette.border, Some(palette.input)),
+            ControlState::Focused(PointerState::Normal | PointerState::Hovered) => framed(frame_insets, palette.border, Some(palette.control_focus)),
+            ControlState::Focused(PointerState::Pressed) => framed(frame_insets, palette.border, Some(palette.input)),
+        },
+        ControlRole::Checkbox | ControlRole::TextInput | ControlRole::SliderTrack | ControlRole::ResizeGrip => match state {
+            ControlState::Disabled => framed(frame_insets, palette.border, Some(palette.disabled_background)),
+            ControlState::Enabled(PointerState::Normal) => framed(frame_insets, palette.border, Some(palette.input)),
+            ControlState::Enabled(PointerState::Hovered | PointerState::Pressed) => framed(frame_insets, palette.border, Some(palette.input_hovered)),
+            ControlState::Focused(PointerState::Normal | PointerState::Hovered) => framed(frame_insets, palette.border, Some(palette.control_focus)),
+            ControlState::Focused(PointerState::Pressed) => framed(frame_insets, palette.border, Some(palette.input_hovered)),
+        },
+        ControlRole::Item => match state {
+            ControlState::Disabled | ControlState::Enabled(PointerState::Normal) => solid(transparent),
+            ControlState::Enabled(PointerState::Hovered | PointerState::Pressed)
+            | ControlState::Focused(PointerState::Normal | PointerState::Hovered | PointerState::Pressed) => solid(palette.selection_background),
+        },
+        ControlRole::ScrollbarTrack => match state {
+            ControlState::Disabled => solid(palette.disabled_background),
+            ControlState::Enabled(_) | ControlState::Focused(_) => solid(palette.scrollbar_track),
+        },
+        ControlRole::ScrollbarThumb => match state {
+            ControlState::Disabled => solid(palette.disabled_background),
+            ControlState::Enabled(_) | ControlState::Focused(_) => solid(palette.scrollbar_thumb),
+        },
+        _ => unreachable!("flat styles iterate only known control roles"),
+    };
+    // Content-color selection is separate from patch grouping because item selection and caption
+    // symbols have explicit contrast policies that ordinary controls do not share.
+    let content_color = match role {
+        ControlRole::Item => match state {
+            ControlState::Disabled => palette.disabled_foreground,
+            ControlState::Enabled(PointerState::Normal) => palette.text,
+            ControlState::Enabled(PointerState::Hovered | PointerState::Pressed)
+            | ControlState::Focused(PointerState::Normal | PointerState::Hovered | PointerState::Pressed) => palette.selection_foreground,
+        },
+        ControlRole::CloseButton | ControlRole::MinimizeButton | ControlRole::MaximizeButton | ControlRole::RestoreButton => match state {
+            ControlState::Disabled => palette.disabled_title_foreground,
+            ControlState::Enabled(_) | ControlState::Focused(_) => palette.title_foreground,
+        },
+        _ => match state {
+            ControlState::Disabled => palette.disabled_foreground,
+            ControlState::Enabled(_) | ControlState::Focused(_) => palette.text,
+        },
+    };
+    patch.content_color = rgba(content_color);
+    patch
+}
+
+/// Resolves one menu surface or entry from the menu-specific state domain.
+fn flat_menu_visual(frame_insets: Insets, palette: &FlatPalette, role: MenuRole, state: MenuState) -> AssetVisual {
+    // Open is a menu state rather than a duplicate title role. Popup owners and selected submenu
+    // entries consequently share the same explicit selection precedence.
+    let selected = matches!(state, MenuState::Hovered | MenuState::Pressed | MenuState::Focused | MenuState::Open);
+    let transparent = Color { r: 0, g: 0, b: 0, a: 0 };
+    let mut patch = match role {
+        MenuRole::Bar => match state {
+            MenuState::Disabled => solid(palette.disabled_background),
+            _ => solid(palette.menu_background),
+        },
+        MenuRole::Title | MenuRole::Item => {
+            if selected {
+                solid(palette.selection_background)
+            } else {
+                solid(transparent)
+            }
+        }
+        MenuRole::Popup => match state {
+            MenuState::Disabled => framed(frame_insets, palette.border, Some(palette.disabled_background)),
+            _ => framed(frame_insets, palette.border, Some(palette.menu_background)),
+        },
+        _ => unreachable!("flat styles iterate only known menu roles"),
+    };
+    let content_color = match state {
+        MenuState::Disabled => palette.disabled_foreground,
+        _ if selected && matches!(role, MenuRole::Title | MenuRole::Item) => palette.selection_foreground,
+        _ => palette.menu_foreground,
+    };
+    patch.content_color = rgba(content_color);
+    patch
+}
+
+/// Resolves one window-chrome visual from activation and availability only.
+fn flat_chrome_visual(frame_insets: Insets, palette: &FlatPalette, role: ChromeRole, state: ChromeState) -> AssetVisual {
+    // Window activation belongs solely to chrome. Control descendants continue resolving their
+    // own enabled, focus, and pointer states independently of the active window.
+    let mut patch = match role {
+        ChromeRole::WindowFrame | ChromeRole::DialogFrame => match state {
+            ChromeState::Base | ChromeState::Disabled => framed(frame_insets, palette.border, None),
+            ChromeState::Active => framed(frame_insets.at_least(1), palette.window_active, None),
+        },
+        ChromeRole::Title => match state {
+            ChromeState::Base => solid(palette.title_background),
+            ChromeState::Active => solid(palette.window_active),
+            ChromeState::Disabled => solid(palette.title_background),
+        },
+        _ => unreachable!("flat styles iterate only known chrome roles"),
+    };
+    let content_color = match (role, state) {
+        (ChromeRole::Title, ChromeState::Disabled) => palette.disabled_title_foreground,
+        (ChromeRole::Title, ChromeState::Base | ChromeState::Active) => palette.title_foreground,
+        (_, ChromeState::Disabled) => palette.disabled_foreground,
+        (_, ChromeState::Base | ChromeState::Active) => palette.text,
+    };
+    patch.content_color = rgba(content_color);
+    patch
+}
+
+/// Shared Skin ABI, independent of optional JSON theme authoring.
+pub mod skin;

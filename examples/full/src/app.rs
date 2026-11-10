@@ -58,7 +58,7 @@ use super::{
     painter_demo::PainterDemo,
     style_editor::StyleEditor,
 };
-use neocogi_ui::{events::*, *};
+use neocogi_ui_contracts::{events::*, *};
 use neocogi_demo_assets::themes::Theme;
 use neocogi_demo_host::{AppState, Host, HostError};
 use neocogi_com::{ComBox, ComInterface, ComPtr, ComRef, NC_E_INVALID_ARG, NcCopyFromBufferOffset, NcStatus};
@@ -301,7 +301,7 @@ impl State {
 }
 impl AppState for State {
     /// Every source maps into this application's one owned protocol.
-    type Message = neocogi_ui::events::EventMessage;
+    type Message = neocogi_ui_contracts::events::EventMessage;
     /// Interprets one message using ordinary exclusive application state.
     fn update(&mut self, event: Self::Message) -> Result<(), NcStatus> {
         self.handle_event(&event)
@@ -418,7 +418,7 @@ impl State {
     }
 
     /// Resolves display text separately from the generated selection event.
-    fn choice_changed(&mut self, event: &neocogi_ui::events::ChoiceSelection) -> Result<(), NcStatus> {
+    fn choice_changed(&mut self, event: &neocogi_ui_contracts::events::ChoiceSelection) -> Result<(), NcStatus> {
         match *event {
             ChoiceSelection::None => self.write_log("Selection cleared"),
             ChoiceSelection::Selected(index) => {
@@ -439,7 +439,7 @@ impl State {
     }
 
     /// Preserves manager-owned minimize/maximize/restore rectangles and clamps only ordinary geometry.
-    fn window_changed(&mut self, message: &neocogi_ui::events::EventMessage) -> Result<(), NcStatus> {
+    fn window_changed(&mut self, message: &neocogi_ui_contracts::events::EventMessage) -> Result<(), NcStatus> {
         let (mut area, clamp) = if let Some(event) = message.query::<IWindowGeometryChangedEventAbi>()? {
             (event.rect()?, !self.minimized)
         } else if message.query::<IWindowMinimizedEventAbi>()?.is_some() {
@@ -517,7 +517,7 @@ fn menu_item(menu: &MenuBuilder, send: &mut Inputs, text: &str, action: Action) 
 }
 
 /// Creates the complete demo with the same structural desktop and floating examples on every backend.
-fn create(runtime: neocogi_com::Runtime) -> Result<(Host, State, std::sync::mpsc::Receiver<neocogi_ui::events::EventMessage>), HostError> {
+fn create(runtime: neocogi_com::Runtime) -> Result<(Host, State, std::sync::mpsc::Receiver<neocogi_ui_contracts::events::EventMessage>), HostError> {
     neocogi_demo_host::initialize(runtime)?;
     let host = Host::new(
         runtime,
@@ -526,7 +526,7 @@ fn create(runtime: neocogi_com::Runtime) -> Result<(Host, State, std::sync::mpsc
         neocogi_demo_assets::load_bundle(runtime)?,
     )?;
     let ui = &host.ui;
-    let (receiver, events) = neocogi_ui::events::channel();
+    let (receiver, events) = neocogi_ui_contracts::events::channel();
     let mut events_tx = Inputs::new(receiver);
     let grid = Rc::new(RefCell::new(GridState::default()));
     let grid_widget = viewport(ui, GridViewWidget::new(grid.clone()))?;
@@ -873,8 +873,8 @@ mod tests;
 
 impl State {
     /// Authenticate installed controls before reading their immutable COM snapshots.
-    fn handle_event(&mut self, message: &neocogi_ui::events::EventMessage) -> Result<(), NcStatus> {
-        use neocogi_ui::events::EventOrigin;
+    fn handle_event(&mut self, message: &neocogi_ui_contracts::events::EventMessage) -> Result<(), NcStatus> {
+        use neocogi_ui_contracts::events::EventOrigin;
         match &message.origin {
             EventOrigin::Widget(origin) if origin.is_alive() => {
                 if let Some(action) = self
@@ -911,7 +911,7 @@ impl State {
                     }
                 } else if self.file_dialog.as_ref().is_some_and(|dialog| origin.same_object(dialog.as_interface())) {
                     if let Some(event) = message.query::<IFileAcceptedEventAbi>()? {
-                        self.file_selected(Some(neocogi_ui::path::decode(event.path()?.as_com_ref())?))?;
+                        self.file_selected(Some(neocogi_ui_contracts::path::decode(event.path()?.as_com_ref())?))?;
                     } else if message.query::<IFileCancelledEventAbi>()?.is_some() {
                         self.file_selected(None)?;
                     }

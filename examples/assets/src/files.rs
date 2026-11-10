@@ -1,6 +1,6 @@
 //! Native clients forward the shared recipe to COM; decoding and packing remain in the GFX plugin.
 use super::recipe_data as data;
-use neocogi_ui::{GfxPluginFactoryAbi, IAssetBundleAbi, NativePath, Size};
+use neocogi_ui_contracts::{IAssetBundleAbi, NativePath, Size};
 use neocogi_com::{ComPtr, NcCopyFromBufferOffset, NcStatus};
 
 /// Resolves resources beside the executable, independently of cwd or build paths.
@@ -14,7 +14,7 @@ pub(super) fn asset_path(relative: &str) -> std::io::Result<std::path::PathBuf> 
 /// The provider owns every decoder, font rasterizer and packing operation; no UI implementation is linked here.
 pub fn load_bundle(runtime: neocogi_com::Runtime) -> Result<ComPtr<IAssetBundleAbi>, NcStatus> {
     let directory = asset_path("").map_err(|_| neocogi_com::NC_E_LOAD_FAILED)?;
-    let factory = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+    let factory = neocogi_ui_contracts::services::gfx(runtime)?;
     let loader = factory.asset_loader()?;
     let builder = loader.create_builder(
         Size {

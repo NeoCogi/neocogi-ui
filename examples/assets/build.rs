@@ -31,14 +31,14 @@
 
 use std::{env, error::Error, path::PathBuf};
 #[cfg(feature = "embed-assets")]
-use neocogi_gfx_impl::{
+use neocogi_ui::gfx::{
     atlas::{self, Builder},
     export::write_rust,
 };
 #[cfg(all(feature = "embed-assets", feature = "full-demo"))]
-use neocogi_skin_impl::theme;
+use neocogi_ui::skin::theme;
 #[cfg(all(feature = "embed-assets", feature = "full-demo"))]
-use neocogi_gfx_support::AssetData;
+use neocogi_ui_contracts::gfx::AssetData;
 
 #[allow(dead_code, reason = "embedded recipes do not stage adjacent inputs")]
 mod build_paths;
@@ -113,7 +113,7 @@ fn stage_recipe() -> Result<(), Box<dyn Error>> {
         for &(name, relative) in recipe_data::THEMES {
             let definition = build_paths::source(&root, std::path::Path::new("resources"), std::path::Path::new(relative))?;
             println!("cargo:rerun-if-changed={}", definition.display());
-            let mut theme = neocogi_skin_authoring::theme::ThemeDocument::from_bytes(&definition, &std::fs::read(&definition)?)?;
+            let mut theme = neocogi_ui::authoring::theme::ThemeDocument::from_bytes(&definition, &std::fs::read(&definition)?)?;
             let mut failure = None;
             theme.visit_resource_paths_mut(|path| {
                 let result = (|| -> Result<(), Box<dyn Error>> {

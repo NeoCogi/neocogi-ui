@@ -2,14 +2,14 @@
 
 A standalone Rust workspace for NeoCogi's retained UI library, built-in widgets,
 document loading, composition, resources, themes, and UI examples. Components use
-typed COM interfaces with independently deployable UI runtime, node, renderer,
-GFX, and skin providers.
+typed COM interfaces. Three reusable crates supply canonical contracts, the
+static implementation and one thin UI shared library; Platform has its own service root.
 
 [NeoCogi Platform](https://github.com/NeoCogi/neocogi-platform) supplies native/browser
 platform services, generic graphics resources, shader compilation and renderer
-backends through the published crates.io release `0.1.0-alpha.2`.
+backends through the published crates.io release `0.2.0-alpha.2`.
 
-The coordinated UI release is `0.1.0-alpha.2`. See the
+The coordinated UI release is `0.2.0-alpha.2`. See the
 [release guide](docs/project/RELEASING.md) for archive qualification and publishing.
 
 See [UI and COM history](docs/project/HISTORY.md) for the matching dependency
@@ -36,13 +36,9 @@ Mac OS 9 themes. Select a theme from **View → Theme** in the Demo Window.
 
 | Directory | Purpose |
 | --- | --- |
-| `crates/build` | Packaged UI/GFX/Skin IDL sources and build helpers |
-| `crates/ui/api` | Typed application clients and shared UI bindings |
-| `crates/ui/runtime` | Retained forest, windows, surfaces, menus and dispatch |
-| `crates/ui/nodes` | Built-in widgets, containers and file dialogs |
-| `crates/ui/support` | Presentation algorithms and drawing helpers |
-| `crates/ui/document`, `crates/ui/design` | Runtime document loading, serialization and extension manifests |
-| `crates/gfx`, `crates/skin`, `crates/appearance` | Images, fonts, resource bundles, themes and appearance |
+| `crates/ui-contracts` | Canonical UI/GFX/Skin/design contracts, portable values, typed clients and packaged IDL/build support |
+| `crates/ui` | Feature-selected retained runtime, nodes, graphics, skin, authoring and documents |
+| `crates/ui-dylib` | Thin `nc_ui` shared library exposing the static implementation's single service root |
 | `examples` | Full/basic/smoke applications, runtime loading and an independent UI extension |
 | `tools` | Asset export |
 | `tests/platform` | UI/GFX integration against platform/backend contracts |
@@ -58,14 +54,13 @@ release `0.1.0`; see the
 The development workspace selects `nightly-2026-09-29` with `rust-src` for
 Cargo artifact dependencies and the min-size profile. Native applications need
 SDL2 and the libraries for their selected graphics backend; see
-[backend prerequisites](crates/ui/runtime/docs/BACKENDS.md).
+[backend prerequisites](crates/ui/docs/runtime/BACKENDS.md).
 The checked-in lockfile fixes the standalone dependency graph.
 
 Platform packages use exact `=0.2.0-alpha.2` registry requirements, COM/IDL use
 `=0.1.0`, and `rs-math3d` uses `=0.21.0`. Internal production/build dependencies
-use the exact UI release `=0.1.0-alpha.2`; test-only
-peer links are omitted from publication and restored from packaged test metadata
-by the archive qualifier.
+use the exact UI release `=0.2.0-alpha.2`. All release tests are package-contained;
+normalized archives need no restored dependency declarations.
 Cargo downloads their checked packages from crates.io; builds require no GitHub
 credentials or companion checkout.
 
@@ -91,10 +86,10 @@ The [WebGL guide](docs/guides/WEB.md) covers input and browser validation.
 ```sh
 python3 scripts/package_inputs.py --check
 python3 -m unittest discover -s scripts -p 'test_*.py'
-cargo test --locked -p neocogi-ui -p neocogi-ui-document -p neocogi-ui-runtime -p neocogi-ui-nodes -p neocogi-ui-support -p neocogi-ui-design --features neocogi-com/runtime --all-targets
+cargo test --locked -p neocogi-ui-contracts -p neocogi-ui --all-features --all-targets
 ```
 
-[UI testing](crates/ui/runtime/docs/TESTING.md) and
+[UI testing](crates/ui/docs/runtime/TESTING.md) and
 [CI](.github/workflows/rust.yml) describe independent consumers, providers,
 native rendering, and browser checks.
 
@@ -104,7 +99,7 @@ Use the exact matching registry versions when integrating the alpha release:
 
 ```toml
 [dependencies]
-neocogi-ui = { version = "=0.1.0-alpha.2" }
+neocogi-ui = { version = "=0.2.0-alpha.2" }
 neocogi-com = { version = "=0.1.0" }
 ```
 
@@ -125,8 +120,8 @@ fn install(ui: &Ui) -> Result<ComPtr<IWindowAbi>, NcStatus> {
 }
 ```
 
-The `neocogi.ui.nodes.runtime` plugin provides `UiFactory`. Its
-`NodesPluginFactory::bind` method consumes a borrowed `UiRuntime`, queries the public
+The `neocogi.ui` root exposes typed `ui()`, `nodes()`, `gfx()` and `skin()` services.
+Disabled services return `NC_E_NOT_FOUND`. `NodesPluginFactory::bind` method consumes a borrowed `UiRuntime`, queries the public
 `IConstructionHost`, `IChoiceMenus`, window, and resource capabilities it needs, and returns one
 host-bound factory. `Ui::from_interfaces(runtime, factory)` verifies that both sides expose the
 same canonical `IWidgetHost` identity before the facade permits construction. No class ID,
@@ -180,7 +175,7 @@ ui.update_with_events(size, dispatcher.as_com_ref())?;
 This handler chooses to ignore removed buttons; their captured event facts remain
 readable. `is_alive()` is an observation, and a later widget call still checks its
 lifetime. `*_unobserved` chooses permanent non-delivery. The
-[executed Button walkthrough](crates/ui/api/docs/button_events.rs) covers activation
+[executed Button walkthrough](crates/ui-contracts/docs/button_events.rs) covers activation
 and a queued event after removal; [event architecture](docs/contracts/CLASS_EVENT_STREAMS.md)
 defines delivery and ownership. The README blocks also execute against real providers.
 

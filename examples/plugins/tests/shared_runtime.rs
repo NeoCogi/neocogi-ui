@@ -26,26 +26,10 @@ fn final_libraries_export_their_real_descriptors() {
         "neocogi.platform.glow"
     };
     let providers = [
-        (
-            neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_UI_LIBRARY_nc_ui"),
-            "neocogi.ui.runtime",
-        ),
-        (
-            neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_NODES_LIBRARY_nc_ui_nodes"),
-            "neocogi.ui.nodes.runtime",
-        ),
+        (neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_UI_LIBRARY_nc_ui"), "neocogi.ui"),
         (
             neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_PLATFORM_LIBRARY_nc_platform"),
             renderer,
-        ),
-        (
-            neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_GFX_LIBRARY_nc_gfx"),
-            "neocogi.gfx.runtime",
-        ),
-        #[cfg(feature = "skin")]
-        (
-            neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_SKIN_LIBRARY_nc_skin"),
-            "neocogi.skin.runtime",
         ),
         #[cfg(feature = "extension")]
         (
@@ -131,7 +115,11 @@ fn cargo_host_and_plugin_share_one_runtime_catalog() {
     // Re-loading the exact Cargo artifacts must reuse the first registrations.
     neocogi_demo_plugins::register(host_runtime()).unwrap();
     assert_eq!(runtime.plugins().unwrap().len(), count);
-    assert!(count >= 4, "production composition must register its actual providers");
+    assert_eq!(
+        count,
+        2 + usize::from(cfg!(feature = "extension")),
+        "one UI library plus Platform and the selected extension"
+    );
     // SAFETY: Cargo supplies this trusted, independently compiled test DLL.
     let executable = std::env::current_exe().unwrap();
     let id = unsafe { runtime.load_plugin_library(executable.parent().unwrap().join("lib").join(PROBE)) };

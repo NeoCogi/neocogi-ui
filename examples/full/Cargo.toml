@@ -9,36 +9,33 @@ repository.workspace = true
 
 [features]
 dynamic = ["neocogi-demo-host/dynamic-skin"]
-# Cargo adds feature flags to defaults; alternate backends require --no-default-features.
 default = ["glow", "dynamic"]
-# Link the full assembly's runtime, UI, renderer, GFX, and Skin implementations.
 monolith = ["neocogi-demo-host/monolith-gfx", "neocogi-demo-host/monolith-skin"]
 glow = ["neocogi-demo-host/glow"]
-# The browser's live style editor needs Skin even though authored themes are precompiled.
 webgl = ["neocogi-demo-host/webgl", "neocogi-demo-host/skin", "embed-assets"]
-# Native deployments read adjacent files unless this feature is explicitly requested.
 embed-assets = ["neocogi-demo-assets/embed-assets"]
 vulkan = ["neocogi-demo-host/vulkan"]
 wgpu = ["neocogi-demo-host/wgpu"]
 
 [dependencies]
-neocogi-platform-contracts.workspace = true
-neocogi-com-host.workspace = true
-neocogi-ui-samples.workspace = true
-neocogi-ui = { workspace = true, features = ["skin"] }
+neocogi-platform-contracts = { workspace = true }
+neocogi-com-host = { workspace = true }
+neocogi-ui-samples = { workspace = true }
 neocogi-com = { workspace = true, default-features = false, features = ["std", "macros"] }
 neocogi-demo-assets = { workspace = true, features = ["full-demo"] }
 neocogi-demo-host = { workspace = true, features = ["png-assets"] }
-rs-math3d.workspace = true
+rs-math3d = { workspace = true }
+neocogi-ui-contracts = { workspace = true }
 
-[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
-wasm-bindgen.workspace = true
+[target."cfg(target_arch = \"wasm32\")".dev-dependencies]
+wasm-bindgen = { workspace = true }
 js-sys = "=0.3.104"
 wasm-bindgen-futures = "=0.4.77"
 
-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+[target."cfg(not(target_arch = \"wasm32\"))".dev-dependencies]
 pollster = "1"
 
 [dev-dependencies]
-neocogi-platform = { workspace = true, features = ["test-support"] }
 neocogi-ui = { workspace = true, features = ["test-support"] }
+neocogi-platform = { workspace = true, features = ["test-support"] }
+neocogi-ui-contracts = { workspace = true, features = ["test-support"] }

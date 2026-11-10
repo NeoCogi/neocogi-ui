@@ -1,6 +1,6 @@
 //! Full application checks use the actual plugin graph, including GPU images and all theme choices.
 use super::*;
-use neocogi_ui::events::testing::TestApp;
+use neocogi_ui_contracts::events::testing::TestApp;
 
 /// Exercise the same leaf constructor used by both scene viewports through actual UI routing.
 #[cfg(not(target_arch = "wasm32"))]
@@ -112,7 +112,7 @@ fn packaged_full_host_selects_win311() {
         steps: std::array::IntoIter<Step, 8>,
     }
     impl AppState for Selection {
-        type Message = neocogi_ui::events::EventMessage;
+        type Message = neocogi_ui_contracts::events::EventMessage;
         /// Preserve the production application's queued COM event handling.
         fn update(&mut self, message: Self::Message) -> Result<(), NcStatus> {
             self.state.update(message)
@@ -202,7 +202,7 @@ fn packaged_full_host_preserves_rejecting_operation() {
         failure: Failure,
     }
     impl AppState for Reject {
-        type Message = neocogi_ui::events::EventMessage;
+        type Message = neocogi_ui_contracts::events::EventMessage;
         /// Preserve ordinary event handling for hooks that are not under test.
         fn update(&mut self, message: Self::Message) -> Result<(), NcStatus> {
             self.state.update(message)
@@ -317,7 +317,7 @@ fn packaged_full_host_retries_render_backpressure() {
             observed: std::sync::mpsc::Sender<()>,
         }
         impl AppState for Prepared {
-            type Message = neocogi_ui::events::EventMessage;
+            type Message = neocogi_ui_contracts::events::EventMessage;
             /// Keep production typed widget handlers active between prepared frames.
             fn update(&mut self, message: Self::Message) -> Result<(), NcStatus> {
                 self.state.update(message)
@@ -403,7 +403,7 @@ fn packaged_full_host_retries_render_backpressure() {
 }
 
 /// Selects Win 3.11 through the real nested menu and verifies publication on the following frame.
-async fn select_win311_from_menu(host: &Host, app: &TestApp<State, neocogi_ui::events::EventMessage>) -> Result<(), HostError> {
+async fn select_win311_from_menu(host: &Host, app: &TestApp<State, neocogi_ui_contracts::events::EventMessage>) -> Result<(), HostError> {
     let mut state = app.state();
     let size = host.window.size()?;
     let base = host.ui.assets()?;
@@ -438,7 +438,7 @@ async fn select_win311_from_menu(host: &Host, app: &TestApp<State, neocogi_ui::e
         host.ui.input(
             UiInput::Key(KeyStroke {
                 key,
-                action: neocogi_ui::KeyAction::Pressed { repeat: false },
+                action: neocogi_ui_contracts::KeyAction::Pressed { repeat: false },
                 modifiers: 0,
             }),
             "",
@@ -545,7 +545,7 @@ async fn popup_scrolling_checks(host: &Host, size: Size) -> Result<(), HostError
         host.ui.input(
             UiInput::Key(KeyStroke {
                 key,
-                action: neocogi_ui::KeyAction::Pressed { repeat: false },
+                action: neocogi_ui_contracts::KeyAction::Pressed { repeat: false },
                 modifiers: 0,
             }),
             "",
@@ -581,7 +581,7 @@ async fn popup_scrolling_checks(host: &Host, size: Size) -> Result<(), HostError
 }
 
 /// Exercises application-level composition against real runtime, platform and decoder objects.
-async fn exercise() -> Result<(Host, TestApp<State, neocogi_ui::events::EventMessage>), HostError> {
+async fn exercise() -> Result<(Host, TestApp<State, neocogi_ui_contracts::events::EventMessage>), HostError> {
     let (host, state, events) = create(crate::host_runtime())?;
     construction_rejection_checks(&host.ui)?;
     let app = TestApp::new(state, events, State::update);

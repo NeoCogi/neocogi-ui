@@ -61,7 +61,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use neocogi_gfx_impl::atlas;
+use neocogi_ui::gfx::atlas;
 /// The command-line and Cargo exporters consume the same concrete file recipe.
 #[path = "../../../../examples/assets/src/recipe.rs"]
 mod recipe;
@@ -94,8 +94,8 @@ fn parse_output_arg() -> Result<PathBuf, Box<dyn Error>> {
 
 /// Builds the default recipe and emits an immutable COM bundle with compressed pixels and compiled metadata.
 fn export_atlas(path: &Path) -> Result<(), Box<dyn Error>> {
-    let atlas = neocogi_gfx_impl::atlas::Builder::from_config(&recipe::atlas_config())?.build()?;
+    let atlas = neocogi_ui::gfx::atlas::Builder::from_config(&recipe::atlas_config())?.build()?;
     // Compiled runtime tables depend only on the facade/contracts; all construction stays in this tool.
-    neocogi_gfx_impl::export::write_rust(&atlas, path)?;
+    neocogi_ui::gfx::export::write_rust(&atlas, path)?;
     Ok(())
 }

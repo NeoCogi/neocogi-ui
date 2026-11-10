@@ -28,7 +28,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //
 //! Calculator with concrete application state and typed COM button handlers.
-use neocogi_ui::*;
+use neocogi_ui_contracts::*;
 use neocogi_demo_host::{AppState, Host, HostError, report_exit};
 use neocogi_com::{ComPtr, NcStatus};
 
@@ -340,7 +340,7 @@ struct State {
 }
 impl AppState for State {
     /// All keypad controls post to one concrete queue and are resolved by identity.
-    type Message = neocogi_ui::events::EventMessage;
+    type Message = neocogi_ui_contracts::events::EventMessage;
     /// Consumes one command using exclusive access to the ordinary arithmetic model.
     fn update(&mut self, message: Self::Message) -> Result<(), NcStatus> {
         let Some(origin) = message.origin.widget::<ButtonAbi>()? else {
@@ -382,7 +382,7 @@ fn run(runtime: neocogi_com::Runtime) -> Result<(), HostError> {
     let grid = host.ui.widgets().grid(
         &[LayoutTrack::Flex { weight: 1.0 }; 4],
         &[LayoutTrack::Flex { weight: KEYPAD_ROW_HEIGHT_WEIGHT }; 5],
-        neocogi_ui::GridLimits { max_columns: 4, max_rows: 5 },
+        neocogi_ui_contracts::GridLimits { max_columns: 4, max_rows: 5 },
     )?;
     let mut tree = host.ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     let display_handle = display.handle();
@@ -404,7 +404,7 @@ fn run(runtime: neocogi_com::Runtime) -> Result<(), HostError> {
         calculator: Calculator::new(),
         keys: Vec::new(),
     };
-    let (queue, events) = neocogi_ui::events::channel();
+    let (queue, events) = neocogi_ui_contracts::events::channel();
     for (index, (label, action)) in [
         ("AC", Action::ClearAll),
         ("CE", Action::ClearEntry),

@@ -1,5 +1,4 @@
 [package]
-# Installed executable names are declared explicitly below.
 autobins = false
 name = "neocogi-runtime-ui-example"
 version.workspace = true
@@ -18,19 +17,17 @@ monolith = ["neocogi-demo-host/monolith-gfx"]
 embed-assets = ["neocogi-demo-assets/embed-assets"]
 
 [dependencies]
-neocogi-com-host.workspace = true
-neocogi-ui.workspace = true
-neocogi-ui-document.workspace = true
+neocogi-com-host = { workspace = true }
 neocogi-com = { workspace = true, features = ["std", "macros"] }
-neocogi-demo-host.workspace = true
-neocogi-demo-assets.workspace = true
+neocogi-demo-host = { workspace = true }
+neocogi-demo-assets = { workspace = true }
+neocogi-ui-contracts = { workspace = true }
+neocogi-ui = { workspace = true, features = ["document"] }
 
 [[bin]]
 name = "neocogi-example-ui"
 path = "src/main.rs"
 
 [dev-dependencies]
-neocogi-ui-runtime.workspace = true
-neocogi-ui-nodes.workspace = true
-neocogi-ui-support = { workspace = true, features = ["test-support"] }
-tempfile.workspace = true
+tempfile = { workspace = true }
+neocogi-ui = { workspace = true, features = ["test-support", "ui"] }

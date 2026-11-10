@@ -11,6 +11,6 @@ mod helpers;
 pub mod events;
 
 // Event publication is UI authoring policy, separate from callable IDL ABI.
-neocogi_ui::abi::core::ui_event_sources! {
-    CounterAbi => [neocogi_ui::abi::core::IActivatedEventAbi, ICounterChangedEventAbi];
+neocogi_ui_contracts::abi::core::ui_event_sources! {
+    CounterAbi => [neocogi_ui_contracts::abi::core::IActivatedEventAbi, ICounterChangedEventAbi];
 }

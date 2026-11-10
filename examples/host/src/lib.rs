@@ -3,8 +3,8 @@
 //! Application state and handlers remain local. UI implementation, DOM/SDL events and GPU objects
 //! are reached only through their checked COM interfaces. Native packages are executable-relative.
 #![deny(missing_docs)]
-use neocogi_ui::*;
-use neocogi_ui::events::ApplyOutcome;
+use neocogi_ui_contracts::*;
+use neocogi_ui_contracts::events::ApplyOutcome;
 use neocogi_com::{com_object, ComPtr, NcCopyFromBufferOffset, NcStatus};
 use std::fmt;
 
@@ -182,8 +182,8 @@ impl Host {
         let platform = runtime.acquire_plugin_root::<PlatformAbi>(neocogi_com::guid_from_qualified_name(renderer_plugin_name()))?;
         let window = platform.create_window(NcCopyFromBufferOffset::new(0, title.as_bytes()), size)?;
         let renderer = window.query()?;
-        let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
-        let runtime_factory = runtime.acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))?;
+        let gfx = neocogi_ui_contracts::services::gfx(runtime)?;
+        let runtime_factory = neocogi_ui_contracts::services::ui(runtime)?;
         let mut ui_runtime = runtime_factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref())?;
         ui_runtime.set_clipboard(window.clipboard()?.as_com_ref())?;
         let render_host = window.graphics_host()?;
@@ -193,7 +193,7 @@ impl Host {
         ui_runtime
             .set_render_host(render_host.as_com_ref(), surface.as_com_ref())
             .map_err(|error| render_error("UI renderer setup", error))?;
-        let node_provider = runtime.acquire_plugin_root::<nodes::NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))?;
+        let node_provider = neocogi_ui_contracts::services::nodes(runtime)?;
         let factory = node_provider.bind(ui_runtime.as_com_ref())?;
         let ui = Ui::from_interfaces(ui_runtime, factory)?;
         let (send, observations) = std::sync::mpsc::channel();
@@ -215,7 +215,7 @@ impl Host {
         // Both local frame hooks and foreign dispatch use this allocation's
         // existing COM borrow gate. Resolve its owner projection only once.
         let host = std::rc::Rc::new(self);
-        let state = neocogi_ui::events::Dispatcher::into_local(neocogi_ui::events::Dispatcher::new(
+        let state = neocogi_ui_contracts::events::Dispatcher::into_local(neocogi_ui_contracts::events::Dispatcher::new(
             Application {
                 state,
                 host: host.clone(),
@@ -266,7 +266,7 @@ impl Host {
     #[cfg(feature = "png-assets")]
     pub fn png_texture_bounded(&self, png: &[u8], rgba_limit: usize) -> Result<ComPtr<ITextureAbi>, HostError> {
         let runtime = self.runtime;
-        let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+        let gfx = neocogi_ui_contracts::services::gfx(runtime)?;
         let decoder = gfx.png_decoder()?;
         let target = self.renderer.query::<ITextureFactoryAbi>()?;
         decoder
@@ -322,7 +322,7 @@ struct Application<State: AppState> {
     /// Current positive drawable size installed before entering the UI update.
     size: Size,
 }
-impl<State: AppState> neocogi_ui::events::MessageProcessor for Application<State> {
+impl<State: AppState> neocogi_ui_contracts::events::MessageProcessor for Application<State> {
     type Message = State::Message;
     /// Preserves actual UI routing order instead of deriving command ownership from the poll tail.
     fn input_boundary(&mut self, boundary: InputBoundary) -> Result<(), NcStatus> {
@@ -364,9 +364,9 @@ struct Driver<State: AppState> {
     /// Owns exactly one UI/renderer pair for this application.
     host: std::rc::Rc<Host>,
     /// Persistent owned state; short local guards end before entering UI dispatch.
-    state: neocogi_com::LocalCom<neocogi_ui::events::Dispatcher<Application<State>>>,
+    state: neocogi_com::LocalCom<neocogi_ui_contracts::events::Dispatcher<Application<State>>>,
     /// Checked once at construction and borrowed for every frame without querying.
-    owner: ComPtr<neocogi_ui::IApplicationDispatcherAbi>,
+    owner: ComPtr<neocogi_ui_contracts::IApplicationDispatcherAbi>,
     /// Optional finite run counts successfully rendered frames, including the final frame.
     remaining: Option<u32>,
     /// Whether the last observed drawable size was zero; cancellation is sent once per transition.
@@ -556,7 +556,7 @@ pub fn initialize(runtime: neocogi_com::Runtime) -> Result<(), HostError> {
 }
 
 /// Loads the exact native artifacts Cargo built for this composition.
-/// Registration order is explicit because Nodes and Skin declare hard provider requirements.
+/// One UI root and one Platform root expose their explicitly selected services.
 #[cfg(all(not(target_arch = "wasm32"), feature = "dynamic", not(feature = "monolith")))]
 fn register(runtime: neocogi_com::Runtime) -> Result<(), HostError> {
     neocogi_demo_plugins::register(runtime)?;
@@ -567,15 +567,10 @@ fn register(runtime: neocogi_com::Runtime) -> Result<(), HostError> {
 #[cfg(any(target_arch = "wasm32", feature = "monolith"))]
 fn register(runtime: neocogi_com::Runtime) -> Result<(), HostError> {
     let descriptors = [
-        nc_ui::plugin_descriptor(),
-        nc_ui_nodes::plugin_descriptor(),
+        neocogi_ui::plugin_descriptor(),
         neocogi_platform::platform::plugin_descriptor(),
         #[cfg(feature = "monolith-extension")]
         nc_ui_extension::plugin_descriptor(),
-        #[cfg(any(target_arch = "wasm32", feature = "monolith-gfx"))]
-        nc_gfx::plugin_descriptor(),
-        #[cfg(feature = "skin")]
-        nc_skin::plugin_descriptor(),
     ];
     for descriptor in descriptors {
         // SAFETY: descriptors and provider code remain linked for process lifetime.

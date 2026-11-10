@@ -52,7 +52,7 @@
 //
 //! Concrete palette/metric controls compile immutable style revisions only after an edit.
 use super::app::{append, column, into_widget, label, row, slider, rgba, NumericTarget};
-use neocogi_ui::*;
+use neocogi_ui_contracts::*;
 use neocogi_demo_assets::themes::Theme;
 use neocogi_com::{ComPtr, NcStatus};
 
@@ -193,9 +193,9 @@ impl StyleEditor {
     pub(super) fn new(runtime: neocogi_com::Runtime, ui: &Ui, events_tx: &mut super::app::Inputs) -> Result<(Self, OwnedWidget<ScrollAreaAbi>), NcStatus> {
         let base = ui.assets()?;
         // Activation belongs to this application; the UI runtime has no asset-provider dependency.
-        let gfx = runtime.acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))?;
+        let gfx = neocogi_ui_contracts::services::gfx(runtime)?;
         let publisher = gfx.asset_publisher()?;
-        let factory = runtime.acquire_plugin_root::<SkinPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.skin.runtime"))?;
+        let factory = neocogi_ui_contracts::services::skin(runtime)?;
         let compiler = factory.style_compiler(publisher.as_com_ref())?;
         let mut metrics = base.metrics()?;
         let mut palette = FlatPalette::default();

@@ -5,7 +5,7 @@ use neocogi_platform_contracts::render::abi::*;
 #[cfg(feature = "glow")]
 use neocogi_platform_contracts::render::platform::*;
 #[cfg(feature = "glow")]
-use neocogi_gfx_support::abi::RenderVertex;
+use neocogi_ui_contracts::gfx::abi::RenderVertex;
 #[cfg(feature = "glow")]
 use std::{cell::RefCell, rc::Rc};
 use neocogi_platform::platform::testing;

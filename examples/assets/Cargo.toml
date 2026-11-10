@@ -9,25 +9,16 @@ repository.workspace = true
 
 [features]
 default = []
-# Full-only photo/mesh are separate from external themes shared with the smoke client.
-full-demo = ["neocogi-ui/skin", "external-themes"]
-external-themes = ["dep:neocogi-skin-authoring"]
-# Explicit opt-in for self-contained resources, including browser deployments.
-embed-assets = ["neocogi-gfx-support/compiled-assets", "dep:neocogi-gfx-impl", "dep:neocogi-skin-impl", "dep:neocogi-gfx-support", "dep:neocogi-gfx-support"]
+full-demo = ["external-themes"]
+external-themes = ["dep:neocogi-ui", "neocogi-ui/authoring"]
+embed-assets = ["neocogi-ui-contracts/compiled-assets", "dep:neocogi-ui", "neocogi-ui/builder", "neocogi-ui/save-to-rust", "neocogi-ui/theme-json"]
 
 [dependencies]
-neocogi-ui.workspace = true
 neocogi-com = { workspace = true, features = ["runtime"] }
-neocogi-gfx-support = { workspace = true, optional = true }
+neocogi-ui-contracts = { workspace = true }
 
-# Cargo builds these APIs for the host even when the demo target is WebAssembly.
 [build-dependencies]
 neocogi-platform-contracts = { workspace = true, features = ["build-support"] }
-# Resolve the host facade only when the asset generator actually runs.
-neocogi-gfx-support = { workspace = true, optional = true }
-neocogi-gfx-impl = { workspace = true, optional = true, features = ["builder", "save-to-rust"] }
-neocogi-skin-impl = { workspace = true, optional = true, features = ["builder", "theme-json"] }
-
-# Host-only resource closure discovery reuses the authoring schema/path visitor.
-neocogi-skin-authoring = { path = "../../crates/skin/authoring", optional = true, default-features = false, version = "=0.1.0-alpha.2" }
-serde_json.workspace = true
+serde_json = { workspace = true }
+neocogi-ui-contracts = { workspace = true, optional = true }
+neocogi-ui = { workspace = true, optional = true }

@@ -2,16 +2,13 @@
 use super::*;
 
 /// Build an independent compositor through the same statically linked GFX service as applications.
-fn compositor(host: ComRef<'_, IRenderHostAbi>, surface: ComRef<'_, IRenderSurfaceAbi>) -> ComPtr<neocogi_gfx_support::abi::GfxCompositorAbi> {
-    use neocogi_gfx_support::abi::GfxPluginFactoryAbi;
+fn compositor(host: ComRef<'_, IRenderHostAbi>, surface: ComRef<'_, IRenderSurfaceAbi>) -> ComPtr<neocogi_ui_contracts::gfx::abi::GfxCompositorAbi> {
     let runtime = crate::host_runtime();
     // SAFETY: the statically linked descriptor and implementation live for this process.
     unsafe {
-        runtime.register_plugin_descriptor(nc_gfx::plugin_descriptor()).unwrap();
+        runtime.register_plugin_descriptor(neocogi_ui::plugin_descriptor()).unwrap();
     }
-    let gfx = runtime
-        .acquire_plugin_root::<GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
-        .unwrap();
+    let gfx = neocogi_ui_contracts::services::gfx(runtime).unwrap();
     let assets = neocogi_demo_assets::load_bundle(runtime).unwrap();
     let mut compositor = gfx.create_compositor(assets.as_com_ref()).unwrap();
     compositor.bind_render_host(host, surface).unwrap();

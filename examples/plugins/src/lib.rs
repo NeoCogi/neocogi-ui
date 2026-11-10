@@ -14,13 +14,9 @@ pub fn register(runtime: neocogi_com::Runtime) -> std::io::Result<()> {
         .join("lib");
     let filenames = [
         neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_UI_LIBRARY_nc_ui"),
-        neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_NODES_LIBRARY_nc_ui_nodes"),
         neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_PLATFORM_LIBRARY_nc_platform"),
-        neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_GFX_LIBRARY_nc_gfx"),
         #[cfg(feature = "extension")]
         neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_EXTENSION_LIBRARY_nc_ui_extension"),
-        #[cfg(feature = "skin")]
-        neocogi_ui_native_artifacts::stage_library!("CARGO_CDYLIB_FILE_SKIN_LIBRARY_nc_skin"),
     ];
     for filename in filenames {
         // SAFETY: the application ships trusted Cargo-built providers in its lib directory.

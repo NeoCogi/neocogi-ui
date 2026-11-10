@@ -1,7 +1,7 @@
 //! Provider-owned NCB settings and editor. No application layout reflection is involved.
 use neocogi_com::{ComBox, ComRef, ComSerialize, ComDeserialize, NcOutputWriter, NcStatus, NC_E_INVALID_ARG};
-use neocogi_ui::*;
-use neocogi_ui::abi::document::{IDesignSettingsEditor, IDesignSettingsEditorAbi};
+use neocogi_ui_contracts::*;
+use neocogi_ui_contracts::abi::document::{IDesignSettingsEditor, IDesignSettingsEditorAbi};
 
 /// Private persistent schema, interpreted only by this plugin.
 #[derive(Clone, ComSerialize, ComDeserialize)]
@@ -47,14 +47,14 @@ impl Settings {
     }
     /// Both editor and constructor decode the same complete schema and budgets.
     pub(super) fn decode(bytes: &[u8]) -> Result<Self, NcStatus> {
-        let settings: Self = neocogi_ui_design::decode_settings(bytes).map_err(|_| NC_E_INVALID_ARG)?;
+        let settings: Self = neocogi_ui_contracts::design::decode_settings(bytes).map_err(|_| NC_E_INVALID_ARG)?;
         settings.validate()?;
         Ok(settings)
     }
     /// Encodes only an accepted typed value under the shared NCB transport ceiling.
     pub(super) fn encode(&self) -> Result<Vec<u8>, NcStatus> {
         self.validate()?;
-        neocogi_ui_design::encode_settings(self).map_err(|_| NC_E_INVALID_ARG)
+        neocogi_ui_contracts::design::encode_settings(self).map_err(|_| NC_E_INVALID_ARG)
     }
     /// The bounded mode starts within its own legal interval.
     pub(super) fn initial(&self) -> u32 {
@@ -80,7 +80,7 @@ impl Settings {
     }
 }
 
-#[neocogi_com::com_object(interfaces(neocogi_ui::abi::document::IDesignSettingsEditor), ownership = exclusive)]
+#[neocogi_com::com_object(interfaces(neocogi_ui_contracts::abi::document::IDesignSettingsEditor), ownership = exclusive)]
 /// Draft controller: the inspector owns the view after transfer; these controls are weak.
 struct Editor {
     /// Unmounted controls held only until take_view transfers their sole ownership.
@@ -187,7 +187,7 @@ mod tests {
             },
         ] {
             // Bypass semantic encode only to construct a well-formed but invalid provider input.
-            let bytes = neocogi_ui_design::encode_settings(&settings).unwrap();
+            let bytes = neocogi_ui_contracts::design::encode_settings(&settings).unwrap();
             assert!(Settings::decode(&bytes).is_err());
             assert!(settings.encode().is_err());
         }
@@ -198,6 +198,6 @@ mod tests {
         let mut trailing = bytes;
         trailing.push(0);
         assert!(Settings::decode(&trailing).is_err());
-        assert!(Settings::decode(&vec![0; neocogi_ui_design::MAX_SETTINGS_BYTES + 1]).is_err());
+        assert!(Settings::decode(&vec![0; neocogi_ui_contracts::design::MAX_SETTINGS_BYTES + 1]).is_err());
     }
 }

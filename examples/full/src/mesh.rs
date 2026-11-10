@@ -215,7 +215,7 @@ impl LeafContent for Suzanne {
                 let pixels = if delta.y != 0 { delta.y } else { delta.x };
                 self.view.apply_scroll(pixels as f32 * MESH_WHEEL_DISTANCE_SCALE);
             }
-            WidgetEvent::Key(key) if matches!(key.action, neocogi_ui::KeyAction::Pressed { .. }) => {
+            WidgetEvent::Key(key) if matches!(key.action, neocogi_ui_contracts::KeyAction::Pressed { .. }) => {
                 let delta = match key.key {
                     KeyCode::ArrowLeft => Vec2i::new(-20, 0),
                     KeyCode::ArrowRight => Vec2i::new(20, 0),
@@ -603,7 +603,7 @@ mod viewport_tests {
                 ),
                 WidgetEvent::Key(KeyStroke {
                     key: KeyCode::ArrowRight,
-                    action: neocogi_ui::KeyAction::Pressed { repeat: false },
+                    action: neocogi_ui_contracts::KeyAction::Pressed { repeat: false },
                     modifiers: 0,
                 }),
                 "",

@@ -1,0 +1,97 @@
+[package]
+name = "neocogi-ui"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = ["crates-io"]
+readme = "README.md"
+description = "NeoCogi static UI runtime, widgets, graphics, appearance and document implementation"
+include = ["Cargo.toml", "README.md", "LICENSE", "src/**", "schemas/**", "build.rs", "tests/**", "docs/**", "examples/**"]
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = []
+ui = []
+gfx = ["publisher", "dep:png"]
+publisher = []
+builder = ["gfx", "dep:fontdue"]
+skin = []
+theme-json = ["skin", "authoring"]
+authoring = []
+document = []
+save-to-rust = ["gfx", "dep:tempfile", "dep:miniz_oxide"]
+compiled-assets = ["neocogi-ui-contracts/compiled-assets"]
+runtime = ["neocogi-com/runtime"]
+test-support = ["ui", "gfx", "skin", "document", "neocogi-ui-contracts/test-support", "dep:neocogi-platform", "neocogi-platform/test-support"]
+
+[dependencies]
+neocogi-ui-contracts.workspace = true
+neocogi-platform-contracts.workspace = true
+neocogi-com = { workspace = true, features = ["macros", "std"] }
+rs-math3d.workspace = true
+bitflags.workspace = true
+serde = { workspace = true, features = ["rc"] }
+serde_json.workspace = true
+png = { workspace = true, optional = true }
+fontdue = { workspace = true, optional = true }
+miniz_oxide = { workspace = true, optional = true, features = ["with-alloc"] }
+tempfile = { workspace = true, optional = true }
+neocogi-platform = { workspace = true, optional = true }
+
+[build-dependencies]
+neocogi-ui-contracts = { workspace = true, features = ["build-support"] }
+neocogi-idl.workspace = true
+
+[dev-dependencies]
+neocogi-idl.workspace = true
+neocogi-com-host.workspace = true
+neocogi-platform = { workspace = true, features = ["test-support"] }
+tempfile.workspace = true
+
+[[test]]
+name = "texture_reservation"
+path = "tests/gfx/texture_reservation.rs"
+required-features = ["test-support"]
+
+[[test]]
+name = "compositor_boundary"
+path = "tests/runtime/compositor_boundary.rs"
+required-features = ["test-support", "document"]
+
+[[test]]
+name = "image_api"
+path = "tests/runtime/image_api.rs"
+required-features = ["test-support"]
+
+[[test]]
+name = "ui"
+path = "tests/runtime/ui.rs"
+required-features = ["test-support"]
+
+[[test]]
+name = "provider_boundary"
+path = "tests/nodes/provider_boundary.rs"
+required-features = ["test-support"]
+
+[[test]]
+name = "bindings"
+path = "tests/document/bindings.rs"
+required-features = ["document"]
+
+[[test]]
+name = "documents"
+path = "tests/document/documents.rs"
+required-features = ["document", "test-support"]
+
+[[example]]
+name = "export_bindings"
+required-features = ["document"]
+
+[[test]]
+name = "catalog_paths"
+path = "tests/runtime/catalog_paths.rs"
+required-features = ["document"]

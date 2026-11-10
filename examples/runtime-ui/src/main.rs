@@ -1,9 +1,9 @@
 //! Loads a UI document without linking its concrete widgets into application code.
 use neocogi_com::{ComPtr, NcStatus};
-use neocogi_ui_document::EventBindings;
+use neocogi_ui::document::EventBindings;
 use neocogi_demo_host::{AppState, Host, HostError};
-use neocogi_ui::*;
-use neocogi_ui_document::{Document, ReloadIds, ReloadSlot, Resources};
+use neocogi_ui_contracts::*;
+use neocogi_ui::document::{Document, ReloadIds, ReloadSlot, Resources};
 
 /// Application state owns its current component and uses checked concrete widget handles.
 struct State {
@@ -12,14 +12,14 @@ struct State {
     /// Source path is a host concern, never interpreted by the COM loader.
     path: Option<std::path::PathBuf>,
     /// Supplies the same concrete receiver to every replacement component.
-    queue: ComPtr<neocogi_ui::events::IEventReceiverAbi>,
+    queue: ComPtr<neocogi_ui_contracts::events::IEventReceiverAbi>,
     /// Exact menu entry accepted as a reload command.
     reload_item: MenuItem,
     /// Counts application-handled button activations.
     saves: u64,
 }
 /// The application requires concrete Save/title fields independently of generic event eligibility.
-fn required_fields(component: &neocogi_ui_document::Component) -> Result<(), NcStatus> {
+fn required_fields(component: &neocogi_ui::document::Component) -> Result<(), NcStatus> {
     component.widget::<ButtonAbi>("save")?;
     component.widget::<TextBlockAbi>("title")?;
     Ok(())
@@ -27,7 +27,7 @@ fn required_fields(component: &neocogi_ui_document::Component) -> Result<(), NcS
 
 impl State {
     /// Loads authored JSON or deployed binary, then binds before publication.
-    fn reload(&mut self) -> Result<neocogi_ui_document::Reloaded, String> {
+    fn reload(&mut self) -> Result<neocogi_ui::document::Reloaded, String> {
         let document = match &self.path {
             Some(path) => {
                 let bytes = std::fs::read(path).map_err(|error| error.to_string())?;
@@ -39,7 +39,10 @@ impl State {
             }
             None => Document::new("Runtime-loaded UI"),
         };
-        let queue = self.queue.query::<neocogi_ui::events::IEventReceiverAbi>().map_err(|error| error.to_string())?;
+        let queue = self
+            .queue
+            .query::<neocogi_ui_contracts::events::IEventReceiverAbi>()
+            .map_err(|error| error.to_string())?;
         self.slot.reload(
             &document,
             Resources::new(),
@@ -53,7 +56,7 @@ impl State {
     }
 }
 impl AppState for State {
-    type Message = neocogi_ui::events::EventMessage;
+    type Message = neocogi_ui_contracts::events::EventMessage;
     /// Runtime calls application handlers only at its normal safe mutation boundary.
     fn update(&mut self, event: Self::Message) -> Result<(), NcStatus> {
         if let Some(origin) = event.origin.service::<IWindowAbi>()? {
@@ -98,8 +101,8 @@ fn run(runtime: neocogi_com::Runtime) -> Result<(), HostError> {
     // One allocator belongs to this application's dispatch domain. Reuse it for
     // any additional/recreated slots that post into the same channel.
     let mut reload_ids = ReloadIds::new();
-    let (queue, receiver) = neocogi_ui::events::channel();
-    let lifecycle = queue.query::<neocogi_ui::events::IEventReceiverAbi>()?;
+    let (queue, receiver) = neocogi_ui_contracts::events::channel();
+    let lifecycle = queue.query::<neocogi_ui_contracts::events::IEventReceiverAbi>()?;
     let root = host.ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch)?;
     let root_handle = root.handle();
     let window = host
@@ -120,7 +123,7 @@ fn run(runtime: neocogi_com::Runtime) -> Result<(), HostError> {
     let bar = menus.create("Runtime UI")?;
     let reload_item = bar
         .submenu("File")?
-        .item_with_queue("Reload", Some(queue.query::<neocogi_ui::events::IEventReceiverAbi>()?.as_com_ref()))?;
+        .item_with_queue("Reload", Some(queue.query::<neocogi_ui_contracts::events::IEventReceiverAbi>()?.as_com_ref()))?;
     menus.attach_bar(window.as_com_ref(), &bar)?;
     #[cfg(not(target_arch = "wasm32"))]
     let path = std::env::args_os().nth(1).map(std::path::PathBuf::from);
@@ -139,17 +142,19 @@ fn main(runtime: neocogi_com::Runtime) -> std::process::ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neocogi_ui_document::WidgetSpec;
+    use neocogi_ui::document::WidgetSpec;
 
     /// Uses actual production UI/GFX factories with tiny canonical test assets, without a native window.
     fn application(path: std::path::PathBuf) -> (State, neocogi_com::Runtime, Ui) {
         // SAFETY: the test executable owns its process-lived immutable host service graph.
         let registry = unsafe { neocogi_com::Runtime::__from_host_api(neocogi_com_host::initialize_process()) }.unwrap();
-        let gfx = neocogi_ui_support::test_support::gfx_factory(registry);
-        let bundle = neocogi_ui_support::test_support::assets::export_bundle(
-            &neocogi_ui_support::SkinBundle::from_atlas(neocogi_ui_support::test_support::test_atlas())).unwrap();
-        let runtime = nc_ui::create_runtime_from_assets(bundle.as_com_ref(), gfx.as_com_ref()).unwrap();
-        let ui = nc_ui_nodes::bind_builtin_nodes(runtime).unwrap();
+        let gfx = neocogi_ui::support::test_support::gfx_factory(registry);
+        let bundle = neocogi_ui::support::test_support::assets::export_bundle(&neocogi_ui::support::SkinBundle::from_atlas(
+            neocogi_ui::support::test_support::test_atlas(),
+        ))
+        .unwrap();
+        let runtime = neocogi_ui::runtime::create_runtime_from_assets(bundle.as_com_ref(), gfx.as_com_ref()).unwrap();
+        let ui = neocogi_ui::nodes::bind_builtin_nodes(runtime).unwrap();
         let root = ui.widgets().linear(FlowDirection::TopToBottom, CrossSize::Stretch).unwrap();
         let window = ui.window("reload regression", Rect { x: 0, y: 0, width: 320, height: 200 }, root).unwrap();
         let mut ids = ReloadIds::new();
@@ -159,15 +164,25 @@ mod tests {
         let file = bar.submenu("File").unwrap();
         let reload_item = file.item("Reload").unwrap();
         menus.attach_bar(window.as_com_ref(), &bar).unwrap();
-        let (queue, _inbox) = neocogi_ui::events::channel();
-        (State { slot, path: Some(path), queue, reload_item, saves: 0 }, registry, ui)
+        let (queue, _inbox) = neocogi_ui_contracts::events::channel();
+        (
+            State {
+                slot,
+                path: Some(path),
+                queue,
+                reload_item,
+                saves: 0,
+            },
+            registry,
+            ui,
+        )
     }
 
     /// A valid common event with a concrete weak origin still reaches the application's real handler.
-    fn activation(button: &Widget<ButtonAbi>) -> neocogi_ui::events::EventMessage {
-        neocogi_ui::events::EventMessage {
-            origin: neocogi_ui::events::EventOrigin::Widget(button.as_interface().clone().into_unknown()),
-            event: neocogi_ui::events::activated().unwrap(),
+    fn activation(button: &Widget<ButtonAbi>) -> neocogi_ui_contracts::events::EventMessage {
+        neocogi_ui_contracts::events::EventMessage {
+            origin: neocogi_ui_contracts::events::EventOrigin::Widget(button.as_interface().clone().into_unknown()),
+            event: neocogi_ui_contracts::events::activated().unwrap(),
         }
     }
 
@@ -187,8 +202,16 @@ mod tests {
         for failure in 0..4 {
             let mut candidate = valid.clone();
             match failure {
-                0 => candidate.root.find_mut("save").unwrap().widget = WidgetSpec::Checkbox { text: "wrong kind".into(), checked: false },
-                1 => { candidate.root.children.retain(|child| child.node.key != "save"); candidate.outputs.clear(); },
+                0 => {
+                    candidate.root.find_mut("save").unwrap().widget = WidgetSpec::Checkbox {
+                        text: "wrong kind".into(),
+                        checked: false,
+                    }
+                }
+                1 => {
+                    candidate.root.children.retain(|child| child.node.key != "save");
+                    candidate.outputs.clear();
+                }
                 2 => candidate.root.find_mut("title").unwrap().widget = WidgetSpec::Button { text: "wrong title".into() },
                 3 => candidate.root.children.retain(|child| child.node.key != "title"),
                 _ => unreachable!(),
@@ -197,9 +220,21 @@ mod tests {
             assert!(state.reload().is_err(), "case {failure}");
             assert!(state.slot.accepts(first));
             assert_eq!(state.slot.component().unwrap().save(&registry).unwrap(), old_recipe);
-            assert!(old_title.as_interface().same_object(state.slot.component().unwrap().widget::<TextBlockAbi>("title").unwrap().as_interface()));
-            assert!(old_root.as_interface().same_object(state.slot.component().unwrap().root().unwrap().as_interface()));
-            assert!(old_save.as_interface().same_object(state.slot.component().unwrap().widget::<ButtonAbi>("save").unwrap().as_interface()));
+            assert!(
+                old_title
+                    .as_interface()
+                    .same_object(state.slot.component().unwrap().widget::<TextBlockAbi>("title").unwrap().as_interface())
+            );
+            assert!(
+                old_root
+                    .as_interface()
+                    .same_object(state.slot.component().unwrap().root().unwrap().as_interface())
+            );
+            assert!(
+                old_save
+                    .as_interface()
+                    .same_object(state.slot.component().unwrap().widget::<ButtonAbi>("save").unwrap().as_interface())
+            );
             state.update(activation(&old_save)).unwrap();
             assert_eq!(state.saves, failure + 1);
         }
@@ -220,8 +255,10 @@ mod tests {
         let foreign_owner = ui.widgets().button_unobserved("foreign").unwrap();
         state.update(activation(&foreign_owner.handle())).unwrap();
         assert_eq!(state.saves, 5);
-        assert_eq!(state.slot.component().unwrap().widget::<TextBlockAbi>("title").unwrap().text().unwrap(), "Save requested 5 times");
+        assert_eq!(
+            state.slot.component().unwrap().widget::<TextBlockAbi>("title").unwrap().text().unwrap(),
+            "Save requested 5 times"
+        );
         state.slot.component().unwrap().save(&registry).unwrap();
-
     }
 }

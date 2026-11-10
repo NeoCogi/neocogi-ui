@@ -3,15 +3,15 @@
 //! The two concrete objects share only lifecycle plumbing. The counter owns its scalar value and
 //! event producer; the inset owns its padding and the host's sole authoritative child editor.
 #![deny(missing_docs)]
-use neocogi_ui::UiEventSource;
+use neocogi_ui_contracts::UiEventSource;
 mod settings;
-use neocogi_ui::com::widget::WidgetState;
-use neocogi_ui::abi::core::*;
+use neocogi_ui_contracts::com::widget::WidgetState;
+use neocogi_ui_contracts::abi::core::*;
 use neocogi_ui_samples::abi::*;
-use neocogi_ui::Painter;
+use neocogi_ui_contracts::Painter;
 use neocogi_com::{ComBox, ComPtr, ComRef, NcCopyFromBufferOffset, NcOutputWriter, NcStatus, NC_E_INVALID_ARG, com_object};
-use neocogi_ui_design::DesignWidgetManifest;
-use neocogi_ui::abi::document::IDesignWidgetCatalog;
+use neocogi_ui_contracts::design::DesignWidgetManifest;
+use neocogi_ui_contracts::abi::document::IDesignWidgetCatalog;
 
 /// Common state is inline; the example adds no second widget allocation or type-erased data.
 struct Common {
@@ -111,7 +111,7 @@ impl CounterObject {
     /// Validates runtime authority and publishes one fully initialized counter identity.
     fn create(
         host: ComRef<'_, IWidgetHostAbi>,
-        queue: Option<ComPtr<neocogi_ui::events::IEventReceiverAbi>>,
+        queue: Option<ComPtr<neocogi_ui_contracts::events::IEventReceiverAbi>>,
         settings: settings::Settings,
     ) -> Result<ComBox<CounterAbi>, NcStatus> {
         host.check_mutation()?;
@@ -132,7 +132,7 @@ impl CounterObject {
             self.count = self.settings.next(self.count);
             // A rejected foreign post cannot erase this already committed change.
             self.common.state.record_change(GeometryChange::Changed);
-            self.common.state.post(neocogi_ui::abi::core::events::activated()?)?;
+            self.common.state.post(neocogi_ui_contracts::abi::core::events::activated()?)?;
             self.common.state.post(neocogi_ui_samples::abi::events::counter_changed(self.count)?)?;
             Ok(GeometryChange::Changed)
         } else {
@@ -341,7 +341,7 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
         index: u32,
         host: ComRef<'_, IWidgetHostAbi>,
         settings: NcCopyFromBufferOffset<'_, u8>,
-        events: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui_contracts::events::EventBinding>,
     ) -> Result<ComBox<IWidgetAbi>, NcStatus> {
         if index != 0 || settings.offset() != 0 {
             return Err(NC_E_INVALID_ARG);
@@ -352,8 +352,8 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
         CounterObject::create(
             host,
             match events.to_owned()? {
-                neocogi_ui::events::EventBinding::Unobserved => None,
-                neocogi_ui::events::EventBinding::Observed(queue) => Some(queue),
+                neocogi_ui_contracts::events::EventBinding::Unobserved => None,
+                neocogi_ui_contracts::events::EventBinding::Observed(queue) => Some(queue),
             },
             settings,
         )?
@@ -364,9 +364,9 @@ impl IDesignWidgetCatalog for ExtensionProviderObject {
     fn create_editor(
         &self,
         index: u32,
-        widgets: ComRef<'_, neocogi_ui::UiFactoryAbi>,
+        widgets: ComRef<'_, neocogi_ui_contracts::UiFactoryAbi>,
         settings: NcCopyFromBufferOffset<'_, u8>,
-    ) -> Result<ComBox<neocogi_ui::abi::document::IDesignSettingsEditorAbi>, NcStatus> {
+    ) -> Result<ComBox<neocogi_ui_contracts::abi::document::IDesignSettingsEditorAbi>, NcStatus> {
         if index != 0 || settings.offset() != 0 {
             return Err(NC_E_INVALID_ARG);
         }
@@ -379,7 +379,7 @@ impl ExtensionProvider for ExtensionProviderObject {
     fn counter(
         &self,
         host: ComRef<'_, IWidgetHostAbi>,
-        events: neocogi_com::NcValueRef<'_, neocogi_ui::events::EventBinding>,
+        events: neocogi_com::NcValueRef<'_, neocogi_ui_contracts::events::EventBinding>,
     ) -> Result<ComBox<CounterAbi>, NcStatus> {
         CounterObject::create(host, events.to_owned()?.into_queue(), settings::Settings::default())
     }

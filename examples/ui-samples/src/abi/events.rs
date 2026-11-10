@@ -1,7 +1,7 @@
 //! Immutable COM event construction. Every result is the sole owner of its captured snapshot.
 use crate::abi::*;
 use neocogi_com::{ComBox, NcStatus};
-use neocogi_ui::abi::core::{IEvent, IEventAbi};
+use neocogi_ui_contracts::abi::core::{IEvent, IEventAbi};
 
 #[neocogi_com::com_object(interfaces(crate::abi::ICounterChangedEvent), ownership = exclusive)]
 /// Immutable captured fact; this allocation retains no source widget or service.

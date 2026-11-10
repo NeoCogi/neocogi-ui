@@ -1,7 +1,7 @@
 //! Native acceptance uses the same extension protocol in dynamic assemblies and static monoliths.
 use super::*;
 use neocogi_ui_samples::abi::*;
-use neocogi_ui::events;
+use neocogi_ui_contracts::events;
 
 /// Host-local controller owns its labels and the extension's editing projection.
 struct Model {
@@ -11,7 +11,7 @@ struct Model {
     counter: neocogi_com::WeakComBox<CounterAbi>,
 }
 impl events::MessageProcessor for Model {
-    type Message = neocogi_ui::events::EventMessage;
+    type Message = neocogi_ui_contracts::events::EventMessage;
     /// Handles the independent plugin's concrete public event protocol.
     fn handle(&mut self, message: Self::Message) -> Result<(), NcStatus> {
         let Some(origin) = message.origin.widget::<CounterAbi>()? else {
@@ -57,8 +57,8 @@ pub(super) fn smoke(runtime: neocogi_com::Runtime, ui: &Ui, size: Size, renderer
     assert_eq!(a_view.children().unwrap_err(), neocogi_com::NC_E_DROPPED);
     assert_eq!(b_view.children().unwrap_err(), neocogi_com::NC_E_DROPPED);
 
-    let (queue, events) = neocogi_ui::events::channel();
-    let binding = neocogi_ui::events::EventBinding::from_queue(Some(queue.as_com_ref()))?;
+    let (queue, events) = neocogi_ui_contracts::events::channel();
+    let binding = neocogi_ui_contracts::events::EventBinding::from_queue(Some(queue.as_com_ref()))?;
     let counter_owner = provider.counter(host.as_com_ref(), neocogi_com::NcValueRef::new(&binding)?)?;
     let mut counter = counter_owner.downgrade();
     let probe: neocogi_com::WeakComBox<IWidgetProbeAbi> = counter.query()?;
@@ -74,7 +74,7 @@ pub(super) fn smoke(runtime: neocogi_com::Runtime, ui: &Ui, size: Size, renderer
     let parent_probe: neocogi_com::WeakComBox<IWidgetProbeAbi> = inset.query()?;
     inset.set_child(widget).map_err(|(status, _candidate)| status)?;
     // The second parent cannot acquire the same owner: set_child consumes it.
-    let root = neocogi_ui::OwnedWidget::from_interface(inset_owner);
+    let root = neocogi_ui_contracts::OwnedWidget::from_interface(inset_owner);
     // Capability discovery happens once while wiring the application, never during UI phases.
     let window = ui
         .window("Independent extension", Rect { x: 10, y: 10, width: 400, height: 200 }, root)
@@ -134,7 +134,10 @@ pub(super) fn smoke(runtime: neocogi_com::Runtime, ui: &Ui, size: Size, renderer
     assert_eq!(inset.children()?.child_count()?, 0);
     ui.update_with_events(size, owner.as_com_ref())?;
     ui.render(size, renderer)?;
-    let replacement = provider.counter(host.as_com_ref(), neocogi_com::NcValueRef::new(&neocogi_ui::events::EventBinding::Unobserved)?)?;
+    let replacement = provider.counter(
+        host.as_com_ref(),
+        neocogi_com::NcValueRef::new(&neocogi_ui_contracts::events::EventBinding::Unobserved)?,
+    )?;
     let replacement_view = replacement.downgrade();
     let replacement_probe = replacement_view.query::<IWidgetProbeAbi>()?;
     let replacement = replacement.query::<IWidgetAbi>().map_err(|(status, _candidate)| status)?;

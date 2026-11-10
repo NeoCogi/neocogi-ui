@@ -1,7 +1,7 @@
 //! Custom controls share activation while publishing their own concrete event interface.
 use neocogi_com::{NC_E_NOINTERFACE};
 use neocogi_ui_samples::abi::{events::counter_changed, ICounterChangedEventAbi};
-use neocogi_ui::abi::core::{events::activated, IActivatedEventAbi};
+use neocogi_ui_contracts::abi::core::{events::activated, IActivatedEventAbi};
 
 #[test]
 fn custom_counter_events_are_queryable_without_a_custom_queue_interface() {

@@ -3,13 +3,16 @@ name = "neocogi-cargo-runtime-probe"
 version.workspace = true
 edition = "2024"
 publish = false
+
 [lib]
 name = "nc_cargo_runtime_probe"
 crate-type = ["cdylib"]
+
 [features]
 dynamic-plugin = []
+
 [dependencies]
 neocogi-com = { workspace = true, features = ["std", "macros", "runtime"] }
 
 [build-dependencies]
-neocogi-idl.workspace = true
+neocogi-idl = { workspace = true }

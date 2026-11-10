@@ -1,9 +1,0 @@
-{
-  "dev-dependencies": {
-    "neocogi-ui-samples": {
-      "version": "=0.1.0-alpha.2"
-    }
-  },
-  "package": "neocogi-ui-document",
-  "schema": 1
-}

@@ -1,0 +1,38 @@
+[package]
+name = "neocogi-ui-contracts"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = ["crates-io"]
+readme = "README.md"
+description = "Canonical NeoCogi UI, graphics, appearance and authoring contracts with typed clients and build support"
+include = ["Cargo.toml", "README.md", "LICENSE", "src/**", "schemas/**", "build.rs", "build_support/**", "tests/**", "docs/**"]
+
+[features]
+default = []
+build-support = ["dep:neocogi-idl", "dep:tempfile", "neocogi-platform-contracts/build-support"]
+compiled-assets = ["dep:miniz_oxide"]
+test-support = []
+runtime = ["neocogi-com/runtime"]
+
+[dependencies]
+neocogi-platform-contracts.workspace = true
+neocogi-com = { workspace = true, features = ["macros", "std"] }
+rs-math3d.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+neocogi-idl = { workspace = true, optional = true }
+tempfile = { workspace = true, optional = true }
+miniz_oxide = { workspace = true, optional = true, features = ["with-alloc"] }
+
+[build-dependencies]
+neocogi-platform-contracts = { workspace = true, features = ["build-support"] }
+neocogi-idl.workspace = true
+
+[dev-dependencies]
+neocogi-idl.workspace = true
+neocogi-com-host.workspace = true
+tempfile.workspace = true
+trybuild.workspace = true

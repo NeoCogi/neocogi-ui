@@ -1,5 +1,4 @@
 [package]
-# Installed executable names are declared explicitly below.
 autobins = false
 name = "neocogi-demo-smoke"
 default-run = "neocogi-demo-smoke"
@@ -13,36 +12,29 @@ publish = false
 [features]
 dynamic = ["neocogi-demo-host/dynamic-skin"]
 default = ["glow", "dynamic"]
-# Link the runtime and selected implementation descriptors into one executable.
 monolith = ["neocogi-demo-host/monolith-gfx", "neocogi-demo-host/monolith-skin"]
 glow = ["neocogi-demo-host/glow"]
 vulkan = ["neocogi-demo-host/vulkan"]
 wgpu = ["neocogi-demo-host/wgpu"]
 extension = []
-# Extension implementations follow the same explicit linkage choice as the host.
 dynamic-extension = ["extension", "dynamic", "neocogi-demo-host/dynamic-extension"]
 monolith-extension = ["extension", "monolith", "neocogi-demo-host/monolith-extension"]
-# Standalone development benchmark; no counters or recorder enter the normal demo executable.
-benchmark = ["embed-assets", "monolith", "dep:neocogi-ui-nodes", "dep:neocogi-gfx", "dep:neocogi-gfx-support", "dep:neocogi-platform"]
+benchmark = ["embed-assets", "monolith", "dep:neocogi-ui", "dep:neocogi-platform"]
 embed-assets = ["neocogi-demo-assets/embed-assets"]
 
 [dependencies]
-neocogi-gfx-support = { workspace = true, features = ["test-support"], optional = true }
-neocogi-com-host.workspace = true
-neocogi-demo-host.workspace = true
-neocogi-ui-samples.workspace = true
-neocogi-platform-contracts.workspace = true
+neocogi-com-host = { workspace = true }
+neocogi-demo-host = { workspace = true }
+neocogi-ui-samples = { workspace = true }
+neocogi-platform-contracts = { workspace = true }
 neocogi-platform = { workspace = true, features = ["test-support"], optional = true }
-rs-math3d.workspace = true
-neocogi-ui = { workspace = true, features = ["skin"] }
+rs-math3d = { workspace = true }
 neocogi-com = { workspace = true, default-features = false, features = ["runtime", "macros", "std"] }
-
 neocogi-demo-assets = { workspace = true, features = ["external-themes"] }
+neocogi-ui-contracts = { workspace = true, features = ["test-support"] }
 
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-# Dynamic assemblies select final DLL packages; monoliths call implementation descriptors directly.
-neocogi-ui-nodes = { workspace = true, optional = true }
-neocogi-gfx = { workspace = true, features = ["builder"], optional = true }
+[target."cfg(not(target_arch = \"wasm32\"))".dependencies]
+neocogi-ui = { workspace = true, features = ["builder", "gfx", "ui", "test-support"], optional = true }
 
 [[bin]]
 name = "neocogi-com-bench"

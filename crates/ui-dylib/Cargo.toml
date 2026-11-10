@@ -1,0 +1,28 @@
+[package]
+name = "neocogi-ui-dylib"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = ["crates-io"]
+readme = "README.md"
+description = "Thin final COM shared-library entrypoint for the NeoCogi UI implementation"
+include = ["Cargo.toml", "README.md", "LICENSE", "src/**", "tests/**"]
+
+[lib]
+name = "nc_ui"
+crate-type = ["cdylib"]
+
+[features]
+default = ["ui", "gfx"]
+ui = ["neocogi-ui/ui"]
+gfx = ["neocogi-ui/gfx"]
+builder = ["gfx", "neocogi-ui/builder"]
+skin = ["neocogi-ui/skin"]
+theme-json = ["skin", "neocogi-ui/theme-json"]
+document = ["neocogi-ui/document"]
+
+[dependencies]
+neocogi-ui.workspace = true
+neocogi-com = { workspace = true, features = ["std"] }

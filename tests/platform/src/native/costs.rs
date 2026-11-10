@@ -42,14 +42,14 @@ impl IRenderer for Capture {
 #[test]
 #[ignore = "explicit native cost measurement; SDL_VIDEODRIVER=offscreen and --nocapture"]
 fn measure_ui_and_mixed_client_costs() {
-    use neocogi_ui::{Ui, UiPluginFactoryAbi, nodes::NodesPluginFactoryAbi};
+    use neocogi_ui_contracts::Ui;
     let _session = native_session();
     let runtime = crate::host_runtime();
     // SAFETY: All statically linked provider code and descriptors are process-lived.
     unsafe {
-        runtime.register_plugin_descriptor(nc_gfx::plugin_descriptor()).unwrap();
-        runtime.register_plugin_descriptor(nc_ui::plugin_descriptor()).unwrap();
-        runtime.register_plugin_descriptor(nc_ui_nodes::plugin_descriptor()).unwrap();
+        runtime.register_plugin_descriptor(neocogi_ui::plugin_descriptor()).unwrap();
+        runtime.register_plugin_descriptor(neocogi_ui::plugin_descriptor()).unwrap();
+        runtime.register_plugin_descriptor(neocogi_ui::plugin_descriptor()).unwrap();
     }
     for mixed in [false, true] {
         let setup = Instant::now();
@@ -59,17 +59,11 @@ fn measure_ui_and_mixed_client_costs() {
         let platform: ComPtr<IPlatformWindowAbi> = window.query().unwrap();
         let host = platform.graphics_host().unwrap();
         let assets = neocogi_demo_assets::load_bundle(runtime).unwrap();
-        let gfx = runtime
-            .acquire_plugin_root::<neocogi_gfx_support::abi::GfxPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.gfx.runtime"))
-            .unwrap();
-        let factory = runtime
-            .acquire_plugin_root::<UiPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.runtime"))
-            .unwrap();
+        let gfx = neocogi_ui_contracts::services::gfx(runtime).unwrap();
+        let factory = neocogi_ui_contracts::services::ui(runtime).unwrap();
         let mut core = factory.create_runtime(assets.as_com_ref(), gfx.as_com_ref()).unwrap();
         core.set_render_host(host.as_com_ref(), framebuffer(host.as_com_ref()).as_com_ref()).unwrap();
-        let nodes = runtime
-            .acquire_plugin_root::<NodesPluginFactoryAbi>(neocogi_com::guid_from_qualified_name("neocogi.ui.nodes.runtime"))
-            .unwrap();
+        let nodes = neocogi_ui_contracts::services::nodes(runtime).unwrap();
         let widgets = nodes.bind(core.as_com_ref()).unwrap();
         let ui = Ui::from_interfaces(core, widgets).unwrap();
         let root = ui.widgets().button_unobserved("Measured UI").unwrap();

@@ -51,7 +51,7 @@
 // IN THE SOFTWARE.
 //
 //! Local math-to-contract conversions used by the concrete graphics widgets.
-pub(super) use neocogi_ui::*;
+pub(super) use neocogi_ui_contracts::*;
 pub(super) use neocogi_com::{ComPtr, ComRef, NcStatus, NcCopyFromBufferOffset};
 pub(super) use rs_math3d::{Vec2f, Vec2i, Vec3f, Vec4f, Mat4f, Quatf, Box3f, Recti, Dimensioni};
 pub(super) use rs_math3d::{RealVector, Vector, CrossProduct};
@@ -62,12 +62,12 @@ pub(super) fn rect(x: i32, y: i32, width: i32, height: i32) -> Recti {
     Recti::new(x, y, width, height)
 }
 /// Converts a copied wire allocation into the math library's ordinary value.
-pub(super) fn local_rect(r: neocogi_ui::Rect) -> Recti {
+pub(super) fn local_rect(r: neocogi_ui_contracts::Rect) -> Recti {
     rect(r.x, r.y, r.width, r.height)
 }
 /// Copies geometry into its portable C-shaped representation.
-pub(super) fn wire_rect(r: Recti) -> neocogi_ui::Rect {
-    neocogi_ui::Rect {
+pub(super) fn wire_rect(r: Recti) -> neocogi_ui_contracts::Rect {
+    neocogi_ui_contracts::Rect {
         x: r.x,
         y: r.y,
         width: r.width,
